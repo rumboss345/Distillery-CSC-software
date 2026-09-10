@@ -9,6 +9,7 @@
     "dev:server": "tsx server/index.ts",
     "build": "tsc -b && vite build",
     "start": "tsx server/index.ts",
+    "reset-admin": "tsx server/reset-admin.ts",
     "preview": "vite preview"
   },
   "dependencies": {

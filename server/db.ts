@@ -134,6 +134,33 @@ export function listPendingUsers(): Omit<User, 'password_hash' | 'approval_token
     .all() as Omit<User, 'password_hash' | 'approval_token'>[];
 }
 
+export function resetAdminAccount(email: string, password: string, name = 'Admin') {
+  const database = ensureDb();
+  const normalized = email.toLowerCase();
+  const passwordHash = bcrypt.hashSync(password, 12);
+  const existing = database
+    .prepare('SELECT id FROM users WHERE email = ? COLLATE NOCASE')
+    .get(normalized) as { id: number } | undefined;
+
+  if (existing) {
+    database
+      .prepare(
+        `UPDATE users
+         SET password_hash = ?, role = 'admin', status = 'approved', approval_token = NULL, name = ?
+         WHERE id = ?`
+      )
+      .run(passwordHash, name, existing.id);
+    return;
+  }
+
+  database
+    .prepare(
+      `INSERT INTO users (email, password_hash, name, role, status, approval_token)
+       VALUES (?, ?, ?, 'admin', 'approved', NULL)`
+    )
+    .run(normalized, passwordHash, name);
+}
+
 export function publicUser(user: User) {
   return {
     id: user.id,
