@@ -2,6 +2,8 @@ import bcrypt from 'bcryptjs';
 import cors from 'cors';
 import express from 'express';
 import jwt from 'jsonwebtoken';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
 import {
   approveUserById,
   approveUserByToken,
@@ -15,9 +17,26 @@ import {
 } from './db.js';
 import { sendAdminApprovalEmail } from './email.js';
 
-const PORT = Number(process.env.AUTH_PORT ?? 3001);
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const isProduction = process.env.NODE_ENV === 'production';
+
+const PORT = isProduction
+  ? Number(process.env.PORT ?? 3001)
+  : Number(process.env.AUTH_PORT ?? 3001);
+const HOST = isProduction ? '0.0.0.0' : undefined;
 const JWT_SECRET = process.env.JWT_SECRET ?? 'distillery-tracker-dev-secret-change-in-production';
-const APP_URL = process.env.APP_URL ?? 'http://localhost:5173';
+const APP_URL = process.env.APP_URL ?? (isProduction ? undefined : 'http://localhost:5173');
+
+if (isProduction && !process.env.JWT_SECRET) {
+  console.error('JWT_SECRET environment variable is required in production.');
+  process.exit(1);
+}
+
+if (isProduction && !process.env.APP_URL) {
+  console.warn(
+    'APP_URL is not set. Approval email links may be incorrect. Set APP_URL to your Render service URL.'
+  );
+}
 
 interface AuthPayload {
   userId: number;
@@ -212,7 +231,32 @@ app.post('/api/admin/users/:id/reject', authMiddleware, adminMiddleware, (req, r
   res.json({ message: `${user.email} rejected`, user: publicUser(user) });
 });
 
-app.listen(PORT, () => {
-  console.log(`Auth API listening on http://localhost:${PORT}`);
-  console.log(`App URL: ${APP_URL}`);
+if (isProduction) {
+  const distPath = join(__dirname, '..', 'dist');
+
+  app.use(express.static(distPath));
+
+  // SPA fallback: React Router routes work on direct refresh
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api/')) {
+      next();
+      return;
+    }
+    res.sendFile(join(distPath, 'index.html'), (err) => {
+      if (err) next(err);
+    });
+  });
+}
+
+app.listen(PORT, HOST, () => {
+  const mode = isProduction ? 'production' : 'development';
+  console.log(`Server listening on http://${HOST ?? 'localhost'}:${PORT} (${mode})`);
+  if (isProduction) {
+    console.log(`Serving frontend from dist/`);
+  } else {
+    console.log(`Vite dev server expected at ${APP_URL ?? 'http://localhost:5173'}`);
+  }
+  if (APP_URL) {
+    console.log(`App URL: ${APP_URL}`);
+  }
 });
