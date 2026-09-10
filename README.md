@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Distillery Traker3
 
 Production management software for distilleries. Track the full spirit-making pipeline from mash to bottle — all data stored locally in your browser.
@@ -87,3 +88,6 @@ src/
 ## License
 
 MIT
+=======
+# Distillery-CSC-software
+>>>>>>> 65f8b0727542f7cb4ab5b104d9a466eb4311f21d
