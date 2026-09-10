@@ -41,36 +41,30 @@ function ensureDb() {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
-  seedAdmin();
   return db;
 }
 
-function seedAdmin() {
-  const adminEmail = process.env.ADMIN_EMAIL?.toLowerCase();
+/** Create DB schema if needed. Does not sync admin credentials. */
+export function initializeAuthDatabase() {
+  ensureDb();
+}
+
+/** Create or update the admin account from ADMIN_EMAIL / ADMIN_PASSWORD. */
+export function syncAdminFromEnv() {
+  const adminEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
   const adminPassword = process.env.ADMIN_PASSWORD;
 
   if (!adminEmail || !adminPassword) {
-    const hasUsers = db.prepare('SELECT 1 FROM users LIMIT 1').get();
-    if (!hasUsers && process.env.NODE_ENV === 'production') {
-      console.error(
-        'ADMIN_EMAIL and ADMIN_PASSWORD are required to create the initial admin account.'
-      );
+    if (process.env.NODE_ENV === 'production') {
+      console.error('ADMIN_EMAIL and ADMIN_PASSWORD environment variables are required in production.');
       process.exit(1);
     }
-    console.warn('ADMIN_EMAIL and ADMIN_PASSWORD not set; skipping admin account seed.');
+    console.warn('ADMIN_EMAIL and ADMIN_PASSWORD not set; skipping admin account sync.');
     return;
   }
 
-  const existing = db
-    .prepare('SELECT id FROM users WHERE email = ? COLLATE NOCASE')
-    .get(adminEmail) as { id: number } | undefined;
-  if (existing) return;
-
-  const passwordHash = bcrypt.hashSync(adminPassword, 12);
-  db.prepare(
-    `INSERT INTO users (email, password_hash, name, role, status, approval_token)
-     VALUES (?, ?, ?, 'admin', 'approved', NULL)`
-  ).run(adminEmail, passwordHash, 'Admin');
+  resetAdminAccount(adminEmail, adminPassword);
+  console.log(`Admin account synced for ${adminEmail}`);
 }
 
 export function getUserByEmail(email: string): User | undefined {
@@ -138,7 +132,7 @@ export function listPendingUsers(): Omit<User, 'password_hash' | 'approval_token
 }
 
 export function resetAdminAccount(email: string, password: string, name = 'Admin') {
-  const database = ensureDb();
+  const database = ensureDb(); // schema only
   const normalized = email.toLowerCase();
   const passwordHash = bcrypt.hashSync(password, 12);
   const existing = database

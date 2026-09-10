@@ -34,9 +34,11 @@ import {
   createUser,
   getUserByEmail,
   getUserById,
+  initializeAuthDatabase,
   listPendingUsers,
   publicUser,
   rejectUserById,
+  syncAdminFromEnv,
   type User,
 } from './db.js';
 import { sendAdminApprovalEmail } from './email.js';
@@ -253,6 +255,9 @@ app.post('/api/admin/users/:id/reject', authMiddleware, adminMiddleware, (req, r
   }
   res.json({ message: `${user.email} rejected`, user: publicUser(user) });
 });
+
+initializeAuthDatabase();
+syncAdminFromEnv();
 
 if (isProduction) {
   const distPath = join(__dirname, '..', 'dist');
