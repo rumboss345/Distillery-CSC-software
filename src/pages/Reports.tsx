@@ -110,7 +110,7 @@ export function Reports() {
           <div className="value">{totalGpa.toFixed(1)} gal</div>
         </div>
         <div className="stat-card">
-          <div className="label">Total Grain Processed</div>
+          <div className="label">Total Sugar Processed</div>
           <div className="value">{totalGrain.toFixed(0)} lbs</div>
         </div>
         <div className="stat-card">
@@ -169,7 +169,7 @@ export function Reports() {
       <div className="section">
         <h3 className="section-title">Yield by Mash Batch — {periodLabel}</h3>
         <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1rem' }}>
-          GPA = Gallons of Pure Alcohol. Yield % = GPA ÷ grain (lbs) × 100.
+          GPA = Gallons of Pure Alcohol. Yield % = GPA ÷ sugar (lbs) × 100.
           {reportMonth ? ' Includes mashes distilled during this month.' : ''}
         </p>
         {yields.length === 0 ? (
@@ -182,7 +182,7 @@ export function Reports() {
               <thead>
                 <tr>
                   <th>Mash Batch</th>
-                  <th>Grain (lbs)</th>
+                  <th>Sugar (lbs)</th>
                   <th>Wash (gal)</th>
                   <th>Hearts (gal)</th>
                   <th>Hearts ABV</th>

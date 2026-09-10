@@ -1,5 +1,5 @@
 export type InventoryCategory =
-  | 'grain'
+  | 'sugar'
   | 'yeast'
   | 'barrels'
   | 'bottles'

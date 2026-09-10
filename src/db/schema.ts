@@ -175,17 +175,17 @@ CREATE INDEX IF NOT EXISTS idx_mash_fermenter_equipment ON mash_fermenter_assign
 
 export const SEED_DATA = `
 INSERT OR IGNORE INTO inventory_items (id, name, category, unit, quantity, reorder_level, notes) VALUES
-  (1, 'Malted Barley', 'grain', 'lbs', 1000, 200, 'Base malt for wash'),
-  (2, 'Corn', 'grain', 'lbs', 650, 150, 'Bourbon mash bill'),
-  (3, 'Rye', 'grain', 'lbs', 300, 100, 'Rye whiskey component'),
+  (1, 'Blackstrap Molasses', 'sugar', 'lbs', 1000, 200, 'Primary fermentable for rum wash'),
+  (2, 'Cane Syrup', 'sugar', 'lbs', 650, 150, 'High-test molasses / cane syrup'),
+  (3, 'Raw Cane Sugar', 'sugar', 'lbs', 300, 100, 'Crystal sugar for wash'),
   (4, 'Distillers Yeast DADY', 'yeast', 'lbs', 25, 5, 'High attenuation yeast'),
   (5, 'New American Oak Barrels', 'barrels', 'each', 12, 4, '53 gallon standard'),
   (6, '750ml Bottles', 'bottles', 'each', 2000, 500, 'Standard spirit bottles'),
   (7, 'Front Labels', 'labels', 'each', 1500, 300, 'Primary product labels');
 
 INSERT OR IGNORE INTO mash_batches (id, batch_number, recipe_name, grain_type, grain_lbs, water_gal, yeast_strain, start_date, target_brix, actual_brix, target_final_brix, actual_final_brix, status, notes) VALUES
-  (1, 'M-2025-001', 'Single Malt Wash', 'Malted Barley', 400, 150, 'Distillers Yeast DADY', '2025-06-01', 16.0, 15.5, 2.5, 3.0, 'complete', 'Clean fermentation, ready for still'),
-  (2, 'M-2025-002', 'Bourbon Mash', 'Corn/Rye/Barley', 750, 225, 'Distillers Yeast DADY', '2025-06-15', 17.1, 16.8, 2.0, NULL, 'fermenting', 'Day 5 of fermentation');
+  (1, 'M-2025-001', 'Molasses Wash', 'Blackstrap Molasses', 400, 150, 'Distillers Yeast DADY', '2025-06-01', 16.0, 15.5, 2.5, 3.0, 'complete', 'Clean fermentation, ready for still'),
+  (2, 'M-2025-002', 'Cane Sugar Wash', 'Raw Cane Sugar', 750, 225, 'Distillers Yeast DADY', '2025-06-15', 17.1, 16.8, 2.0, NULL, 'fermenting', 'Day 5 of fermentation');
 
 INSERT OR IGNORE INTO distillation_runs (id, batch_number, source_mash_batch_id, still_name, run_date, charge_volume_gal, status, notes) VALUES
   (1, 'D-2025-001', 1, 'Pot Still #1', '2025-06-10', 150, 'complete', 'First run of the season');

@@ -238,6 +238,7 @@ function runMigrations(): void {
         unit = 'lbs'
     WHERE lower(unit) = 'kg'
   `);
+  db.run(`UPDATE inventory_items SET category = 'sugar' WHERE category = 'grain'`);
   persistDb();
 }
 

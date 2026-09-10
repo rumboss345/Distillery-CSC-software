@@ -258,7 +258,7 @@ export function MashFermentation() {
     <div>
       <div className="page-header">
         <h2>Mash & Fermentation</h2>
-        <p>Grain in lbs, wash in gallons, fermentation temperature in °F</p>
+        <p>Sugar type in lbs, wash in gallons, fermentation temperature in °F</p>
         <div className="page-actions">
           <button className="btn btn-primary" onClick={openNew}>+ New Mash Batch</button>
         </div>
@@ -278,7 +278,7 @@ export function MashFermentation() {
               <tr>
                 <th>Batch #</th>
                 <th>Recipe</th>
-                <th>Grain (lbs)</th>
+                <th>Sugar (lbs)</th>
                 <th>Water (gal)</th>
                 <th>Fermenter(s)</th>
                 <th>Start → Final Brix</th>
@@ -369,11 +369,11 @@ export function MashFermentation() {
               <input value={form.recipe_name} onChange={(e) => setForm({ ...form, recipe_name: e.target.value })} />
             </div>
             <div className="form-group">
-              <label>Grain Type</label>
+              <label>Sugar Type</label>
               <input value={form.grain_type} onChange={(e) => setForm({ ...form, grain_type: e.target.value })} />
             </div>
             <div className="form-group">
-              <label>Grain (lbs)</label>
+              <label>Sugar (lbs)</label>
               <input type="number" min="0" step="0.1" value={form.grain_lbs || ''} onChange={(e) => setForm({ ...form, grain_lbs: parseFloat(e.target.value) || 0 })} placeholder="400" />
             </div>
             <div className="form-group">

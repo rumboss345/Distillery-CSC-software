@@ -10,7 +10,7 @@ Production management software for distilleries. Track the full spirit-making pi
 - **Barrel Aging** — Track fill dates, warehouse locations, and volume loss
 - **Bottling** — Record finished goods with bottle counts and lot numbers
 - **Floor Plan** — Interactive equipment layout
-- **Inventory** — Grains, yeast, barrels, bottles, and labels
+- **Inventory** — Sugar, yeast, barrels, bottles, and labels
 - **Reports** — Yield analysis and production summary
 
 ## Local development

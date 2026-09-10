@@ -72,7 +72,7 @@ export function Dashboard() {
                 <tr>
                   <th>Batch</th>
                   <th>Recipe</th>
-                  <th>Grain (lbs)</th>
+                  <th>Sugar (lbs)</th>
                   <th>Started</th>
                   <th>Status</th>
                 </tr>

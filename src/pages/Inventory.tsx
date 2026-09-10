@@ -9,7 +9,7 @@ import {
 import { Modal } from '../components/Modal';
 import type { InventoryCategory, InventoryItem } from '../types';
 
-const CATEGORIES: InventoryCategory[] = ['grain', 'yeast', 'barrels', 'bottles', 'labels', 'other'];
+const CATEGORIES: InventoryCategory[] = ['sugar', 'yeast', 'barrels', 'bottles', 'labels', 'other'];
 
 const emptyItem = (): Omit<InventoryItem, 'id' | 'created_at' | 'updated_at'> => ({
   name: '',
