@@ -1,4 +1,4 @@
-# Distillery Traker3
+# CSC Distillery Tracker
 
 Production management software for distilleries. Track the full spirit-making pipeline from mash to bottle.
 
@@ -36,7 +36,7 @@ Set these environment variables in the Render dashboard (not in GitHub):
 | `JWT_SECRET` | Yes | Long random string for session tokens |
 | `ADMIN_EMAIL` | Yes | Admin login email |
 | `ADMIN_PASSWORD` | Yes | Admin login password |
-| `APP_URL` | Yes | Your Render URL, e.g. `https://distillery-traker3.onrender.com` |
+| `APP_URL` | Yes | Your Render URL, e.g. `https://csc-distillery-tracker.onrender.com` |
 | `SMTP_*` | No | Optional email for user approval notifications |
 
 Render sets `PORT` and `NODE_ENV=production` automatically. The Node server serves the built frontend from `dist/` and handles `/api` routes on the same port.

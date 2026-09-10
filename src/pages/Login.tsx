@@ -33,7 +33,7 @@ export function Login() {
     <div className="auth-screen">
       <div className="auth-card">
         <div className="auth-brand">
-          <h1>Distillery Traker3</h1>
+          <h1>CSC Distillery Tracker</h1>
           <p>Sign in to continue</p>
         </div>
 

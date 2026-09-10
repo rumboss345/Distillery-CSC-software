@@ -24,9 +24,9 @@ export async function sendAdminApprovalEmail(params: {
   approvalToken: string;
 }) {
   const approveUrl = `${APP_URL}/approve?token=${params.approvalToken}`;
-  const subject = `Distillery Traker3: approve new user ${params.newUserEmail}`;
+  const subject = `CSC Distillery Tracker: approve new user ${params.newUserEmail}`;
   const text = [
-    'A new user requested access to Distillery Traker3.',
+    'A new user requested access to CSC Distillery Tracker.',
     '',
     `Email: ${params.newUserEmail}`,
     params.newUserName ? `Name: ${params.newUserName}` : '',

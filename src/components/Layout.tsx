@@ -20,7 +20,7 @@ export function Layout() {
     <div className="app-layout">
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <h1>Distillery Traker3</h1>
+          <h1>CSC Distillery Tracker</h1>
           <p>Production management</p>
         </div>
         <nav className="sidebar-nav">
