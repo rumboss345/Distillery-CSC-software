@@ -50,11 +50,6 @@ const HOST = isProduction ? '0.0.0.0' : undefined;
 const JWT_SECRET = process.env.JWT_SECRET ?? 'distillery-tracker-dev-secret-change-in-production';
 const APP_URL = process.env.APP_URL ?? (isProduction ? undefined : 'http://localhost:5173');
 
-if (isProduction && !process.env.JWT_SECRET) {
-  console.error('JWT_SECRET environment variable is required in production.');
-  process.exit(1);
-}
-
 if (isProduction && !process.env.APP_URL) {
   console.warn(
     'APP_URL is not set. Approval email links may be incorrect. Set APP_URL to your Render service URL.'
