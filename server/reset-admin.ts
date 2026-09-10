@@ -26,6 +26,7 @@ function loadEnvFile() {
 
 loadEnvFile();
 
+// Also load env in production (Render sets vars directly; .env is local-only)
 const email = process.env.ADMIN_EMAIL;
 const password = process.env.ADMIN_PASSWORD;
 

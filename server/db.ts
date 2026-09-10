@@ -50,8 +50,11 @@ function seedAdmin() {
   const adminPassword = process.env.ADMIN_PASSWORD;
 
   if (!adminEmail || !adminPassword) {
-    if (process.env.NODE_ENV === 'production') {
-      console.error('ADMIN_EMAIL and ADMIN_PASSWORD environment variables are required in production.');
+    const hasUsers = db.prepare('SELECT 1 FROM users LIMIT 1').get();
+    if (!hasUsers && process.env.NODE_ENV === 'production') {
+      console.error(
+        'ADMIN_EMAIL and ADMIN_PASSWORD are required to create the initial admin account.'
+      );
       process.exit(1);
     }
     console.warn('ADMIN_EMAIL and ADMIN_PASSWORD not set; skipping admin account seed.');

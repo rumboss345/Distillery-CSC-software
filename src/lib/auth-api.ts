@@ -28,6 +28,11 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
+    if (res.status === 502 || res.status === 503) {
+      throw new Error(
+        'Cannot reach the server. If running locally, use npm run dev. On Render, check deploy logs and env vars (JWT_SECRET, ADMIN_EMAIL, ADMIN_PASSWORD).'
+      );
+    }
     throw new Error(data.error ?? `Request failed (${res.status})`);
   }
 
