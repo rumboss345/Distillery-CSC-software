@@ -17,11 +17,10 @@ Production management software for distilleries. Track the full spirit-making pi
 
 ```bash
 npm install
-cp .env.example .env   # edit JWT_SECRET and ADMIN_PASSWORD
 npm run dev
 ```
 
-Open **http://localhost:5173** — Vite serves the frontend and proxies `/api` to the auth server on port 3001.
+Open **http://localhost:5173**
 
 ## Production (Render)
 
@@ -29,27 +28,11 @@ Open **http://localhost:5173** — Vite serves the frontend and proxies `/api` t
 
 **Start Command:** `npm start`
 
-Set these environment variables in the Render dashboard (not in GitHub):
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `JWT_SECRET` | Yes | Long random string for session tokens |
-| `ADMIN_EMAIL` | Yes | Admin login email |
-| `ADMIN_PASSWORD` | Yes | Admin login password |
-| `APP_URL` | Yes | Your Render URL, e.g. `https://csc-distillery-tracker.onrender.com` |
-| `SMTP_*` | No | Optional email for user approval notifications |
-
-Render sets `PORT` and `NODE_ENV=production` automatically. The Node server serves the built frontend from `dist/` and handles `/api` routes on the same port.
-
-## Sign in & user access
-
-On first run, an admin account is created from `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
-
-New users can **Request access** from the login page. Their account stays **pending** until an admin approves via email link or the **User approvals** page.
+Render sets `PORT` and `NODE_ENV=production` automatically. The Node server serves the built frontend from `dist/`.
 
 ## Data storage
 
-See deployment notes below — auth users and production data use different storage.
+Production data is stored in **SQLite** (sql.js) in each user's browser localStorage. It is not synced to the server.
 
 ## License
 
