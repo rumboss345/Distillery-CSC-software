@@ -20,9 +20,8 @@ import { sendAdminApprovalEmail } from './email.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const isProduction = process.env.NODE_ENV === 'production';
 
-const PORT = isProduction
-  ? Number(process.env.PORT ?? 3001)
-  : Number(process.env.AUTH_PORT ?? 3001);
+// Render sets PORT; local dev uses AUTH_PORT or 3001
+const PORT = Number(process.env.PORT ?? process.env.AUTH_PORT ?? 3001);
 const HOST = isProduction ? '0.0.0.0' : undefined;
 const JWT_SECRET = process.env.JWT_SECRET ?? 'distillery-tracker-dev-secret-change-in-production';
 const APP_URL = process.env.APP_URL ?? (isProduction ? undefined : 'http://localhost:5173');

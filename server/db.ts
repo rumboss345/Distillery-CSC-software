@@ -46,8 +46,18 @@ function ensureDb() {
 }
 
 function seedAdmin() {
-  const adminEmail = (process.env.ADMIN_EMAIL ?? 'nelson@rum.ky').toLowerCase();
-  const adminPassword = process.env.ADMIN_PASSWORD ?? 'rumboss';
+  const adminEmail = process.env.ADMIN_EMAIL?.toLowerCase();
+  const adminPassword = process.env.ADMIN_PASSWORD;
+
+  if (!adminEmail || !adminPassword) {
+    if (process.env.NODE_ENV === 'production') {
+      console.error('ADMIN_EMAIL and ADMIN_PASSWORD environment variables are required in production.');
+      process.exit(1);
+    }
+    console.warn('ADMIN_EMAIL and ADMIN_PASSWORD not set; skipping admin account seed.');
+    return;
+  }
+
   const existing = db
     .prepare('SELECT id FROM users WHERE email = ? COLLATE NOCASE')
     .get(adminEmail) as { id: number } | undefined;

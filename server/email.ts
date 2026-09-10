@@ -1,6 +1,6 @@
 import nodemailer from 'nodemailer';
 
-const ADMIN_EMAIL = (process.env.ADMIN_EMAIL ?? 'nelson@rum.ky').toLowerCase();
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL?.toLowerCase();
 const APP_URL = process.env.APP_URL ?? 'http://localhost:5173';
 
 function createTransport() {
@@ -42,11 +42,15 @@ export async function sendAdminApprovalEmail(params: {
   const transport = createTransport();
   if (!transport) {
     console.log('\n--- New user registration (SMTP not configured) ---');
-    console.log(`To: ${ADMIN_EMAIL}`);
+    console.log(`To: ${ADMIN_EMAIL ?? '(set ADMIN_EMAIL)'}`);
     console.log(`Subject: ${subject}`);
     console.log(text);
     console.log('---\n');
     return { sent: false, approveUrl };
+  }
+
+  if (!ADMIN_EMAIL) {
+    throw new Error('ADMIN_EMAIL environment variable is required to send approval emails.');
   }
 
   await transport.sendMail({
