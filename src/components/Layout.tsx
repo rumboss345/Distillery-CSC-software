@@ -1,4 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: '◈' },
@@ -13,6 +14,8 @@ const navItems = [
 ];
 
 export function Layout() {
+  const { user, logout } = useAuth();
+
   return (
     <div className="app-layout">
       <aside className="sidebar">
@@ -34,7 +37,27 @@ export function Layout() {
               {item.label}
             </NavLink>
           ))}
+          {user?.role === 'admin' && (
+            <NavLink
+              to="/admin/users"
+              className={({ isActive }) =>
+                `nav-link${isActive ? ' active' : ''}`
+              }
+            >
+              <span className="nav-icon">✉</span>
+              User approvals
+            </NavLink>
+          )}
         </nav>
+        <div className="sidebar-footer">
+          <div className="sidebar-user">
+            <span className="sidebar-user-email">{user?.email}</span>
+            {user?.role === 'admin' && <span className="sidebar-user-role">Admin</span>}
+          </div>
+          <button type="button" className="btn btn-ghost btn-sm sidebar-logout" onClick={logout}>
+            Sign out
+          </button>
+        </div>
       </aside>
       <main className="main-content">
         <Outlet />

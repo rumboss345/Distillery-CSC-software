@@ -17,10 +17,12 @@ Production management software for distilleries. Track the full spirit-making pi
 
 ```bash
 npm install
+cp .env.example .env   # set ADMIN_EMAIL, ADMIN_PASSWORD, JWT_SECRET
+npm run reset-admin    # create/update admin account
 npm run dev
 ```
 
-Open **http://localhost:5173**
+Open **http://localhost:5173** and sign in.
 
 ## Production (Render)
 
@@ -28,7 +30,18 @@ Open **http://localhost:5173**
 
 **Start Command:** `npm start`
 
-Render sets `PORT` and `NODE_ENV=production` automatically. The Node server serves the built frontend from `dist/`.
+Set in the Render dashboard (not GitHub):
+
+| Variable | Required |
+|----------|----------|
+| `JWT_SECRET` | Yes |
+| `ADMIN_EMAIL` | Yes |
+| `ADMIN_PASSWORD` | Yes |
+| `APP_URL` | Yes — your Render URL |
+
+After deploy, run `npm run reset-admin` once in Render Shell to set the admin password.
+
+Render sets `PORT` and `NODE_ENV=production` automatically. The Node server serves the built frontend from `dist/` and handles `/api` auth routes.
 
 ## Data storage
 

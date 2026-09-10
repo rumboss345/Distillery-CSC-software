@@ -1,5 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
 import { Layout } from './components/Layout';
+import { ProtectedRoute } from './components/ProtectedRoute';
 import { Dashboard } from './pages/Dashboard';
 import { MashFermentation } from './pages/MashFermentation';
 import { Distillation } from './pages/Distillation';
@@ -9,6 +11,10 @@ import { Blending } from './pages/Blending';
 import { Inventory } from './pages/Inventory';
 import { Reports } from './pages/Reports';
 import { FloorPlanPage } from './pages/FloorPlan';
+import { Login } from './pages/Login';
+import { Register } from './pages/Register';
+import { ApproveUser } from './pages/ApproveUser';
+import { AdminUsers } from './pages/AdminUsers';
 import { useDatabaseReady } from './db/queries';
 
 function AppContent() {
@@ -34,16 +40,22 @@ function AppContent() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route element={<Layout />}>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/mash" element={<MashFermentation />} />
-          <Route path="/distillation" element={<Distillation />} />
-          <Route path="/blending" element={<Blending />} />
-          <Route path="/barrels" element={<Barrels />} />
-          <Route path="/bottling" element={<Bottling />} />
-          <Route path="/inventory" element={<Inventory />} />
-          <Route path="/floor-plan" element={<FloorPlanPage />} />
-          <Route path="/reports" element={<Reports />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/approve" element={<ApproveUser />} />
+        <Route element={<ProtectedRoute />}>
+          <Route element={<Layout />}>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/mash" element={<MashFermentation />} />
+            <Route path="/distillation" element={<Distillation />} />
+            <Route path="/blending" element={<Blending />} />
+            <Route path="/barrels" element={<Barrels />} />
+            <Route path="/bottling" element={<Bottling />} />
+            <Route path="/inventory" element={<Inventory />} />
+            <Route path="/floor-plan" element={<FloorPlanPage />} />
+            <Route path="/reports" element={<Reports />} />
+            <Route path="/admin/users" element={<AdminUsers />} />
+          </Route>
         </Route>
       </Routes>
     </BrowserRouter>
@@ -51,5 +63,9 @@ function AppContent() {
 }
 
 export default function App() {
-  return <AppContent />;
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
+  );
 }
