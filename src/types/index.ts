@@ -90,6 +90,7 @@ export interface MashBatch {
   grain_lbs: number;
   water_gal: number;
   yeast_strain: string;
+  yeast_lbs: number;
   start_date: string;
   target_brix: number | null;
   actual_brix: number | null;

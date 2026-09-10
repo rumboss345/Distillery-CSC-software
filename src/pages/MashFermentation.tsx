@@ -10,6 +10,7 @@ import {
   getAvailableFermenters,
   getMashFermenterAssignments,
   getAllMashFermenterAssignments,
+  getInventoryByCategory,
   useRefreshKey,
 } from '../db/queries';
 import { Modal } from '../components/Modal';
@@ -119,6 +120,7 @@ const emptyBatch = (): Omit<MashBatch, 'id' | 'created_at'> => ({
   grain_lbs: 0,
   water_gal: 0,
   yeast_strain: '',
+  yeast_lbs: 0,
   start_date: new Date().toISOString().slice(0, 10),
   target_brix: null,
   actual_brix: null,
@@ -148,6 +150,8 @@ export function MashFermentation() {
 
   void key;
 
+  const sugarItems = getInventoryByCategory('sugar');
+  const yeastItems = getInventoryByCategory('yeast');
   const availableFermenters = getAvailableFermenters(editId);
   const availableFermenters2 = getAvailableFermenters(editId).filter(
     (f) => f.id !== fermenterForm.fermenter1Id,
@@ -204,7 +208,7 @@ export function MashFermentation() {
 
   const openEdit = (batch: MashBatch) => {
     setEditId(batch.id);
-    setForm({ ...batch });
+    setForm({ ...batch, yeast_lbs: batch.yeast_lbs ?? 0 });
     loadFermenterForm(batch.id);
     setShowForm(true);
   };
@@ -235,6 +239,24 @@ export function MashFermentation() {
         }
       }
     }
+
+    const previous = editId ? batches.find((b) => b.id === editId) : undefined;
+    const sugarItem = sugarItems.find((i) => i.name === form.grain_type);
+    const yeastItem = yeastItems.find((i) => i.name === form.yeast_strain);
+    const sugarNeeded = form.grain_lbs - (previous && previous.grain_type === form.grain_type ? previous.grain_lbs : 0);
+    const yeastNeeded = form.yeast_lbs - (previous && previous.yeast_strain === form.yeast_strain ? previous.yeast_lbs : 0);
+
+    if (sugarItem && sugarNeeded > sugarItem.quantity + 0.0001) {
+      if (!confirm(`${form.grain_type} inventory is ${sugarItem.quantity} ${sugarItem.unit}, but this batch uses ${form.grain_lbs} lbs. Save anyway?`)) {
+        return;
+      }
+    }
+    if (yeastItem && yeastNeeded > yeastItem.quantity + 0.0001) {
+      if (!confirm(`${form.yeast_strain} inventory is ${yeastItem.quantity} ${yeastItem.unit}, but this batch uses ${form.yeast_lbs} lbs. Save anyway?`)) {
+        return;
+      }
+    }
+
     saveMashBatchWithFermenters(form, buildAssignments(), editId);
     setShowForm(false);
     refresh();
@@ -370,7 +392,20 @@ export function MashFermentation() {
             </div>
             <div className="form-group">
               <label>Sugar Type</label>
-              <input value={form.grain_type} onChange={(e) => setForm({ ...form, grain_type: e.target.value })} />
+              <select
+                value={form.grain_type}
+                onChange={(e) => setForm({ ...form, grain_type: e.target.value })}
+              >
+                <option value="">— Select sugar from inventory —</option>
+                {sugarItems.map((item) => (
+                  <option key={item.id} value={item.name}>
+                    {item.name} ({item.quantity} {item.unit} on hand)
+                  </option>
+                ))}
+                {form.grain_type && !sugarItems.some((i) => i.name === form.grain_type) && (
+                  <option value={form.grain_type}>{form.grain_type} (not in inventory)</option>
+                )}
+              </select>
             </div>
             <div className="form-group">
               <label>Sugar (lbs)</label>
@@ -382,7 +417,24 @@ export function MashFermentation() {
             </div>
             <div className="form-group">
               <label>Yeast Strain</label>
-              <input value={form.yeast_strain} onChange={(e) => setForm({ ...form, yeast_strain: e.target.value })} />
+              <select
+                value={form.yeast_strain}
+                onChange={(e) => setForm({ ...form, yeast_strain: e.target.value })}
+              >
+                <option value="">— Select yeast from inventory —</option>
+                {yeastItems.map((item) => (
+                  <option key={item.id} value={item.name}>
+                    {item.name} ({item.quantity} {item.unit} on hand)
+                  </option>
+                ))}
+                {form.yeast_strain && !yeastItems.some((i) => i.name === form.yeast_strain) && (
+                  <option value={form.yeast_strain}>{form.yeast_strain} (not in inventory)</option>
+                )}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Yeast (lbs)</label>
+              <input type="number" min="0" step="0.01" value={form.yeast_lbs || ''} onChange={(e) => setForm({ ...form, yeast_lbs: parseFloat(e.target.value) || 0 })} placeholder="2" />
             </div>
             <div className="form-group">
               <label>Start Date</label>
@@ -488,7 +540,7 @@ export function MashFermentation() {
               <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
             </div>
           </div>
-          <p className="form-hint">Assigned fermenters show as <strong>in use</strong> on the floor plan until this mash is charged to a still.</p>
+          <p className="form-hint">Saving deducts sugar and yeast from inventory. Assigned fermenters show as <strong>in use</strong> on the floor plan until this mash is charged to a still.</p>
           <div className="form-actions">
             <button className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
             <button className="btn btn-primary" onClick={handleSave}>Save Batch</button>

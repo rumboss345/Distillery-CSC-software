@@ -76,6 +76,10 @@ const DEST_HOLDING_TANK_MIGRATION = `
 ALTER TABLE distillation_runs ADD COLUMN dest_holding_tank_equipment_id INTEGER REFERENCES floor_equipment(id);
 `;
 
+const YEAST_LBS_MIGRATION = `
+ALTER TABLE mash_batches ADD COLUMN yeast_lbs REAL NOT NULL DEFAULT 0;
+`;
+
 const BLENDING_MIGRATION = `
 CREATE TABLE IF NOT EXISTS blend_products (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -192,6 +196,14 @@ function runMigrations(): void {
   );
   if (!hasBlending) {
     db.run(BLENDING_MIGRATION);
+    persistDb();
+  }
+
+  const hasYeastLbs = queryOne<{ name: string }>(
+    "SELECT name FROM pragma_table_info('mash_batches') WHERE name='yeast_lbs'",
+  );
+  if (!hasYeastLbs) {
+    db.run(YEAST_LBS_MIGRATION);
     persistDb();
   }
 

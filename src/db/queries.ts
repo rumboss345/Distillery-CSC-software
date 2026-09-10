@@ -64,6 +64,29 @@ export function getInventoryItems(): InventoryItem[] {
   );
 }
 
+export function getInventoryByCategory(category: InventoryItem['category']): InventoryItem[] {
+  return queryAll<InventoryItem>(
+    'SELECT * FROM inventory_items WHERE category = ? ORDER BY name',
+    [category],
+  );
+}
+
+function findInventoryItem(category: InventoryItem['category'], name: string): InventoryItem | undefined {
+  const trimmed = name.trim();
+  if (!trimmed) return undefined;
+  return queryOne<InventoryItem>(
+    'SELECT * FROM inventory_items WHERE category = ? AND name = ? COLLATE NOCASE',
+    [category, trimmed],
+  ) ?? undefined;
+}
+
+function applyInventoryDelta(category: InventoryItem['category'], name: string, delta: number): void {
+  if (!name.trim() || delta === 0) return;
+  const item = findInventoryItem(category, name);
+  if (!item) return;
+  adjustInventory(item.id, delta);
+}
+
 export function saveInventoryItem(item: Omit<InventoryItem, 'id' | 'created_at' | 'updated_at'>, id?: number): void {
   if (id) {
     runQuery(
@@ -97,18 +120,51 @@ export function getMashBatches(): MashBatch[] {
   );
 }
 
+export function getMashBatch(id: number): MashBatch | undefined {
+  return queryOne<MashBatch>('SELECT * FROM mash_batches WHERE id = ?', [id]) ?? undefined;
+}
+
 export function saveMashBatch(batch: Omit<MashBatch, 'id' | 'created_at'>, id?: number): number {
   if (id) {
     runQuery(
-      `UPDATE mash_batches SET batch_number=?, recipe_name=?, grain_type=?, grain_lbs=?, water_gal=?, yeast_strain=?, start_date=?, target_brix=?, actual_brix=?, target_final_brix=?, actual_final_brix=?, status=?, notes=? WHERE id=?`,
-      [batch.batch_number, batch.recipe_name, batch.grain_type, batch.grain_lbs, batch.water_gal, batch.yeast_strain, batch.start_date, batch.target_brix, batch.actual_brix, batch.target_final_brix, batch.actual_final_brix, batch.status, batch.notes, id],
+      `UPDATE mash_batches SET batch_number=?, recipe_name=?, grain_type=?, grain_lbs=?, water_gal=?, yeast_strain=?, yeast_lbs=?, start_date=?, target_brix=?, actual_brix=?, target_final_brix=?, actual_final_brix=?, status=?, notes=? WHERE id=?`,
+      [batch.batch_number, batch.recipe_name, batch.grain_type, batch.grain_lbs, batch.water_gal, batch.yeast_strain, batch.yeast_lbs, batch.start_date, batch.target_brix, batch.actual_brix, batch.target_final_brix, batch.actual_final_brix, batch.status, batch.notes, id],
     );
     return id;
   }
   return insertRow(
-    `INSERT INTO mash_batches (batch_number, recipe_name, grain_type, grain_lbs, water_gal, yeast_strain, start_date, target_brix, actual_brix, target_final_brix, actual_final_brix, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [batch.batch_number, batch.recipe_name, batch.grain_type, batch.grain_lbs, batch.water_gal, batch.yeast_strain, batch.start_date, batch.target_brix, batch.actual_brix, batch.target_final_brix, batch.actual_final_brix, batch.status, batch.notes],
+    `INSERT INTO mash_batches (batch_number, recipe_name, grain_type, grain_lbs, water_gal, yeast_strain, yeast_lbs, start_date, target_brix, actual_brix, target_final_brix, actual_final_brix, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [batch.batch_number, batch.recipe_name, batch.grain_type, batch.grain_lbs, batch.water_gal, batch.yeast_strain, batch.yeast_lbs, batch.start_date, batch.target_brix, batch.actual_brix, batch.target_final_brix, batch.actual_final_brix, batch.status, batch.notes],
   );
+}
+
+function applyMashInventoryUsage(
+  next: Omit<MashBatch, 'id' | 'created_at'>,
+  previous?: MashBatch,
+): void {
+  const prevSugar = previous?.grain_type ?? '';
+  const nextSugar = next.grain_type ?? '';
+  const prevSugarLbs = previous?.grain_lbs ?? 0;
+  const nextSugarLbs = next.grain_lbs ?? 0;
+
+  if (prevSugar.trim().toLowerCase() === nextSugar.trim().toLowerCase()) {
+    applyInventoryDelta('sugar', nextSugar, prevSugarLbs - nextSugarLbs);
+  } else {
+    applyInventoryDelta('sugar', prevSugar, prevSugarLbs);
+    applyInventoryDelta('sugar', nextSugar, -nextSugarLbs);
+  }
+
+  const prevYeast = previous?.yeast_strain ?? '';
+  const nextYeast = next.yeast_strain ?? '';
+  const prevYeastLbs = previous?.yeast_lbs ?? 0;
+  const nextYeastLbs = next.yeast_lbs ?? 0;
+
+  if (prevYeast.trim().toLowerCase() === nextYeast.trim().toLowerCase()) {
+    applyInventoryDelta('yeast', nextYeast, prevYeastLbs - nextYeastLbs);
+  } else {
+    applyInventoryDelta('yeast', prevYeast, prevYeastLbs);
+    applyInventoryDelta('yeast', nextYeast, -nextYeastLbs);
+  }
 }
 
 export interface FermenterAssignmentInput {
@@ -358,8 +414,10 @@ export function saveMashBatchWithFermenters(
   assignments: FermenterAssignmentInput[],
   id?: number,
 ): number {
+  const previous = id ? getMashBatch(id) : undefined;
   const mashId = saveMashBatch(batch, id);
   saveMashFermenterAssignments(mashId, assignments);
+  applyMashInventoryUsage(batch, previous);
   return mashId;
 }
 
