@@ -114,6 +114,11 @@ import { AccountingDashboardPage } from './pages/accounting/AccountingDashboardP
 import { AccountMappingsPage } from './pages/accounting/AccountMappingsPage';
 import { AccountingEventsPage } from './pages/accounting/AccountingEventsPage';
 import { ExportBatchesPage } from './pages/accounting/ExportBatchesPage';
+import { AdministrationLayout } from './pages/administration/AdministrationLayout';
+import { AdministrationDashboardPage } from './pages/administration/AdministrationDashboardPage';
+import { UsersRolesPage } from './pages/administration/UsersRolesPage';
+import { AuditLogPage } from './pages/administration/AuditLogPage';
+import { DocumentsPage } from './pages/administration/DocumentsPage';
 import { useDatabaseReady } from './db/queries';
 
 function AppContent() {
@@ -234,6 +239,12 @@ function AppContent() {
               <Route path="mappings" element={<AccountMappingsPage />} />
               <Route path="events" element={<AccountingEventsPage />} />
               <Route path="exports" element={<ExportBatchesPage />} />
+            </Route>
+            <Route path="/administration" element={<AdministrationLayout />}>
+              <Route index element={<AdministrationDashboardPage />} />
+              <Route path="users" element={<UsersRolesPage />} />
+              <Route path="audit-log" element={<AuditLogPage />} />
+              <Route path="documents" element={<DocumentsPage />} />
             </Route>
             <Route path="/costing" element={<CostingLayout />}>
               <Route index element={<CostingDashboardPage />} />
