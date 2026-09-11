@@ -25,8 +25,14 @@ CREATE TABLE IF NOT EXISTS rc_recipe_versions (
   target_abv NUMERIC(6, 3),
   expected_yield_percent NUMERIC(8, 4),
   expected_final_volume_litres NUMERIC(14, 4),
+  target_brix NUMERIC(8, 4),
+  target_ph NUMERIC(6, 3),
+  target_carbonation_volumes NUMERIC(8, 4),
   instructions TEXT NOT NULL DEFAULT '',
   notes TEXT NOT NULL DEFAULT '',
+  created_by TEXT,
+  approved_by TEXT,
+  approved_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (recipe_id, version_number)
@@ -38,6 +44,7 @@ CREATE TABLE IF NOT EXISTS rc_recipe_ingredients (
   ingredient_type TEXT NOT NULL,
   raw_material_id INTEGER REFERENCES md_raw_materials(id) ON DELETE SET NULL,
   bulk_spirit_id INTEGER REFERENCES md_bulk_spirits(id) ON DELETE SET NULL,
+  source_lot_id INTEGER,
   description TEXT NOT NULL DEFAULT '',
   quantity NUMERIC(14, 4) NOT NULL,
   unit TEXT NOT NULL,
@@ -58,7 +65,18 @@ CREATE TABLE IF NOT EXISTS rc_recipe_packaging (
   notes TEXT NOT NULL DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS rc_recipe_steps (
+  id SERIAL PRIMARY KEY,
+  recipe_version_id INTEGER NOT NULL REFERENCES rc_recipe_versions(id) ON DELETE CASCADE,
+  step_number INTEGER NOT NULL,
+  instruction TEXT NOT NULL,
+  notes TEXT NOT NULL DEFAULT '',
+  UNIQUE (recipe_version_id, step_number)
+);
+
 CREATE INDEX IF NOT EXISTS idx_rc_recipes_product ON rc_recipes(product_id);
 CREATE INDEX IF NOT EXISTS idx_rc_recipe_versions_recipe ON rc_recipe_versions(recipe_id);
 CREATE INDEX IF NOT EXISTS idx_rc_recipe_ingredients_version ON rc_recipe_ingredients(recipe_version_id);
 CREATE INDEX IF NOT EXISTS idx_rc_recipe_packaging_version ON rc_recipe_packaging(recipe_version_id);
+CREATE INDEX IF NOT EXISTS idx_rc_recipe_packaging_sku ON rc_recipe_packaging(sku_id);
+CREATE INDEX IF NOT EXISTS idx_rc_recipe_steps_version ON rc_recipe_steps(recipe_version_id);

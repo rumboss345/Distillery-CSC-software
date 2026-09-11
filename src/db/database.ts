@@ -3,7 +3,7 @@ import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 import { buildCscFloorEquipmentRows, CSC_FLOOR_PLAN_SIZE } from '../lib/csc-floor-equipment';
 import { MASTER_DATA_SCHEMA, SUPPLIER_CLASSIFICATIONS_MIGRATION } from './master-data-schema';
 import { migrateSupplierClassificationsFromLegacy, seedMasterDataIfEmpty } from './master-data-queries';
-import { RECIPES_SCHEMA } from './recipes-schema';
+import { RECIPES_SCHEMA, RECIPES_V1C_MIGRATION, RECIPES_V1C_NEW_COLUMNS } from './recipes-schema';
 import { seedRecipeLookupsIfEmpty } from './recipes-queries';
 import { SCHEMA, SEED_DATA } from './schema';
 
@@ -373,6 +373,20 @@ function runMigrations(): void {
   persistDb();
 }
 
+function recipeColumnExists(table: string, column: string): boolean {
+  if (!db) return false;
+  const stmt = db.prepare(`PRAGMA table_info(${table})`);
+  const columns = stmt.getColumnNames();
+  let found = false;
+  while (stmt.step()) {
+    const values = stmt.get();
+    const nameIdx = columns.indexOf('name');
+    if (nameIdx >= 0 && values[nameIdx] === column) found = true;
+  }
+  stmt.free();
+  return found;
+}
+
 function migrateRecipes(): void {
   if (!db) return;
   const hasRecipes = queryOne<{ name: string }>(
@@ -381,6 +395,13 @@ function migrateRecipes(): void {
   if (!hasRecipes) {
     db.run(RECIPES_SCHEMA);
     seedRecipeLookupsIfEmpty();
+  } else {
+    db.run(RECIPES_V1C_MIGRATION);
+    for (const col of RECIPES_V1C_NEW_COLUMNS) {
+      if (!recipeColumnExists(col.table, col.column)) {
+        db.run(col.ddl);
+      }
+    }
   }
 }
 

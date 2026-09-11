@@ -1,16 +1,23 @@
-import { formatBusinessCode } from '../../shared/master-data/codes';
-import { nextBusinessCode } from './master-data-queries';
+import { assertActivationReady } from '../../shared/recipes/activation-validation';
 import {
   DEFAULT_RECIPE_TYPES,
   RECIPE_LOOKUP_TYPES,
 } from '../../shared/recipes/constants';
 import {
+  validateBatchSizeUnit,
+  validateCarbonationOptional,
+  validateExpectedYieldOptional,
   validateIngredientQuantity,
   validateIngredientType,
+  validateIngredientUnit,
   validateQuantityBasis,
   validateRecipeName,
+  validateStepInstruction,
+  validateStepNumber,
   validateTargetAbvOptional,
   validateTargetBatchSize,
+  validateTargetBrixOptional,
+  validateTargetPhOptional,
   validateVersionStatus,
 } from '../../shared/recipes/validation';
 import type {
@@ -20,11 +27,14 @@ import type {
   RcRecipePackaging,
   RcRecipePackagingSaveInput,
   RcRecipeSaveInput,
+  RcRecipeStep,
+  RcRecipeStepSaveInput,
   RcRecipeVersion,
   RcRecipeVersionSaveInput,
 } from '../types/recipes';
-import { insertRow, queryAll, queryOne, runQuery } from './database';
+import { getDb, insertRow, queryAll, queryOne, runQuery, scheduleSave } from './database';
 import { getLookupNames, addLookupValue } from './master-data-queries';
+import { nextBusinessCode } from './master-data-queries';
 
 const now = () => new Date().toISOString();
 
@@ -43,6 +53,80 @@ function assertUniqueCode(table: string, codeColumn: string, code: string, exclu
     excludeId != null ? [code, excludeId] : [code],
   );
   if (existing) throw new Error(`Code "${code}" already exists.`);
+}
+
+function validateVersionFields(data: RcRecipeVersionSaveInput): void {
+  validateVersionStatus(data.status);
+  validateTargetBatchSize(data.target_batch_size);
+  validateBatchSizeUnit(data.batch_size_unit);
+  validateTargetAbvOptional(data.target_abv);
+  validateExpectedYieldOptional(data.expected_yield_percent);
+  validateTargetBrixOptional(data.target_brix);
+  validateTargetPhOptional(data.target_ph);
+  validateCarbonationOptional(data.target_carbonation_volumes);
+}
+
+function normalizeIngredientInput(data: RcRecipeIngredientSaveInput): RcRecipeIngredientSaveInput {
+  return {
+    ...data,
+    raw_material_id: data.ingredient_type === 'Raw Material' ? data.raw_material_id : null,
+    bulk_spirit_id: data.ingredient_type === 'Bulk Spirit' ? data.bulk_spirit_id : null,
+    source_lot_id: data.source_lot_id ?? null,
+    description: data.ingredient_type === 'Water' && !data.description.trim()
+      ? 'Water'
+      : data.description,
+  };
+}
+
+function buildActivationContext(recipeId: number, versionId: number) {
+  const recipe = getRecipe(recipeId);
+  const version = getRecipeVersion(versionId);
+  if (!recipe || !version) throw new Error('Recipe or version not found.');
+
+  const product = queryOne<{ id: number }>('SELECT id FROM md_products WHERE id = ?', [recipe.product_id]);
+  const rawMaterials = queryAll<{ id: number }>(
+    'SELECT id FROM md_raw_materials WHERE active = 1',
+  );
+  const bulkSpirits = queryAll<{ id: number }>(
+    'SELECT id FROM md_bulk_spirits WHERE active = 1',
+  );
+  const packagingMaterials = queryAll<{ id: number }>(
+    'SELECT id FROM md_packaging_materials WHERE active = 1',
+  );
+  const skus = queryAll<{ id: number; product_id: number }>(
+    'SELECT id, product_id FROM md_skus',
+  );
+
+  return {
+    productId: recipe.product_id,
+    productExists: product != null,
+    version: {
+      target_batch_size: version.target_batch_size,
+      batch_size_unit: version.batch_size_unit,
+      target_abv: version.target_abv,
+      expected_yield_percent: version.expected_yield_percent,
+      target_brix: version.target_brix,
+      target_ph: version.target_ph,
+      target_carbonation_volumes: version.target_carbonation_volumes,
+    },
+    ingredients: getRecipeIngredients(versionId).map((i) => ({
+      ingredient_type: i.ingredient_type,
+      raw_material_id: i.raw_material_id,
+      bulk_spirit_id: i.bulk_spirit_id,
+      description: i.description,
+      quantity: i.quantity,
+      unit: i.unit,
+    })),
+    packaging: getRecipePackaging(versionId).map((p) => ({
+      sku_id: p.sku_id,
+      packaging_material_id: p.packaging_material_id,
+      quantity: p.quantity,
+    })),
+    validRawMaterialIds: new Set(rawMaterials.map((r) => r.id)),
+    validBulkSpiritIds: new Set(bulkSpirits.map((b) => b.id)),
+    validPackagingMaterialIds: new Set(packagingMaterials.map((p) => p.id)),
+    skuProductIdBySkuId: new Map(skus.map((s) => [s.id, s.product_id])),
+  };
 }
 
 // ─── Lookups ───────────────────────────────────────────────────────────────
@@ -96,6 +180,8 @@ export function getRecipe(id: number): RcRecipe | null {
 export function saveRecipe(data: RcRecipeSaveInput, id?: number, code?: string): number {
   validateRecipeName(data.name);
   if (!data.product_id) throw new Error('Product is required.');
+  const product = queryOne<{ id: number }>('SELECT id FROM md_products WHERE id = ?', [data.product_id]);
+  if (!product) throw new Error('Selected product does not exist.');
   const ts = now();
   if (id) {
     if (code) assertUniqueCode('rc_recipes', 'recipe_code', code, id);
@@ -122,6 +208,9 @@ export function saveRecipe(data: RcRecipeSaveInput, id?: number, code?: string):
     target_abv: null,
     expected_yield_percent: null,
     expected_final_volume_litres: null,
+    target_brix: null,
+    target_ph: null,
+    target_carbonation_volumes: null,
     instructions: '',
     notes: '',
   });
@@ -145,7 +234,7 @@ export function getRecipeVersion(id: number): RcRecipeVersion | null {
   return queryOne<RcRecipeVersion>('SELECT * FROM rc_recipe_versions WHERE id = ?', [id]);
 }
 
-export function getNextVersionNumber(recipeId: number): number {
+function getNextVersionNumber(recipeId: number): number {
   const row = queryOne<{ max_num: number | null }>(
     'SELECT MAX(version_number) AS max_num FROM rc_recipe_versions WHERE recipe_id = ?',
     [recipeId],
@@ -154,33 +243,31 @@ export function getNextVersionNumber(recipeId: number): number {
 }
 
 export function createRecipeVersion(recipeId: number, data: RcRecipeVersionSaveInput): number {
-  validateVersionStatus(data.status);
-  validateTargetBatchSize(data.target_batch_size);
-  validateTargetAbvOptional(data.target_abv);
+  validateVersionFields(data);
   const versionNumber = getNextVersionNumber(recipeId);
   const ts = now();
   return insertRow(
     `INSERT INTO rc_recipe_versions (recipe_id, version_number, version_label, status, effective_date,
       target_batch_size, batch_size_unit, target_abv, expected_yield_percent, expected_final_volume_litres,
-      instructions, notes, created_at, updated_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      target_brix, target_ph, target_carbonation_volumes, instructions, notes, created_at, updated_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     [recipeId, versionNumber, data.version_label, data.status, data.effective_date,
       data.target_batch_size, data.batch_size_unit, data.target_abv, data.expected_yield_percent,
-      data.expected_final_volume_litres, data.instructions, data.notes, ts, ts],
+      data.expected_final_volume_litres, data.target_brix, data.target_ph, data.target_carbonation_volumes,
+      data.instructions, data.notes, ts, ts],
   );
 }
 
 export function saveRecipeVersion(versionId: number, data: RcRecipeVersionSaveInput): number {
   assertVersionEditable(versionId);
-  validateVersionStatus(data.status);
-  validateTargetBatchSize(data.target_batch_size);
-  validateTargetAbvOptional(data.target_abv);
+  validateVersionFields(data);
   runQuery(
     `UPDATE rc_recipe_versions SET version_label=?, status=?, effective_date=?, target_batch_size=?,
      batch_size_unit=?, target_abv=?, expected_yield_percent=?, expected_final_volume_litres=?,
-     instructions=?, notes=?, updated_at=? WHERE id=?`,
+     target_brix=?, target_ph=?, target_carbonation_volumes=?, instructions=?, notes=?, updated_at=? WHERE id=?`,
     [data.version_label, data.status, data.effective_date, data.target_batch_size, data.batch_size_unit,
       data.target_abv, data.expected_yield_percent, data.expected_final_volume_litres,
+      data.target_brix, data.target_ph, data.target_carbonation_volumes,
       data.instructions, data.notes, now(), versionId],
   );
   return versionId;
@@ -198,6 +285,9 @@ export function cloneRecipeVersion(sourceVersionId: number): number {
     target_abv: source.target_abv,
     expected_yield_percent: source.expected_yield_percent,
     expected_final_volume_litres: source.expected_final_volume_litres,
+    target_brix: source.target_brix,
+    target_ph: source.target_ph,
+    target_carbonation_volumes: source.target_carbonation_volumes,
     instructions: source.instructions,
     notes: source.notes,
   });
@@ -206,6 +296,7 @@ export function cloneRecipeVersion(sourceVersionId: number): number {
       ingredient_type: ing.ingredient_type,
       raw_material_id: ing.raw_material_id,
       bulk_spirit_id: ing.bulk_spirit_id,
+      source_lot_id: ing.source_lot_id,
       description: ing.description,
       quantity: ing.quantity,
       unit: ing.unit,
@@ -225,10 +316,17 @@ export function cloneRecipeVersion(sourceVersionId: number): number {
       notes: pkg.notes,
     });
   }
+  for (const step of getRecipeSteps(sourceVersionId)) {
+    saveRecipeStep(newVersionId, {
+      step_number: step.step_number,
+      instruction: step.instruction,
+      notes: step.notes,
+    });
+  }
   return newVersionId;
 }
 
-export function activateRecipeVersion(recipeId: number, versionId: number): void {
+export function activateRecipeVersion(recipeId: number, versionId: number, approvedBy?: string | null): void {
   const version = queryOne<RcRecipeVersion>(
     'SELECT * FROM rc_recipe_versions WHERE id = ? AND recipe_id = ?',
     [versionId, recipeId],
@@ -237,19 +335,34 @@ export function activateRecipeVersion(recipeId: number, versionId: number): void
   if (version.status === 'Archived') {
     throw new Error('Archived versions cannot be activated. Clone to a new Draft version first.');
   }
+  if (version.status === 'Active') {
+    throw new Error('This version is already Active.');
+  }
+
+  assertActivationReady(buildActivationContext(recipeId, versionId));
+
   const ts = now();
-  runQuery(
-    `UPDATE rc_recipe_versions SET status = 'Archived', updated_at = ? WHERE recipe_id = ? AND status = 'Active'`,
-    [ts, recipeId],
-  );
-  runQuery(
-    `UPDATE rc_recipe_versions SET status = 'Active', updated_at = ? WHERE id = ?`,
-    [ts, versionId],
-  );
-  runQuery(
-    'UPDATE rc_recipes SET active_version_id = ?, status = ?, updated_at = ? WHERE id = ?',
-    [versionId, 'Active', ts, recipeId],
-  );
+  const db = getDb();
+  db.run('BEGIN');
+  try {
+    db.run(
+      `UPDATE rc_recipe_versions SET status = 'Archived', updated_at = ? WHERE recipe_id = ? AND status = 'Active'`,
+      [ts, recipeId],
+    );
+    db.run(
+      `UPDATE rc_recipe_versions SET status = 'Active', approved_by = ?, approved_at = ?, updated_at = ? WHERE id = ?`,
+      [approvedBy ?? null, ts, ts, versionId],
+    );
+    db.run(
+      'UPDATE rc_recipes SET active_version_id = ?, status = ?, updated_at = ? WHERE id = ?',
+      [versionId, 'Active', ts, recipeId],
+    );
+    db.run('COMMIT');
+    scheduleSave();
+  } catch (err) {
+    db.run('ROLLBACK');
+    throw err;
+  }
 }
 
 export function archiveRecipeVersion(recipeId: number, versionId: number): void {
@@ -282,18 +395,21 @@ export function getRecipeIngredients(versionId: number): RcRecipeIngredient[] {
   );
 }
 
-function validateIngredientRefs(data: RcRecipeIngredientSaveInput): void {
+function validateIngredientRefs(data: RcRecipeIngredientSaveInput, recipeProductId?: number): void {
+  void recipeProductId;
   validateIngredientType(data.ingredient_type);
   validateQuantityBasis(data.quantity_basis);
   validateIngredientQuantity(data.quantity);
-  if (data.ingredient_type === 'Raw Material' && !data.raw_material_id) {
-    throw new Error('Raw material is required for this ingredient type.');
+  validateIngredientUnit(data.unit);
+  if (data.ingredient_type === 'Raw Material') {
+    if (!data.raw_material_id) throw new Error('Raw material is required for this ingredient type.');
+    const rm = queryOne<{ id: number }>('SELECT id FROM md_raw_materials WHERE id = ? AND active = 1', [data.raw_material_id]);
+    if (!rm) throw new Error('Raw material reference is invalid or inactive.');
   }
-  if (data.ingredient_type === 'Bulk Spirit' && !data.bulk_spirit_id) {
-    throw new Error('Bulk spirit is required for this ingredient type.');
-  }
-  if (data.ingredient_type === 'Water' && !data.description.trim()) {
-    // default description ok
+  if (data.ingredient_type === 'Bulk Spirit') {
+    if (!data.bulk_spirit_id) throw new Error('Bulk spirit is required for this ingredient type.');
+    const bs = queryOne<{ id: number }>('SELECT id FROM md_bulk_spirits WHERE id = ? AND active = 1', [data.bulk_spirit_id]);
+    if (!bs) throw new Error('Bulk spirit reference is invalid or inactive.');
   }
   if (data.ingredient_type === 'Other' && !data.description.trim()) {
     throw new Error('Description is required for Other ingredients.');
@@ -306,22 +422,26 @@ export function saveRecipeIngredient(
   id?: number,
 ): number {
   assertVersionEditable(versionId);
-  validateIngredientRefs(data);
+  const normalized = normalizeIngredientInput(data);
+  validateIngredientRefs(normalized);
   if (id) {
     runQuery(
-      `UPDATE rc_recipe_ingredients SET ingredient_type=?, raw_material_id=?, bulk_spirit_id=?, description=?,
-       quantity=?, unit=?, quantity_basis=?, sequence=?, optional=?, notes=? WHERE id = ? AND recipe_version_id = ?`,
-      [data.ingredient_type, data.raw_material_id, data.bulk_spirit_id, data.description,
-        data.quantity, data.unit, data.quantity_basis, data.sequence, data.optional, data.notes, id, versionId],
+      `UPDATE rc_recipe_ingredients SET ingredient_type=?, raw_material_id=?, bulk_spirit_id=?, source_lot_id=?,
+       description=?, quantity=?, unit=?, quantity_basis=?, sequence=?, optional=?, notes=?
+       WHERE id = ? AND recipe_version_id = ?`,
+      [normalized.ingredient_type, normalized.raw_material_id, normalized.bulk_spirit_id, normalized.source_lot_id,
+        normalized.description, normalized.quantity, normalized.unit, normalized.quantity_basis, normalized.sequence,
+        normalized.optional, normalized.notes, id, versionId],
     );
     return id;
   }
   return insertRow(
     `INSERT INTO rc_recipe_ingredients (recipe_version_id, ingredient_type, raw_material_id, bulk_spirit_id,
-      description, quantity, unit, quantity_basis, sequence, optional, notes)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-    [versionId, data.ingredient_type, data.raw_material_id, data.bulk_spirit_id, data.description,
-      data.quantity, data.unit, data.quantity_basis, data.sequence, data.optional, data.notes],
+      source_lot_id, description, quantity, unit, quantity_basis, sequence, optional, notes)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [versionId, normalized.ingredient_type, normalized.raw_material_id, normalized.bulk_spirit_id,
+      normalized.source_lot_id, normalized.description, normalized.quantity, normalized.unit,
+      normalized.quantity_basis, normalized.sequence, normalized.optional, normalized.notes],
   );
 }
 
@@ -339,9 +459,37 @@ export function getRecipePackaging(versionId: number): RcRecipePackaging[] {
      LEFT JOIN md_skus s ON s.id = p.sku_id
      LEFT JOIN md_packaging_materials pm ON pm.id = p.packaging_material_id
      WHERE p.recipe_version_id = ?
-     ORDER BY p.id`,
+     ORDER BY s.name COLLATE NOCASE, pm.name COLLATE NOCASE, p.id`,
     [versionId],
   );
+}
+
+function validatePackagingRefs(versionId: number, data: RcRecipePackagingSaveInput): void {
+  validateQuantityBasis(data.quantity_basis);
+  validateIngredientQuantity(data.quantity);
+  if (!data.packaging_material_id) {
+    throw new Error('Packaging material is required.');
+  }
+  const pm = queryOne<{ id: number }>(
+    'SELECT id FROM md_packaging_materials WHERE id = ? AND active = 1',
+    [data.packaging_material_id],
+  );
+  if (!pm) throw new Error('Packaging material reference is invalid or inactive.');
+  if (data.sku_id != null) {
+    const version = queryOne<{ recipe_id: number }>(
+      'SELECT recipe_id FROM rc_recipe_versions WHERE id = ?',
+      [versionId],
+    );
+    const recipe = version ? getRecipe(version.recipe_id) : null;
+    const sku = queryOne<{ id: number; product_id: number }>(
+      'SELECT id, product_id FROM md_skus WHERE id = ?',
+      [data.sku_id],
+    );
+    if (!sku) throw new Error('SKU reference is invalid.');
+    if (recipe && sku.product_id !== recipe.product_id) {
+      throw new Error('SKU must belong to the same product as this recipe.');
+    }
+  }
 }
 
 export function saveRecipePackaging(
@@ -350,11 +498,7 @@ export function saveRecipePackaging(
   id?: number,
 ): number {
   assertVersionEditable(versionId);
-  validateQuantityBasis(data.quantity_basis);
-  validateIngredientQuantity(data.quantity);
-  if (!data.sku_id && !data.packaging_material_id) {
-    throw new Error('SKU or packaging material is required.');
-  }
+  validatePackagingRefs(versionId, data);
   if (id) {
     runQuery(
       `UPDATE rc_recipe_packaging SET sku_id=?, packaging_material_id=?, quantity=?, quantity_basis=?,
@@ -378,6 +522,47 @@ export function deleteRecipePackaging(versionId: number, packagingId: number): v
   runQuery('DELETE FROM rc_recipe_packaging WHERE id = ? AND recipe_version_id = ?', [packagingId, versionId]);
 }
 
+// ─── Steps ─────────────────────────────────────────────────────────────────
+
+export function getRecipeSteps(versionId: number): RcRecipeStep[] {
+  return queryAll<RcRecipeStep>(
+    'SELECT * FROM rc_recipe_steps WHERE recipe_version_id = ? ORDER BY step_number',
+    [versionId],
+  );
+}
+
+export function saveRecipeStep(versionId: number, data: RcRecipeStepSaveInput, id?: number): number {
+  assertVersionEditable(versionId);
+  validateStepNumber(data.step_number);
+  validateStepInstruction(data.instruction);
+  if (id) {
+    runQuery(
+      'UPDATE rc_recipe_steps SET step_number=?, instruction=?, notes=? WHERE id = ? AND recipe_version_id = ?',
+      [data.step_number, data.instruction.trim(), data.notes, id, versionId],
+    );
+    return id;
+  }
+  return insertRow(
+    'INSERT INTO rc_recipe_steps (recipe_version_id, step_number, instruction, notes) VALUES (?,?,?,?)',
+    [versionId, data.step_number, data.instruction.trim(), data.notes],
+  );
+}
+
+export function reorderRecipeSteps(versionId: number, orderedStepIds: number[]): void {
+  assertVersionEditable(versionId);
+  orderedStepIds.forEach((stepId, index) => {
+    runQuery(
+      'UPDATE rc_recipe_steps SET step_number = ? WHERE id = ? AND recipe_version_id = ?',
+      [index + 1, stepId, versionId],
+    );
+  });
+}
+
+export function deleteRecipeStep(versionId: number, stepId: number): void {
+  assertVersionEditable(versionId);
+  runQuery('DELETE FROM rc_recipe_steps WHERE id = ? AND recipe_version_id = ?', [stepId, versionId]);
+}
+
 /** Insert theoretical water from dilution calculator into a Draft version. */
 export function insertDilutionWaterIngredient(
   versionId: number,
@@ -394,6 +579,7 @@ export function insertDilutionWaterIngredient(
     ingredient_type: 'Water',
     raw_material_id: null,
     bulk_spirit_id: null,
+    source_lot_id: null,
     description: 'Dilution water (theoretical)',
     quantity: waterLitres,
     unit: 'L',
@@ -403,5 +589,3 @@ export function insertDilutionWaterIngredient(
     notes,
   });
 }
-
-export { formatBusinessCode };

@@ -28,7 +28,7 @@ export function RecipesPage() {
   const products = masterDataRepository.products.listActive();
   const recipeTypes = recipesRepository.lookups.recipeTypes();
   const items = useMemo(() => {
-    let rows = recipesRepository.recipes.list(statusFilter === 'all' ? undefined : statusFilter);
+    let rows = recipesRepository.listRecipes(statusFilter === 'all' ? undefined : statusFilter);
     if (search.trim()) {
       const q = search.toLowerCase();
       rows = rows.filter((r) =>
@@ -48,7 +48,7 @@ export function RecipesPage() {
 
   const handleSave = () => {
     try {
-      const newId = recipesRepository.recipes.save(form);
+      const newId = recipesRepository.saveRecipe(form);
       setShowForm(false);
       refresh();
       navigate(`/recipes/${newId}`);
@@ -67,16 +67,16 @@ export function RecipesPage() {
           <option value="Active">Active</option>
           <option value="Inactive">Inactive</option>
         </select>
-        <button className="btn btn-primary" onClick={openNew} disabled={products.length === 0}>+ Add Recipe</button>
+        <button className="btn btn-primary" onClick={openNew} disabled={products.length === 0}>+ New Recipe</button>
       </div>
       {products.length === 0 && (
-        <p className="alert alert-info">Add a product under Master Data before creating recipes.</p>
+        <p className="alert alert-info">Add a product under Master Data before creating recipes. Liquid formulas belong to the product; packaging BOMs may differ per SKU.</p>
       )}
       <div className="table-wrap">
         <table>
           <thead>
             <tr>
-              <th>Code</th><th>Name</th><th>Product</th><th>Type</th><th>Active Version</th><th>Status</th><th></th>
+              <th>Recipe Code</th><th>Recipe Name</th><th>Product</th><th>Recipe Type</th><th>Active Version</th><th>Status</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -96,8 +96,9 @@ export function RecipesPage() {
         {items.length === 0 && <p className="empty-state">No recipes defined.</p>}
       </div>
       {showForm && (
-        <Modal title="Add Recipe" onClose={() => setShowForm(false)}>
+        <Modal title="New Recipe" onClose={() => setShowForm(false)}>
           {error && <div className="alert alert-danger">{error}</div>}
+          <p className="form-hint">Recipe belongs to a product. One liquid formula can package into multiple SKUs.</p>
           <div className="form-grid">
             <div className="form-group"><label>Recipe Name *</label>
               <input className="form-control" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
