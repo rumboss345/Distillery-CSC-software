@@ -21,6 +21,14 @@ import type { MashBatch, MashStatus } from '../types';
 
 const STATUSES: MashStatus[] = ['planned', 'mashing', 'fermenting', 'complete', 'discarded'];
 
+const STATUS_LABELS: Record<MashStatus, string> = {
+  planned: 'planned',
+  mashing: 'washing',
+  fermenting: 'fermenting',
+  complete: 'complete',
+  discarded: 'discarded',
+};
+
 type LogFormState = { temperature_f: string; brix: string; ph: string; notes: string };
 
 const emptyLogForm = (): LogFormState => ({
@@ -80,7 +88,7 @@ function FermenterLogPanel({
         </h5>
       )}
       <p className="form-hint">
-        Estimated ABV uses starting Brix ({startBrix ?? 'set actual start Brix on the mash'}) vs each log’s Brix.
+        Estimated ABV uses starting Brix ({startBrix ?? 'set actual start Brix on the wash'}) vs each log’s Brix.
       </p>
       <div className="form-grid" style={{ marginBottom: '1rem' }}>
         <div className="form-group">
@@ -132,7 +140,7 @@ function FermenterLogPanel({
 }
 
 const emptyBatch = (): Omit<MashBatch, 'id' | 'created_at'> => ({
-  batch_number: generateBatchNumber('M'),
+  batch_number: generateBatchNumber('W'),
   recipe_name: '',
   grain_type: '',
   grain_lbs: 0,
@@ -281,7 +289,7 @@ export function MashFermentation() {
   };
 
   const handleDelete = (id: number) => {
-    if (confirm('Delete this mash batch?')) {
+    if (confirm('Delete this wash batch?')) {
       deleteMashBatch(id);
       if (selectedId === id) setSelectedId(null);
       refresh();
@@ -301,16 +309,16 @@ export function MashFermentation() {
   return (
     <div>
       <div className="page-header">
-        <h2>Mash & Fermentation</h2>
+        <h2>Wash & Fermentation</h2>
         <p>Sugar type in lbs, wash in gallons, fermentation temperature in °F</p>
         <div className="page-actions">
-          <button className="btn btn-primary" onClick={openNew}>+ New Mash Batch</button>
+          <button className="btn btn-primary" onClick={openNew}>+ New Wash Batch</button>
         </div>
       </div>
 
       {batches.length === 0 ? (
         <div className="empty-state">
-          <p>No mash batches recorded yet.</p>
+          <p>No wash batches recorded yet.</p>
           <button className="btn btn-primary" onClick={openNew} style={{ marginTop: '1rem' }}>
             Create your first batch
           </button>
@@ -362,7 +370,7 @@ export function MashFermentation() {
                     </td>
                     <td>{formatAbvEstimate(estAbv)}</td>
                     <td>{format(new Date(b.start_date), 'MMM d, yyyy')}</td>
-                    <td><StatusBadge status={b.status} /></td>
+                    <td><StatusBadge status={STATUS_LABELS[b.status] ?? b.status} /></td>
                     <td className="td-actions">
                       <button className="btn btn-sm btn-secondary" onClick={() => setSelectedId(b.id === selectedId ? null : b.id)}>
                         Logs
@@ -411,7 +419,7 @@ export function MashFermentation() {
       )}
 
       {showForm && (
-        <Modal title={editId ? 'Edit Mash Batch' : 'New Mash Batch'} onClose={() => setShowForm(false)}>
+        <Modal title={editId ? 'Edit Wash Batch' : 'New Wash Batch'} onClose={() => setShowForm(false)}>
           <div className="form-grid">
             <div className="form-group">
               <label>Batch Number</label>
@@ -474,7 +482,7 @@ export function MashFermentation() {
             <div className="form-group">
               <label>Status</label>
               <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as MashStatus })}>
-                {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
               </select>
             </div>
 
@@ -593,7 +601,7 @@ export function MashFermentation() {
               <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
             </div>
           </div>
-          <p className="form-hint">Saving deducts sugar and yeast from inventory. Assigned fermenters show as <strong>in use</strong> on the floor plan until this mash is charged to a still.</p>
+          <p className="form-hint">Saving deducts sugar and yeast from inventory. Assigned fermenters show as <strong>in use</strong> on the floor plan until this wash is charged to a still.</p>
           <div className="form-actions">
             <button className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
             <button className="btn btn-primary" onClick={handleSave}>Save Batch</button>

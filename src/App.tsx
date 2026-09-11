@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -46,7 +46,8 @@ function AppContent() {
         <Route element={<ProtectedRoute />}>
           <Route element={<Layout />}>
             <Route path="/" element={<Dashboard />} />
-            <Route path="/mash" element={<MashFermentation />} />
+            <Route path="/wash" element={<MashFermentation />} />
+            <Route path="/mash" element={<Navigate to="/wash" replace />} />
             <Route path="/distillation" element={<Distillation />} />
             <Route path="/blending" element={<Blending />} />
             <Route path="/barrels" element={<Barrels />} />

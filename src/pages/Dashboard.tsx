@@ -10,7 +10,7 @@ export function Dashboard() {
   const lowStock = getInventoryItems().filter((i) => i.quantity <= i.reorder_level);
 
   const handleClearAllData = () => {
-    if (!confirm('Clear ALL distillery data? This removes mashes, runs, blends, barrels, bottling, inventory, and floor plan records.')) {
+    if (!confirm('Clear ALL distillery data? This removes washes, runs, blends, barrels, bottling, inventory, and floor plan records.')) {
       return;
     }
     if (!confirm('This cannot be undone. Clear everything and reset to sample data?')) {
@@ -30,7 +30,7 @@ export function Dashboard() {
         <div className="stat-card">
           <div className="label">Active Fermentations</div>
           <div className="value accent">{summary.activeMashes}</div>
-          <div className="sub">Mash batches in progress</div>
+          <div className="sub">Wash batches in progress</div>
         </div>
         <div className="stat-card">
           <div className="label">Distillation Runs</div>
@@ -62,9 +62,9 @@ export function Dashboard() {
       </div>
 
       <div className="section">
-        <h3 className="section-title">Recent Mash Batches</h3>
+        <h3 className="section-title">Recent Wash Batches</h3>
         {recentMashes.length === 0 ? (
-          <div className="empty-state">No mash batches yet</div>
+          <div className="empty-state">No wash batches yet</div>
         ) : (
           <div className="table-wrap">
             <table>

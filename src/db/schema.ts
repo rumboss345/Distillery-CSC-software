@@ -208,7 +208,7 @@ INSERT OR IGNORE INTO floor_plans (id, name, width_ft, height_ft, notes) VALUES
 INSERT OR IGNORE INTO floor_equipment (id, floor_plan_id, name, equipment_type, pos_x_ft, pos_y_ft, width_ft, depth_ft, capacity_gal, status, linked_mash_batch_id, notes) VALUES
   (1, 1, 'Fermenter #1', 'fermenter', 6, 8, 10, 10, 500, 'in_use', 2, '500 gal conical fermenter'),
   (2, 1, 'Fermenter #2', 'fermenter', 20, 8, 10, 10, 500, 'in_use', 2, 'Available for next batch'),
-  (3, 1, 'Mash Tun', 'mash_tun', 6, 28, 14, 12, 600, 'empty', NULL, 'Copper mash tun'),
+  (3, 1, 'Wash Tank', 'mash_tun', 6, 28, 14, 12, 600, 'empty', NULL, 'Copper wash tank'),
   (4, 1, 'Pot Still #1', 'pot_still', 48, 10, 12, 14, 200, 'offline', NULL, 'Primary pot still'),
   (5, 1, 'Spirit Safe', 'holding_tank', 64, 12, 6, 4, 50, 'in_use', NULL, 'Hearts collection'),
   (6, 1, 'Low Wines Receiver', 'holding_tank', 64, 22, 8, 6, 100, 'in_use', NULL, '');

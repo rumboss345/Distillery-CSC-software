@@ -94,7 +94,7 @@ export function Reports() {
 
       <div className="card-grid">
         <div className="stat-card">
-          <div className="label">Completed Mashes</div>
+          <div className="label">Completed Washes</div>
           <div className="value">{completedMashes}</div>
         </div>
         <div className="stat-card">
@@ -167,10 +167,10 @@ export function Reports() {
       </div>
 
       <div className="section">
-        <h3 className="section-title">Yield by Mash Batch — {periodLabel}</h3>
+        <h3 className="section-title">Yield by Wash Batch — {periodLabel}</h3>
         <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1rem' }}>
           GPA = Gallons of Pure Alcohol. Yield % = GPA ÷ sugar (lbs) × 100.
-          {reportMonth ? ' Includes mashes distilled during this month.' : ''}
+          {reportMonth ? ' Includes washes distilled during this month.' : ''}
         </p>
         {yields.length === 0 ? (
           <div className="empty-state">
@@ -181,7 +181,7 @@ export function Reports() {
             <table>
               <thead>
                 <tr>
-                  <th>Mash Batch</th>
+                  <th>Wash Batch</th>
                   <th>Sugar (lbs)</th>
                   <th>Wash (gal)</th>
                   <th>Hearts (gal)</th>
@@ -211,7 +211,7 @@ export function Reports() {
       <div className="section">
         <h3 className="section-title">Production Pipeline Summary — {periodLabel}</h3>
         <div className="card" style={{ fontFamily: 'monospace', fontSize: '0.85rem', lineHeight: 2 }}>
-          <div>Mash Batches:     {filteredMashes.length} started{reportMonth ? '' : ` (${summary.activeMashes} active)`}</div>
+          <div>Wash Batches:     {filteredMashes.length} started{reportMonth ? '' : ` (${summary.activeMashes} active)`}</div>
           <div>Distillation:     {filteredRuns.length} runs{reportMonth ? '' : ` (${summary.activeRuns} active)`}</div>
           <div>Barrels Filled:   {filteredBarrels.length}{reportMonth ? '' : ` (${summary.barrelsAging} aging total)`}</div>
           <div>Hearts Collected: {summary.totalHeartsGal.toFixed(1)} gal</div>

@@ -112,7 +112,7 @@ export function deleteInventoryItem(id: number): void {
   runQuery('DELETE FROM inventory_items WHERE id = ?', [id]);
 }
 
-// ── Mash & Fermentation ────────────────────────────────────
+// ── Wash & Fermentation ────────────────────────────────────
 
 export function getMashBatches(): MashBatch[] {
   return queryAll<MashBatch>(
@@ -892,7 +892,7 @@ export function getEquipmentVolumeReport(): EquipmentVolumeReport[] {
         capacity_gal: eq.capacity_gal,
         volume_gal: eq.active_volume_gal ?? 0,
         abv: null,
-        detail: eq.active_batch_number ? `Mash ${eq.active_batch_number}` : '',
+        detail: eq.active_batch_number ? `Wash ${eq.active_batch_number}` : '',
       };
     }
 
@@ -936,9 +936,9 @@ export function getEquipmentVolumeReport(): EquipmentVolumeReport[] {
   });
 }
 
-export function generateBatchNumber(prefix: 'M' | 'D' | 'BT' | 'BL'): string {
+export function generateBatchNumber(prefix: 'W' | 'M' | 'D' | 'BT' | 'BL'): string {
   const year = new Date().getFullYear();
-  const table = prefix === 'M'
+  const table = prefix === 'W' || prefix === 'M'
     ? 'mash_batches'
     : prefix === 'D'
       ? 'distillation_runs'

@@ -469,7 +469,7 @@ export function Distillation() {
 
             {runForm.run_type === 'wash' ? (
               <div className="form-group full-width">
-                <label>Source Mash Batch</label>
+                <label>Source Wash Batch</label>
                 <select
                   value={runForm.source_mash_batch_id ?? ''}
                   onChange={(e) => handleMashChange(e.target.value ? parseInt(e.target.value) : null)}
@@ -504,7 +504,7 @@ export function Distillation() {
                   <p className="field-hint">Previously charged from {savedFermenterName}</p>
                 )}
                 {chargeableFermenters.length === 0 && runForm.source_mash_batch_id && !savedFermenterName && (
-                  <p className="field-hint">No fermenter assignments for this mash — charge volume is manual.</p>
+                  <p className="field-hint">No fermenter assignments for this wash — charge volume is manual.</p>
                 )}
               </div>
             ) : (

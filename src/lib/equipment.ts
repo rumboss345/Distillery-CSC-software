@@ -4,7 +4,7 @@ export const EQUIPMENT_TYPES: { value: EquipmentType; label: string }[] = [
   { value: 'fermenter', label: 'Fermenter' },
   { value: 'pot_still', label: 'Pot Still' },
   { value: 'column_still', label: 'Column Still' },
-  { value: 'mash_tun', label: 'Mash Tun' },
+  { value: 'mash_tun', label: 'Wash Tank' },
   { value: 'holding_tank', label: 'Holding Tank' },
   { value: 'boiler', label: 'Boiler' },
   { value: 'other', label: 'Other' },

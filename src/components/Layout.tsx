@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: '◈' },
-  { to: '/mash', label: 'Mash & Ferment', icon: '◉' },
+  { to: '/wash', label: 'Wash & Ferment', icon: '◉' },
   { to: '/distillation', label: 'Distillation', icon: '△' },
   { to: '/blending', label: 'Blending', icon: '◆' },
   { to: '/barrels', label: 'Barrel Aging', icon: '▣' },

@@ -1,10 +1,10 @@
 # CSC Distillery Tracker
 
-Production management software for distilleries. Track the full spirit-making pipeline from mash to bottle.
+Production management software for distilleries. Track the full spirit-making pipeline from wash to bottle.
 
 ## Features
 
-- **Mash & Fermentation** — Record wash batches, Brix readings, and daily fermentation logs
+- **Wash & Fermentation** — Record wash batches, Brix readings, and daily fermentation logs
 - **Distillation** — Log still runs with heads / hearts / tails cuts, volumes, and ABV
 - **Blending** — Create blend products from holding tank spirit
 - **Barrel Aging** — Track fill dates, warehouse locations, and volume loss

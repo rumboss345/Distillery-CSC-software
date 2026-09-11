@@ -420,7 +420,7 @@ tr:hover td {
 }
 
 .badge-planned { background: var(--info-bg); color: var(--info); }
-.badge-mashing, .badge-running { background: var(--warning-bg); color: var(--warning); }
+.badge-mashing, .badge-washing, .badge-running { background: var(--warning-bg); color: var(--warning); }
 .badge-fermenting { background: rgba(200, 149, 108, 0.2); color: var(--accent); }
 .badge-complete { background: var(--success-bg); color: var(--success); }
 .badge-discarded, .badge-dumped { background: var(--danger-bg); color: var(--danger); }

@@ -141,7 +141,7 @@ export function FloorPlanPage() {
                 )}
                 {selected.equipment_type === 'fermenter' && selected.status === 'empty' && (
                   <dd className="form-hint" style={{ gridColumn: '1 / -1' }}>
-                    Assign this fermenter from Mash & Fermentation.
+                    Assign this fermenter from Wash & Fermentation.
                   </dd>
                 )}
                 {selected.notes && (
