@@ -31,6 +31,7 @@ import type {
   TransferMaterialInput,
 } from '../types/material-inventory';
 import type { SqlValue } from 'sql.js/dist/sql-wasm.js';
+import { tryServerWrite } from '../data/server-mutation-bridge';
 import { insertRow, queryAll, queryOne, runQuery, withDatabaseTransaction } from './database';
 import { createOpeningBalanceCostLayer, snapshotMaterialConsumptionCost } from './costing-queries';
 import { addLookupValue, nextBusinessCode } from './master-data-queries';
@@ -420,6 +421,12 @@ function insertMaterialTransaction(input: PostMaterialTransactionInput): number 
 }
 
 export function postMaterialTransaction(input: PostMaterialTransactionInput): number {
+  const delegated = tryServerWrite(
+    'material.postTransaction',
+    input as unknown as Record<string, unknown>,
+    (r) => Number(r.transactionId),
+  );
+  if (delegated !== null) return delegated;
   assertLedgerMaterial(input.materialType, input.rawMaterialId ?? null, input.packagingMaterialId ?? null);
   return withDatabaseTransaction(() => insertMaterialTransaction(input));
 }
@@ -504,6 +511,12 @@ export function reverseMaterialTransaction(transactionId: number, createdBy?: st
 }
 
 export function transferMaterial(input: TransferMaterialInput): string {
+  const delegated = tryServerWrite(
+    'material.transfer',
+    input as unknown as Record<string, unknown>,
+    (r) => String(r.transactionGroupId),
+  );
+  if (delegated !== null) return delegated;
   assertLedgerMaterial(input.materialType, input.rawMaterialId ?? null, input.packagingMaterialId ?? null);
   const lot = getMaterialLot(input.materialLotId);
   if (!lot) throw new Error('Material lot not found.');
@@ -566,6 +579,12 @@ export function postMaterialOpeningBalance(input: {
   unitCostKyd?: number | null;
   totalCostKyd?: number | null;
 }): number {
+  const delegated = tryServerWrite(
+    'material.openingBalance',
+    input as unknown as Record<string, unknown>,
+    (r) => Number(r.transactionId),
+  );
+  if (delegated !== null) return delegated;
   assertLedgerMaterial(input.materialType, input.rawMaterialId ?? null, input.packagingMaterialId ?? null);
   const existing = queryOne<{ count: number }>(
     `SELECT COUNT(*) AS count FROM mat_transactions

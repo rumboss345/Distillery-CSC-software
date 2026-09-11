@@ -71,15 +71,70 @@ Required env vars:
 
 Connection pooling via `pg.Pool` (max 10). No authoritative data on ephemeral filesystem.
 
+## Client Data Adapter (Step 1A-F)
+
+When `DATABASE_MODE=postgres_authoritative`:
+
+- `ErpDataProvider` bootstraps `/api/erp/bootstrap` into an in-memory cache
+- `hydrateErpTablesFromServerCache()` repopulates the sql.js query engine from server data (not localStorage ERP rows)
+- `tryServerWrite()` routes critical ledger mutations to `/api/erp/*` handlers
+- `persistDb()` skips localStorage writes — stale browser ERP data cannot appear as production inventory
+
+Modules: `src/data/data-adapter.ts`, `server-api-adapter.ts`, `server-cache-hydrator.ts`, `server-mutation-bridge.ts`
+
+## Cutover Dry Run (TEST database)
+
+1. Create browser-local test dataset in `browser_local` mode
+2. Export via Admin → Data Migration
+3. `pg_dump $DATABASE_URL > pre_cutover_backup.sql`
+4. `POST /api/production/migration/import`
+5. `POST /api/production/migration/validate` — reconciliation must PASS (all lots, tanks, COGS)
+6. Set `DATABASE_MODE=postgres_authoritative` on **test** server only
+7. Run operational workflow (receipt → production → ship)
+8. Restart server — confirm data persists
+9. Re-run reconciliation — must PASS
+10. Roll back: `DATABASE_MODE=browser_local`, restore browser export if needed
+
+## Render Production Configuration
+
+| Variable | Required | Notes |
+|----------|----------|-------|
+| `DATABASE_URL` | Yes | Render PostgreSQL with SSL (`?sslmode=require`) |
+| `DATABASE_MODE` | Yes | `browser_local` until cutover approved |
+| `JWT_SECRET` | Yes | Strong random secret |
+| `ADMIN_EMAIL` | Yes | Initial admin login |
+| `ADMIN_PASSWORD` | Yes | Initial admin password |
+| `NODE_ENV` | Yes | `production` |
+
+Startup: migrations 001–021 apply automatically. Connection pool max 10. No authoritative data on ephemeral filesystem.
+
+## Cutover Readiness (`serverApiCutoverReady`)
+
+`evaluateCutoverReadiness()` returns `ready=true` only when ALL checks pass:
+
+- PostgreSQL connected
+- Migrations current (001–021)
+- Read + critical write domains IMPLEMENTED
+- Last reconciliation PASS with zero discrepancies
+- Integration certification recorded (`step_1a_integration_certified`)
+- Client adapter + server-mode paths certified
+- NOT prematurely in `postgres_authoritative` production mode
+
+**`serverApiCutoverReady` remains false until every gate passes.**
+
 ## Cutover Checklist (Human Approval Required)
 
-- [ ] All 450+ tests pass
-- [ ] Import + reconciliation PASS
+- [ ] All tests pass (unit + PostgreSQL integration)
+- [ ] Import + full reconciliation PASS (no sampling on critical ledger data)
 - [ ] `serverApiCutoverReady=true`
-- [ ] Multi-user concurrency tests pass
+- [ ] Concurrency scenarios A–F verified on PostgreSQL
+- [ ] E2E workflow test passes on PostgreSQL
+- [ ] UI smoke test in `postgres_authoritative` against TEST database
+- [ ] Multi-user test (2 sessions, shared state)
+- [ ] Cutover dry run documented
 - [ ] External browser backup stored
 - [ ] PostgreSQL backup taken
 - [ ] Admin activates via Data Migration UI
-- [ ] Only then: optionally set `DATABASE_MODE=postgres_authoritative`
+- [ ] Only then: set `DATABASE_MODE=postgres_authoritative` in production
 
 **Do not enable `SERVER_AUTHORITATIVE` without explicit approval.**

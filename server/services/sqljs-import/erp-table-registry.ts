@@ -34,14 +34,15 @@ export const ERP_IMPORT_TABLES: ErpTableSpec[] = [
   { table: 'md_storage_locations', optional: true },
 
   // 1C Recipes
-  { table: 'rec_recipes', optional: true },
-  { table: 'rec_recipe_versions', optional: true },
-  { table: 'rec_recipe_ingredients', optional: true },
-  { table: 'rec_recipe_packaging', optional: true },
-  { table: 'rec_recipe_steps', optional: true },
+  { table: 'rc_recipes', optional: true },
+  { table: 'rc_recipe_versions', optional: true },
+  { table: 'rc_recipe_ingredients', optional: true },
+  { table: 'rc_recipe_packaging', optional: true },
+  { table: 'rc_recipe_steps', optional: true },
 
   // 1D Liquid ledger
-  { table: 'liq_liquid_lots', optional: true },
+  { table: 'liq_lots', optional: true },
+  { table: 'liq_lot_parents', optional: true },
   { table: 'liq_tanks', optional: true },
   { table: 'liq_transactions', optional: true },
   { table: 'liq_reconciliations', optional: true },
@@ -53,7 +54,7 @@ export const ERP_IMPORT_TABLES: ErpTableSpec[] = [
   { table: 'prod_batch_inputs', optional: true },
   { table: 'prod_batch_losses', optional: true },
   { table: 'prod_batch_steps', optional: true },
-  { table: 'prod_batch_events', optional: true },
+  { table: 'prod_events', optional: true },
 
   // 1F Material + purchasing
   { table: 'mat_storage_bins', optional: true },
@@ -68,11 +69,16 @@ export const ERP_IMPORT_TABLES: ErpTableSpec[] = [
 
   // 1G Costing
   { table: 'cost_landed_cost_documents', optional: true },
-  { table: 'cost_landed_cost_lines', optional: true },
+  { table: 'cost_landed_cost_components', optional: true },
+  { table: 'cost_landed_cost_allocations', optional: true },
   { table: 'cost_material_lot_layers', optional: true },
+  { table: 'cost_material_consumptions', optional: true },
+  { table: 'cost_liquid_lot_layers', optional: true },
+  { table: 'cost_batch_conversion_costs', optional: true },
   { table: 'cost_batch_snapshots', optional: true },
-  { table: 'cost_liquid_layers', optional: true },
+  { table: 'cost_production_outputs', optional: true },
   { table: 'cost_liquid_movements', optional: true },
+  { table: 'cost_post_consumption_flags', optional: true },
   { table: 'cost_adjustments', optional: true },
 
   // 1H Finished goods
@@ -92,7 +98,7 @@ export const ERP_IMPORT_TABLES: ErpTableSpec[] = [
   { table: 'brl_fills', optional: true },
   { table: 'brl_observations', optional: true },
   { table: 'brl_dumps', optional: true },
-  { table: 'brl_dump_sources', optional: true },
+  { table: 'brl_angel_share_events', optional: true },
 
   // 1K Quality
   { table: 'qc_specifications', optional: true },

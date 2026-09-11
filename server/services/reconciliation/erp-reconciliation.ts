@@ -141,7 +141,7 @@ export async function buildErpReconciliationReport(
   }
 
   if (tableExists(browserDb, 'mat_lots')) {
-    for (const lot of selectAll(browserDb, 'mat_lots').slice(0, 20)) {
+    for (const lot of selectAll(browserDb, 'mat_lots')) {
       const lotId = Number(lot.id);
       const bBal = browserMaterialLotBalance(browserDb, lotId);
       const sBal = await serverMaterialLotBalance(client, lotId);
@@ -159,7 +159,7 @@ export async function buildErpReconciliationReport(
   }
 
   if (tableExists(browserDb, 'fg_lots')) {
-    for (const lot of selectAll(browserDb, 'fg_lots').slice(0, 20)) {
+    for (const lot of selectAll(browserDb, 'fg_lots')) {
       const lotId = Number(lot.id);
       const bBal = browserFgLotBalance(browserDb, lotId);
       const sBal = await serverFgLotBalance(client, lotId);
@@ -174,6 +174,94 @@ export async function buildErpReconciliationReport(
         critical: true,
       });
     }
+  }
+
+  if (tableExists(browserDb, 'liq_lots')) {
+    for (const lot of selectAll(browserDb, 'liq_lots')) {
+      const lotId = Number(lot.id);
+      const browserVol = selectAll(browserDb, 'liq_transactions')
+        .filter((tx) => !tx.reversal_of_transaction_id)
+        .reduce((sum, tx) => {
+          if (Number(tx.destination_lot_id) === lotId) return sum + Number(tx.volume_litres ?? 0);
+          if (Number(tx.source_lot_id) === lotId) return sum - Number(tx.volume_litres ?? 0);
+          return sum;
+        }, 0);
+      const serverRow = await client.query<{ vol: string }>(
+        `SELECT
+          COALESCE(SUM(CASE WHEN destination_lot_id = $1 THEN volume_litres ELSE 0 END), 0) -
+          COALESCE(SUM(CASE WHEN source_lot_id = $1 THEN volume_litres ELSE 0 END), 0) AS vol
+         FROM liq_transactions
+         WHERE (source_lot_id = $1 OR destination_lot_id = $1)
+           AND reversal_of_transaction_id IS NULL`,
+        [lotId],
+      );
+      const serverVol = Number(serverRow.rows[0]?.vol ?? 0);
+      const diff = Math.abs(browserVol - serverVol);
+      rows.push({
+        key: `liq_lot_volume_${lotId}`,
+        label: `Liquid lot ${lot.lot_code ?? lotId} volume`,
+        browser: browserVol,
+        server: serverVol,
+        difference: diff,
+        status: diff <= 0.05 ? 'PASS' : 'FAIL',
+        critical: true,
+      });
+    }
+  }
+
+  if (tableExists(browserDb, 'qc_holds')) {
+    const browserActiveHolds = selectAll(browserDb, 'qc_holds').filter((h) => h.status === 'Active').length;
+    const serverActiveHolds = await client.query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM qc_holds WHERE status = 'Active'`,
+    );
+    const sHolds = Number(serverActiveHolds.rows[0]?.count ?? 0);
+    rows.push({
+      key: 'qc_active_holds',
+      label: 'Active QA holds',
+      browser: browserActiveHolds,
+      server: sHolds,
+      difference: sHolds - browserActiveHolds,
+      status: browserActiveHolds === sHolds ? 'PASS' : 'FAIL',
+      critical: true,
+    });
+  }
+
+  if (tableExists(browserDb, 'sal_shipments')) {
+    const browserPosted = selectAll(browserDb, 'sal_shipments').filter((s) => s.status === 'Posted').length;
+    const serverPosted = await client.query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM sal_shipments WHERE status = 'Posted'`,
+    );
+    const sPosted = Number(serverPosted.rows[0]?.count ?? 0);
+    rows.push({
+      key: 'sal_posted_shipments',
+      label: 'Posted shipments',
+      browser: browserPosted,
+      server: sPosted,
+      difference: sPosted - browserPosted,
+      status: browserPosted === sPosted ? 'PASS' : 'FAIL',
+      critical: true,
+    });
+  }
+
+  if (tableExists(browserDb, 'sal_cogs_records')) {
+    const browserCogs = selectAll(browserDb, 'sal_cogs_records').reduce(
+      (sum, r) => sum + Number(r.total_cogs_kyd ?? r.extended_cost_kyd ?? 0),
+      0,
+    );
+    const serverCogsRow = await client.query<{ total: string }>(
+      `SELECT COALESCE(SUM(COALESCE(total_cogs_kyd, extended_cost_kyd, 0)), 0)::text AS total FROM sal_cogs_records`,
+    );
+    const serverCogs = Number(serverCogsRow.rows[0]?.total ?? 0);
+    const cogsDiff = Math.abs(browserCogs - serverCogs);
+    rows.push({
+      key: 'sal_cogs_total',
+      label: 'COGS records total (KYD)',
+      browser: browserCogs,
+      server: serverCogs,
+      difference: cogsDiff,
+      status: cogsDiff <= 0.01 ? 'PASS' : 'FAIL',
+      critical: true,
+    });
   }
 
   const browserTanks = computeBrowserTankBalances(browserDb);

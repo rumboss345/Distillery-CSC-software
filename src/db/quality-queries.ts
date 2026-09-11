@@ -20,6 +20,7 @@ import type {
   ReleaseHoldInput,
 } from '../types/quality';
 import { guardSensitiveAction } from './administration-queries';
+import { tryServerWrite } from '../data/server-mutation-bridge';
 import { insertRow, queryAll, queryOne, runQuery, withDatabaseTransaction } from './database';
 import { getLotChildren } from './liquid-ledger-queries';
 import { nextBusinessCode } from './master-data-queries';
@@ -262,6 +263,12 @@ export function listTestResults(sampleId: number): QcTestResult[] {
 }
 
 export function placeHold(input: PlaceHoldInput): number {
+  const delegated = tryServerWrite(
+    'quality.placeHold',
+    input as unknown as Record<string, unknown>,
+    (r) => Number(r.holdId),
+  );
+  if (delegated !== null) return delegated;
   if (isEntityOnHold(input.entityType, input.entityId)) {
     throw new Error('An active hold already exists for this entity.');
   }
@@ -288,6 +295,12 @@ export function placeHold(input: PlaceHoldInput): number {
 }
 
 export function releaseHold(input: ReleaseHoldInput): void {
+  const delegated = tryServerWrite(
+    'quality.releaseHold',
+    { holdId: input.holdId, releaseNotes: input.releaseNotes ?? input.permissionCtx?.reason },
+    () => undefined,
+  );
+  if (delegated !== null) return;
   const hold = queryOne<QcHold>('SELECT * FROM qc_holds WHERE id = ?', [input.holdId]);
   if (!hold) throw new Error('Hold not found.');
   if (hold.status !== 'Active') throw new Error('Hold is not active.');

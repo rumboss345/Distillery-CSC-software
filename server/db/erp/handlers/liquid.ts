@@ -42,8 +42,8 @@ async function nextOperationGroupId(client: pg.PoolClient): Promise<string> {
 }
 
 async function assertLedgerTank(client: pg.PoolClient, tankId: number) {
-  const tank = await queryOne<{ tracking_mode: string; status: string; capacity_litres: number }>(
-    'SELECT tracking_mode, status, capacity_litres FROM liq_tanks WHERE id = $1',
+  const tank = await queryOne<{ id: number; tracking_mode: string; status: string; capacity_litres: number }>(
+    'SELECT id, tracking_mode, status, capacity_litres FROM liq_tanks WHERE id = $1',
     [tankId],
     client,
   );
@@ -67,14 +67,15 @@ async function computeTankBalanceFromLedger(tankId: number) {
   );
   let volume = 0;
   let lpa = 0;
+  const tank = Number(tankId);
   for (const tx of rows) {
-    if (tx.destination_tank_id === tankId) {
-      volume += tx.volume_litres;
-      lpa += tx.lpa;
+    if (Number(tx.destination_tank_id) === tank) {
+      volume += Number(tx.volume_litres);
+      lpa += Number(tx.lpa);
     }
-    if (tx.source_tank_id === tankId) {
-      volume -= tx.volume_litres;
-      lpa -= tx.lpa;
+    if (Number(tx.source_tank_id) === tank) {
+      volume -= Number(tx.volume_litres);
+      lpa -= Number(tx.lpa);
     }
   }
   return { volumeLitres: Math.max(0, volume), lpa: volume > 0 ? Math.max(0, lpa) : 0 };
@@ -144,6 +145,8 @@ export async function transferLiquid(input: TransferLiquidInput): Promise<number
       throw new Error('Source and destination tanks must differ.');
     }
 
+    await client.query('SELECT pg_advisory_xact_lock($1)', [input.sourceTankId]);
+
     const source = await assertLedgerTank(client, input.sourceTankId);
     const dest = await assertLedgerTank(client, input.destinationTankId);
     validatePositiveVolume(input.volumeLitres, 'Transfer volume');
@@ -152,7 +155,7 @@ export async function transferLiquid(input: TransferLiquidInput): Promise<number
     validateSufficientBalance(sourceBalance.volumeLitres, input.volumeLitres, 'Source tank');
 
     const destBalance = await computeTankBalanceFromLedger(dest.id);
-    validateCapacity(destBalance.volumeLitres + input.volumeLitres, dest.capacity_litres);
+    validateCapacity(destBalance.volumeLitres + input.volumeLitres, Number(dest.capacity_litres));
 
     let lotId = input.sourceLotId ?? null;
     if (lotId == null) {

@@ -18,6 +18,7 @@ import {
 } from './costing-queries';
 import type { PermissionContext } from '../types/administration';
 import { guardSensitiveAction } from './administration-queries';
+import { tryServerWrite } from '../data/server-mutation-bridge';
 import { insertRow, queryAll, queryOne, runQuery, withDatabaseTransaction } from './database';
 import { getLotVolumeInTank, postTransaction } from './liquid-ledger-queries';
 import { nextBusinessCode } from './master-data-queries';
@@ -487,6 +488,12 @@ export function transferFgLot(input: {
   notes?: string;
   createdBy?: string | null;
 }): number {
+  const delegated = tryServerWrite(
+    'finishedGoods.transfer',
+    input as unknown as Record<string, unknown>,
+    (r) => Number(r.transactionId),
+  );
+  if (delegated !== null) return delegated;
   return withDatabaseTransaction(() => {
     if (input.sourceLocationId === input.destinationLocationId) {
       throw new Error('Source and destination locations must differ.');
@@ -701,6 +708,12 @@ export function postFgShipment(input: {
   notes?: string;
   createdBy?: string | null;
 }): number {
+  const delegated = tryServerWrite(
+    'finishedGoods.shipment',
+    input as unknown as Record<string, unknown>,
+    (r) => Number(r.transactionId),
+  );
+  if (delegated !== null) return delegated;
   return withDatabaseTransaction(() => {
     const lot = queryOne<FgLot>('SELECT * FROM fg_lots WHERE id = ?', [input.fgLotId]);
     if (!lot) throw new Error('Finished goods lot not found.');

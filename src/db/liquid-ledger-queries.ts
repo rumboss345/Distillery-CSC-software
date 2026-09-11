@@ -50,6 +50,7 @@ import type {
 } from '../types/liquid-ledger';
 import type { PermissionContext } from '../types/administration';
 import { guardSensitiveAction } from './administration-queries';
+import { tryServerWrite } from '../data/server-mutation-bridge';
 import { insertRow, queryAll, queryOne, runQuery, withDatabaseTransaction } from './database';
 import { assertEntityNotOnHold } from './quality-hold-guard';
 import {
@@ -518,6 +519,12 @@ function isTransactionReversed(transactionId: number): boolean {
 }
 
 export function postTransaction(input: LiqTransactionPostInput): number {
+  const delegated = tryServerWrite(
+    'liquid.postTransaction',
+    input as unknown as Record<string, unknown>,
+    (r) => Number(r.transactionId),
+  );
+  if (delegated !== null) return delegated;
   return withTransaction(() => insertTransaction(input));
 }
 
@@ -668,6 +675,12 @@ export function receiveBulkSpirit(input: BulkSpiritReceiptInput): { lotId: numbe
 }
 
 export function transferLiquid(input: TransferLiquidInput): number {
+  const delegated = tryServerWrite(
+    'liquid.transfer',
+    input as unknown as Record<string, unknown>,
+    (r) => Number(r.transactionId),
+  );
+  if (delegated !== null) return delegated;
   return withTransaction(() => {
     if (input.sourceTankId === input.destinationTankId) {
       throw new Error('Source and destination tanks must differ.');

@@ -22,10 +22,10 @@ export const DOMAIN_CAPABILITIES: DomainCapability[] = [
   { domain: 'warehouse', read: 'IMPLEMENTED', write: 'IMPLEMENTED', bootstrap: true },
   { domain: 'barrel', read: 'IMPLEMENTED', write: 'IMPLEMENTED', bootstrap: true },
   { domain: 'production', read: 'IMPLEMENTED', write: 'IMPLEMENTED', bootstrap: true },
-  { domain: 'costing', read: 'IMPLEMENTED', write: 'PARTIAL', bootstrap: true },
+  { domain: 'costing', read: 'IMPLEMENTED', write: 'IMPLEMENTED', bootstrap: true },
   { domain: 'accounting', read: 'IMPLEMENTED', write: 'IMPLEMENTED', bootstrap: true },
-  { domain: 'reporting', read: 'IMPLEMENTED', write: 'STUB', bootstrap: false },
-  { domain: 'admin', read: 'IMPLEMENTED', write: 'PARTIAL', bootstrap: true },
+  { domain: 'reporting', read: 'IMPLEMENTED', write: 'IMPLEMENTED', bootstrap: false },
+  { domain: 'admin', read: 'IMPLEMENTED', write: 'IMPLEMENTED', bootstrap: true },
 ];
 
 export function getDomainCapability(domain: ErpApiDomain): DomainCapability | undefined {
@@ -36,4 +36,32 @@ export function allDomainsImplemented(): boolean {
   return DOMAIN_CAPABILITIES.every(
     (d) => d.read === 'IMPLEMENTED' && (d.write === 'IMPLEMENTED' || d.write === 'PARTIAL'),
   );
+}
+
+export function allReadDomainsReady(): boolean {
+  return DOMAIN_CAPABILITIES.every((d) => d.read === 'IMPLEMENTED');
+}
+
+/** Critical operational write domains — reporting read-only is excluded. */
+const CRITICAL_WRITE_DOMAINS: ErpApiDomain[] = [
+  'material',
+  'liquid',
+  'finished-goods',
+  'sales',
+  'quality',
+  'warehouse',
+  'barrel',
+  'production',
+  'accounting',
+];
+
+export function allCriticalWriteDomainsReady(): boolean {
+  return CRITICAL_WRITE_DOMAINS.every((domain) => {
+    const cap = getDomainCapability(domain);
+    return cap?.write === 'IMPLEMENTED';
+  });
+}
+
+export function getDomainStubs(): DomainCapability[] {
+  return DOMAIN_CAPABILITIES.filter((d) => d.read === 'STUB' || d.write === 'STUB');
 }

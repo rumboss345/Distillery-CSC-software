@@ -79,6 +79,8 @@ import {
 } from './administration-schema';
 import { seedAdministrationIfEmpty } from './administration-queries';
 import { SCHEMA, SEED_DATA } from './schema';
+import { shouldBlockLocalErpRead } from '../data/server-cache-hydrator';
+import { isPostgresAuthoritativeMode } from './production-mode';
 
 const FLOOR_MIGRATION = `
 CREATE TABLE IF NOT EXISTS floor_plans (
@@ -809,6 +811,9 @@ function queryAll<T>(
   sql: string,
   params: SqlValue[] = [],
 ): T[] {
+  if (shouldBlockLocalErpRead(sql)) {
+    throw new Error('ERP server cache is not loaded. Wait for bootstrap before reading operational data.');
+  }
   if (!db) return [];
   const stmt = db.prepare(sql);
   stmt.bind(params);
@@ -839,6 +844,7 @@ function toBase64(data: Uint8Array): string {
 
 function persistDb(): void {
   if (!db) return;
+  if (isPostgresAuthoritativeMode()) return;
   localStorage.setItem(DB_STORAGE_KEY, toBase64(new Uint8Array(db.export())));
 }
 

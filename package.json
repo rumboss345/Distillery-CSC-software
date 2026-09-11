@@ -11,7 +11,7 @@
     "start": "tsx server/index.ts",
     "reset-admin": "tsx server/reset-admin.ts",
     "preview": "vite preview",
-    "test": "node --import tsx --test server/tests/unit/*.test.ts server/tests/integration/*.test.ts",
+    "test": "node --import tsx --test --test-concurrency=1 server/tests/unit/*.test.ts server/tests/integration/*.test.ts",
     "test:unit": "node --import tsx --test server/tests/unit/*.test.ts"
   },
   "dependencies": {

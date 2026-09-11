@@ -14,7 +14,8 @@ describe('Step 1A concurrency', { skip: !pgConfigured }, () => {
     await runMigrations();
     await withTransaction(async (client) => {
       await client.query(
-        `INSERT INTO md_code_sequences (entity_type, last_number) VALUES ('materialTransaction', 0)
+        `INSERT INTO md_code_sequences (entity_type, last_number)
+         SELECT unnest(ARRAY['materialTransaction', 'liquidTransaction', 'operationGroup', 'fgTransaction']::text[]), 0
          ON CONFLICT (entity_type) DO UPDATE SET last_number = 0`,
       );
     });

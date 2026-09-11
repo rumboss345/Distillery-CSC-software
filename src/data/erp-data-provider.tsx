@@ -8,9 +8,12 @@ import {
   type ReactNode,
 } from 'react';
 import { refreshProductionMode } from '../db/production-mode';
-import { shouldUseServerApi } from './data-adapter';
+import { setSqlJsLegacyOnly, shouldUseServerApi } from './data-adapter';
 import { bootstrapErpCache } from './server-api-adapter';
 import { invalidateErpCache } from './server-cache';
+import { hydrateErpTablesFromServerCache, clearHydrationState } from './server-cache-hydrator';
+import { getDb, initDatabase } from '../db/database';
+import { isPostgresAuthoritativeMode } from '../db/production-mode';
 
 interface ErpDataContextValue {
   ready: boolean;
@@ -31,7 +34,12 @@ export function ErpDataProvider({ children }: { children: ReactNode }) {
     try {
       await refreshProductionMode().catch(() => null);
       if (shouldUseServerApi()) {
+        setSqlJsLegacyOnly(true);
+        await initDatabase();
         await bootstrapErpCache();
+        if (isPostgresAuthoritativeMode()) {
+          hydrateErpTablesFromServerCache(getDb());
+        }
       }
       setReady(true);
     } catch (err) {
@@ -46,6 +54,7 @@ export function ErpDataProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     invalidateErpCache();
+    clearHydrationState();
     await load();
   }, [load]);
 

@@ -40,6 +40,7 @@ import {
 } from './finished-goods-queries';
 import type { PermissionContext } from '../types/administration';
 import { guardSensitiveAction } from './administration-queries';
+import { tryServerWrite } from '../data/server-mutation-bridge';
 import { insertRow, queryAll, queryOne, runQuery, withDatabaseTransaction } from './database';
 import { nextBusinessCode } from './master-data-queries';
 
@@ -458,6 +459,12 @@ export function postShipment(
   createdBy?: string | null,
   permissionCtx?: PermissionContext,
 ): void {
+  const delegated = tryServerWrite(
+    'sales.postShipment',
+    { shipmentId, createdBy },
+    () => undefined,
+  );
+  if (delegated !== null) return;
   withDatabaseTransaction(() => {
     const shipment = getShipment(shipmentId);
     if (!shipment) throw new Error('Shipment not found.');
