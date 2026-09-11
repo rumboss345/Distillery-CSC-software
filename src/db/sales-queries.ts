@@ -38,6 +38,8 @@ import {
   postFgShipment,
   postFgWriteOff,
 } from './finished-goods-queries';
+import type { PermissionContext } from '../types/administration';
+import { guardSensitiveAction } from './administration-queries';
 import { insertRow, queryAll, queryOne, runQuery, withDatabaseTransaction } from './database';
 import { nextBusinessCode } from './master-data-queries';
 
@@ -451,12 +453,25 @@ export function addShipmentLinesFromSuggestions(input: {
 }
 
 /** Post shipment — immutable FG Shipment ledger entries & operational COGS snapshots. */
-export function postShipment(shipmentId: number, createdBy?: string | null): void {
+export function postShipment(
+  shipmentId: number,
+  createdBy?: string | null,
+  permissionCtx?: PermissionContext,
+): void {
   withDatabaseTransaction(() => {
     const shipment = getShipment(shipmentId);
     if (!shipment) throw new Error('Shipment not found.');
     if (shipment.status === 'Posted') throw new Error('Shipment has already been posted.');
     if (shipment.status === 'Cancelled') throw new Error('Cannot post a cancelled shipment.');
+
+    guardSensitiveAction({
+      action: 'SHIP_FG',
+      permissionCtx,
+      entityType: 'sal_shipment',
+      entityId: shipmentId,
+      beforeState: { status: shipment.status, shipment_code: shipment.shipment_code },
+      afterState: { status: 'Posted' },
+    });
 
     const lines = getShipmentLines(shipmentId);
     if (lines.length === 0) throw new Error('Shipment requires at least one line.');
@@ -688,12 +703,25 @@ export function addReturnLine(input: AddReturnLineInput): number {
   );
 }
 
-export function postReturn(returnId: number, createdBy?: string | null): void {
+export function postReturn(
+  returnId: number,
+  createdBy?: string | null,
+  permissionCtx?: PermissionContext,
+): void {
   withDatabaseTransaction(() => {
     const ret = getReturn(returnId);
     if (!ret) throw new Error('Return not found.');
     if (ret.status === 'Posted') throw new Error('Return has already been posted.');
     if (ret.status === 'Cancelled') throw new Error('Cannot post a cancelled return.');
+
+    guardSensitiveAction({
+      action: 'POST_RETURN',
+      permissionCtx,
+      entityType: 'sal_return',
+      entityId: returnId,
+      beforeState: { status: ret.status, return_code: ret.return_code },
+      afterState: { status: 'Posted' },
+    });
 
     const lines = getReturnLines(returnId);
     if (lines.length === 0) throw new Error('Return requires at least one line.');

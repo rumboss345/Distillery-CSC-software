@@ -40,6 +40,7 @@ import {
   runQuery,
   withDatabaseTransaction,
 } from './database';
+import { guardSensitiveAction } from './administration-queries';
 import {
   createBlend,
   getLotBalance,
@@ -828,6 +829,15 @@ export function completeBatch(input: CompleteBatchInput): { lotId: number; trans
 
   validatePositiveVolume(input.actualOutputLitres, 'Output volume');
   const outputLpa = resolveOutputLpa(input.actualOutputLitres, input.actualOutputAbv);
+
+  guardSensitiveAction({
+    action: 'COMPLETE_BATCH',
+    permissionCtx: input.permissionCtx,
+    entityType: 'prod_batch',
+    entityId: input.batchId,
+    beforeState: { status: batch.status, batch_code: batch.batch_code },
+    afterState: { status: 'Completed' },
+  });
 
   return withDatabaseTransaction(() => {
     revalidateLiquidInputsAtCompletion(batch.id);

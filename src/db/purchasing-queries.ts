@@ -124,7 +124,7 @@ export function addPurchaseOrderLine(input: AddPurchaseOrderLineInput): number {
       description,
       input.orderedQuantity,
       input.unit,
-      input.unitPrice,
+      input.unitPrice ?? null,
       input.currency ?? po.currency,
       input.expectedDate ?? null,
       input.notes ?? '',

@@ -16,6 +16,8 @@ import {
   getBatchMaterialCost,
   getLiquidPositionCostForVolume,
 } from './costing-queries';
+import type { PermissionContext } from '../types/administration';
+import { guardSensitiveAction } from './administration-queries';
 import { insertRow, queryAll, queryOne, runQuery, withDatabaseTransaction } from './database';
 import { getLotVolumeInTank, postTransaction } from './liquid-ledger-queries';
 import { nextBusinessCode } from './master-data-queries';
@@ -523,7 +525,11 @@ export function transferFgLot(input: {
   });
 }
 
-export function reverseFgTransaction(transactionId: number, createdBy?: string | null): number {
+export function reverseFgTransaction(
+  transactionId: number,
+  createdBy?: string | null,
+  permissionCtx?: PermissionContext,
+): number {
   return withDatabaseTransaction(() => {
     const original = queryOne<FgTransaction>('SELECT * FROM fg_transactions WHERE id = ?', [transactionId]);
     if (!original) throw new Error('Transaction not found.');
@@ -533,6 +539,19 @@ export function reverseFgTransaction(transactionId: number, createdBy?: string |
     if (isFgTransactionReversed(original.id)) {
       throw new Error('Transaction has already been reversed.');
     }
+
+    guardSensitiveAction({
+      action: 'REVERSE_TRANSACTION',
+      permissionCtx,
+      entityType: 'fg_transaction',
+      entityId: transactionId,
+      beforeState: {
+        transaction_code: original.transaction_code,
+        transaction_type: original.transaction_type,
+        quantity: original.quantity,
+      },
+      afterState: { reversed: true },
+    });
 
     const code = nextBusinessCode('fgTransaction', 'fg_transactions', 'transaction_code');
     return insertRow(

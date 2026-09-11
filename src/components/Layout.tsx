@@ -27,6 +27,7 @@ const navItems = [
   { to: '/recipes', label: 'Recipes', icon: '◎' },
   { to: '/master-data', label: 'Master Data', icon: '◫' },
   { to: '/reports', label: 'Reports', icon: '▤' },
+  { to: '/administration', label: 'Administration', icon: '⚙' },
 ];
 
 export function Layout() {

@@ -216,6 +216,7 @@ export interface CompleteBatchInput {
   actualCarbonationVolumes?: number | null;
   operatorId?: string | null;
   notes?: string;
+  permissionCtx?: import('./administration').PermissionContext;
 }
 
 export interface ProductionProgress {

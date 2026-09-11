@@ -40,6 +40,8 @@ import {
   postTransaction,
   reverseTransaction,
 } from './liquid-ledger-queries';
+import type { PermissionContext } from '../types/administration';
+import { guardSensitiveAction } from './administration-queries';
 import { insertRow, queryAll, queryOne, runQuery, withDatabaseTransaction } from './database';
 
 const now = () => new Date().toISOString();
@@ -673,12 +675,25 @@ export function dumpBarrel(input: DumpBarrelInput): number {
   });
 }
 
-export function reverseBarrelFill(fillId: number, createdBy?: string | null): void {
+export function reverseBarrelFill(
+  fillId: number,
+  createdBy?: string | null,
+  permissionCtx?: PermissionContext,
+): void {
   withDatabaseTransaction(() => {
     const fill = getFillOrThrow(fillId);
     if (fill.status !== 'Active') {
       throw new Error('Only active fills can be reversed.');
     }
+
+    guardSensitiveAction({
+      action: 'REVERSE_BARREL_FILL',
+      permissionCtx,
+      entityType: 'brl_fill',
+      entityId: fillId,
+      beforeState: { status: fill.status, fill_code: fill.fill_code },
+      afterState: { status: 'Reversed' },
+    });
 
     const obsCount = queryOne<{ count: number }>(
       'SELECT COUNT(*) AS count FROM brl_observations WHERE fill_id = ?',

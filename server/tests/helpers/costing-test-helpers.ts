@@ -41,8 +41,20 @@ export {
 
 export const FLOOR_STUB = `
 CREATE TABLE IF NOT EXISTS floor_equipment (
-  id INTEGER PRIMARY KEY AUTOINCREMENT, floor_plan_id INTEGER DEFAULT 1, name TEXT NOT NULL,
-  equipment_type TEXT DEFAULT 'holding_tank', tracking_mode TEXT DEFAULT 'LEGACY', created_at TEXT DEFAULT (datetime('now'))
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  floor_plan_id INTEGER DEFAULT 1,
+  name TEXT NOT NULL,
+  equipment_type TEXT DEFAULT 'holding_tank',
+  pos_x_ft REAL DEFAULT 0,
+  pos_y_ft REAL DEFAULT 0,
+  width_ft REAL DEFAULT 8,
+  depth_ft REAL DEFAULT 8,
+  capacity_gal REAL DEFAULT 0,
+  status TEXT DEFAULT 'empty',
+  linked_mash_batch_id INTEGER,
+  notes TEXT DEFAULT '',
+  tracking_mode TEXT DEFAULT 'LEGACY',
+  created_at TEXT DEFAULT (datetime('now'))
 );
 `;
 

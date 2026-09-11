@@ -170,4 +170,5 @@ export interface ReleaseHoldInput {
   holdId: number;
   releasedBy?: string | null;
   releaseNotes?: string;
+  permissionCtx?: import('./administration').PermissionContext;
 }

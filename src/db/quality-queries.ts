@@ -19,6 +19,7 @@ import type {
   RecordTestResultInput,
   ReleaseHoldInput,
 } from '../types/quality';
+import { guardSensitiveAction } from './administration-queries';
 import { insertRow, queryAll, queryOne, runQuery, withDatabaseTransaction } from './database';
 import { getLotChildren } from './liquid-ledger-queries';
 import { nextBusinessCode } from './master-data-queries';
@@ -290,6 +291,16 @@ export function releaseHold(input: ReleaseHoldInput): void {
   const hold = queryOne<QcHold>('SELECT * FROM qc_holds WHERE id = ?', [input.holdId]);
   if (!hold) throw new Error('Hold not found.');
   if (hold.status !== 'Active') throw new Error('Hold is not active.');
+
+  const reason = input.permissionCtx?.reason ?? input.releaseNotes;
+  guardSensitiveAction({
+    action: 'RELEASE_QA_HOLD',
+    permissionCtx: { ...input.permissionCtx, reason },
+    entityType: 'qc_hold',
+    entityId: input.holdId,
+    beforeState: { status: hold.status, hold_code: hold.hold_code },
+    afterState: { status: 'Released' },
+  });
 
   runQuery(
     `UPDATE qc_holds SET status = 'Released', released_at = ?, released_by = ?, release_notes = ? WHERE id = ?`,

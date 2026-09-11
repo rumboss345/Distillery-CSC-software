@@ -48,6 +48,8 @@ import type {
   TankLotComponent,
   TransferLiquidInput,
 } from '../types/liquid-ledger';
+import type { PermissionContext } from '../types/administration';
+import { guardSensitiveAction } from './administration-queries';
 import { insertRow, queryAll, queryOne, runQuery, withDatabaseTransaction } from './database';
 import { assertEntityNotOnHold } from './quality-hold-guard';
 import {
@@ -556,13 +558,30 @@ export function getTransactions(filters?: {
   `, params as (string | number | null)[]);
 }
 
-export function reverseTransaction(transactionId: number, createdBy?: string | null): number[] {
+export function reverseTransaction(
+  transactionId: number,
+  createdBy?: string | null,
+  permissionCtx?: PermissionContext,
+): number[] {
   return withTransaction(() => {
     const original = queryOne<LiqTransaction>('SELECT * FROM liq_transactions WHERE id = ?', [transactionId]);
     if (!original) throw new Error('Transaction not found.');
     if (original.reversal_of_transaction_id) {
       throw new Error('Cannot reverse a reversal transaction.');
     }
+
+    guardSensitiveAction({
+      action: 'REVERSE_TRANSACTION',
+      permissionCtx,
+      entityType: 'liq_transaction',
+      entityId: transactionId,
+      beforeState: {
+        transaction_code: original.transaction_code,
+        transaction_type: original.transaction_type,
+        volume_litres: original.volume_litres,
+      },
+      afterState: { reversed: true },
+    });
 
     const targets = original.transaction_group_id
       ? queryAll<LiqTransaction>(
