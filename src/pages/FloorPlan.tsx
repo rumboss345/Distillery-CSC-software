@@ -1,9 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
+  getFloorPlans,
   getFloorPlan,
   getFloorEquipmentWithContext,
+  addFloorPlan,
   saveFloorEquipment,
   updateEquipmentPosition,
+  moveEquipmentToPlan,
   deleteFloorEquipment,
   useRefreshKey,
 } from '../db/queries';
@@ -37,21 +40,41 @@ const emptyEquipment = (planId: number, type: EquipmentType = 'fermenter'): Omit
 
 export function FloorPlanPage() {
   const { key, refresh } = useRefreshKey();
-  const plan = getFloorPlan();
-  const equipment = getFloorEquipmentWithContext(plan.id);
+  const plans = getFloorPlans();
+  const [activePlanId, setActivePlanId] = useState(plans[0]?.id ?? 1);
+  const plan = getFloorPlan(activePlanId);
+  const equipment = getFloorEquipmentWithContext(activePlanId);
 
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [showPageForm, setShowPageForm] = useState(false);
   const [editId, setEditId] = useState<number | undefined>();
-  const [form, setForm] = useState(emptyEquipment(plan.id));
+  const [form, setForm] = useState(emptyEquipment(activePlanId));
+  const [pageName, setPageName] = useState('');
+  const [draggingEquipmentId, setDraggingEquipmentId] = useState<number | null>(null);
+  const [dropTargetPlanId, setDropTargetPlanId] = useState<number | null>(null);
 
   void key;
+
+  useEffect(() => {
+    if (!draggingEquipmentId) {
+      setDropTargetPlanId(null);
+      return;
+    }
+    const onMove = (e: PointerEvent) => {
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      const tab = el?.closest('[data-plan-drop-id]') as HTMLElement | null;
+      setDropTargetPlanId(tab ? Number(tab.dataset.planDropId) : null);
+    };
+    window.addEventListener('pointermove', onMove);
+    return () => window.removeEventListener('pointermove', onMove);
+  }, [draggingEquipmentId]);
 
   const selected = equipment.find((e) => e.id === selectedId) ?? null;
 
   const openNew = () => {
     setEditId(undefined);
-    setForm(emptyEquipment(plan.id));
+    setForm(emptyEquipment(activePlanId));
     setShowForm(true);
   };
 
@@ -78,6 +101,16 @@ export function FloorPlanPage() {
     refresh();
   };
 
+  const handleAddPage = () => {
+    const trimmed = pageName.trim();
+    if (!trimmed) return;
+    const newId = addFloorPlan(trimmed, plan.width_ft, plan.height_ft);
+    setPageName('');
+    setShowPageForm(false);
+    setActivePlanId(newId);
+    refresh();
+  };
+
   const handleDelete = (id: number) => {
     if (confirm('Remove this equipment from the floor plan?')) {
       deleteFloorEquipment(id);
@@ -91,14 +124,71 @@ export function FloorPlanPage() {
     refresh();
   };
 
+  const handleMoveToPlan = (equipmentId: number, targetPlanId: number) => {
+    moveEquipmentToPlan(equipmentId, targetPlanId);
+    if (selectedId === equipmentId) setSelectedId(null);
+    setActivePlanId(targetPlanId);
+    refresh();
+  };
+
+  const handleListDragStart = (e: React.DragEvent, equipmentId: number) => {
+    e.dataTransfer.setData('text/equipment-id', String(equipmentId));
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggingEquipmentId(equipmentId);
+  };
+
+  const handleListDragEnd = () => {
+    setDraggingEquipmentId(null);
+    setDropTargetPlanId(null);
+  };
+
+  const handleTabDragOver = (e: React.DragEvent, planId: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDropTargetPlanId(planId);
+  };
+
+  const handleTabDragLeave = () => {
+    setDropTargetPlanId(null);
+  };
+
+  const handleTabDrop = (e: React.DragEvent, targetPlanId: number) => {
+    e.preventDefault();
+    const raw = e.dataTransfer.getData('text/equipment-id');
+    const equipmentId = raw ? parseInt(raw, 10) : draggingEquipmentId;
+    if (equipmentId && targetPlanId !== activePlanId) {
+      handleMoveToPlan(equipmentId, targetPlanId);
+    }
+    setDraggingEquipmentId(null);
+    setDropTargetPlanId(null);
+  };
+
   return (
     <div>
       <div className="page-header">
         <h2>Floor Plan</h2>
-        <p>{plan.name} — {plan.width_ft} × {plan.height_ft} ft · Drag equipment to reposition</p>
+        <p>{plan.name} — {plan.width_ft} × {plan.height_ft} ft · Drag equipment to reposition or drop on another page tab</p>
         <div className="page-actions">
           <button className="btn btn-primary" onClick={openNew}>+ Add Equipment</button>
+          <button className="btn btn-secondary" onClick={() => { setPageName(''); setShowPageForm(true); }}>+ Add Page</button>
         </div>
+      </div>
+
+      <div className="floor-plan-tabs">
+        {plans.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            data-plan-drop-id={p.id}
+            className={`floor-plan-tab${activePlanId === p.id ? ' active' : ''}${dropTargetPlanId === p.id ? ' drop-target' : ''}`}
+            onClick={() => { setActivePlanId(p.id); setSelectedId(null); }}
+            onDragOver={(e) => handleTabDragOver(e, p.id)}
+            onDragLeave={handleTabDragLeave}
+            onDrop={(e) => handleTabDrop(e, p.id)}
+          >
+            {p.name}
+          </button>
+        ))}
       </div>
 
       <div className="floor-layout">
@@ -109,8 +199,13 @@ export function FloorPlanPage() {
             selectedId={selectedId}
             onSelect={setSelectedId}
             onMoveEnd={handleMove}
+            onMoveToPlan={handleMoveToPlan}
+            onDragChange={setDraggingEquipmentId}
           />
           <FloorLegend />
+          {draggingEquipmentId && (
+            <p className="form-hint floor-drag-hint">Drop on a page tab above to move equipment to Inside, Outside, or another page.</p>
+          )}
         </div>
 
         <aside className="floor-sidebar">
@@ -118,6 +213,8 @@ export function FloorPlanPage() {
             <div className="card">
               <h3 className="floor-sidebar-title">{selected.name}</h3>
               <dl className="floor-detail-list">
+                <dt>Page</dt>
+                <dd>{plan.name}</dd>
                 <dt>Type</dt>
                 <dd>{equipmentTypeLabel(selected.equipment_type)}</dd>
                 <dt>Status</dt>
@@ -158,18 +255,22 @@ export function FloorPlanPage() {
             </div>
           ) : (
             <div className="card floor-sidebar-hint">
-              <p>Click equipment on the floor plan to view details, or add new fermenters and stills.</p>
+              <p>Click equipment on the floor plan to view details, or drag items to another page tab.</p>
             </div>
           )}
 
           <div className="card">
-            <h4 className="floor-list-title">All Equipment ({equipment.length})</h4>
+            <h4 className="floor-list-title">Equipment on {plan.name} ({equipment.length})</h4>
             <ul className="floor-equipment-list">
               {equipment.map((item) => (
                 <li key={item.id}>
                   <button
-                    className={`floor-list-btn${selectedId === item.id ? ' active' : ''}`}
+                    type="button"
+                    draggable
+                    className={`floor-list-btn${selectedId === item.id ? ' active' : ''}${draggingEquipmentId === item.id ? ' dragging' : ''}`}
                     onClick={() => setSelectedId(item.id)}
+                    onDragStart={(e) => handleListDragStart(e, item.id)}
+                    onDragEnd={handleListDragEnd}
                   >
                     <span className="floor-list-name">{item.name}</span>
                     <span className="floor-list-type">{equipmentTypeLabel(item.equipment_type)}</span>
@@ -187,6 +288,17 @@ export function FloorPlanPage() {
             <div className="form-group">
               <label>Name</label>
               <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Fermenter #3" />
+            </div>
+            <div className="form-group">
+              <label>Page</label>
+              <select
+                value={form.floor_plan_id}
+                onChange={(e) => setForm({ ...form, floor_plan_id: parseInt(e.target.value, 10) })}
+              >
+                {plans.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
             </div>
             <div className="form-group">
               <label>Equipment Type</label>
@@ -263,6 +375,25 @@ export function FloorPlanPage() {
           <div className="form-actions">
             <button className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
             <button className="btn btn-primary" onClick={handleSave} disabled={!form.name.trim()}>Save</button>
+          </div>
+        </Modal>
+      )}
+
+      {showPageForm && (
+        <Modal title="Add Floor Plan Page" onClose={() => setShowPageForm(false)}>
+          <div className="form-group">
+            <label>Page Name</label>
+            <input
+              value={pageName}
+              onChange={(e) => setPageName(e.target.value)}
+              placeholder="e.g. Warehouse, Tank farm"
+              autoFocus
+            />
+          </div>
+          <p className="form-hint">Default pages are <strong>Inside</strong> and <strong>Outside</strong>. Add more as needed.</p>
+          <div className="form-actions">
+            <button className="btn btn-secondary" onClick={() => setShowPageForm(false)}>Cancel</button>
+            <button className="btn btn-primary" onClick={handleAddPage} disabled={!pageName.trim()}>Add Page</button>
           </div>
         </Modal>
       )}

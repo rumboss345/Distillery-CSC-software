@@ -992,9 +992,29 @@ export function generateBatchNumber(prefix: 'W' | 'M' | 'D' | 'BT' | 'BL'): stri
 
 // ── Floor Plan ─────────────────────────────────────────────
 
-export function getFloorPlan(): FloorPlan {
-  return queryOne<FloorPlan>('SELECT * FROM floor_plans ORDER BY id LIMIT 1')
-    ?? { id: 1, name: 'Production Floor', width_ft: 80, height_ft: 60, notes: '' };
+export function getFloorPlans(): FloorPlan[] {
+  return queryAll<FloorPlan>('SELECT * FROM floor_plans ORDER BY id');
+}
+
+export function getFloorPlan(id?: number): FloorPlan {
+  if (id != null) {
+    return queryOne<FloorPlan>('SELECT * FROM floor_plans WHERE id = ?', [id])
+      ?? getFloorPlans()[0]
+      ?? { id: 1, name: 'Inside', width_ft: 160, height_ft: 120, notes: '' };
+  }
+  return getFloorPlans()[0]
+    ?? { id: 1, name: 'Inside', width_ft: 160, height_ft: 120, notes: '' };
+}
+
+export function addFloorPlan(
+  name: string,
+  width_ft = 160,
+  height_ft = 120,
+): number {
+  return insertRow(
+    `INSERT INTO floor_plans (name, width_ft, height_ft, notes) VALUES (?, ?, ?, '')`,
+    [name.trim(), width_ft, height_ft],
+  );
 }
 
 export function saveFloorPlan(plan: Omit<FloorPlan, 'id'>, id = 1): void {
@@ -1049,8 +1069,8 @@ export function saveFloorEquipment(
 ): void {
   if (id) {
     runQuery(
-      `UPDATE floor_equipment SET name=?, equipment_type=?, pos_x_ft=?, pos_y_ft=?, width_ft=?, depth_ft=?, capacity_gal=?, status=?, linked_mash_batch_id=?, notes=? WHERE id=?`,
-      [item.name, item.equipment_type, item.pos_x_ft, item.pos_y_ft, item.width_ft, item.depth_ft, item.capacity_gal, item.status, item.linked_mash_batch_id, item.notes, id],
+      `UPDATE floor_equipment SET floor_plan_id=?, name=?, equipment_type=?, pos_x_ft=?, pos_y_ft=?, width_ft=?, depth_ft=?, capacity_gal=?, status=?, linked_mash_batch_id=?, notes=? WHERE id=?`,
+      [item.floor_plan_id, item.name, item.equipment_type, item.pos_x_ft, item.pos_y_ft, item.width_ft, item.depth_ft, item.capacity_gal, item.status, item.linked_mash_batch_id, item.notes, id],
     );
   } else {
     insertRow(
@@ -1062,6 +1082,18 @@ export function saveFloorEquipment(
 
 export function updateEquipmentPosition(id: number, pos_x_ft: number, pos_y_ft: number): void {
   runQuery('UPDATE floor_equipment SET pos_x_ft=?, pos_y_ft=? WHERE id=?', [pos_x_ft, pos_y_ft, id]);
+}
+
+export function moveEquipmentToPlan(
+  equipmentId: number,
+  planId: number,
+  pos_x_ft = 4,
+  pos_y_ft = 4,
+): void {
+  runQuery(
+    'UPDATE floor_equipment SET floor_plan_id=?, pos_x_ft=?, pos_y_ft=? WHERE id=?',
+    [planId, pos_x_ft, pos_y_ft, equipmentId],
+  );
 }
 
 export function deleteFloorEquipment(id: number): void {

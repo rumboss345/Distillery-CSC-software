@@ -542,6 +542,56 @@ tr:hover td {
 .badge-offline { background: var(--bg-hover); color: var(--text-muted); }
 
 /* Floor Plan */
+.floor-plan-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.floor-plan-tab {
+  padding: 0.45rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+
+.floor-plan-tab:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.floor-plan-tab.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+}
+
+.floor-plan-tab.drop-target {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent);
+  background: color-mix(in srgb, var(--accent) 15%, var(--bg-card));
+  color: var(--text);
+}
+
+.floor-drag-hint {
+  margin-top: 0.5rem;
+}
+
+.floor-equipment.dragging {
+  opacity: 0.85;
+  z-index: 20;
+}
+
+.floor-list-btn.dragging {
+  opacity: 0.5;
+}
+
 .floor-layout {
   display: flex;
   gap: 1.5rem;

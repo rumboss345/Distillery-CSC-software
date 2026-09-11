@@ -10,13 +10,32 @@ interface FloorCanvasProps {
   selectedId: number | null;
   onSelect: (id: number | null) => void;
   onMoveEnd: (id: number, x: number, y: number) => void;
+  onMoveToPlan?: (id: number, targetPlanId: number) => void;
+  onDragChange?: (id: number | null) => void;
 }
 
-export function FloorCanvas({ plan, equipment, selectedId, onSelect, onMoveEnd }: FloorCanvasProps) {
+function findPlanDropTarget(clientX: number, clientY: number): number | null {
+  const el = document.elementFromPoint(clientX, clientY);
+  const tab = el?.closest('[data-plan-drop-id]') as HTMLElement | null;
+  if (!tab) return null;
+  const planId = Number(tab.dataset.planDropId);
+  return Number.isFinite(planId) ? planId : null;
+}
+
+export function FloorCanvas({
+  plan,
+  equipment,
+  selectedId,
+  onSelect,
+  onMoveEnd,
+  onMoveToPlan,
+  onDragChange,
+}: FloorCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState<{ id: number; offsetX: number; offsetY: number } | null>(null);
   const [livePos, setLivePos] = useState<{ x: number; y: number } | null>(null);
   const livePosRef = useRef<{ x: number; y: number } | null>(null);
+  const lastPointerRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   const widthPx = plan.width_ft * PX_PER_FT;
   const heightPx = plan.height_ft * PX_PER_FT;
@@ -30,15 +49,20 @@ export function FloorCanvas({ plan, equipment, selectedId, onSelect, onMoveEnd }
   );
 
   useEffect(() => {
+    onDragChange?.(dragging?.id ?? null);
+  }, [dragging, onDragChange]);
+
+  useEffect(() => {
     if (!dragging) return;
 
     const onMovePointer = (e: PointerEvent) => {
+      lastPointerRef.current = { x: e.clientX, y: e.clientY };
       const canvas = canvasRef.current;
       if (!canvas) return;
-      const rect = canvas.getBoundingClientRect();
       const item = equipment.find((eq) => eq.id === dragging.id);
       if (!item) return;
 
+      const rect = canvas.getBoundingClientRect();
       const xFt = (e.clientX - rect.left) / PX_PER_FT - dragging.offsetX;
       const yFt = (e.clientY - rect.top) / PX_PER_FT - dragging.offsetY;
       const clamped = clamp(item, xFt, yFt);
@@ -46,8 +70,11 @@ export function FloorCanvas({ plan, equipment, selectedId, onSelect, onMoveEnd }
       setLivePos(clamped);
     };
 
-    const onUp = () => {
-      if (livePosRef.current && dragging) {
+    const onUp = (e: PointerEvent) => {
+      const targetPlanId = findPlanDropTarget(e.clientX, e.clientY);
+      if (targetPlanId != null && targetPlanId !== plan.id && dragging && onMoveToPlan) {
+        onMoveToPlan(dragging.id, targetPlanId);
+      } else if (livePosRef.current && dragging) {
         onMoveEnd(dragging.id, livePosRef.current.x, livePosRef.current.y);
       }
       livePosRef.current = null;
@@ -61,7 +88,7 @@ export function FloorCanvas({ plan, equipment, selectedId, onSelect, onMoveEnd }
       window.removeEventListener('pointermove', onMovePointer);
       window.removeEventListener('pointerup', onUp);
     };
-  }, [dragging, equipment, clamp, onMoveEnd]);
+  }, [dragging, equipment, clamp, onMoveEnd, onMoveToPlan, plan.id]);
 
   const gridLines = [];
   for (let x = 0; x <= plan.width_ft; x += 5) {
@@ -100,7 +127,7 @@ export function FloorCanvas({ plan, equipment, selectedId, onSelect, onMoveEnd }
           return (
             <div
               key={item.id}
-              className={`floor-equipment floor-equipment--${item.equipment_type}${isSelected ? ' selected' : ''}${item.status === 'in_use' ? ' in-use' : ''}${item.status === 'cleaning' ? ' cleaning' : ''}${item.status === 'offline' ? ' offline' : ''}`}
+              className={`floor-equipment floor-equipment--${item.equipment_type}${isSelected ? ' selected' : ''}${item.status === 'in_use' ? ' in-use' : ''}${item.status === 'cleaning' ? ' cleaning' : ''}${item.status === 'offline' ? ' offline' : ''}${isDragging ? ' dragging' : ''}`}
               style={{
                 left: posX * PX_PER_FT,
                 top: posY * PX_PER_FT,
@@ -113,6 +140,7 @@ export function FloorCanvas({ plan, equipment, selectedId, onSelect, onMoveEnd }
                 e.stopPropagation();
                 e.currentTarget.setPointerCapture(e.pointerId);
                 onSelect(item.id);
+                lastPointerRef.current = { x: e.clientX, y: e.clientY };
                 setDragging({
                   id: item.id,
                   offsetX: (e.clientX - e.currentTarget.getBoundingClientRect().left) / PX_PER_FT,

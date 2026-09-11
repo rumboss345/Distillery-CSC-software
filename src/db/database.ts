@@ -339,7 +339,20 @@ function runMigrations(): void {
   `);
   seedCscFloorEquipment({ onlyMissing: true });
   db.run(`UPDATE floor_equipment SET capacity_gal = 1000 WHERE equipment_type = 'fermenter'`);
+  migrateFloorPlanPages();
   persistDb();
+}
+
+function migrateFloorPlanPages(): void {
+  if (!db) return;
+  const planCount = queryOne<{ count: number }>('SELECT COUNT(*) as count FROM floor_plans')?.count ?? 0;
+  if (planCount <= 1) {
+    db.run(`UPDATE floor_plans SET name = 'Inside' WHERE id = 1`);
+    db.run(`
+      INSERT OR IGNORE INTO floor_plans (id, name, width_ft, height_ft, notes) VALUES
+        (2, 'Outside', 160, 120, 'Outdoor equipment area')
+    `);
+  }
 }
 
 const DB_STORAGE_KEY = 'distillery-tracker-db-v5';

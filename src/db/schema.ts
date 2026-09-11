@@ -217,7 +217,8 @@ INSERT OR IGNORE INTO bottling_runs (id, batch_number, source_barrel_id, bottlin
   (1, 'BT-2024-012', NULL, '2025-05-20', 750, 480, 43, 'Island Reserve Rum', 'L-2405', 'Previous season bottling');
 
 INSERT OR IGNORE INTO floor_plans (id, name, width_ft, height_ft, notes) VALUES
-  (1, 'Production Floor', 160, 120, 'CSC distillery production floor');
+  (1, 'Inside', 160, 120, 'Indoor production area'),
+  (2, 'Outside', 160, 120, 'Outdoor equipment area');
 
 INSERT OR IGNORE INTO mash_fermenter_assignments (id, mash_batch_id, floor_equipment_id, volume_gal) VALUES
   (1, 2, 1, 112.5),
