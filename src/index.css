@@ -475,6 +475,7 @@ tr:hover td {
 .badge-hearts { background: var(--success-bg); color: var(--success); }
 .badge-tails { background: var(--warning-bg); color: var(--warning); }
 .badge-low-stock { background: var(--danger-bg); color: var(--danger); }
+.badge-muted { background: var(--bg-hover); color: var(--text-muted); }
 
 /* Modal */
 .modal-overlay {

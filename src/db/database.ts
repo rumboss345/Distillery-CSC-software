@@ -1,6 +1,8 @@
 import initSqlJs, { Database, SqlValue } from 'sql.js/dist/sql-wasm.js';
 import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 import { buildCscFloorEquipmentRows, CSC_FLOOR_PLAN_SIZE } from '../lib/csc-floor-equipment';
+import { MASTER_DATA_SCHEMA } from './master-data-schema';
+import { seedMasterDataIfEmpty } from './master-data-queries';
 import { SCHEMA, SEED_DATA } from './schema';
 
 const FLOOR_MIGRATION = `
@@ -364,7 +366,19 @@ function runMigrations(): void {
   seedCscFloorEquipment({ onlyMissing: true });
   db.run(`UPDATE floor_equipment SET capacity_gal = 1000 WHERE equipment_type = 'fermenter'`);
   migrateFloorPlanPages();
+  migrateMasterData();
   persistDb();
+}
+
+function migrateMasterData(): void {
+  if (!db) return;
+  const hasMasterData = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='md_products'",
+  );
+  if (!hasMasterData) {
+    db.run(MASTER_DATA_SCHEMA);
+    seedMasterDataIfEmpty();
+  }
 }
 
 function migrateFloorPlanPages(): void {
@@ -459,7 +473,9 @@ export async function initDatabase(): Promise<Database> {
   } else {
     db = new SQL.Database();
     db.run(SCHEMA);
+    db.run(MASTER_DATA_SCHEMA);
     db.run(SEED_DATA);
+    seedMasterDataIfEmpty();
     seedCscFloorEquipment({ assignSequentialIds: true, demoStatusForFirstTwo: true });
     persistDb();
   }

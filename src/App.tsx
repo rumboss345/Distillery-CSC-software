@@ -17,6 +17,13 @@ import { ApproveUser } from './pages/ApproveUser';
 import { AdminUsers } from './pages/AdminUsers';
 import { DataMigration } from './pages/DataMigration';
 import { AdminRoute } from './components/AdminRoute';
+import { MasterDataLayout } from './pages/master-data/MasterDataLayout';
+import { ProductsPage } from './pages/master-data/ProductsPage';
+import { SkusPage } from './pages/master-data/SkusPage';
+import { MaterialsPage } from './pages/master-data/MaterialsPage';
+import { BulkSpiritsPage } from './pages/master-data/BulkSpiritsPage';
+import { SuppliersPage } from './pages/master-data/SuppliersPage';
+import { LocationsPage } from './pages/master-data/LocationsPage';
 import { useDatabaseReady } from './db/queries';
 
 function AppContent() {
@@ -55,6 +62,15 @@ function AppContent() {
             <Route path="/barrels" element={<Barrels />} />
             <Route path="/bottling" element={<Bottling />} />
             <Route path="/inventory" element={<Inventory />} />
+            <Route path="/master-data" element={<MasterDataLayout />}>
+              <Route index element={<Navigate to="products" replace />} />
+              <Route path="products" element={<ProductsPage />} />
+              <Route path="skus" element={<SkusPage />} />
+              <Route path="materials" element={<MaterialsPage />} />
+              <Route path="bulk-spirits" element={<BulkSpiritsPage />} />
+              <Route path="suppliers" element={<SuppliersPage />} />
+              <Route path="locations" element={<LocationsPage />} />
+            </Route>
             <Route path="/floor-plan" element={<FloorPlanPage />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/admin/users" element={<AdminUsers />} />

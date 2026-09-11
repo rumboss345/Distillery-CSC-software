@@ -13,6 +13,7 @@ const navItems = [
   { to: '/bottling', label: 'Bottling', icon: '◇' },
   { to: '/floor-plan', label: 'Floor Plan', icon: '▦' },
   { to: '/inventory', label: 'Inventory', icon: '☰' },
+  { to: '/master-data', label: 'Master Data', icon: '◫' },
   { to: '/reports', label: 'Reports', icon: '▤' },
 ];
 
