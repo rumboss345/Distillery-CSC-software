@@ -29,4 +29,5 @@ export { barrelAgingRepository } from './barrel-aging-repository';
 export { multiLocationRepository } from './multi-location-repository';
 export { maintenanceRepository } from './maintenance-repository';
 export { planningRepository } from './planning-repository';
+export { salesRepository } from './sales-repository';
 export type { InventoryRepository } from './types';

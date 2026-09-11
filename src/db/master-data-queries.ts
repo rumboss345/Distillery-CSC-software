@@ -50,7 +50,12 @@ function assertUniqueCode(table: string, codeColumn: string, code: string, exclu
   if (existing) throw new Error(`Code "${code}" already exists.`);
 }
 
-export function nextBusinessCode(entityType: CodeEntityType, table: string, codeColumn: string): string {
+export function nextBusinessCode(
+  entityType: CodeEntityType,
+  table: string,
+  codeColumn: string,
+  pad = 4,
+): string {
   const prefix = codePrefixForEntity(entityType);
   const seqType = entityType;
   const row = queryOne<{ last_number: number }>(
@@ -59,7 +64,7 @@ export function nextBusinessCode(entityType: CodeEntityType, table: string, code
   );
   let next = (row?.last_number ?? 0) + 1;
   for (let attempt = 0; attempt < 100; attempt++) {
-    const code = formatBusinessCode(prefix, next);
+    const code = formatBusinessCode(prefix, next, pad);
     const clash = queryOne<{ id: number }>(
       `SELECT id FROM ${table} WHERE ${codeColumn} = ?`,
       [code],

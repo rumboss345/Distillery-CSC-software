@@ -60,6 +60,11 @@ import {
   PLANNING_V1M_MIGRATION,
   PLANNING_V1M_NEW_COLUMNS,
 } from './planning-schema';
+import {
+  SALES_DEPLETION_SCHEMA,
+  SALES_DEPLETION_V1N_MIGRATION,
+  SALES_DEPLETION_V1N_NEW_COLUMNS,
+} from './sales-schema';
 import { SCHEMA, SEED_DATA } from './schema';
 
 const FLOOR_MIGRATION = `
@@ -435,6 +440,7 @@ function runMigrations(): void {
   migrateMultiLocation();
   migrateMaintenance();
   migratePlanning();
+  migrateSalesDepletion();
   persistDb();
 }
 
@@ -593,6 +599,23 @@ function migratePlanning(): void {
     db.run(PLANNING_V1M_MIGRATION);
   }
   for (const col of PLANNING_V1M_NEW_COLUMNS) {
+    if (!recipeColumnExists(col.table, col.column)) {
+      db.run(col.ddl);
+    }
+  }
+}
+
+function migrateSalesDepletion(): void {
+  if (!db) return;
+  const hasSales = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='sal_customers'",
+  );
+  if (!hasSales) {
+    db.run(SALES_DEPLETION_SCHEMA);
+  } else {
+    db.run(SALES_DEPLETION_V1N_MIGRATION);
+  }
+  for (const col of SALES_DEPLETION_V1N_NEW_COLUMNS) {
     if (!recipeColumnExists(col.table, col.column)) {
       db.run(col.ddl);
     }
@@ -814,6 +837,7 @@ export async function initDatabase(): Promise<Database> {
     migrateMultiLocation();
     migrateMaintenance();
     migratePlanning();
+    migrateSalesDepletion();
     persistDb();
   }
 

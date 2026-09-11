@@ -88,6 +88,10 @@ export const CODE_PREFIXES = {
   productionPlan: 'PPL',
   mrpRun: 'MRP',
   scheduleSlot: 'SCH',
+  customer: 'CUS',
+  salesOrder: 'SO',
+  salesShipment: 'SHP',
+  salesReturn: 'SRT',
 } as const;
 
 export const DEFAULT_UNITS = [

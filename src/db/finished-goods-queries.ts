@@ -646,6 +646,33 @@ export function postFgCycleCountAdjustment(input: {
   });
 }
 
+export function postFgReturn(input: {
+  fgLotId: number;
+  destinationLocationId: number;
+  quantity: number;
+  unitCostKyd?: number | null;
+  referenceType?: string | null;
+  referenceId?: number | null;
+  notes?: string;
+  createdBy?: string | null;
+}): number {
+  const lot = queryOne<FgLot>('SELECT * FROM fg_lots WHERE id = ?', [input.fgLotId]);
+  if (!lot) throw new Error('Finished goods lot not found.');
+  assertLedgerLocation(input.destinationLocationId);
+  return insertFgTransaction({
+    transactionType: 'Return',
+    fgLotId: input.fgLotId,
+    skuId: lot.sku_id,
+    destinationLocationId: input.destinationLocationId,
+    quantity: input.quantity,
+    referenceType: input.referenceType ?? 'sales_return',
+    referenceId: input.referenceId ?? null,
+    unitCostKyd: input.unitCostKyd ?? lot.unit_cost_kyd,
+    notes: input.notes ?? 'FG return to stock',
+    createdBy: input.createdBy ?? null,
+  });
+}
+
 export function postFgShipment(input: {
   fgLotId: number;
   sourceLocationId: number;

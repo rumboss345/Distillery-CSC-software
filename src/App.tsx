@@ -95,6 +95,13 @@ import { MrpPage } from './pages/planning/MrpPage';
 import { PurchasingRecommendationsPage } from './pages/planning/PurchasingRecommendationsPage';
 import { SafetyStockPage } from './pages/planning/SafetyStockPage';
 import { SchedulePage } from './pages/planning/SchedulePage';
+import { SalesLayout } from './pages/sales/SalesLayout';
+import { SalesDashboardPage } from './pages/sales/SalesDashboardPage';
+import { CustomersPage } from './pages/sales/CustomersPage';
+import { SalesOrdersPage } from './pages/sales/SalesOrdersPage';
+import { ShipmentsPage } from './pages/sales/ShipmentsPage';
+import { ReturnsPage } from './pages/sales/ReturnsPage';
+import { DepletionAnalyticsPage } from './pages/sales/DepletionAnalyticsPage';
 import { useDatabaseReady } from './db/queries';
 
 function AppContent() {
@@ -201,6 +208,14 @@ function AppContent() {
               <Route path="purchasing-recommendations" element={<PurchasingRecommendationsPage />} />
               <Route path="safety-stock" element={<SafetyStockPage />} />
               <Route path="schedule" element={<SchedulePage />} />
+            </Route>
+            <Route path="/sales" element={<SalesLayout />}>
+              <Route index element={<SalesDashboardPage />} />
+              <Route path="customers" element={<CustomersPage />} />
+              <Route path="orders" element={<SalesOrdersPage />} />
+              <Route path="shipments" element={<ShipmentsPage />} />
+              <Route path="returns" element={<ReturnsPage />} />
+              <Route path="analytics" element={<DepletionAnalyticsPage />} />
             </Route>
             <Route path="/costing" element={<CostingLayout />}>
               <Route index element={<CostingDashboardPage />} />
