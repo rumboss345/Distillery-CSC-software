@@ -15,6 +15,7 @@ import {
   LOOKUP_TYPES,
 } from '../../shared/master-data/constants';
 import {
+  assertValidLocationParent,
   validateAbvOptional,
   validateAbvRequired,
   validateConversionFactor,
@@ -413,12 +414,20 @@ export function getStorageLocations(activeOnly = false): MdStorageLocation[] {
   );
 }
 
+function getLocationParentId(locationId: number): number | null {
+  return queryOne<{ parent_location_id: number | null }>(
+    'SELECT parent_location_id FROM md_storage_locations WHERE id = ?',
+    [locationId],
+  )?.parent_location_id ?? null;
+}
+
 export function saveStorageLocation(
   data: Omit<MdStorageLocation, 'id' | 'location_code' | 'created_at' | 'updated_at' | 'parent_name'>,
   id?: number,
   code?: string,
 ) {
   validateRequired(data.name, 'Location name');
+  assertValidLocationParent(id, data.parent_location_id, getLocationParentId);
   const ts = now();
   if (id) {
     if (code) assertUniqueCode('md_storage_locations', 'location_code', code, id);

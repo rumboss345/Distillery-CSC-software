@@ -15,6 +15,24 @@ CREATE TABLE IF NOT EXISTS md_lookup_values (
   UNIQUE (lookup_type, name)
 );
 
+CREATE TABLE IF NOT EXISTS md_units (
+  id SERIAL PRIMARY KEY,
+  code TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  unit_type TEXT NOT NULL CHECK (unit_type IN ('liquid', 'weight', 'count')),
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS md_unit_conversions (
+  id SERIAL PRIMARY KEY,
+  from_unit_code TEXT NOT NULL,
+  to_unit_code TEXT NOT NULL,
+  factor NUMERIC(18, 8) NOT NULL,
+  notes TEXT NOT NULL DEFAULT '',
+  UNIQUE (from_unit_code, to_unit_code)
+);
+
 CREATE TABLE IF NOT EXISTS md_suppliers (
   id SERIAL PRIMARY KEY,
   supplier_code TEXT NOT NULL UNIQUE,
@@ -147,3 +165,4 @@ CREATE TABLE IF NOT EXISTS md_storage_locations (
 
 CREATE INDEX IF NOT EXISTS idx_md_skus_product ON md_skus(product_id);
 CREATE INDEX IF NOT EXISTS idx_md_lookup_type ON md_lookup_values(lookup_type);
+CREATE INDEX IF NOT EXISTS idx_md_locations_parent ON md_storage_locations(parent_location_id);

@@ -31,3 +31,28 @@ export function validateConversionFactor(factor: number): void {
     throw new Error('Conversion factor must be greater than zero.');
   }
 }
+
+/** Prevent self-parent and circular location hierarchies. */
+export function assertValidLocationParent(
+  locationId: number | undefined,
+  parentId: number | null,
+  getParentId: (id: number) => number | null | undefined,
+): void {
+  if (parentId == null) return;
+  if (locationId != null && parentId === locationId) {
+    throw new Error('A location cannot be its own parent.');
+  }
+  let current: number | null = parentId;
+  const visited = new Set<number>();
+  while (current != null) {
+    if (locationId != null && current === locationId) {
+      throw new Error('Circular location hierarchy is not allowed.');
+    }
+    if (visited.has(current)) {
+      throw new Error('Circular location hierarchy is not allowed.');
+    }
+    visited.add(current);
+    const next = getParentId(current);
+    current = next ?? null;
+  }
+}
