@@ -48,7 +48,7 @@ export function getEquipmentDisplayColor(
 }
 
 export const TYPE_DEFAULTS: Record<EquipmentType, { width_ft: number; depth_ft: number; capacity_gal: number }> = {
-  fermenter: { width_ft: 10, depth_ft: 10, capacity_gal: 500 },
+  fermenter: { width_ft: 10, depth_ft: 10, capacity_gal: 1000 },
   pot_still: { width_ft: 12, depth_ft: 14, capacity_gal: 200 },
   column_still: { width_ft: 8, depth_ft: 20, capacity_gal: 300 },
   mash_tun: { width_ft: 14, depth_ft: 12, capacity_gal: 600 },

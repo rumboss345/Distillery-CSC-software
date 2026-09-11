@@ -10,12 +10,12 @@ export type CscFloorEquipmentSeed = {
 
 /** CSC distillery floor equipment catalog. Order controls default layout zones. */
 export const CSC_FLOOR_EQUIPMENT: CscFloorEquipmentSeed[] = [
-  { name: 'Fermentation 1', equipment_type: 'fermenter', capacity_gal: 500 },
-  { name: 'Fermentation 2', equipment_type: 'fermenter', capacity_gal: 500 },
-  { name: 'Fermentation 3', equipment_type: 'fermenter', capacity_gal: 500 },
-  { name: 'Fermentation 4', equipment_type: 'fermenter', capacity_gal: 500 },
-  { name: 'Fermentation 6', equipment_type: 'fermenter', capacity_gal: 500 },
-  { name: 'Fermentation 7', equipment_type: 'fermenter', capacity_gal: 500 },
+  { name: 'Fermentation 1', equipment_type: 'fermenter', capacity_gal: 1000 },
+  { name: 'Fermentation 2', equipment_type: 'fermenter', capacity_gal: 1000 },
+  { name: 'Fermentation 3', equipment_type: 'fermenter', capacity_gal: 1000 },
+  { name: 'Fermentation 4', equipment_type: 'fermenter', capacity_gal: 1000 },
+  { name: 'Fermentation 6', equipment_type: 'fermenter', capacity_gal: 1000 },
+  { name: 'Fermentation 7', equipment_type: 'fermenter', capacity_gal: 1000 },
   { name: 'Low wines storage Tank 5', equipment_type: 'holding_tank', capacity_gal: 500 },
   { name: 'Vodka high proof storage', equipment_type: 'holding_tank', capacity_gal: 500 },
   { name: 'Canning blending tank', equipment_type: 'holding_tank', capacity_gal: 400 },
