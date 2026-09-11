@@ -51,6 +51,8 @@ export const TRANSACTION_TYPES = [
   'Manual Adjustment Increase',
   'Manual Adjustment Decrease',
   'Correction / Reversal',
+  'Barrel Fill Withdrawal',
+  'Barrel Dump Receipt',
 ] as const;
 
 export type TransactionType = (typeof TRANSACTION_TYPES)[number];

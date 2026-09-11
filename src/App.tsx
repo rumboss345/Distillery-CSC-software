@@ -6,6 +6,12 @@ import { Dashboard } from './pages/Dashboard';
 import { MashFermentation } from './pages/MashFermentation';
 import { Distillation } from './pages/Distillation';
 import { Barrels } from './pages/Barrels';
+import { BarrelInventoryLayout } from './pages/barrel-inventory/BarrelInventoryLayout';
+import { BarrelDashboardPage } from './pages/barrel-inventory/BarrelDashboardPage';
+import { BarrelsMasterPage } from './pages/barrel-inventory/BarrelsMasterPage';
+import { BarrelFillsPage } from './pages/barrel-inventory/BarrelFillsPage';
+import { BarrelObservationsPage } from './pages/barrel-inventory/BarrelObservationsPage';
+import { BarrelDumpsPage } from './pages/barrel-inventory/BarrelDumpsPage';
 import { Bottling } from './pages/Bottling';
 import { Blending } from './pages/Blending';
 import { Inventory } from './pages/Inventory';
@@ -103,7 +109,15 @@ function AppContent() {
             <Route path="/mash" element={<Navigate to="/wash" replace />} />
             <Route path="/distillation" element={<Distillation />} />
             <Route path="/blending" element={<Blending />} />
-            <Route path="/barrels" element={<Barrels />} />
+            <Route path="/barrels" element={<Navigate to="/barrels-inventory" replace />} />
+            <Route path="/barrels-inventory" element={<BarrelInventoryLayout />}>
+              <Route index element={<BarrelDashboardPage />} />
+              <Route path="barrels" element={<BarrelsMasterPage />} />
+              <Route path="fills" element={<BarrelFillsPage />} />
+              <Route path="observations" element={<BarrelObservationsPage />} />
+              <Route path="dumps" element={<BarrelDumpsPage />} />
+            </Route>
+            <Route path="/barrels-legacy" element={<Barrels />} />
             <Route path="/bottling" element={<Bottling />} />
             <Route path="/inventory" element={<Inventory />} />
             <Route path="/recipes" element={<RecipesLayout />}>

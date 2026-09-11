@@ -35,6 +35,11 @@ import {
   FINISHED_GOODS_V1H_NEW_COLUMNS,
 } from './finished-goods-schema';
 import {
+  BARREL_AGING_SCHEMA,
+  BARREL_AGING_V1J_MIGRATION,
+  BARREL_AGING_V1J_NEW_COLUMNS,
+} from './barrel-aging-schema';
+import {
   QUALITY_SCHEMA,
   QUALITY_V1K_MIGRATION,
   QUALITY_V1K_NEW_COLUMNS,
@@ -409,6 +414,7 @@ function runMigrations(): void {
   migrateMaterialInventory();
   migrateCosting();
   migrateFinishedGoods();
+  migrateBarrelAging();
   migrateQuality();
   persistDb();
 }
@@ -478,6 +484,23 @@ function migrateFinishedGoods(): void {
     db.run(FINISHED_GOODS_V1H_MIGRATION);
   }
   for (const col of FINISHED_GOODS_V1H_NEW_COLUMNS) {
+    if (!recipeColumnExists(col.table, col.column)) {
+      db.run(col.ddl);
+    }
+  }
+}
+
+function migrateBarrelAging(): void {
+  if (!db) return;
+  const hasBarrelAging = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='brl_barrels'",
+  );
+  if (!hasBarrelAging) {
+    db.run(BARREL_AGING_SCHEMA);
+  } else {
+    db.run(BARREL_AGING_V1J_MIGRATION);
+  }
+  for (const col of BARREL_AGING_V1J_NEW_COLUMNS) {
     if (!recipeColumnExists(col.table, col.column)) {
       db.run(col.ddl);
     }
@@ -711,6 +734,7 @@ export async function initDatabase(): Promise<Database> {
     migrateMaterialInventory();
     migrateCosting();
     migrateFinishedGoods();
+    migrateBarrelAging();
     migrateQuality();
     persistDb();
   }

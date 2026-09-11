@@ -24,4 +24,6 @@ export {
   purchasingRepository,
 };
 export { CostingRepository } from './costing-repository';
+export { finishedGoodsRepository } from './finished-goods-repository';
+export { barrelAgingRepository } from './barrel-aging-repository';
 export type { InventoryRepository } from './types';

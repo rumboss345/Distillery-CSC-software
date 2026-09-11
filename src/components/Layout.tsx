@@ -9,7 +9,7 @@ const navItems = [
   { to: '/wash', label: 'Wash & Ferment', icon: '◉' },
   { to: '/distillation', label: 'Distillation', icon: '△' },
   { to: '/blending', label: 'Blending', icon: '◆' },
-  { to: '/barrels', label: 'Barrel Aging', icon: '▣' },
+  { to: '/barrels-inventory', label: 'Barrel Aging', icon: '▣' },
   { to: '/bottling', label: 'Bottling', icon: '◇' },
   { to: '/floor-plan', label: 'Floor Plan', icon: '▦' },
   { to: '/inventory', label: 'Inventory', icon: '☰' },
