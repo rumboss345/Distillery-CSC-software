@@ -431,7 +431,7 @@ export function Distillation() {
                   {cuts.map((c) => (
                     <tr key={c.id}>
                       <td><StatusBadge status={c.cut_type} /></td>
-                      <td>{c.holding_tank_name ?? '—'}</td>
+                      <td>{c.holding_tank_name ?? (c.cut_type === 'heads' ? 'Discarded' : '—')}</td>
                       <td>{format(new Date(c.start_time), 'HH:mm')}</td>
                       <td>{c.end_time ? format(new Date(c.end_time), 'HH:mm') : '—'}</td>
                       <td>{c.volume_gal} gal</td>
