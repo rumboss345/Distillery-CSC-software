@@ -521,6 +521,10 @@ export function getFermentationLogs(
 }
 
 export function addFermentationLog(log: Omit<FermentationLog, 'id'>): void {
+  const batch = getMashBatch(log.mash_batch_id);
+  if (!batch || batch.status !== 'fermenting') {
+    throw new Error('Fermentation logs can only be added while batch status is fermenting.');
+  }
   insertRow(
     `INSERT INTO fermentation_logs (mash_batch_id, floor_equipment_id, logged_at, temperature_f, brix, ph, notes) VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [

@@ -301,6 +301,14 @@ export function MashFermentation() {
 
   const selectedAssignments = selectedId ? getMashFermenterAssignments(selectedId) : [];
   const selectedBatch = batches.find((b) => b.id === selectedId);
+  const canLogSelectedBatch = selectedBatch?.status === 'fermenting';
+
+  useEffect(() => {
+    if (selectedId && !canLogSelectedBatch) {
+      setSelectedId(null);
+    }
+  }, [selectedId, canLogSelectedBatch]);
+
   const selectedStartBrix = selectedBatch
     ? selectedBatch.actual_brix ?? selectedBatch.target_brix
     : null;
@@ -372,7 +380,12 @@ export function MashFermentation() {
                     <td>{format(new Date(b.start_date), 'MMM d, yyyy')}</td>
                     <td><StatusBadge status={STATUS_LABELS[b.status] ?? b.status} /></td>
                     <td className="td-actions">
-                      <button className="btn btn-sm btn-secondary" onClick={() => setSelectedId(b.id === selectedId ? null : b.id)}>
+                      <button
+                        className="btn btn-sm btn-secondary"
+                        disabled={b.status !== 'fermenting'}
+                        title={b.status !== 'fermenting' ? 'Set status to fermenting to log readings' : undefined}
+                        onClick={() => setSelectedId(b.id === selectedId ? null : b.id)}
+                      >
                         Logs
                       </button>
                       <button className="btn btn-sm btn-ghost" onClick={() => openEdit(b)}>Edit</button>
@@ -386,7 +399,7 @@ export function MashFermentation() {
         </div>
       )}
 
-      {selectedId && selectedBatch && (
+      {selectedId && selectedBatch && canLogSelectedBatch && (
         <div className="detail-panel">
           <h4>Fermentation Logs — {selectedBatch.batch_number}</h4>
           {selectedAssignments.length > 1 ? (
