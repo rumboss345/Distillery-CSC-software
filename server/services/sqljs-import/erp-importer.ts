@@ -102,10 +102,13 @@ async function importTableGeneric(
       );
     } else {
       const id = num(row.id);
-      const colsWithoutId = insertCols.filter((c) => c !== 'id');
-      const valsWithoutId = insertCols
-        .map((c, i) => (c === 'id' ? null : values[i]))
-        .filter((v) => v !== null) as unknown[];
+      const colsWithoutId: string[] = [];
+      const valsWithoutId: unknown[] = [];
+      for (let i = 0; i < insertCols.length; i++) {
+        if (insertCols[i] === 'id') continue;
+        colsWithoutId.push(insertCols[i]);
+        valsWithoutId.push(values[i]);
+      }
       const placeholders = valsWithoutId.map((_, i) => `$${i + 2}`).join(', ');
       await client.query(
         `INSERT INTO ${table} (id, ${colsWithoutId.join(', ')})

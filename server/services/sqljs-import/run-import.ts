@@ -4,7 +4,9 @@ import type pg from 'pg';
 import { setMigrationState } from '../migration-state.js';
 import { buildMigrationValidationReport } from '../migration-validation.js';
 import { importSqlJsIntoPostgres } from './importer.js';
+import { importErpTablesFromSqlJs } from './erp-importer.js';
 import { collectPreview } from './parser.js';
+import { buildErpReconciliationReport, persistReconciliationRun } from '../reconciliation/erp-reconciliation.js';
 
 export interface RunImportOptions {
   sourceLabel: string;
@@ -99,14 +101,18 @@ export async function runProductionImportTransaction(
     );
   }
 
-  const importedCounts = await importSqlJsIntoPostgres(browserDb, client, importRunId);
+  const legacyCounts = await importSqlJsIntoPostgres(browserDb, client, importRunId);
+  const erpCounts = await importErpTablesFromSqlJs(browserDb, client, importRunId, { skipLegacy: true });
+  const importedCounts = { ...legacyCounts, ...erpCounts };
   const validationReport = await buildMigrationValidationReport(browserDb, client);
+  const erpReconciliation = await buildErpReconciliationReport(browserDb, client);
+  await persistReconciliationRun(erpReconciliation, options.userEmail);
 
   await client.query(
     `UPDATE data_import_runs
      SET status = 'imported', validation_summary = $1::jsonb, completed_at = NOW()
      WHERE id = $2`,
-    [JSON.stringify({ importedCounts, validationReport }), importRunId],
+    [JSON.stringify({ importedCounts, validationReport, erpReconciliation }), importRunId],
   );
 
   await setMigrationState('MIGRATION_IMPORTED', {

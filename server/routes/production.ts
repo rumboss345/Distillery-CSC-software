@@ -13,6 +13,8 @@ import { buildMigrationValidationReport } from '../services/migration-validation
 import { runProductionImportTransaction } from '../services/sqljs-import/run-import.js';
 import { collectPreview, openSqlJsDatabase } from '../services/sqljs-import/parser.js';
 import { serverHasProductionData } from '../services/production-status-helpers.js';
+import { evaluateCutoverReadiness } from '../services/cutover-readiness.js';
+import { buildErpReconciliationReport, persistReconciliationRun } from '../services/reconciliation/erp-reconciliation.js';
 
 const router = Router();
 
@@ -272,6 +274,38 @@ router.post('/migration/activate', authMiddleware, adminMiddleware, requirePostg
       reloadRequired: true,
     });
   } catch (err) {
+    res.status(500).json({ error: safeErrorMessage(err) });
+  }
+});
+
+router.get('/cutover-readiness', authMiddleware, adminMiddleware, requirePostgresConfigured, async (_req, res) => {
+  try {
+    const report = await evaluateCutoverReadiness();
+    res.json(report);
+  } catch (err) {
+    res.status(500).json({ error: safeErrorMessage(err) });
+  }
+});
+
+router.post('/migration/reconcile-erp', authMiddleware, adminMiddleware, requirePostgresConfigured, async (req, res) => {
+  let browserDb: Awaited<ReturnType<typeof openSqlJsDatabase>> | null = null;
+  try {
+    const databaseBase64 = String(req.body.databaseBase64 ?? '');
+    if (!databaseBase64) {
+      res.status(400).json({ error: 'databaseBase64 is required' });
+      return;
+    }
+    browserDb = await openSqlJsDatabase(databaseBase64);
+    let report;
+    const runId = await withTransaction(async (client) => {
+      report = await buildErpReconciliationReport(browserDb!, client);
+      return persistReconciliationRun(report!, req.user!.email);
+    });
+    browserDb.close();
+    browserDb = null;
+    res.json({ runId, report, passed: report!.passed });
+  } catch (err) {
+    if (browserDb) browserDb.close();
     res.status(500).json({ error: safeErrorMessage(err) });
   }
 });
