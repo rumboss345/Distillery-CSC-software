@@ -1,6 +1,8 @@
+import { useEffect, useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { ProductionDatabaseBanner } from './ProductionDatabaseBanner';
 import { useAuth } from '../context/AuthContext';
+import { fetchProductionStatus } from '../lib/production-api';
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: '◈' },
@@ -16,6 +18,13 @@ const navItems = [
 
 export function Layout() {
   const { user, logout } = useAuth();
+  const [postgresConfigured, setPostgresConfigured] = useState(false);
+
+  useEffect(() => {
+    fetchProductionStatus()
+      .then((status) => setPostgresConfigured(status.databaseConfigured))
+      .catch(() => setPostgresConfigured(false));
+  }, []);
 
   return (
     <div className="app-layout">
@@ -49,15 +58,17 @@ export function Layout() {
                 <span className="nav-icon">✉</span>
                 User approvals
               </NavLink>
-              <NavLink
-                to="/admin/data-migration"
-                className={({ isActive }) =>
-                  `nav-link${isActive ? ' active' : ''}`
-                }
-              >
-                <span className="nav-icon">⇄</span>
-                Data migration
-              </NavLink>
+              {postgresConfigured && (
+                <NavLink
+                  to="/admin/data-migration"
+                  className={({ isActive }) =>
+                    `nav-link${isActive ? ' active' : ''}`
+                  }
+                >
+                  <span className="nav-icon">⇄</span>
+                  Data migration
+                </NavLink>
+              )}
             </>
           )}
         </nav>

@@ -1,4 +1,5 @@
-import { Router } from 'express';
+import { Router, type Request, type Response, type NextFunction } from 'express';
+import { isDatabaseConfigured } from '../config.js';
 import { withTransaction } from '../db/pool.js';
 import { query, queryOne } from '../db/pool.js';
 import { adminMiddleware, authMiddleware } from '../middleware/auth.js';
@@ -14,6 +15,16 @@ import { collectPreview, openSqlJsDatabase } from '../services/sqljs-import/pars
 import { serverHasProductionData } from '../services/production-status-helpers.js';
 
 const router = Router();
+
+function requirePostgresConfigured(req: Request, res: Response, next: NextFunction) {
+  if (!isDatabaseConfigured()) {
+    res.status(503).json({
+      error: 'PostgreSQL is not configured. Set DATABASE_URL to enable central database migration features.',
+    });
+    return;
+  }
+  next();
+}
 
 function safeErrorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
@@ -34,7 +45,7 @@ router.get('/status', async (_req, res) => {
   }
 });
 
-router.post('/migration/preview', authMiddleware, adminMiddleware, async (req, res) => {
+router.post('/migration/preview', authMiddleware, adminMiddleware, requirePostgresConfigured, async (req, res) => {
   try {
     const databaseBase64 = String(req.body.databaseBase64 ?? '');
     const sourceLabel = String(req.body.sourceLabel ?? 'browser_export');
@@ -71,7 +82,7 @@ router.post('/migration/preview', authMiddleware, adminMiddleware, async (req, r
   }
 });
 
-router.post('/migration/import', authMiddleware, adminMiddleware, async (req, res) => {
+router.post('/migration/import', authMiddleware, adminMiddleware, requirePostgresConfigured, async (req, res) => {
   let browserDb: Awaited<ReturnType<typeof openSqlJsDatabase>> | null = null;
   try {
     const databaseBase64 = String(req.body.databaseBase64 ?? '');
@@ -145,7 +156,7 @@ router.post('/migration/import', authMiddleware, adminMiddleware, async (req, re
   }
 });
 
-router.post('/migration/validate', authMiddleware, adminMiddleware, async (req, res) => {
+router.post('/migration/validate', authMiddleware, adminMiddleware, requirePostgresConfigured, async (req, res) => {
   let browserDb: Awaited<ReturnType<typeof openSqlJsDatabase>> | null = null;
   try {
     const databaseBase64 = String(req.body.databaseBase64 ?? '');
@@ -176,7 +187,7 @@ router.post('/migration/validate', authMiddleware, adminMiddleware, async (req, 
   }
 });
 
-router.post('/migration/activate', authMiddleware, adminMiddleware, async (req, res) => {
+router.post('/migration/activate', authMiddleware, adminMiddleware, requirePostgresConfigured, async (req, res) => {
   try {
     const confirm = Boolean(req.body.confirm);
     const override = Boolean(req.body.override);
@@ -265,7 +276,7 @@ router.post('/migration/activate', authMiddleware, adminMiddleware, async (req, 
   }
 });
 
-router.get('/migration/history', authMiddleware, adminMiddleware, async (_req, res) => {
+router.get('/migration/history', authMiddleware, adminMiddleware, requirePostgresConfigured, async (_req, res) => {
   const result = await query(
     `SELECT id, source_label, imported_by_email, status, preview_summary, validation_summary,
             backup_size_bytes, backup_sha256, notes, created_at, completed_at

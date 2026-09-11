@@ -1,4 +1,5 @@
 import { isDatabaseConfigured } from '../config.js';
+import { getLocalUserCount } from '../db/auth-local.js';
 import { pingDatabase, queryOne } from '../db/pool.js';
 import { getMigrationStateRecord, hasSuccessfulImport, isServerApiCutoverReady } from './migration-state.js';
 import { readdirSync } from 'fs';
@@ -10,16 +11,18 @@ const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'migr
 export interface HealthReport {
   ok: boolean;
   application: 'running';
+  productionMode: 'browser_local' | 'postgresql';
   postgresql: {
     configured: boolean;
-    reachable: boolean;
+    reachable: boolean | null;
   };
   migrations: {
-    current: boolean;
+    current: boolean | null;
     pendingCount: number | null;
   };
   authentication: {
     ready: boolean;
+    mode: 'sqlite_local' | 'postgresql';
     userCount: number | null;
   };
   production: {
@@ -27,12 +30,37 @@ export interface HealthReport {
     imported: boolean;
     serverAuthoritative: boolean;
     serverApiCutoverReady: boolean;
+    browserLocalModeActive: boolean;
   };
 }
 
 export async function getHealthReport(): Promise<HealthReport> {
   const configured = isDatabaseConfigured();
-  const reachable = configured ? await pingDatabase() : false;
+
+  if (!configured) {
+    const userCount = getLocalUserCount();
+    return {
+      ok: true,
+      application: 'running',
+      productionMode: 'browser_local',
+      postgresql: { configured: false, reachable: null },
+      migrations: { current: null, pendingCount: null },
+      authentication: {
+        ready: userCount > 0,
+        mode: 'sqlite_local',
+        userCount,
+      },
+      production: {
+        migrationState: 'LOCAL_ONLY',
+        imported: false,
+        serverAuthoritative: false,
+        serverApiCutoverReady: false,
+        browserLocalModeActive: true,
+      },
+    };
+  }
+
+  const reachable = await pingDatabase();
 
   let migrationsCurrent = false;
   let pendingCount: number | null = null;
@@ -70,14 +98,20 @@ export async function getHealthReport(): Promise<HealthReport> {
   return {
     ok,
     application: 'running',
-    postgresql: { configured, reachable },
+    productionMode: 'postgresql',
+    postgresql: { configured: true, reachable },
     migrations: { current: migrationsCurrent, pendingCount },
-    authentication: { ready: (userCount ?? 0) > 0, userCount },
+    authentication: {
+      ready: (userCount ?? 0) > 0,
+      mode: 'postgresql',
+      userCount,
+    },
     production: {
       migrationState,
       imported,
       serverAuthoritative,
       serverApiCutoverReady: apiReady,
+      browserLocalModeActive: !serverAuthoritative,
     },
   };
 }

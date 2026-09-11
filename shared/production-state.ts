@@ -8,7 +8,7 @@ export type ProductionMigrationState =
 
 export const PRODUCTION_STATE_MESSAGES: Record<ProductionMigrationState, string> = {
   LOCAL_ONLY:
-    'Production data is stored in this browser only. Central PostgreSQL is not configured or reachable.',
+    'Browser-local production mode is active. PostgreSQL is not configured on the server.',
   MIGRATION_READY:
     'Central PostgreSQL is ready. Production screens still use the browser database until import and cutover.',
   MIGRATION_IMPORTED:

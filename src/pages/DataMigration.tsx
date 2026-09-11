@@ -238,6 +238,27 @@ export function DataMigration() {
 
   const migrationState = status?.migrationState ?? 'LOCAL_ONLY';
 
+  if (status && !status.databaseConfigured) {
+    return (
+      <div>
+        <div className="page-header">
+          <h2>Production Database Migration</h2>
+        </div>
+        <div className="detail-panel">
+          <h4>PostgreSQL not configured</h4>
+          <p>
+            Central database migration features are disabled because <code>DATABASE_URL</code> is not set on the server.
+            Production testing continues using the browser database in this session.
+          </p>
+          <p className="form-hint">
+            When you are ready to enable PostgreSQL, set <code>DATABASE_URL</code> on the server and restart.
+            All migration schema, validation, and cutover safeguards will activate automatically.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="page-header">
