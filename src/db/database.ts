@@ -1,8 +1,8 @@
 import initSqlJs, { Database, SqlValue } from 'sql.js/dist/sql-wasm.js';
 import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 import { buildCscFloorEquipmentRows, CSC_FLOOR_PLAN_SIZE } from '../lib/csc-floor-equipment';
-import { MASTER_DATA_SCHEMA } from './master-data-schema';
-import { seedMasterDataIfEmpty } from './master-data-queries';
+import { MASTER_DATA_SCHEMA, SUPPLIER_CLASSIFICATIONS_MIGRATION } from './master-data-schema';
+import { migrateSupplierClassificationsFromLegacy, seedMasterDataIfEmpty } from './master-data-queries';
 import { SCHEMA, SEED_DATA } from './schema';
 
 const FLOOR_MIGRATION = `
@@ -378,6 +378,9 @@ function migrateMasterData(): void {
   if (!hasMasterData) {
     db.run(MASTER_DATA_SCHEMA);
     seedMasterDataIfEmpty();
+  } else {
+    db.run(SUPPLIER_CLASSIFICATIONS_MIGRATION);
+    migrateSupplierClassificationsFromLegacy();
   }
 }
 

@@ -15,6 +15,10 @@ import {
   LOOKUP_TYPES,
 } from '../../shared/master-data/constants';
 import {
+  normalizeSupplierClassifications,
+  primarySupplierClassification,
+} from '../../shared/master-data/supplier-classifications';
+import {
   assertValidLocationParent,
   validateAbvOptional,
   validateAbvRequired,
@@ -31,6 +35,7 @@ import type {
   MdSku,
   MdStorageLocation,
   MdSupplier,
+  MdSupplierSaveInput,
   MdUnit,
 } from '../types/master-data';
 import { insertRow, queryAll, queryOne, runQuery } from './database';
@@ -116,14 +121,56 @@ export function getUnitCodes(unitType?: string): string[] {
 
 // ─── Suppliers ─────────────────────────────────────────────────────────────
 
-export function getSuppliers(activeOnly = false): MdSupplier[] {
-  return queryAll<MdSupplier>(
-    `SELECT * FROM md_suppliers${activeOnly ? ' WHERE active = 1' : ''} ORDER BY company_name COLLATE NOCASE`,
+export function getSupplierClassifications(supplierId: number): string[] {
+  return queryAll<{ supplier_type: string }>(
+    `SELECT supplier_type FROM md_supplier_classifications
+     WHERE supplier_id = ? ORDER BY supplier_type COLLATE NOCASE`,
+    [supplierId],
+  ).map((row) => row.supplier_type);
+}
+
+function attachSupplierClassifications(suppliers: Omit<MdSupplier, 'classifications'>[]): MdSupplier[] {
+  return suppliers.map((supplier) => {
+    const classifications = getSupplierClassifications(supplier.id);
+    return {
+      ...supplier,
+      classifications: classifications.length > 0 ? classifications : [supplier.supplier_type],
+    };
+  });
+}
+
+function saveSupplierClassifications(supplierId: number, types: string[]): void {
+  const classifications = normalizeSupplierClassifications(types);
+  if (classifications.length === 0) {
+    throw new Error('At least one supplier classification is required.');
+  }
+  runQuery('DELETE FROM md_supplier_classifications WHERE supplier_id = ?', [supplierId]);
+  for (const supplierType of classifications) {
+    insertRow(
+      'INSERT INTO md_supplier_classifications (supplier_id, supplier_type) VALUES (?, ?)',
+      [supplierId, supplierType],
+    );
+  }
+  runQuery(
+    'UPDATE md_suppliers SET supplier_type = ?, updated_at = ? WHERE id = ?',
+    [primarySupplierClassification(classifications), now(), supplierId],
   );
 }
 
-export function saveSupplier(data: Omit<MdSupplier, 'id' | 'supplier_code' | 'created_at' | 'updated_at'>, id?: number, code?: string) {
+export function getSuppliers(activeOnly = false): MdSupplier[] {
+  const rows = queryAll<Omit<MdSupplier, 'classifications'>>(
+    `SELECT * FROM md_suppliers${activeOnly ? ' WHERE active = 1' : ''} ORDER BY company_name COLLATE NOCASE`,
+  );
+  return attachSupplierClassifications(rows);
+}
+
+export function saveSupplier(data: MdSupplierSaveInput, id?: number, code?: string) {
   validateRequired(data.company_name, 'Company name');
+  const classifications = normalizeSupplierClassifications(data.classifications);
+  if (classifications.length === 0) {
+    throw new Error('At least one supplier classification is required.');
+  }
+  const primaryType = primarySupplierClassification(classifications);
   const ts = now();
   if (id) {
     if (code) assertUniqueCode('md_suppliers', 'supplier_code', code, id);
@@ -132,24 +179,47 @@ export function saveSupplier(data: Omit<MdSupplier, 'id' | 'supplier_code' | 'cr
        website=?, supplier_type=?, payment_terms=?, currency=?, active=?, notes=?, updated_at=?,
        supplier_code=COALESCE(?, supplier_code) WHERE id=?`,
       [data.company_name, data.contact_name, data.email, data.phone, data.country, data.address,
-        data.website, data.supplier_type, data.payment_terms, data.currency, data.active, data.notes, ts,
+        data.website, primaryType, data.payment_terms, data.currency, data.active, data.notes, ts,
         code ?? null, id],
     );
+    saveSupplierClassifications(id, classifications);
     return id;
   }
   const supplierCode = code ?? nextBusinessCode('supplier', 'md_suppliers', 'supplier_code');
   assertUniqueCode('md_suppliers', 'supplier_code', supplierCode);
-  return insertRow(
+  const supplierId = insertRow(
     `INSERT INTO md_suppliers (supplier_code, company_name, contact_name, email, phone, country, address,
       website, supplier_type, payment_terms, currency, active, notes, created_at, updated_at)
      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     [supplierCode, data.company_name, data.contact_name, data.email, data.phone, data.country, data.address,
-      data.website, data.supplier_type, data.payment_terms, data.currency, data.active, data.notes, ts, ts],
+      data.website, primaryType, data.payment_terms, data.currency, data.active, data.notes, ts, ts],
   );
+  saveSupplierClassifications(supplierId, classifications);
+  return supplierId;
 }
 
 export function setSupplierActive(id: number, active: boolean) {
   runQuery('UPDATE md_suppliers SET active = ?, updated_at = ? WHERE id = ?', [active ? 1 : 0, now(), id]);
+}
+
+/** Migrate legacy md_suppliers.supplier_type into md_supplier_classifications (idempotent). */
+export function migrateSupplierClassificationsFromLegacy(): void {
+  const suppliers = queryAll<{ id: number; supplier_type: string }>(
+    'SELECT id, supplier_type FROM md_suppliers',
+  );
+  for (const supplier of suppliers) {
+    const existing = queryOne<{ count: number }>(
+      'SELECT COUNT(*) AS count FROM md_supplier_classifications WHERE supplier_id = ?',
+      [supplier.id],
+    )?.count ?? 0;
+    if (existing > 0) continue;
+    const legacyType = supplier.supplier_type?.trim();
+    if (!legacyType) continue;
+    runQuery(
+      'INSERT OR IGNORE INTO md_supplier_classifications (supplier_id, supplier_type) VALUES (?, ?)',
+      [supplier.id, legacyType],
+    );
+  }
 }
 
 // ─── Products ──────────────────────────────────────────────────────────────

@@ -26,7 +26,9 @@ export interface MdSupplier {
   country: string;
   address: string;
   website: string;
+  /** Derived primary classification (first sorted type). Authoritative list is classifications. */
   supplier_type: string;
+  classifications: string[];
   payment_terms: string;
   currency: string;
   active: number;
@@ -34,6 +36,11 @@ export interface MdSupplier {
   created_at: string;
   updated_at: string;
 }
+
+export type MdSupplierSaveInput = Omit<
+  MdSupplier,
+  'id' | 'supplier_code' | 'created_at' | 'updated_at' | 'supplier_type'
+>;
 
 export interface MdProduct {
   id: number;

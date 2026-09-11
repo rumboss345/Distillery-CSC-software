@@ -16,6 +16,7 @@ const empty = (): Omit<MdBulkSpirit, 'id' | 'spirit_code' | 'created_at' | 'upda
 export function BulkSpiritsPage() {
   const { key, refresh } = useRefreshKey();
   const [search, setSearch] = useState('');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<number>();
   const [form, setForm] = useState(empty());
@@ -25,13 +26,16 @@ export function BulkSpiritsPage() {
   const spiritTypes = masterDataRepository.lookups.get(LOOKUP_TYPES.SPIRIT_TYPE);
   const suppliers = masterDataRepository.suppliers.list(true);
   const items = useMemo(() => {
-    let rows = masterDataRepository.bulkSpirits.list();
+    let rows = masterDataRepository.bulkSpirits.list(activeFilter === 'active');
+    if (activeFilter === 'inactive') {
+      rows = masterDataRepository.bulkSpirits.list().filter((r) => !r.active);
+    }
     if (search.trim()) {
       const q = search.toLowerCase();
       rows = rows.filter((r) => r.name.toLowerCase().includes(q) || r.spirit_code.toLowerCase().includes(q));
     }
     return rows;
-  }, [key, search]);
+  }, [key, search, activeFilter]);
 
   const openNew = () => { setEditId(undefined); setForm(empty()); setError(''); setShowForm(true); };
   const openEdit = (row: MdBulkSpirit) => {
@@ -55,6 +59,11 @@ export function BulkSpiritsPage() {
     }
   };
 
+  const toggleActive = (id: number, active: number) => {
+    masterDataRepository.bulkSpirits.setActive(id, !active);
+    refresh();
+  };
+
   const previewLpa = form.litres_per_purchase_unit > 0 && form.nominal_abv > 0
     ? litresPureAlcohol(form.litres_per_purchase_unit, form.nominal_abv)
     : null;
@@ -63,6 +72,11 @@ export function BulkSpiritsPage() {
     <div>
       <div className="page-actions" style={{ marginBottom: '1rem' }}>
         <input className="form-control" placeholder="Search bulk spirits…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ maxWidth: 280 }} />
+        <select className="form-control" value={activeFilter} onChange={(e) => setActiveFilter(e.target.value as typeof activeFilter)} style={{ maxWidth: 160 }}>
+          <option value="all">All statuses</option>
+          <option value="active">Active only</option>
+          <option value="inactive">Inactive only</option>
+        </select>
         <button className="btn btn-primary" onClick={openNew}>+ Add Bulk Spirit</button>
       </div>
       <div className="table-wrap">
@@ -77,7 +91,10 @@ export function BulkSpiritsPage() {
                 <td>{litresPureAlcohol(row.litres_per_purchase_unit, row.nominal_abv).toFixed(1)} LPA</td>
                 <td>{row.supplier_name ?? '—'}</td>
                 <td><ActiveBadge active={row.active} /></td>
-                <td><button className="btn btn-ghost btn-sm" onClick={() => openEdit(row)}>Edit</button></td>
+                <td>
+                  <button className="btn btn-ghost btn-sm" onClick={() => openEdit(row)}>Edit</button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => toggleActive(row.id, row.active)}>{row.active ? 'Deactivate' : 'Activate'}</button>
+                </td>
               </tr>
             ))}
           </tbody>

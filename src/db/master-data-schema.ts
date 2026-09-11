@@ -52,6 +52,13 @@ CREATE TABLE IF NOT EXISTS md_suppliers (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+/** Authoritative supplier classifications (many-to-many). md_suppliers.supplier_type is a derived primary-type cache for legacy/PG parity only. */
+CREATE TABLE IF NOT EXISTS md_supplier_classifications (
+  supplier_id INTEGER NOT NULL REFERENCES md_suppliers(id) ON DELETE CASCADE,
+  supplier_type TEXT NOT NULL,
+  PRIMARY KEY (supplier_id, supplier_type COLLATE NOCASE)
+);
+
 CREATE TABLE IF NOT EXISTS md_products (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   product_code TEXT NOT NULL UNIQUE,
@@ -166,4 +173,15 @@ CREATE TABLE IF NOT EXISTS md_storage_locations (
 CREATE INDEX IF NOT EXISTS idx_md_skus_product ON md_skus(product_id);
 CREATE INDEX IF NOT EXISTS idx_md_lookup_type ON md_lookup_values(lookup_type);
 CREATE INDEX IF NOT EXISTS idx_md_locations_parent ON md_storage_locations(parent_location_id);
+CREATE INDEX IF NOT EXISTS idx_md_supplier_classifications_supplier ON md_supplier_classifications(supplier_id);
+`;
+
+/** Incremental migration for existing browser DBs created before supplier classifications. */
+export const SUPPLIER_CLASSIFICATIONS_MIGRATION = `
+CREATE TABLE IF NOT EXISTS md_supplier_classifications (
+  supplier_id INTEGER NOT NULL REFERENCES md_suppliers(id) ON DELETE CASCADE,
+  supplier_type TEXT NOT NULL,
+  PRIMARY KEY (supplier_id, supplier_type COLLATE NOCASE)
+);
+CREATE INDEX IF NOT EXISTS idx_md_supplier_classifications_supplier ON md_supplier_classifications(supplier_id);
 `;

@@ -52,6 +52,13 @@ CREATE TABLE IF NOT EXISTS md_suppliers (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Authoritative supplier classifications. md_suppliers.supplier_type is a derived primary-type cache only.
+CREATE TABLE IF NOT EXISTS md_supplier_classifications (
+  supplier_id INTEGER NOT NULL REFERENCES md_suppliers(id) ON DELETE CASCADE,
+  supplier_type TEXT NOT NULL,
+  PRIMARY KEY (supplier_id, supplier_type)
+);
+
 CREATE TABLE IF NOT EXISTS md_products (
   id SERIAL PRIMARY KEY,
   product_code TEXT NOT NULL UNIQUE,
@@ -166,3 +173,4 @@ CREATE TABLE IF NOT EXISTS md_storage_locations (
 CREATE INDEX IF NOT EXISTS idx_md_skus_product ON md_skus(product_id);
 CREATE INDEX IF NOT EXISTS idx_md_lookup_type ON md_lookup_values(lookup_type);
 CREATE INDEX IF NOT EXISTS idx_md_locations_parent ON md_storage_locations(parent_location_id);
+CREATE INDEX IF NOT EXISTS idx_md_supplier_classifications_supplier ON md_supplier_classifications(supplier_id);

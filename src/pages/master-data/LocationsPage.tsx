@@ -13,6 +13,7 @@ const empty = (): Omit<MdStorageLocation, 'id' | 'location_code' | 'created_at' 
 export function LocationsPage() {
   const { key, refresh } = useRefreshKey();
   const [search, setSearch] = useState('');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<number>();
   const [form, setForm] = useState(empty());
@@ -21,13 +22,16 @@ export function LocationsPage() {
   void key;
   const locationTypes = masterDataRepository.lookups.get(LOOKUP_TYPES.LOCATION_TYPE);
   const items = useMemo(() => {
-    let rows = masterDataRepository.locations.list();
+    let rows = masterDataRepository.locations.list(activeFilter === 'active');
+    if (activeFilter === 'inactive') {
+      rows = masterDataRepository.locations.list().filter((r) => !r.active);
+    }
     if (search.trim()) {
       const q = search.toLowerCase();
       rows = rows.filter((r) => r.name.toLowerCase().includes(q) || r.location_code.toLowerCase().includes(q));
     }
     return rows;
-  }, [key, search]);
+  }, [key, search, activeFilter]);
   const allLocations = masterDataRepository.locations.list();
 
   const openNew = () => { setEditId(undefined); setForm(empty()); setError(''); setShowForm(true); };
@@ -49,10 +53,20 @@ export function LocationsPage() {
     }
   };
 
+  const toggleActive = (id: number, active: number) => {
+    masterDataRepository.locations.setActive(id, !active);
+    refresh();
+  };
+
   return (
     <div>
       <div className="page-actions" style={{ marginBottom: '1rem' }}>
         <input className="form-control" placeholder="Search locations…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ maxWidth: 280 }} />
+        <select className="form-control" value={activeFilter} onChange={(e) => setActiveFilter(e.target.value as typeof activeFilter)} style={{ maxWidth: 160 }}>
+          <option value="all">All statuses</option>
+          <option value="active">Active only</option>
+          <option value="inactive">Inactive only</option>
+        </select>
         <button className="btn btn-primary" onClick={openNew}>+ Add Location</button>
       </div>
       <div className="table-wrap">
@@ -64,7 +78,10 @@ export function LocationsPage() {
                 <td>{row.location_code}</td><td>{row.name}</td><td>{row.location_type}</td>
                 <td>{row.parent_name ?? '—'}</td>
                 <td><ActiveBadge active={row.active} /></td>
-                <td><button className="btn btn-ghost btn-sm" onClick={() => openEdit(row)}>Edit</button></td>
+                <td>
+                  <button className="btn btn-ghost btn-sm" onClick={() => openEdit(row)}>Edit</button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => toggleActive(row.id, row.active)}>{row.active ? 'Deactivate' : 'Activate'}</button>
+                </td>
               </tr>
             ))}
           </tbody>
