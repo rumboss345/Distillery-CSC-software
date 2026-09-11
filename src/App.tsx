@@ -37,6 +37,15 @@ import { ProductionLayout } from './pages/production/ProductionLayout';
 import { ProductionOrdersPage } from './pages/production/ProductionOrdersPage';
 import { ProductionOrderDetailPage } from './pages/production/ProductionOrderDetailPage';
 import { BatchExecutionPage } from './pages/production/BatchExecutionPage';
+import { MaterialInventoryLayout } from './pages/material-inventory/MaterialInventoryLayout';
+import { MaterialDashboardPage } from './pages/material-inventory/MaterialDashboardPage';
+import { MaterialListPage } from './pages/material-inventory/MaterialListPage';
+import { MaterialLotsPage } from './pages/material-inventory/MaterialLotsPage';
+import { MaterialTransactionsPage } from './pages/material-inventory/MaterialTransactionsPage';
+import { MaterialReconciliationPage } from './pages/material-inventory/MaterialReconciliationPage';
+import { PurchasingLayout } from './pages/purchasing/PurchasingLayout';
+import { PurchaseOrdersPage } from './pages/purchasing/PurchaseOrdersPage';
+import { ReceiptsPage } from './pages/purchasing/ReceiptsPage';
 import { useDatabaseReady } from './db/queries';
 
 function AppContent() {
@@ -83,6 +92,18 @@ function AppContent() {
               <Route index element={<ProductionOrdersPage />} />
               <Route path=":id" element={<ProductionOrderDetailPage />} />
               <Route path=":id/batch/:batchId" element={<BatchExecutionPage />} />
+            </Route>
+            <Route path="/material-inventory" element={<MaterialInventoryLayout />}>
+              <Route index element={<MaterialDashboardPage />} />
+              <Route path="raw-materials" element={<MaterialListPage materialKind="raw" />} />
+              <Route path="packaging" element={<MaterialListPage materialKind="packaging" />} />
+              <Route path="lots" element={<MaterialLotsPage />} />
+              <Route path="transactions" element={<MaterialTransactionsPage />} />
+              <Route path="reconciliation" element={<MaterialReconciliationPage />} />
+            </Route>
+            <Route path="/purchasing" element={<PurchasingLayout />}>
+              <Route index element={<PurchaseOrdersPage />} />
+              <Route path="receipts" element={<ReceiptsPage />} />
             </Route>
             <Route path="/liquid-inventory" element={<LiquidInventoryLayout />}>
               <Route index element={<TankBoardPage />} />

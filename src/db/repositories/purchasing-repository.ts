@@ -1,0 +1,46 @@
+import type { PurchasingRepository } from '../../types/purchasing';
+import {
+  addPurchaseOrderLine,
+  addReceiptLine,
+  cancelPurchaseOrder,
+  closePurchaseOrder,
+  createPurchaseOrder,
+  createReceipt,
+  getPurchaseOrder,
+  getPurchaseOrderLines,
+  getReceipt,
+  getReceiptLines,
+  getReceivedQuantity,
+  getRemainingQuantity,
+  listPurchaseOrders,
+  listReceipts,
+  postDirectReceipt,
+  postReceipt,
+  postSupplierReturn,
+  reverseReceipt,
+  submitPurchaseOrder,
+  updateDraftPurchaseOrder,
+} from '../purchasing-queries';
+
+export const purchasingRepository: PurchasingRepository = {
+  createPurchaseOrder,
+  updateDraftPurchaseOrder,
+  addPurchaseOrderLine,
+  submitPurchaseOrder,
+  cancelPurchaseOrder,
+  closePurchaseOrder,
+  getPurchaseOrder,
+  listPurchaseOrders,
+  getPurchaseOrderLines,
+  getReceivedQuantity,
+  getRemainingQuantity,
+  createReceipt,
+  addReceiptLine,
+  postReceipt,
+  reverseReceipt,
+  getReceipt,
+  listReceipts,
+  getReceiptLines,
+};
+
+export { postDirectReceipt, postSupplierReturn };

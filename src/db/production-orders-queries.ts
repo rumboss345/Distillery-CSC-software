@@ -63,6 +63,13 @@ import {
   PRODUCTION_TYPES,
 } from '../../shared/production-orders/constants';
 import { addLookupValue, getLookupNames } from './master-data-queries';
+import {
+  getMaterialLotBalanceByLocation,
+  normalizeMaterialQuantity,
+  postProductionIssue,
+} from './material-inventory-queries';
+import { validateSufficientMaterialBalance } from '../../shared/material-inventory/validation';
+import type { MaterialType } from '../../shared/material-inventory/constants';
 
 const now = () => new Date().toISOString();
 
@@ -538,13 +545,35 @@ export function recordInput(input: RecordBatchInputData): number {
     }
   }
 
+  let baseQuantity: number | null = null;
+  let baseUnit: string | null = null;
+  if (input.inputType === 'Raw Material' || input.inputType === 'Packaging') {
+    const materialType: MaterialType = input.inputType === 'Raw Material' ? 'RAW_MATERIAL' : 'PACKAGING_MATERIAL';
+    const rawId = input.rawMaterialId ?? null;
+    const pkgId = input.packagingMaterialId ?? null;
+    const trackingMode = input.inputType === 'Raw Material'
+      ? queryOne<{ inventory_tracking_mode: string }>('SELECT inventory_tracking_mode FROM md_raw_materials WHERE id = ?', [rawId])?.inventory_tracking_mode ?? 'LEGACY'
+      : queryOne<{ inventory_tracking_mode: string }>('SELECT inventory_tracking_mode FROM md_packaging_materials WHERE id = ?', [pkgId])?.inventory_tracking_mode ?? 'LEGACY';
+    if (trackingMode === 'LEDGER') {
+      if (input.materialLotId == null || input.sourceLocationId == null) {
+        throw new Error('LEDGER-managed material input requires material lot and source location.');
+      }
+      const normalized = normalizeMaterialQuantity(materialType, rawId, pkgId, input.actualQuantity, input.unit);
+      baseQuantity = normalized.baseQuantity;
+      baseUnit = normalized.baseUnit;
+      const avail = getMaterialLotBalanceByLocation(input.materialLotId, input.sourceLocationId);
+      validateSufficientMaterialBalance(avail, baseQuantity, `material lot at location`);
+    }
+  }
+
   const lpa = computeActualLpa(input.actualVolumeLitres ?? input.actualQuantity, input.actualAbv ?? 0);
   const inputId = insertRow(
     `INSERT INTO prod_batch_inputs (
       batch_id, requirement_id, input_type, raw_material_id, bulk_spirit_id, liquid_lot_id,
-      source_tank_id, packaging_material_id, actual_quantity, unit,
-      actual_volume_litres, actual_abv, actual_lpa, notes, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      source_tank_id, packaging_material_id, material_lot_id, source_location_id,
+      actual_quantity, unit, actual_volume_litres, actual_abv, actual_lpa,
+      base_quantity, base_unit, material_transaction_id, notes, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
     [
       input.batchId,
       input.requirementId ?? null,
@@ -554,11 +583,15 @@ export function recordInput(input: RecordBatchInputData): number {
       input.liquidLotId ?? null,
       input.sourceTankId ?? null,
       input.packagingMaterialId ?? null,
+      input.materialLotId ?? null,
+      input.sourceLocationId ?? null,
       input.actualQuantity,
       input.unit,
       input.actualVolumeLitres ?? (input.inputType === 'Water' || input.inputType === 'Liquid Lot' || input.inputType === 'Bulk Spirit' ? input.actualQuantity : null),
       input.inputType === 'Water' ? 0 : (input.actualAbv ?? null),
       lpa,
+      baseQuantity,
+      baseUnit,
       input.notes ?? '',
       now(),
     ],
@@ -614,6 +647,76 @@ function getWaterInputs(batchId: number): ProdBatchInput[] {
     `SELECT * FROM prod_batch_inputs WHERE batch_id = ? AND input_type = 'Water'`,
     [batchId],
   );
+}
+
+function getMaterialInputs(batchId: number): ProdBatchInput[] {
+  return queryAll<ProdBatchInput>(
+    `SELECT * FROM prod_batch_inputs WHERE batch_id = ? AND input_type IN ('Raw Material', 'Packaging')`,
+    [batchId],
+  );
+}
+
+function isLedgerMaterialInput(input: ProdBatchInput): boolean {
+  if (input.material_transaction_id != null) return false;
+  if (input.material_lot_id == null || input.source_location_id == null) return false;
+  if (input.input_type === 'Raw Material') {
+    const mode = queryOne<{ inventory_tracking_mode: string }>(
+      'SELECT inventory_tracking_mode FROM md_raw_materials WHERE id = ?',
+      [input.raw_material_id],
+    )?.inventory_tracking_mode ?? 'LEGACY';
+    return mode === 'LEDGER';
+  }
+  if (input.input_type === 'Packaging') {
+    const mode = queryOne<{ inventory_tracking_mode: string }>(
+      'SELECT inventory_tracking_mode FROM md_packaging_materials WHERE id = ?',
+      [input.packaging_material_id],
+    )?.inventory_tracking_mode ?? 'LEGACY';
+    return mode === 'LEDGER';
+  }
+  return false;
+}
+
+function revalidateMaterialInputsAtCompletion(batchId: number): void {
+  for (const input of getMaterialInputs(batchId)) {
+    if (!isLedgerMaterialInput(input)) continue;
+    const baseQty = input.base_quantity ?? input.actual_quantity;
+    const avail = getMaterialLotBalanceByLocation(input.material_lot_id!, input.source_location_id!);
+    validateSufficientMaterialBalance(avail, baseQty, `material lot ${input.material_lot_id} at location ${input.source_location_id}`);
+  }
+}
+
+function postPendingMaterialIssues(
+  batchId: number,
+  orderId: number,
+  groupId: string,
+  operatorId?: string | null,
+): void {
+  for (const input of getMaterialInputs(batchId)) {
+    if (!isLedgerMaterialInput(input)) continue;
+    const materialType: MaterialType = input.input_type === 'Raw Material' ? 'RAW_MATERIAL' : 'PACKAGING_MATERIAL';
+    const baseQty = input.base_quantity ?? input.actual_quantity;
+    const baseUnit = input.base_unit ?? input.unit;
+    const txId = postProductionIssue({
+      materialType,
+      rawMaterialId: input.raw_material_id,
+      packagingMaterialId: input.packaging_material_id,
+      materialLotId: input.material_lot_id!,
+      sourceLocationId: input.source_location_id!,
+      quantity: input.actual_quantity,
+      unit: input.unit,
+      baseQuantity: baseQty,
+      baseUnit,
+      productionOrderId: orderId,
+      productionBatchId: batchId,
+      transactionGroupId: groupId,
+      createdBy: operatorId,
+    });
+    runQuery('UPDATE prod_batch_inputs SET material_transaction_id = ? WHERE id = ?', [txId, input.id]);
+  }
+}
+
+function allocateMaterialOperationGroupId(): string {
+  return nextBusinessCode('materialOperationGroup', 'mat_transactions', 'transaction_group_id');
 }
 
 function revalidateLiquidInputsAtCompletion(batchId: number): void {
@@ -718,6 +821,7 @@ export function completeBatch(input: CompleteBatchInput): { lotId: number; trans
 
   return withDatabaseTransaction(() => {
     revalidateLiquidInputsAtCompletion(batch.id);
+    revalidateMaterialInputsAtCompletion(batch.id);
 
     const destBalance = getTankBalance(input.destinationTankId);
     if (destBalance.trackingMode !== 'LEDGER') {
@@ -728,11 +832,13 @@ export function completeBatch(input: CompleteBatchInput): { lotId: number; trans
     }
 
     const groupId = batch.transaction_group_id ?? allocateOperationGroupId();
+    const materialGroupId = allocateMaterialOperationGroupId();
     const docType = SOURCE_DOCUMENT_TYPES.PRODUCTION_BATCH;
     const docId = batch.id;
     let lotId = 0;
     let transactionIds: number[] = [];
 
+    postPendingMaterialIssues(batch.id, order.id, materialGroupId, input.operatorId);
     postPendingBatchLosses(batch.id, groupId, input.operatorId);
     validateLpaConservation(batch.id, outputLpa, input.notes);
 

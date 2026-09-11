@@ -17,6 +17,12 @@ import {
   PRODUCTION_ORDERS_V1E_NEW_COLUMNS,
 } from './production-orders-schema';
 import { seedProductionLookupsIfEmpty } from './production-orders-queries';
+import {
+  MATERIAL_INVENTORY_SCHEMA,
+  MATERIAL_INVENTORY_V1F_MIGRATION,
+  MATERIAL_INVENTORY_V1F_NEW_COLUMNS,
+} from './material-inventory-schema';
+import { seedMaterialLookupsIfEmpty } from './material-inventory-queries';
 import { SCHEMA, SEED_DATA } from './schema';
 
 const FLOOR_MIGRATION = `
@@ -384,6 +390,7 @@ function runMigrations(): void {
   migrateRecipes();
   migrateLiquidLedger();
   migrateProductionOrders();
+  migrateMaterialInventory();
   persistDb();
 }
 
@@ -419,6 +426,24 @@ function migrateProductionOrders(): void {
       if (!recipeColumnExists(col.table, col.column)) {
         db.run(col.ddl);
       }
+    }
+  }
+}
+
+function migrateMaterialInventory(): void {
+  if (!db) return;
+  const hasMaterial = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='mat_lots'",
+  );
+  if (!hasMaterial) {
+    db.run(MATERIAL_INVENTORY_SCHEMA);
+    seedMaterialLookupsIfEmpty();
+  } else {
+    db.run(MATERIAL_INVENTORY_V1F_MIGRATION);
+  }
+  for (const col of MATERIAL_INVENTORY_V1F_NEW_COLUMNS) {
+    if (!recipeColumnExists(col.table, col.column)) {
+      db.run(col.ddl);
     }
   }
 }
@@ -601,14 +626,17 @@ export async function initDatabase(): Promise<Database> {
     db.run(RECIPES_SCHEMA);
     db.run(LIQUID_LEDGER_SCHEMA);
     db.run(PRODUCTION_ORDERS_SCHEMA);
+    db.run(MATERIAL_INVENTORY_SCHEMA);
     db.run(SEED_DATA);
     seedMasterDataIfEmpty();
     seedRecipeLookupsIfEmpty();
     seedLiquidLedgerLookupsIfEmpty();
     seedProductionLookupsIfEmpty();
+    seedMaterialLookupsIfEmpty();
     seedCscFloorEquipment({ assignSequentialIds: true, demoStatusForFirstTwo: true });
     migrateLiquidLedger();
     migrateProductionOrders();
+    migrateMaterialInventory();
     persistDb();
   }
 

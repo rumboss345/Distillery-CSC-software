@@ -91,12 +91,17 @@ export interface ProdBatchInput {
   liquid_lot_id: number | null;
   source_tank_id: number | null;
   packaging_material_id: number | null;
+  material_lot_id: number | null;
+  source_location_id: number | null;
   actual_quantity: number;
   unit: string;
   actual_volume_litres: number | null;
   actual_abv: number | null;
   actual_lpa: number | null;
+  base_quantity: number | null;
+  base_unit: string | null;
   transaction_group_id: string | null;
+  material_transaction_id: number | null;
   notes: string;
   created_at: string;
 }
@@ -178,6 +183,8 @@ export interface RecordBatchInputData {
   liquidLotId?: number | null;
   sourceTankId?: number | null;
   packagingMaterialId?: number | null;
+  materialLotId?: number | null;
+  sourceLocationId?: number | null;
   actualQuantity: number;
   unit: string;
   actualVolumeLitres?: number | null;

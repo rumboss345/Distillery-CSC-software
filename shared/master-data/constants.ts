@@ -61,6 +61,11 @@ export const CODE_PREFIXES = {
   operationGroup: 'LGO',
   productionOrder: 'PO',
   productionBatch: 'PB',
+  materialLot: 'MLT',
+  materialTransaction: 'MTX',
+  materialOperationGroup: 'MGO',
+  purchaseOrder: 'PUR',
+  receipt: 'RCV',
 } as const;
 
 export const DEFAULT_UNITS = [
