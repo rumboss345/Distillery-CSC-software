@@ -32,6 +32,7 @@ import type {
 } from '../types/material-inventory';
 import type { SqlValue } from 'sql.js/dist/sql-wasm.js';
 import { insertRow, queryAll, queryOne, runQuery, withDatabaseTransaction } from './database';
+import { createOpeningBalanceCostLayer, snapshotMaterialConsumptionCost } from './costing-queries';
 import { addLookupValue, nextBusinessCode } from './master-data-queries';
 
 const now = () => new Date().toISOString();
@@ -561,6 +562,8 @@ export function postMaterialOpeningBalance(input: {
   effectiveDate?: string;
   notes?: string;
   createdBy?: string | null;
+  unitCostKyd?: number | null;
+  totalCostKyd?: number | null;
 }): number {
   assertLedgerMaterial(input.materialType, input.rawMaterialId ?? null, input.packagingMaterialId ?? null);
   const existing = queryOne<{ count: number }>(
@@ -582,7 +585,7 @@ export function postMaterialOpeningBalance(input: {
     input.unit,
   );
 
-  return postMaterialTransaction({
+  const txId = postMaterialTransaction({
     transactionType: 'Opening Balance',
     materialType: input.materialType,
     rawMaterialId: input.rawMaterialId,
@@ -597,6 +600,16 @@ export function postMaterialOpeningBalance(input: {
     notes: input.notes ?? 'Opening balance',
     createdBy: input.createdBy,
   });
+
+  createOpeningBalanceCostLayer({
+    materialLotId: input.materialLotId,
+    effectiveDate: input.effectiveDate ?? now(),
+    quantityBasis: baseQuantity,
+    unitCostKyd: input.unitCostKyd,
+    totalCostKyd: input.totalCostKyd,
+  });
+
+  return txId;
 }
 
 export function postMaterialDamage(input: {
@@ -656,7 +669,7 @@ export function postProductionIssue(input: {
   const lot = getMaterialLot(input.materialLotId);
   if (!lot) throw new Error('Material lot not found.');
   validateLotIssueable(lot.status, lot.expiration_date);
-  return insertMaterialTransaction({
+  const txId = insertMaterialTransaction({
     transactionType: 'Production Issue',
     materialType: input.materialType,
     rawMaterialId: input.rawMaterialId,
@@ -674,6 +687,15 @@ export function postProductionIssue(input: {
     transactionGroupId: input.transactionGroupId,
     createdBy: input.createdBy,
   });
+  snapshotMaterialConsumptionCost(
+    txId,
+    input.productionOrderId,
+    input.productionBatchId,
+    input.materialLotId,
+    input.baseQuantity,
+    false,
+  );
+  return txId;
 }
 
 function getNetIssuedBaseQuantityForBatchLot(batchId: number, lotId: number): number {
@@ -715,7 +737,7 @@ export function postProductionReturn(input: {
       `Production return ${input.baseQuantity} ${input.baseUnit} exceeds net issued ${netIssued} ${input.baseUnit} for batch/lot.`,
     );
   }
-  return insertMaterialTransaction({
+  const txId = insertMaterialTransaction({
     transactionType: 'Production Return',
     materialType: input.materialType,
     rawMaterialId: input.rawMaterialId,
@@ -733,6 +755,15 @@ export function postProductionReturn(input: {
     transactionGroupId: input.transactionGroupId,
     createdBy: input.createdBy,
   });
+  snapshotMaterialConsumptionCost(
+    txId,
+    input.productionOrderId,
+    input.productionBatchId,
+    input.materialLotId,
+    input.baseQuantity,
+    true,
+  );
+  return txId;
 }
 
 export function getMaterialTransactions(filters?: {

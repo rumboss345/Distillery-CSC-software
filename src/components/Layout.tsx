@@ -16,6 +16,7 @@ const navItems = [
   { to: '/material-inventory', label: 'Material Inventory', icon: '▤' },
   { to: '/liquid-inventory', label: 'Liquid Inventory', icon: '◐' },
   { to: '/purchasing', label: 'Purchasing', icon: '◧' },
+  { to: '/costing', label: 'Costing', icon: '◈' },
   { to: '/production', label: 'Production', icon: '◷' },
   { to: '/recipes', label: 'Recipes', icon: '◎' },
   { to: '/master-data', label: 'Master Data', icon: '◫' },

@@ -23,6 +23,11 @@ import {
   MATERIAL_INVENTORY_V1F_NEW_COLUMNS,
 } from './material-inventory-schema';
 import { seedMaterialLookupsIfEmpty } from './material-inventory-queries';
+import {
+  COSTING_SCHEMA,
+  COSTING_V1G_MIGRATION,
+  COSTING_V1G_NEW_COLUMNS,
+} from './costing-schema';
 import { SCHEMA, SEED_DATA } from './schema';
 
 const FLOOR_MIGRATION = `
@@ -391,6 +396,7 @@ function runMigrations(): void {
   migrateLiquidLedger();
   migrateProductionOrders();
   migrateMaterialInventory();
+  migrateCosting();
   persistDb();
 }
 
@@ -442,6 +448,23 @@ function migrateMaterialInventory(): void {
     db.run(MATERIAL_INVENTORY_V1F_MIGRATION);
   }
   for (const col of MATERIAL_INVENTORY_V1F_NEW_COLUMNS) {
+    if (!recipeColumnExists(col.table, col.column)) {
+      db.run(col.ddl);
+    }
+  }
+}
+
+function migrateCosting(): void {
+  if (!db) return;
+  const hasCosting = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='cost_landed_cost_documents'",
+  );
+  if (!hasCosting) {
+    db.run(COSTING_SCHEMA);
+  } else {
+    db.run(COSTING_V1G_MIGRATION);
+  }
+  for (const col of COSTING_V1G_NEW_COLUMNS) {
     if (!recipeColumnExists(col.table, col.column)) {
       db.run(col.ddl);
     }
@@ -627,6 +650,7 @@ export async function initDatabase(): Promise<Database> {
     db.run(LIQUID_LEDGER_SCHEMA);
     db.run(PRODUCTION_ORDERS_SCHEMA);
     db.run(MATERIAL_INVENTORY_SCHEMA);
+    db.run(COSTING_SCHEMA);
     db.run(SEED_DATA);
     seedMasterDataIfEmpty();
     seedRecipeLookupsIfEmpty();
@@ -637,6 +661,7 @@ export async function initDatabase(): Promise<Database> {
     migrateLiquidLedger();
     migrateProductionOrders();
     migrateMaterialInventory();
+    migrateCosting();
     persistDb();
   }
 

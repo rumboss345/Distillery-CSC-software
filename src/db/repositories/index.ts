@@ -23,4 +23,5 @@ export {
   materialInventoryRepository,
   purchasingRepository,
 };
+export { CostingRepository } from './costing-repository';
 export type { InventoryRepository } from './types';

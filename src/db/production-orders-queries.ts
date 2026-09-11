@@ -68,6 +68,14 @@ import {
   normalizeMaterialQuantity,
   postProductionIssue,
 } from './material-inventory-queries';
+import {
+  createLiquidCostFromBlend,
+  createLiquidCostFromProofDown,
+  createPreliminaryBatchSnapshot,
+  getBatchMaterialCost,
+  getBatchConversionCostTotal,
+  getLiquidLotTotalCost,
+} from './costing-queries';
 import { validateSufficientMaterialBalance } from '../../shared/material-inventory/validation';
 import type { MaterialType } from '../../shared/material-inventory/constants';
 
@@ -929,6 +937,62 @@ export function completeBatch(input: CompleteBatchInput): { lotId: number; trans
     );
 
     insertEvent('Batch Completed', `Batch ${batch.batch_code} completed`, order.id, batch.id, input.operatorId);
+
+    try {
+      const materialCost = getBatchMaterialCost(batch.id);
+      const conversionCost = getBatchConversionCostTotal(batch.id);
+
+      if (productionType === 'Blending') {
+        const liquidInputs = getLiquidInputs(batch.id);
+        const inputLotCosts = liquidInputs.map((li) => ({
+          lotId: li.liquid_lot_id!,
+          costKyd: getLiquidLotTotalCost(li.liquid_lot_id!),
+        }));
+        createLiquidCostFromBlend({
+          outputLotId: lotId,
+          productionBatchId: batch.id,
+          effectiveDate: ts,
+          inputLotCosts,
+          materialCostKyd: materialCost.total ?? 0,
+          conversionCostKyd: conversionCost,
+          outputVolumeLitres: input.actualOutputLitres,
+          outputLpa: outputLpa,
+        });
+      } else if (productionType === 'Proof Down' || productionType.includes('Proof')) {
+        const spiritInput = getLiquidInputs(batch.id)[0];
+        const waterInputs = getWaterInputs(batch.id);
+        let waterCost = 0;
+        for (const wi of waterInputs) {
+          if (wi.raw_material_id && wi.material_lot_id) {
+            const consumptions = queryAll<{ extended_cost_kyd: number | null }>(
+              `SELECT extended_cost_kyd FROM cost_material_consumptions
+               WHERE production_batch_id = ? AND material_lot_id = ?`,
+              [batch.id, wi.material_lot_id],
+            );
+            waterCost += consumptions.reduce((s, c) => s + (c.extended_cost_kyd ?? 0), 0);
+          }
+        }
+        const spiritCost = spiritInput?.liquid_lot_id
+          ? getLiquidLotTotalCost(spiritInput.liquid_lot_id)
+          : 0;
+        createLiquidCostFromProofDown({
+          outputLotId: lotId,
+          productionBatchId: batch.id,
+          effectiveDate: ts,
+          inputTotalCostKyd: spiritCost + (materialCost.total ?? 0),
+          waterCostKyd: waterCost,
+          conversionCostKyd: conversionCost,
+          inputVolumeLitres: spiritInput?.actual_volume_litres ?? spiritInput?.actual_quantity ?? 0,
+          inputAbv: spiritInput?.actual_abv ?? order.snapshot_target_abv ?? 96,
+          outputVolumeLitres: input.actualOutputLitres,
+          outputAbv: input.actualOutputAbv,
+        });
+      }
+
+      createPreliminaryBatchSnapshot(batch.id, input.actualOutputLitres, outputLpa);
+    } catch {
+      createPreliminaryBatchSnapshot(batch.id, input.actualOutputLitres, outputLpa);
+    }
 
     const openBatches = queryOne<{ count: number }>(
       `SELECT COUNT(*) AS count FROM prod_batches

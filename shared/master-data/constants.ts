@@ -66,6 +66,8 @@ export const CODE_PREFIXES = {
   materialOperationGroup: 'MGO',
   purchaseOrder: 'PUR',
   receipt: 'RCV',
+  landedCost: 'LCD',
+  costAdjustment: 'CADJ',
 } as const;
 
 export const DEFAULT_UNITS = [

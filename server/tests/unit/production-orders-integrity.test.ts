@@ -35,6 +35,7 @@ import {
 } from '../../../src/db/production-orders-queries';
 import { PRODUCTION_ORDERS_SCHEMA } from '../../../src/db/production-orders-schema';
 import { MATERIAL_INVENTORY_SCHEMA, MATERIAL_INVENTORY_V1F_NEW_COLUMNS } from '../../../src/db/material-inventory-schema';
+import { COSTING_SCHEMA } from '../../../src/db/costing-schema';
 import {
   activateRecipeVersion,
   cloneRecipeVersion,
@@ -83,6 +84,7 @@ async function createTestDb(): Promise<Database> {
   db.run(LIQUID_LEDGER_SCHEMA);
   db.run(PRODUCTION_ORDERS_SCHEMA);
   db.run(MATERIAL_INVENTORY_SCHEMA);
+  db.run(COSTING_SCHEMA);
   for (const col of MATERIAL_INVENTORY_V1F_NEW_COLUMNS) {
     try { db.run(col.ddl); } catch { /* column may exist */ }
   }

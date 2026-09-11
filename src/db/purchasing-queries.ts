@@ -21,6 +21,7 @@ import {
   postMaterialTransaction,
   reverseMaterialTransaction,
 } from './material-inventory-queries';
+import { createMaterialLotCostLayerFromReceipt } from './costing-queries';
 
 const now = () => new Date().toISOString();
 
@@ -474,6 +475,17 @@ export function postReceipt(receiptId: number, receivedBy?: string | null): stri
         transactionTimestamp: receipt.received_date,
         createdBy: receivedBy,
       });
+
+      createMaterialLotCostLayerFromReceipt(
+        line.material_lot_id!,
+        receipt.id,
+        line.id,
+        receipt.received_date,
+        line.base_quantity,
+        line.unit_cost,
+        line.currency,
+        receipt.exchange_rate,
+      );
     }
 
     runQuery(

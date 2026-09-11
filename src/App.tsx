@@ -47,6 +47,13 @@ import { MaterialReconciliationPage } from './pages/material-inventory/MaterialR
 import { PurchasingLayout } from './pages/purchasing/PurchasingLayout';
 import { PurchaseOrdersPage } from './pages/purchasing/PurchaseOrdersPage';
 import { ReceiptsPage } from './pages/purchasing/ReceiptsPage';
+import { CostingLayout } from './pages/costing/CostingLayout';
+import { CostingDashboardPage } from './pages/costing/CostingDashboardPage';
+import { LandedCostsPage } from './pages/costing/LandedCostsPage';
+import { MaterialValuationPage } from './pages/costing/MaterialValuationPage';
+import { LiquidValuationPage } from './pages/costing/LiquidValuationPage';
+import { BatchCostingPage } from './pages/costing/BatchCostingPage';
+import { CostAdjustmentsPage } from './pages/costing/CostAdjustmentsPage';
 import { useDatabaseReady } from './db/queries';
 
 function AppContent() {
@@ -106,6 +113,14 @@ function AppContent() {
             <Route path="/purchasing" element={<PurchasingLayout />}>
               <Route index element={<PurchaseOrdersPage />} />
               <Route path="receipts" element={<ReceiptsPage />} />
+            </Route>
+            <Route path="/costing" element={<CostingLayout />}>
+              <Route index element={<CostingDashboardPage />} />
+              <Route path="landed-costs" element={<LandedCostsPage />} />
+              <Route path="material-valuation" element={<MaterialValuationPage />} />
+              <Route path="liquid-valuation" element={<LiquidValuationPage />} />
+              <Route path="batch-costing" element={<BatchCostingPage />} />
+              <Route path="adjustments" element={<CostAdjustmentsPage />} />
             </Route>
             <Route path="/liquid-inventory" element={<LiquidInventoryLayout />}>
               <Route index element={<TankBoardPage />} />

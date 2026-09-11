@@ -19,6 +19,7 @@ import {
   seedLiquidLedgerLookupsIfEmpty,
 } from '../../../src/db/liquid-ledger-queries';
 import { LIQUID_LEDGER_SCHEMA } from '../../../src/db/liquid-ledger-schema';
+import { COSTING_SCHEMA } from '../../../src/db/costing-schema';
 import { RECIPES_SCHEMA } from '../../../src/db/recipes-schema';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -65,6 +66,7 @@ async function createIntegrationDb(): Promise<Database> {
   db.run(RECIPES_SCHEMA);
   db.run(FLOOR_EQUIPMENT_STUB);
   db.run(LIQUID_LEDGER_SCHEMA);
+  db.run(COSTING_SCHEMA);
   __injectDatabaseForTests(db);
   seedLiquidLedgerLookupsIfEmpty();
   return db;
