@@ -15,7 +15,14 @@ import { BarrelDumpsPage } from './pages/barrel-inventory/BarrelDumpsPage';
 import { Bottling } from './pages/Bottling';
 import { Blending } from './pages/Blending';
 import { Inventory } from './pages/Inventory';
-import { Reports } from './pages/Reports';
+import { ReportsLayout } from './pages/reports/ReportsLayout';
+import { ExecutiveDashboardPage } from './pages/reports/ExecutiveDashboardPage';
+import { ProductionKpisPage } from './pages/reports/ProductionKpisPage';
+import { InventoryReportsPage } from './pages/reports/InventoryReportsPage';
+import { PurchasingReportsPage } from './pages/reports/PurchasingReportsPage';
+import { BarrelReportsPage } from './pages/reports/BarrelReportsPage';
+import { CostingReportsPage } from './pages/reports/CostingReportsPage';
+import { LegacyProductionReportsPage } from './pages/reports/LegacyProductionReportsPage';
 import { FloorPlanPage } from './pages/FloorPlan';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
@@ -243,7 +250,15 @@ function AppContent() {
               <Route path="locations" element={<LocationsPage />} />
             </Route>
             <Route path="/floor-plan" element={<FloorPlanPage />} />
-            <Route path="/reports" element={<Reports />} />
+            <Route path="/reports" element={<ReportsLayout />}>
+              <Route index element={<ExecutiveDashboardPage />} />
+              <Route path="production-kpis" element={<ProductionKpisPage />} />
+              <Route path="inventory" element={<InventoryReportsPage />} />
+              <Route path="purchasing" element={<PurchasingReportsPage />} />
+              <Route path="barrels" element={<BarrelReportsPage />} />
+              <Route path="costing" element={<CostingReportsPage />} />
+              <Route path="legacy-production" element={<LegacyProductionReportsPage />} />
+            </Route>
             <Route path="/admin/users" element={<AdminUsers />} />
             <Route path="/admin/data-migration" element={<AdminRoute><DataMigration /></AdminRoute>} />
           </Route>

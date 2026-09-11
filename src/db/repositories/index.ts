@@ -30,4 +30,5 @@ export { multiLocationRepository } from './multi-location-repository';
 export { maintenanceRepository } from './maintenance-repository';
 export { planningRepository } from './planning-repository';
 export { salesRepository } from './sales-repository';
+export { reportingRepository } from './reporting-repository';
 export type { InventoryRepository } from './types';

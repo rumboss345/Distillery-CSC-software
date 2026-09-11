@@ -65,6 +65,7 @@ import {
   SALES_DEPLETION_V1N_MIGRATION,
   SALES_DEPLETION_V1N_NEW_COLUMNS,
 } from './sales-schema';
+import { REPORTING_SCHEMA, REPORTING_V1O_MIGRATION } from './reporting-schema';
 import { SCHEMA, SEED_DATA } from './schema';
 
 const FLOOR_MIGRATION = `
@@ -441,6 +442,7 @@ function runMigrations(): void {
   migrateMaintenance();
   migratePlanning();
   migrateSalesDepletion();
+  migrateReporting();
   persistDb();
 }
 
@@ -619,6 +621,18 @@ function migrateSalesDepletion(): void {
     if (!recipeColumnExists(col.table, col.column)) {
       db.run(col.ddl);
     }
+  }
+}
+
+function migrateReporting(): void {
+  if (!db) return;
+  const hasReporting = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='view' AND name='rpt_v_mat_ledger_tx'",
+  );
+  if (!hasReporting) {
+    db.run(REPORTING_SCHEMA);
+  } else {
+    db.run(REPORTING_V1O_MIGRATION);
   }
 }
 
@@ -838,6 +852,7 @@ export async function initDatabase(): Promise<Database> {
     migrateMaintenance();
     migratePlanning();
     migrateSalesDepletion();
+    migrateReporting();
     persistDb();
   }
 
