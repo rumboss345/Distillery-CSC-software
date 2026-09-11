@@ -48,7 +48,7 @@ import type {
   TankLotComponent,
   TransferLiquidInput,
 } from '../types/liquid-ledger';
-import { getDb, insertRow, queryAll, queryOne, runQuery, scheduleSave } from './database';
+import { insertRow, queryAll, queryOne, runQuery, withDatabaseTransaction } from './database';
 import { addLookupValue, getLookupNames, nextBusinessCode } from './master-data-queries';
 import { getHoldingTankContents, getHoldingTanks } from './queries';
 
@@ -152,18 +152,10 @@ function computeLotVolumeInTank(lotId: number, tankId: number): { volumeLitres: 
 }
 
 function withTransaction<T>(fn: () => T): T {
-  const db = getDb();
-  db.run('BEGIN');
-  try {
-    const result = fn();
-    db.run('COMMIT');
-    scheduleSave();
-    return result;
-  } catch (err) {
-    db.run('ROLLBACK');
-    throw err;
-  }
+  return withDatabaseTransaction(fn);
 }
+
+export { withTransaction as withLedgerTransaction };
 
 function assertNoCircularGenealogy(childLotId: number, parentLotId: number): void {
   const ancestors = getLotAncestry(parentLotId);
@@ -720,7 +712,9 @@ export function createBlend(input: BlendInput): { lotId: number; transactionIds:
     let totalLpa = 0;
     const txIds: number[] = [];
     const ts = now();
-    const groupId = nextOperationGroupId();
+    const groupId = input.transactionGroupId ?? nextOperationGroupId();
+    const docType = input.sourceDocumentType ?? null;
+    const docId = input.sourceDocumentId ?? null;
 
     for (const c of input.consumptions) {
       validatePositiveVolume(c.volumeLitres, 'Blend consumption volume');
@@ -743,8 +737,8 @@ export function createBlend(input: BlendInput): { lotId: number; transactionIds:
         volume_litres: c.volumeLitres,
         abv,
         reason_code: null,
-        source_document_type: null,
-        source_document_id: null,
+        source_document_type: docType,
+        source_document_id: docId,
         notes: input.notes ?? '',
         created_by: input.createdBy ?? null,
         transaction_group_id: groupId,
@@ -759,7 +753,7 @@ export function createBlend(input: BlendInput): { lotId: number; transactionIds:
       lot_type: input.outputLotType,
       product_id: input.productId ?? null,
       bulk_spirit_id: null,
-      recipe_version_id: null,
+      recipe_version_id: input.recipeVersionId ?? null,
       description: input.outputDescription,
       initial_volume_litres: totalVolume,
       initial_abv: outputAbv,
@@ -786,8 +780,8 @@ export function createBlend(input: BlendInput): { lotId: number; transactionIds:
       volume_litres: totalVolume,
       abv: outputAbv,
       reason_code: null,
-      source_document_type: null,
-      source_document_id: null,
+      source_document_type: docType,
+      source_document_id: docId,
       notes: input.notes ?? '',
       created_by: input.createdBy ?? null,
       transaction_group_id: groupId,
@@ -809,9 +803,11 @@ export function proofDown(input: ProofDownInput): { lotId: number; transactionId
     const theoretical = dilutionCalculation(input.sourceVolumeLitres, input.sourceAbv, input.targetAbv);
     const outputVolume = input.actualOutputVolumeLitres ?? theoretical.finalVolumeLitres;
     validatePositiveVolume(outputVolume, 'Output volume');
+    const outputAbv = input.actualOutputAbv ?? input.targetAbv;
+    validateAbv(outputAbv);
 
     const sourceLpa = computeLpa(input.sourceVolumeLitres, input.sourceAbv);
-    const outputLpa = computeLpa(outputVolume, input.targetAbv);
+    const outputLpa = computeLpa(outputVolume, outputAbv);
     if (Math.abs(outputLpa - sourceLpa) > 0.5 && !(input.notes ?? '').trim()) {
       throw new Error(
         'Actual output LPA differs from source LPA. Provide a note explaining the variance.',
@@ -826,7 +822,9 @@ export function proofDown(input: ProofDownInput): { lotId: number; transactionId
 
     const txIds: number[] = [];
     const ts = now();
-    const groupId = nextOperationGroupId();
+    const groupId = input.transactionGroupId ?? nextOperationGroupId();
+    const docType = input.sourceDocumentType ?? null;
+    const docId = input.sourceDocumentId ?? null;
 
     txIds.push(insertTransaction({
       transaction_type: 'Proof Down Consumption',
@@ -838,8 +836,8 @@ export function proofDown(input: ProofDownInput): { lotId: number; transactionId
       volume_litres: input.sourceVolumeLitres,
       abv: input.sourceAbv,
       reason_code: null,
-      source_document_type: null,
-      source_document_id: null,
+      source_document_type: docType,
+      source_document_id: docId,
       notes: input.notes ?? '',
       created_by: input.createdBy ?? null,
       transaction_group_id: groupId,
@@ -855,8 +853,8 @@ export function proofDown(input: ProofDownInput): { lotId: number; transactionId
       volume_litres: input.waterVolumeLitres,
       abv: 0,
       reason_code: null,
-      source_document_type: null,
-      source_document_id: null,
+      source_document_type: docType,
+      source_document_id: docId,
       notes: 'Water addition for proof-down',
       created_by: input.createdBy ?? null,
       transaction_group_id: groupId,
@@ -864,12 +862,12 @@ export function proofDown(input: ProofDownInput): { lotId: number; transactionId
 
     const lotId = createLot({
       lot_type: 'Proofed Spirit',
-      product_id: null,
+      product_id: input.productId ?? null,
       bulk_spirit_id: null,
-      recipe_version_id: null,
-      description: `Proof-down to ${input.targetAbv}% ABV`,
+      recipe_version_id: input.recipeVersionId ?? null,
+      description: `Proof-down to ${outputAbv}% ABV`,
       initial_volume_litres: outputVolume,
-      initial_abv: input.targetAbv,
+      initial_abv: outputAbv,
       status: 'Active',
       source_type: 'Proof Down',
       source_reference_id: input.sourceLotId,
@@ -886,16 +884,63 @@ export function proofDown(input: ProofDownInput): { lotId: number; transactionId
       source_lot_id: null,
       destination_lot_id: lotId,
       volume_litres: outputVolume,
-      abv: input.targetAbv,
+      abv: outputAbv,
       reason_code: null,
-      source_document_type: null,
-      source_document_id: null,
+      source_document_type: docType,
+      source_document_id: docId,
       notes: input.notes ?? '',
       created_by: input.createdBy ?? null,
       transaction_group_id: groupId,
     }));
 
     return { lotId, transactionIds: txIds };
+  });
+}
+
+export function postProcessLoss(input: {
+  tankId: number;
+  lotId?: number | null;
+  volumeLitres: number;
+  abv: number;
+  lossType: string;
+  reason: string;
+  notes?: string;
+  createdBy?: string | null;
+  sourceDocumentType?: string | null;
+  sourceDocumentId?: number | null;
+  transactionGroupId?: string | null;
+}): number {
+  return withTransaction(() => {
+    const tank = assertLedgerTank(input.tankId);
+    validatePositiveVolume(input.volumeLitres, 'Loss volume');
+    validateAbv(input.abv);
+    validateReasonCode(input.reason, true);
+    const balance = computeTankBalanceFromLedger(tank.id);
+    validateSufficientBalance(balance.volumeLitres, input.volumeLitres, 'Tank');
+    if (input.lotId != null) {
+      const lotBal = computeLotVolumeInTank(input.lotId, tank.id);
+      validateSufficientBalance(lotBal.volumeLitres, input.volumeLitres, 'Lot');
+    }
+    const txType = input.lossType === 'Evaporation' ? 'Evaporation Loss'
+      : input.lossType === 'Spill' ? 'Spill / Damage'
+      : input.lossType === 'Sampling' ? 'Sampling'
+      : 'Process Loss';
+    return insertTransaction({
+      transaction_type: txType,
+      transaction_timestamp: now(),
+      source_tank_id: tank.id,
+      destination_tank_id: null,
+      source_lot_id: input.lotId ?? null,
+      destination_lot_id: null,
+      volume_litres: input.volumeLitres,
+      abv: input.abv,
+      reason_code: input.reason,
+      source_document_type: input.sourceDocumentType ?? null,
+      source_document_id: input.sourceDocumentId ?? null,
+      notes: input.notes ?? input.lossType,
+      created_by: input.createdBy ?? null,
+      transaction_group_id: input.transactionGroupId ?? null,
+    });
   });
 }
 

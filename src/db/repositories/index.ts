@@ -3,6 +3,7 @@ import { localInventoryRepository } from './local-inventory-repository';
 import { masterDataRepository } from './master-data-repository';
 import { recipesRepository } from './recipes-repository';
 import { liquidInventoryRepository } from './liquid-ledger-repository';
+import { productionOrdersRepository } from './production-orders-repository';
 import type { InventoryRepository } from './types';
 
 export function getInventoryRepository(): InventoryRepository {
@@ -12,5 +13,5 @@ export function getInventoryRepository(): InventoryRepository {
   return localInventoryRepository;
 }
 
-export { masterDataRepository, recipesRepository, liquidInventoryRepository };
+export { masterDataRepository, recipesRepository, liquidInventoryRepository, productionOrdersRepository };
 export type { InventoryRepository } from './types';
