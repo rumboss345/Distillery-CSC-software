@@ -6,6 +6,12 @@ import { Dashboard } from './pages/Dashboard';
 import { MashFermentation } from './pages/MashFermentation';
 import { Distillation } from './pages/Distillation';
 import { Barrels } from './pages/Barrels';
+import { BarrelInventoryLayout } from './pages/barrel-inventory/BarrelInventoryLayout';
+import { BarrelDashboardPage } from './pages/barrel-inventory/BarrelDashboardPage';
+import { BarrelsMasterPage } from './pages/barrel-inventory/BarrelsMasterPage';
+import { BarrelFillsPage } from './pages/barrel-inventory/BarrelFillsPage';
+import { BarrelObservationsPage } from './pages/barrel-inventory/BarrelObservationsPage';
+import { BarrelDumpsPage } from './pages/barrel-inventory/BarrelDumpsPage';
 import { Bottling } from './pages/Bottling';
 import { Blending } from './pages/Blending';
 import { Inventory } from './pages/Inventory';
@@ -61,6 +67,13 @@ import { FgInventoryPage } from './pages/finished-goods/FgInventoryPage';
 import { FgLotsPage } from './pages/finished-goods/FgLotsPage';
 import { PackagingRunsPage } from './pages/finished-goods/PackagingRunsPage';
 import { FgTransactionsPage } from './pages/finished-goods/FgTransactionsPage';
+import { QualityLayout } from './pages/quality/QualityLayout';
+import { QualityDashboardPage } from './pages/quality/QualityDashboardPage';
+import { SpecificationsPage } from './pages/quality/SpecificationsPage';
+import { SamplesPage } from './pages/quality/SamplesPage';
+import { HoldsPage } from './pages/quality/HoldsPage';
+import { CoaPage } from './pages/quality/CoaPage';
+import { RecallTracePage } from './pages/quality/RecallTracePage';
 import { useDatabaseReady } from './db/queries';
 
 function AppContent() {
@@ -96,7 +109,15 @@ function AppContent() {
             <Route path="/mash" element={<Navigate to="/wash" replace />} />
             <Route path="/distillation" element={<Distillation />} />
             <Route path="/blending" element={<Blending />} />
-            <Route path="/barrels" element={<Barrels />} />
+            <Route path="/barrels" element={<Navigate to="/barrels-inventory" replace />} />
+            <Route path="/barrels-inventory" element={<BarrelInventoryLayout />}>
+              <Route index element={<BarrelDashboardPage />} />
+              <Route path="barrels" element={<BarrelsMasterPage />} />
+              <Route path="fills" element={<BarrelFillsPage />} />
+              <Route path="observations" element={<BarrelObservationsPage />} />
+              <Route path="dumps" element={<BarrelDumpsPage />} />
+            </Route>
+            <Route path="/barrels-legacy" element={<Barrels />} />
             <Route path="/bottling" element={<Bottling />} />
             <Route path="/inventory" element={<Inventory />} />
             <Route path="/recipes" element={<RecipesLayout />}>
@@ -127,6 +148,14 @@ function AppContent() {
               <Route path="lots" element={<FgLotsPage />} />
               <Route path="packaging-runs" element={<PackagingRunsPage />} />
               <Route path="transactions" element={<FgTransactionsPage />} />
+            </Route>
+            <Route path="/quality" element={<QualityLayout />}>
+              <Route index element={<QualityDashboardPage />} />
+              <Route path="specifications" element={<SpecificationsPage />} />
+              <Route path="samples" element={<SamplesPage />} />
+              <Route path="holds" element={<HoldsPage />} />
+              <Route path="coa" element={<CoaPage />} />
+              <Route path="recall" element={<RecallTracePage />} />
             </Route>
             <Route path="/costing" element={<CostingLayout />}>
               <Route index element={<CostingDashboardPage />} />

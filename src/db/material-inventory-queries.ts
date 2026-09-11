@@ -34,6 +34,7 @@ import type { SqlValue } from 'sql.js/dist/sql-wasm.js';
 import { insertRow, queryAll, queryOne, runQuery, withDatabaseTransaction } from './database';
 import { createOpeningBalanceCostLayer, snapshotMaterialConsumptionCost } from './costing-queries';
 import { addLookupValue, nextBusinessCode } from './master-data-queries';
+import { assertEntityNotOnHold } from './quality-hold-guard';
 
 const now = () => new Date().toISOString();
 
@@ -679,6 +680,7 @@ export function postProductionIssue(input: {
 }): number {
   const lot = getMaterialLot(input.materialLotId);
   if (!lot) throw new Error('Material lot not found.');
+  assertEntityNotOnHold('mat_lot', input.materialLotId, `production issue for material lot ${lot.lot_code}`);
   validateLotIssueable(lot.status, lot.expiration_date);
   const txId = insertMaterialTransaction({
     transactionType: 'Production Issue',

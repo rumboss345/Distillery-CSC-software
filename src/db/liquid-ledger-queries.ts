@@ -49,6 +49,7 @@ import type {
   TransferLiquidInput,
 } from '../types/liquid-ledger';
 import { insertRow, queryAll, queryOne, runQuery, withDatabaseTransaction } from './database';
+import { assertEntityNotOnHold } from './quality-hold-guard';
 import {
   recordLiquidTransferCostMovement,
   reverseLiquidTransferCostMovement,
@@ -736,6 +737,10 @@ export function createBlend(input: BlendInput): { lotId: number; transactionIds:
     const destTank = assertLedgerTank(input.destinationTankId);
     if (input.consumptions.length < 2) {
       throw new Error('A blend requires at least two source lots.');
+    }
+
+    for (const c of input.consumptions) {
+      assertEntityNotOnHold('liq_lot', c.lotId, `blend consumption for liquid lot ${c.lotId}`);
     }
 
     let totalVolume = 0;

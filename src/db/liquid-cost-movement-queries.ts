@@ -273,6 +273,55 @@ export function reverseLiquidTransferCostMovement(transactionGroupId: string): n
   });
 }
 
+/** Remove cost from source tank when liquid is filled into a barrel (Phase 1J). */
+export function recordBarrelFillCostMovement(input: {
+  liquidLotId: number;
+  sourceTankId: number;
+  volumeLitres: number;
+  lpa: number;
+  fillId: number;
+  liquidTransactionId: number;
+  transactionGroupId: string;
+  costKyd?: number;
+}): number {
+  const costKyd = input.costKyd ?? getLiquidPositionCostForVolume(input.liquidLotId, input.sourceTankId, input.volumeLitres);
+  return insertMovement({
+    liquidTransactionId: input.liquidTransactionId,
+    transactionGroupId: input.transactionGroupId,
+    liquidLotId: input.liquidLotId,
+    sourceTankId: input.sourceTankId,
+    volumeLitres: input.volumeLitres,
+    lpa: input.lpa,
+    transferredCostKyd: costKyd,
+    movementType: 'Barrel Fill Consumption',
+    notes: `Barrel fill #${input.fillId}`,
+  });
+}
+
+/** Assign barrel-aged liquid cost to destination tank on dump. */
+export function recordBarrelDumpCostMovement(input: {
+  liquidLotId: number;
+  destinationTankId: number;
+  volumeLitres: number;
+  lpa: number;
+  dumpId: number;
+  liquidTransactionId: number;
+  transactionGroupId: string;
+  costKyd: number;
+}): number {
+  return insertMovement({
+    liquidTransactionId: input.liquidTransactionId,
+    transactionGroupId: input.transactionGroupId,
+    liquidLotId: input.liquidLotId,
+    destinationTankId: input.destinationTankId,
+    volumeLitres: input.volumeLitres,
+    lpa: input.lpa,
+    transferredCostKyd: input.costKyd,
+    movementType: 'Barrel Dump Receipt',
+    notes: `Barrel dump #${input.dumpId}`,
+  });
+}
+
 /** Remove cost from source tank when liquid is consumed in production. */
 export function recordLiquidProductionConsumption(input: {
   liquidLotId: number;

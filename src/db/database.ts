@@ -34,6 +34,16 @@ import {
   FINISHED_GOODS_V1H_MIGRATION,
   FINISHED_GOODS_V1H_NEW_COLUMNS,
 } from './finished-goods-schema';
+import {
+  BARREL_AGING_SCHEMA,
+  BARREL_AGING_V1J_MIGRATION,
+  BARREL_AGING_V1J_NEW_COLUMNS,
+} from './barrel-aging-schema';
+import {
+  QUALITY_SCHEMA,
+  QUALITY_V1K_MIGRATION,
+  QUALITY_V1K_NEW_COLUMNS,
+} from './quality-schema';
 import { SCHEMA, SEED_DATA } from './schema';
 
 const FLOOR_MIGRATION = `
@@ -404,6 +414,8 @@ function runMigrations(): void {
   migrateMaterialInventory();
   migrateCosting();
   migrateFinishedGoods();
+  migrateBarrelAging();
+  migrateQuality();
   persistDb();
 }
 
@@ -472,6 +484,40 @@ function migrateFinishedGoods(): void {
     db.run(FINISHED_GOODS_V1H_MIGRATION);
   }
   for (const col of FINISHED_GOODS_V1H_NEW_COLUMNS) {
+    if (!recipeColumnExists(col.table, col.column)) {
+      db.run(col.ddl);
+    }
+  }
+}
+
+function migrateBarrelAging(): void {
+  if (!db) return;
+  const hasBarrelAging = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='brl_barrels'",
+  );
+  if (!hasBarrelAging) {
+    db.run(BARREL_AGING_SCHEMA);
+  } else {
+    db.run(BARREL_AGING_V1J_MIGRATION);
+  }
+  for (const col of BARREL_AGING_V1J_NEW_COLUMNS) {
+    if (!recipeColumnExists(col.table, col.column)) {
+      db.run(col.ddl);
+    }
+  }
+}
+
+function migrateQuality(): void {
+  if (!db) return;
+  const hasQuality = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='qc_specifications'",
+  );
+  if (!hasQuality) {
+    db.run(QUALITY_SCHEMA);
+  } else {
+    db.run(QUALITY_V1K_MIGRATION);
+  }
+  for (const col of QUALITY_V1K_NEW_COLUMNS) {
     if (!recipeColumnExists(col.table, col.column)) {
       db.run(col.ddl);
     }
@@ -688,6 +734,8 @@ export async function initDatabase(): Promise<Database> {
     migrateMaterialInventory();
     migrateCosting();
     migrateFinishedGoods();
+    migrateBarrelAging();
+    migrateQuality();
     persistDb();
   }
 
