@@ -1,0 +1,40 @@
+# Render Blueprint — CSC Distillery Tracker
+# Deploy: Render Dashboard → New → Blueprint → connect this repo → select branch
+#
+# Set sensitive values in the Render dashboard (never commit secrets):
+#   JWT_SECRET, ADMIN_EMAIL, ADMIN_PASSWORD, APP_URL
+#
+# DATABASE_MODE stays browser_local until Step 1A cutover is human-approved.
+
+services:
+  - type: web
+    name: csc-distillery
+    runtime: node
+    plan: starter
+    branch: cursor/step-1a-postgresql-cutover-b370
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_MODE
+        value: browser_local
+      - key: JWT_SECRET
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: APP_URL
+        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: csc-postgres
+          property: connectionString
+
+databases:
+  - name: csc-postgres
+    plan: basic-256mb
+    databaseName: csc_distillery
+    user: csc
