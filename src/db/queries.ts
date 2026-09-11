@@ -11,6 +11,7 @@ import type {
   DistillationCut,
   DistillationCutView,
   HoldingTankContents,
+  HoldingTankIntakeEntry,
   HoldingTankTransfer,
   HoldingTankTransferView,
   DistillationRun,
@@ -430,6 +431,105 @@ export function defaultTankForCutType(
     default:
       return null;
   }
+}
+
+export function holdingTankIntakeKey(entry: Pick<HoldingTankIntakeEntry, 'kind' | 'id'>): string {
+  return `${entry.kind}:${entry.id}`;
+}
+
+/** Recent cuts and transfers that added spirit to a holding tank (newest first). */
+export function getHoldingTankIntakeHistory(
+  tankId: number,
+  limit = 5,
+): HoldingTankIntakeEntry[] {
+  const cuts = queryAll<{
+    id: number;
+    occurred_at: string;
+    cut_type: string;
+    volume_gal: number;
+    abv: number;
+    batch_number: string;
+    run_type: string;
+    still_name: string;
+    mash_batch: string | null;
+  }>(`
+    SELECT
+      c.id,
+      c.start_time as occurred_at,
+      c.cut_type,
+      c.volume_gal,
+      c.abv,
+      r.batch_number,
+      r.run_type,
+      r.still_name,
+      m.batch_number as mash_batch
+    FROM distillation_cuts c
+    JOIN distillation_runs r ON r.id = c.distillation_run_id
+    LEFT JOIN mash_batches m ON m.id = r.source_mash_batch_id
+    WHERE c.holding_tank_equipment_id = ?
+      AND c.volume_gal > 0
+  `, [tankId]);
+
+  const transfers = queryAll<{
+    id: number;
+    occurred_at: string;
+    volume_gal: number;
+    abv: number;
+    spirit_type: string;
+    source_tank_name: string;
+  }>(`
+    SELECT
+      t.id,
+      COALESCE(t.created_at, t.transfer_date) as occurred_at,
+      t.volume_gal,
+      t.abv,
+      t.spirit_type,
+      src.name as source_tank_name
+    FROM holding_tank_transfers t
+    JOIN floor_equipment src ON src.id = t.source_tank_equipment_id
+    WHERE t.dest_tank_equipment_id = ?
+  `, [tankId]);
+
+  const runTypeLabels: Record<string, string> = {
+    wash: 'wash run',
+    low_wines: 'low wines run',
+  };
+
+  const spiritLabels: Record<string, string> = {
+    low_wines: 'low wines',
+    high_wines: 'high wines',
+  };
+
+  const entries: HoldingTankIntakeEntry[] = [
+    ...cuts.map((c) => {
+      const cutLabel = c.cut_type.charAt(0).toUpperCase() + c.cut_type.slice(1);
+      const runLabel = runTypeLabels[c.run_type] ?? c.run_type;
+      const detailParts = [c.still_name, c.mash_batch ? `wash ${c.mash_batch}` : null].filter(Boolean);
+      return {
+        kind: 'cut' as const,
+        id: c.id,
+        occurred_at: c.occurred_at,
+        volume_gal: c.volume_gal,
+        abv: c.abv,
+        summary: `${cutLabel} from ${c.batch_number} (${runLabel})`,
+        detail: detailParts.length > 0 ? detailParts.join(' · ') : undefined,
+      };
+    }),
+    ...transfers.map((t) => ({
+      kind: 'transfer' as const,
+      id: t.id,
+      occurred_at: t.occurred_at,
+      volume_gal: t.volume_gal,
+      abv: t.abv,
+      summary: `Transfer from ${t.source_tank_name}`,
+      detail: spiritLabels[t.spirit_type] ?? t.spirit_type.replace('_', ' '),
+    })),
+  ];
+
+  entries.sort(
+    (a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime(),
+  );
+  return entries.slice(0, limit);
 }
 
 export function getHoldingTankTransfers(): HoldingTankTransferView[] {

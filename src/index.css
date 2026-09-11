@@ -1048,6 +1048,63 @@ tr:hover td {
   line-height: 1.4;
 }
 
+.tank-intake-history {
+  margin-top: 0.65rem;
+}
+
+.tank-intake-history-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin: 0 0 0.35rem;
+}
+
+.tank-intake-history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.tank-intake-history-item {
+  width: 100%;
+  text-align: left;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-elevated, rgba(255, 255, 255, 0.02));
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.tank-intake-history-item:hover {
+  border-color: var(--accent);
+  background: rgba(200, 149, 108, 0.06);
+}
+
+.tank-intake-history-item.selected {
+  border-color: var(--accent);
+  background: rgba(200, 149, 108, 0.12);
+}
+
+.tank-intake-history-summary {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.tank-intake-history-meta {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 0.15rem;
+}
+
 .form-hint {
   margin-bottom: 0;
 }

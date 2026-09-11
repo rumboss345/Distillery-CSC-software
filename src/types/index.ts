@@ -157,6 +157,19 @@ export interface HoldingTankContents {
   cut_count: number;
 }
 
+export type HoldingTankIntakeKind = 'cut' | 'transfer';
+
+/** A single distillation cut or transfer that added spirit to a holding tank. */
+export interface HoldingTankIntakeEntry {
+  kind: HoldingTankIntakeKind;
+  id: number;
+  occurred_at: string;
+  volume_gal: number;
+  abv: number;
+  summary: string;
+  detail?: string;
+}
+
 export interface HoldingTankTransfer {
   id: number;
   spirit_type: SpiritTransferType;

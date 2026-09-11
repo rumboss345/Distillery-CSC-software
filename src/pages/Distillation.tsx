@@ -22,13 +22,16 @@ import {
   saveHoldingTankTransfer,
   deleteHoldingTankTransfer,
   generateBatchNumber,
+  holdingTankIntakeKey,
   useRefreshKey,
 } from '../db/queries';
+import { HoldingTankIntakeHistory } from '../components/HoldingTankIntakeHistory';
 import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
 import type {
   DistillationRun,
   DistillationRunType,
+  HoldingTankIntakeEntry,
   RunStatus,
   CutType,
   SpiritTransferType,
@@ -97,8 +100,16 @@ export function Distillation() {
     notes: '',
   });
   const [transferForm, setTransferForm] = useState(emptyTransferForm);
+  const [selectedTransferIntakeKey, setSelectedTransferIntakeKey] = useState<string | null>(null);
+  const [selectedLowWineIntakeKey, setSelectedLowWineIntakeKey] = useState<string | null>(null);
+  const [selectedCutIntakeKey, setSelectedCutIntakeKey] = useState<string | null>(null);
 
   void key;
+
+  const applyIntakeVolume = (entry: HoldingTankIntakeEntry) => ({
+    volume: Math.round(entry.volume_gal * 10) / 10,
+    abv: Math.round(entry.abv * 10) / 10,
+  });
 
   const chargeableFermenters = runForm.run_type === 'wash' && runForm.source_mash_batch_id
     ? getChargeableFermentersForMash(runForm.source_mash_batch_id, editRunId)
@@ -161,6 +172,7 @@ export function Distillation() {
   };
 
   const handleLowWineTankChange = (tankId: number | null) => {
+    setSelectedLowWineIntakeKey(null);
     const tank = chargeableLowWineTanks.find((t) => t.id === tankId);
     const destId = runForm.dest_holding_tank_equipment_id;
     const destStillValid = destId != null && destId !== tankId;
@@ -389,10 +401,12 @@ export function Distillation() {
 
   const openTransferForm = () => {
     setTransferForm(emptyTransferForm());
+    setSelectedTransferIntakeKey(null);
     setShowTransferForm(true);
   };
 
   const handleSourceTankChange = (tankId: number) => {
+    setSelectedTransferIntakeKey(null);
     const contents = tankId ? getHoldingTankContents(tankId) : null;
     setTransferForm({
       ...transferForm,
@@ -639,6 +653,19 @@ export function Distillation() {
                     Available: {selectedLowWineAvailable.volume_gal.toFixed(1)} gal @ {selectedLowWineAvailable.abv.toFixed(1)}% ABV
                   </p>
                 )}
+                <HoldingTankIntakeHistory
+                  tankId={runForm.source_holding_tank_equipment_id}
+                  selectedKey={selectedLowWineIntakeKey}
+                  onSelect={(entry) => {
+                    const { volume, abv } = applyIntakeVolume(entry);
+                    setSelectedLowWineIntakeKey(holdingTankIntakeKey(entry));
+                    setRunForm({
+                      ...runForm,
+                      charge_volume_gal: volume,
+                      charge_abv: abv,
+                    });
+                  }}
+                />
                 <div className="form-group" style={{ marginTop: '0.75rem' }}>
                   <label>High Wines Storage Tank</label>
                   <select
@@ -840,6 +867,19 @@ export function Distillation() {
                   Available: {transferSourceContents.volume_gal.toFixed(1)} gal @ {transferSourceContents.abv.toFixed(1)}% ABV
                 </p>
               )}
+              <HoldingTankIntakeHistory
+                tankId={transferForm.source_tank_equipment_id || null}
+                selectedKey={selectedTransferIntakeKey}
+                onSelect={(entry) => {
+                  const { volume, abv } = applyIntakeVolume(entry);
+                  setSelectedTransferIntakeKey(holdingTankIntakeKey(entry));
+                  setTransferForm({
+                    ...transferForm,
+                    volume_gal: volume,
+                    abv,
+                  });
+                }}
+              />
             </div>
             <div className="form-group full-width">
               <label>To Tank</label>
@@ -938,10 +978,13 @@ export function Distillation() {
               </label>
               <select
                 value={cutForm.holding_tank_equipment_id ?? ''}
-                onChange={(e) => setCutForm({
-                  ...cutForm,
-                  holding_tank_equipment_id: e.target.value ? parseInt(e.target.value) : null,
-                })}
+                onChange={(e) => {
+                  setSelectedCutIntakeKey(null);
+                  setCutForm({
+                    ...cutForm,
+                    holding_tank_equipment_id: e.target.value ? parseInt(e.target.value) : null,
+                  });
+                }}
               >
                 <option value="">{cutForm.cut_type === 'heads' ? '— Discarded / no tank —' : '— Select tank —'}</option>
                 {cutDestinationTanks.map((t) => (
@@ -959,6 +1002,14 @@ export function Distillation() {
               {cutForm.cut_type === 'heads' && (
                 <p className="field-hint">Leave empty if heads are discarded rather than stored.</p>
               )}
+              <HoldingTankIntakeHistory
+                tankId={cutForm.holding_tank_equipment_id}
+                selectedKey={selectedCutIntakeKey}
+                title="Already in this tank"
+                onSelect={(entry) => {
+                  setSelectedCutIntakeKey(holdingTankIntakeKey(entry));
+                }}
+              />
               {selectedTankContents && selectedTankContents.volume_gal > 0 && cutForm.volume_gal > 0 && (
                 <p className="field-hint">
                   After this cut: {(selectedTankContents.volume_gal + cutForm.volume_gal).toFixed(1)} gal
