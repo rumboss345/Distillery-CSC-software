@@ -84,6 +84,10 @@ export const CODE_PREFIXES = {
   mwo: 'MWO',
   pmSchedule: 'PMS',
   downtime: 'DTN',
+  demandForecast: 'DFC',
+  productionPlan: 'PPL',
+  mrpRun: 'MRP',
+  scheduleSlot: 'SCH',
 } as const;
 
 export const DEFAULT_UNITS = [

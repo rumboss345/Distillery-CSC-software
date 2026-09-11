@@ -21,6 +21,7 @@ const navItems = [
   { to: '/warehouse', label: 'Warehouses', icon: '▦' },
   { to: '/quality', label: 'Quality (QA/QC)', icon: '◉' },
   { to: '/maintenance', label: 'Maintenance', icon: '⚙' },
+  { to: '/planning', label: 'Planning & MRP', icon: '◰' },
   { to: '/production', label: 'Production', icon: '◷' },
   { to: '/recipes', label: 'Recipes', icon: '◎' },
   { to: '/master-data', label: 'Master Data', icon: '◫' },

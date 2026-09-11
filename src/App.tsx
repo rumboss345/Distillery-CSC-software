@@ -87,6 +87,14 @@ import { WorkOrdersPage } from './pages/maintenance/WorkOrdersPage';
 import { PmSchedulesPage } from './pages/maintenance/PmSchedulesPage';
 import { DowntimePage } from './pages/maintenance/DowntimePage';
 import { CalibrationPage } from './pages/maintenance/CalibrationPage';
+import { PlanningLayout } from './pages/planning/PlanningLayout';
+import { PlanningDashboardPage } from './pages/planning/PlanningDashboardPage';
+import { DemandPage } from './pages/planning/DemandPage';
+import { ProductionPlanPage } from './pages/planning/ProductionPlanPage';
+import { MrpPage } from './pages/planning/MrpPage';
+import { PurchasingRecommendationsPage } from './pages/planning/PurchasingRecommendationsPage';
+import { SafetyStockPage } from './pages/planning/SafetyStockPage';
+import { SchedulePage } from './pages/planning/SchedulePage';
 import { useDatabaseReady } from './db/queries';
 
 function AppContent() {
@@ -184,6 +192,15 @@ function AppContent() {
               <Route path="pm-schedules" element={<PmSchedulesPage />} />
               <Route path="downtime" element={<DowntimePage />} />
               <Route path="calibration" element={<CalibrationPage />} />
+            </Route>
+            <Route path="/planning" element={<PlanningLayout />}>
+              <Route index element={<PlanningDashboardPage />} />
+              <Route path="demand" element={<DemandPage />} />
+              <Route path="production-plan" element={<ProductionPlanPage />} />
+              <Route path="mrp" element={<MrpPage />} />
+              <Route path="purchasing-recommendations" element={<PurchasingRecommendationsPage />} />
+              <Route path="safety-stock" element={<SafetyStockPage />} />
+              <Route path="schedule" element={<SchedulePage />} />
             </Route>
             <Route path="/costing" element={<CostingLayout />}>
               <Route index element={<CostingDashboardPage />} />

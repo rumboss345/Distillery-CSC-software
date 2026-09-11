@@ -55,6 +55,11 @@ import {
   MAINTENANCE_V1L_MIGRATION,
   MAINTENANCE_V1L_NEW_COLUMNS,
 } from './maintenance-schema';
+import {
+  PLANNING_SCHEMA,
+  PLANNING_V1M_MIGRATION,
+  PLANNING_V1M_NEW_COLUMNS,
+} from './planning-schema';
 import { SCHEMA, SEED_DATA } from './schema';
 
 const FLOOR_MIGRATION = `
@@ -429,6 +434,7 @@ function runMigrations(): void {
   migrateQuality();
   migrateMultiLocation();
   migrateMaintenance();
+  migratePlanning();
   persistDb();
 }
 
@@ -570,6 +576,23 @@ function migrateMaintenance(): void {
     db.run(MAINTENANCE_V1L_MIGRATION);
   }
   for (const col of MAINTENANCE_V1L_NEW_COLUMNS) {
+    if (!recipeColumnExists(col.table, col.column)) {
+      db.run(col.ddl);
+    }
+  }
+}
+
+function migratePlanning(): void {
+  if (!db) return;
+  const hasPlanning = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='plan_demand_forecasts'",
+  );
+  if (!hasPlanning) {
+    db.run(PLANNING_SCHEMA);
+  } else {
+    db.run(PLANNING_V1M_MIGRATION);
+  }
+  for (const col of PLANNING_V1M_NEW_COLUMNS) {
     if (!recipeColumnExists(col.table, col.column)) {
       db.run(col.ddl);
     }
@@ -790,6 +813,7 @@ export async function initDatabase(): Promise<Database> {
     migrateQuality();
     migrateMultiLocation();
     migrateMaintenance();
+    migratePlanning();
     persistDb();
   }
 
