@@ -1,56 +1,26 @@
 import bcrypt from 'bcryptjs';
 import cors from 'cors';
 import express from 'express';
-import { existsSync, readFileSync } from 'fs';
-import jwt from 'jsonwebtoken';
+import { existsSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-
-function loadEnvFile() {
-  const envPath = join(dirname(fileURLToPath(import.meta.url)), '..', '.env');
-  if (!existsSync(envPath)) return;
-
-  for (const line of readFileSync(envPath, 'utf8').split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-    const eq = trimmed.indexOf('=');
-    if (eq === -1) continue;
-    const key = trimmed.slice(0, eq).trim();
-    let value = trimmed.slice(eq + 1).trim();
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
-    if (process.env[key] === undefined) process.env[key] = value;
-  }
-}
-
-loadEnvFile();
 import {
   approveUserById,
   approveUserByToken,
   createUser,
   getUserByEmail,
-  getUserById,
-  initializeAuthDatabase,
   listPendingUsers,
   publicUser,
   rejectUserById,
-  syncAdminFromEnv,
-  type User,
-} from './db.js';
+} from './db/auth.js';
+import { isDatabaseConfigured, pingDatabase } from './db/pool.js';
+import { APP_URL, HOST, PORT, isProduction, JWT_SECRET } from './config.js';
 import { sendAdminApprovalEmail } from './email.js';
+import { adminMiddleware, authMiddleware, signToken } from './middleware/auth.js';
+import productionRoutes from './routes/production.js';
+import { initializeServerDatastores } from './startup.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const isProduction = process.env.NODE_ENV === 'production';
-
-// Render sets PORT; local dev uses AUTH_PORT or 3001
-const PORT = Number(process.env.PORT ?? process.env.AUTH_PORT ?? 3001);
-const HOST = isProduction ? '0.0.0.0' : undefined;
-const JWT_SECRET = process.env.JWT_SECRET ?? 'distillery-tracker-dev-secret-change-in-production';
-const APP_URL = process.env.APP_URL ?? (isProduction ? undefined : 'http://localhost:5173');
 
 if (isProduction && !process.env.JWT_SECRET) {
   console.error('JWT_SECRET environment variable is required in production.');
@@ -59,79 +29,33 @@ if (isProduction && !process.env.JWT_SECRET) {
 
 if (isProduction && !process.env.APP_URL) {
   console.warn(
-    'APP_URL is not set. Approval email links may be incorrect. Set APP_URL to your Render service URL.'
+    'APP_URL is not set. Approval email links may be incorrect. Set APP_URL to your Render service URL.',
   );
 }
 
-interface AuthPayload {
-  userId: number;
-  email: string;
-  role: 'admin' | 'user';
-}
-
-function signToken(user: User) {
-  const payload: AuthPayload = {
-    userId: user.id,
-    email: user.email,
-    role: user.role,
-  };
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
-}
-
-function authMiddleware(
-  req: express.Request,
-  res: express.Response,
-  next: express.NextFunction
-) {
-  const header = req.headers.authorization;
-  const token = header?.startsWith('Bearer ') ? header.slice(7) : null;
-  if (!token) {
-    res.status(401).json({ error: 'Authentication required' });
-    return;
-  }
-  try {
-    const payload = jwt.verify(token, JWT_SECRET) as AuthPayload;
-    const user = getUserById(payload.userId);
-    if (!user || (user.role !== 'admin' && user.status !== 'approved')) {
-      res.status(401).json({ error: 'Invalid session' });
-      return;
-    }
-    req.user = user;
-    next();
-  } catch {
-    res.status(401).json({ error: 'Invalid or expired session' });
-  }
-}
-
-function adminMiddleware(
-  req: express.Request,
-  res: express.Response,
-  next: express.NextFunction
-) {
-  if (req.user?.role !== 'admin') {
-    res.status(403).json({ error: 'Admin access required' });
-    return;
-  }
-  next();
-}
-
-declare global {
-  namespace Express {
-    interface Request {
-      user?: User;
-    }
-  }
-}
+void JWT_SECRET;
 
 const app = express();
 app.use(cors({ origin: true, credentials: true }));
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
 
-app.get('/api/health', (_req, res) => {
-  res.json({ ok: true });
+app.get('/api/health', async (_req, res) => {
+  const dbOk = isDatabaseConfigured() ? await pingDatabase() : false;
+  res.json({
+    ok: true,
+    databaseConfigured: isDatabaseConfigured(),
+    databaseConnected: dbOk,
+  });
 });
 
+app.use('/api/production', productionRoutes);
+
 app.post('/api/auth/register', async (req, res) => {
+  if (!isDatabaseConfigured()) {
+    res.status(503).json({ error: 'Server database is not configured' });
+    return;
+  }
+
   const email = String(req.body.email ?? '').trim().toLowerCase();
   const password = String(req.body.password ?? '');
   const name = req.body.name ? String(req.body.name).trim() : null;
@@ -148,13 +72,13 @@ app.post('/api/auth/register', async (req, res) => {
     res.status(400).json({ error: 'Password must be at least 8 characters' });
     return;
   }
-  if (getUserByEmail(email)) {
+  if (await getUserByEmail(email)) {
     res.status(409).json({ error: 'An account with this email already exists' });
     return;
   }
 
   const passwordHash = bcrypt.hashSync(password, 12);
-  const user = createUser(email, passwordHash, name);
+  const user = await createUser(email, passwordHash, name);
 
   try {
     await sendAdminApprovalEmail({
@@ -173,7 +97,12 @@ app.post('/api/auth/register', async (req, res) => {
   });
 });
 
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
+  if (!isDatabaseConfigured()) {
+    res.status(503).json({ error: 'Server database is not configured' });
+    return;
+  }
+
   const email = String(req.body.email ?? '').trim().toLowerCase();
   const password = String(req.body.password ?? '');
 
@@ -182,7 +111,7 @@ app.post('/api/auth/login', (req, res) => {
     return;
   }
 
-  const user = getUserByEmail(email);
+  const user = await getUserByEmail(email);
   if (!user || !bcrypt.compareSync(password, user.password_hash)) {
     res.status(401).json({ error: 'Invalid email or password' });
     return;
@@ -213,14 +142,14 @@ app.get('/api/auth/me', authMiddleware, (req, res) => {
   res.json({ user: publicUser(req.user!) });
 });
 
-app.post('/api/auth/approve', (req, res) => {
+app.post('/api/auth/approve', async (req, res) => {
   const token = String(req.body.token ?? req.query.token ?? '').trim();
   if (!token) {
     res.status(400).json({ error: 'Approval token is required' });
     return;
   }
 
-  const user = approveUserByToken(token);
+  const user = await approveUserByToken(token);
   if (!user) {
     res.status(404).json({ error: 'Invalid or expired approval link' });
     return;
@@ -232,13 +161,13 @@ app.post('/api/auth/approve', (req, res) => {
   });
 });
 
-app.get('/api/admin/pending-users', authMiddleware, adminMiddleware, (_req, res) => {
-  res.json({ users: listPendingUsers() });
+app.get('/api/admin/pending-users', authMiddleware, adminMiddleware, async (_req, res) => {
+  res.json({ users: await listPendingUsers() });
 });
 
-app.post('/api/admin/users/:id/approve', authMiddleware, adminMiddleware, (req, res) => {
+app.post('/api/admin/users/:id/approve', authMiddleware, adminMiddleware, async (req, res) => {
   const id = Number(req.params.id);
-  const user = approveUserById(id);
+  const user = await approveUserById(id);
   if (!user) {
     res.status(404).json({ error: 'Pending user not found' });
     return;
@@ -246,9 +175,9 @@ app.post('/api/admin/users/:id/approve', authMiddleware, adminMiddleware, (req, 
   res.json({ message: `${user.email} approved`, user: publicUser(user) });
 });
 
-app.post('/api/admin/users/:id/reject', authMiddleware, adminMiddleware, (req, res) => {
+app.post('/api/admin/users/:id/reject', authMiddleware, adminMiddleware, async (req, res) => {
   const id = Number(req.params.id);
-  const user = rejectUserById(id);
+  const user = await rejectUserById(id);
   if (!user) {
     res.status(404).json({ error: 'Pending user not found' });
     return;
@@ -256,15 +185,11 @@ app.post('/api/admin/users/:id/reject', authMiddleware, adminMiddleware, (req, r
   res.json({ message: `${user.email} rejected`, user: publicUser(user) });
 });
 
-initializeAuthDatabase();
-syncAdminFromEnv();
-
 if (isProduction) {
   const distPath = join(__dirname, '..', 'dist');
 
   app.use(express.static(distPath));
 
-  // SPA fallback: React Router routes work on direct refresh
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api/')) {
       next();
@@ -276,13 +201,15 @@ if (isProduction) {
   });
 }
 
+await initializeServerDatastores();
+
 app.listen(PORT, HOST, () => {
   const mode = isProduction ? 'production' : 'development';
   console.log(`Server listening on http://${HOST ?? 'localhost'}:${PORT} (${mode})`);
   if (isProduction) {
-    console.log(`Serving frontend from dist/`);
-  } else {
-    console.log(`Vite dev server expected at ${APP_URL ?? 'http://localhost:5173'}`);
+    console.log('Serving frontend from dist/');
+  } else if (APP_URL) {
+    console.log(`Vite dev server expected at ${APP_URL}`);
   }
   if (APP_URL) {
     console.log(`App URL: ${APP_URL}`);

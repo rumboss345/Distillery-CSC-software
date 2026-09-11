@@ -1,3 +1,48 @@
+.production-banner {
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  font-size: 0.95rem;
+}
+
+.production-banner--info {
+  background: var(--info-bg);
+  border-color: rgba(106, 158, 201, 0.35);
+  color: var(--text);
+}
+
+.production-banner--warn {
+  background: var(--warning-bg);
+  border-color: rgba(212, 160, 74, 0.35);
+}
+
+.production-banner--error {
+  background: var(--danger-bg);
+  border-color: rgba(201, 106, 106, 0.35);
+}
+
+.production-banner a {
+  color: var(--accent-hover);
+}
+
+.alert {
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+
+.alert-danger {
+  background: var(--danger-bg);
+  border-color: rgba(201, 106, 106, 0.35);
+}
+
+.alert-info {
+  background: var(--info-bg);
+  border-color: rgba(106, 158, 201, 0.35);
+}
+
 :root {
   --bg: #0f0e0c;
   --bg-elevated: #1a1816;

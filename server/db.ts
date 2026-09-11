@@ -1,3 +1,4 @@
+/** @deprecated Auth now uses PostgreSQL via server/db/auth.ts. This file remains for legacy reference only. */
 import Database from 'better-sqlite3';
 import bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';

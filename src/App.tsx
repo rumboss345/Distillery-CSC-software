@@ -15,6 +15,7 @@ import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { ApproveUser } from './pages/ApproveUser';
 import { AdminUsers } from './pages/AdminUsers';
+import { DataMigration } from './pages/DataMigration';
 import { useDatabaseReady } from './db/queries';
 
 function AppContent() {
@@ -56,6 +57,7 @@ function AppContent() {
             <Route path="/floor-plan" element={<FloorPlanPage />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/admin/users" element={<AdminUsers />} />
+            <Route path="/admin/data-migration" element={<DataMigration />} />
           </Route>
         </Route>
       </Routes>
