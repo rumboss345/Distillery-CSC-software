@@ -9,10 +9,10 @@ export const BLEND_INGREDIENT_TYPES: { value: BlendIngredientType; label: string
 ];
 
 export const INGREDIENT_UNITS: Record<BlendIngredientType, string[]> = {
-  water: ['gal', 'fl oz'],
-  sugar: ['lbs', 'oz'],
-  flavoring: ['gal', 'fl oz', 'oz'],
-  other: ['gal', 'lbs', 'oz', 'fl oz', 'each'],
+  water: ['gal', 'fl oz', 'ml'],
+  sugar: ['lbs', 'oz', 'ml'],
+  flavoring: ['gal', 'fl oz', 'oz', 'ml'],
+  other: ['gal', 'lbs', 'oz', 'fl oz', 'ml', 'each'],
 };
 
 export function ingredientVolumeGal(ingredient: Pick<BlendIngredientInput, 'amount' | 'unit'>): number {
