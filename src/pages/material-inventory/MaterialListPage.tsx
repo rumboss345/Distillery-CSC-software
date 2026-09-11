@@ -17,7 +17,7 @@ export function MaterialListPage({ materialKind }: Props) {
             <th>Name</th>
             <th>Tracking</th>
             <th>Inventory UOM</th>
-            <th>On Hand (LEDGER)</th>
+            <th>Ledger Balance</th>
             <th>Reorder Point</th>
           </tr>
         </thead>
@@ -38,7 +38,7 @@ export function MaterialListPage({ materialKind }: Props) {
                 <td>{item.name}</td>
                 <td>{mode}</td>
                 <td>{isRaw ? (item as { inventory_unit: string }).inventory_unit : (item as { inventory_unit: string }).inventory_unit}</td>
-                <td>{onHand != null ? onHand.toFixed(3) : '— (LEGACY)'}</td>
+                <td>{mode === 'LEDGER' ? onHand!.toFixed(3) : 'Not Activated'}</td>
                 <td>{(item as { reorder_point?: number }).reorder_point ?? '—'}</td>
               </tr>
             );

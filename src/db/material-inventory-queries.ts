@@ -11,7 +11,9 @@ import {
   type MaterialType,
 } from '../../shared/material-inventory/constants';
 import { normalizeToBaseUnit } from '../../shared/material-inventory/uom-conversion';
+import { LEGACY_RECEIPT_BLOCK_MESSAGE } from '../../shared/material-inventory/constants';
 import {
+  validateDiscreteBaseQuantity,
   validateLossReason,
   validateLotIssueable,
   validateMaterialIdentity,
@@ -73,28 +75,75 @@ function getMaterialBaseUnit(
   return row.inventory_unit;
 }
 
+export function getMaterialTrackingMode(
+  materialType: MaterialType,
+  materialId: number,
+): 'LEGACY' | 'LEDGER' {
+  if (materialType === 'RAW_MATERIAL') {
+    return (queryOne<{ inventory_tracking_mode: string }>(
+      'SELECT inventory_tracking_mode FROM md_raw_materials WHERE id = ?',
+      [materialId],
+    )?.inventory_tracking_mode ?? 'LEGACY') as 'LEGACY' | 'LEDGER';
+  }
+  return (queryOne<{ inventory_tracking_mode: string }>(
+    'SELECT inventory_tracking_mode FROM md_packaging_materials WHERE id = ?',
+    [materialId],
+  )?.inventory_tracking_mode ?? 'LEGACY') as 'LEGACY' | 'LEDGER';
+}
+
+function countPostedLedgerTransactions(
+  materialType: MaterialType,
+  rawMaterialId: number | null,
+  packagingMaterialId: number | null,
+): number {
+  if (materialType === 'RAW_MATERIAL') {
+    return queryOne<{ count: number }>(
+      `SELECT COUNT(*) AS count FROM mat_transactions
+       WHERE material_type = 'RAW_MATERIAL' AND raw_material_id = ? AND reversal_of_transaction_id IS NULL`,
+      [rawMaterialId],
+    )?.count ?? 0;
+  }
+  return queryOne<{ count: number }>(
+    `SELECT COUNT(*) AS count FROM mat_transactions
+     WHERE material_type = 'PACKAGING_MATERIAL' AND packaging_material_id = ? AND reversal_of_transaction_id IS NULL`,
+    [packagingMaterialId],
+  )?.count ?? 0;
+}
+
 function assertLedgerMaterial(
   materialType: MaterialType,
   rawMaterialId: number | null,
   packagingMaterialId: number | null,
 ): void {
   validateMaterialIdentity({ materialType, rawMaterialId, packagingMaterialId });
+  const materialId = (rawMaterialId ?? packagingMaterialId)!;
+  const mode = getMaterialTrackingMode(materialType, materialId);
+  if (mode !== 'LEDGER') {
+    throw new Error(LEGACY_RECEIPT_BLOCK_MESSAGE);
+  }
+}
+
+/** Explicit controlled activation — does not create inventory. */
+export function activateMaterialLedgerTracking(
+  materialType: MaterialType,
+  materialId: number,
+  activationReference?: string | null,
+): void {
+  const mode = getMaterialTrackingMode(materialType, materialId);
+  if (mode === 'LEDGER') {
+    throw new Error('Material already uses LEDGER tracking.');
+  }
+  const ts = now();
   if (materialType === 'RAW_MATERIAL') {
-    const mode = queryOne<{ inventory_tracking_mode: string }>(
-      'SELECT inventory_tracking_mode FROM md_raw_materials WHERE id = ?',
-      [rawMaterialId],
-    )?.inventory_tracking_mode ?? 'LEGACY';
-    if (mode !== 'LEDGER') {
-      throw new Error('Material is not LEDGER-managed. Set inventory_tracking_mode to LEDGER on master data.');
-    }
+    runQuery(
+      `UPDATE md_raw_materials SET inventory_tracking_mode = 'LEDGER', ledger_activated_at = ?, ledger_activation_reference = ? WHERE id = ?`,
+      [ts, activationReference ?? null, materialId],
+    );
   } else {
-    const mode = queryOne<{ inventory_tracking_mode: string }>(
-      'SELECT inventory_tracking_mode FROM md_packaging_materials WHERE id = ?',
-      [packagingMaterialId],
-    )?.inventory_tracking_mode ?? 'LEGACY';
-    if (mode !== 'LEDGER') {
-      throw new Error('Material is not LEDGER-managed. Set inventory_tracking_mode to LEDGER on master data.');
-    }
+    runQuery(
+      `UPDATE md_packaging_materials SET inventory_tracking_mode = 'LEDGER', ledger_activated_at = ?, ledger_activation_reference = ? WHERE id = ?`,
+      [ts, activationReference ?? null, materialId],
+    );
   }
 }
 
@@ -316,9 +365,10 @@ function insertMaterialTransaction(input: PostMaterialTransactionInput): number 
     packagingMaterialId: input.packagingMaterialId,
   });
   validatePositiveQuantity(input.baseQuantity, 'Base quantity');
+  validateDiscreteBaseQuantity(input.baseQuantity, input.baseUnit);
   if (input.materialLotId != null && (input.transactionType === 'Production Issue' || input.transactionType === 'Location Transfer Out')) {
     const lot = getMaterialLot(input.materialLotId);
-    if (lot) validateLotIssueable(lot.status);
+    if (lot) validateLotIssueable(lot.status, lot.expiration_date);
   }
   if (input.sourceLocationId != null) {
     validatePostWouldNotGoNegative(input);
@@ -331,8 +381,8 @@ function insertMaterialTransaction(input: PostMaterialTransactionInput): number 
       source_location_id, source_bin_id, destination_location_id, destination_bin_id,
       quantity, unit, base_quantity, base_unit, reason_code,
       source_document_type, source_document_id, purchase_order_id, receipt_id,
-      production_order_id, production_batch_id, unit_cost, currency, notes, created_by, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      production_order_id, production_batch_id, unit_cost, cost_unit, currency, notes, created_by, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       code,
       input.transactionGroupId ?? null,
@@ -358,6 +408,7 @@ function insertMaterialTransaction(input: PostMaterialTransactionInput): number 
       input.productionOrderId ?? null,
       input.productionBatchId ?? null,
       input.unitCost ?? null,
+      input.costUnit ?? null,
       input.currency ?? null,
       input.notes ?? '',
       input.createdBy ?? null,
@@ -412,9 +463,9 @@ export function reverseMaterialTransaction(transactionId: number, createdBy?: st
           material_type, raw_material_id, packaging_material_id, material_lot_id,
           source_location_id, destination_location_id, quantity, unit, base_quantity, base_unit,
           reason_code, source_document_type, source_document_id, purchase_order_id, receipt_id,
-          production_order_id, production_batch_id, unit_cost, currency, notes, created_by,
+          production_order_id, production_batch_id, unit_cost, cost_unit, currency, notes, created_by,
           created_at, reversal_of_transaction_id
-        ) VALUES (?, ?, 'Correction / Reversal', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Reversal', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, 'Correction / Reversal', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Reversal', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           nextBusinessCode('materialTransaction', 'mat_transactions', 'transaction_code'),
           reversalGroupId,
@@ -436,6 +487,7 @@ export function reverseMaterialTransaction(transactionId: number, createdBy?: st
           tx.production_order_id,
           tx.production_batch_id,
           tx.unit_cost,
+          tx.cost_unit,
           tx.currency,
           `Reversal of ${tx.transaction_code}`,
           createdBy ?? null,
@@ -513,10 +565,14 @@ export function postMaterialOpeningBalance(input: {
   assertLedgerMaterial(input.materialType, input.rawMaterialId ?? null, input.packagingMaterialId ?? null);
   const existing = queryOne<{ count: number }>(
     `SELECT COUNT(*) AS count FROM mat_transactions
-     WHERE material_lot_id = ? AND transaction_type = 'Opening Balance'`,
-    [input.materialLotId],
+     WHERE material_lot_id = ? AND destination_location_id = ? AND transaction_type = 'Opening Balance'
+       AND reversal_of_transaction_id IS NULL
+       AND id NOT IN (SELECT reversal_of_transaction_id FROM mat_transactions WHERE reversal_of_transaction_id IS NOT NULL)`,
+    [input.materialLotId, input.locationId],
   )?.count ?? 0;
-  if (existing > 0) throw new Error('Opening Balance already exists for this material lot.');
+  if (existing > 0) {
+    throw new Error('Opening Balance already exists for this material lot at this location.');
+  }
 
   const { baseQuantity, baseUnit } = normalizeMaterialQuantity(
     input.materialType,
@@ -599,7 +655,7 @@ export function postProductionIssue(input: {
 }): number {
   const lot = getMaterialLot(input.materialLotId);
   if (!lot) throw new Error('Material lot not found.');
-  validateLotIssueable(lot.status);
+  validateLotIssueable(lot.status, lot.expiration_date);
   return insertMaterialTransaction({
     transactionType: 'Production Issue',
     materialType: input.materialType,
@@ -620,6 +676,24 @@ export function postProductionIssue(input: {
   });
 }
 
+function getNetIssuedBaseQuantityForBatchLot(batchId: number, lotId: number): number {
+  const rows = queryAll<{ transaction_type: string; base_quantity: number }>(
+    `SELECT transaction_type, base_quantity FROM mat_transactions
+     WHERE production_batch_id = ? AND material_lot_id = ?
+       AND transaction_type IN ('Production Issue', 'Production Return')
+       AND reversal_of_transaction_id IS NULL
+       AND id NOT IN (SELECT reversal_of_transaction_id FROM mat_transactions WHERE reversal_of_transaction_id IS NOT NULL)`,
+    [batchId, lotId],
+  );
+  let issued = 0;
+  let returned = 0;
+  for (const row of rows) {
+    if (row.transaction_type === 'Production Issue') issued += row.base_quantity;
+    else returned += row.base_quantity;
+  }
+  return issued - returned;
+}
+
 export function postProductionReturn(input: {
   materialType: MaterialType;
   rawMaterialId?: number | null;
@@ -635,6 +709,12 @@ export function postProductionReturn(input: {
   transactionGroupId: string;
   createdBy?: string | null;
 }): number {
+  const netIssued = getNetIssuedBaseQuantityForBatchLot(input.productionBatchId, input.materialLotId);
+  if (input.baseQuantity > netIssued + 1e-9) {
+    throw new Error(
+      `Production return ${input.baseQuantity} ${input.baseUnit} exceeds net issued ${netIssued} ${input.baseUnit} for batch/lot.`,
+    );
+  }
   return insertMaterialTransaction({
     transactionType: 'Production Return',
     materialType: input.materialType,
@@ -785,6 +865,19 @@ export function setMaterialTrackingMode(
   mode: 'LEGACY' | 'LEDGER',
 ): void {
   if (mode !== 'LEGACY' && mode !== 'LEDGER') throw new Error('Invalid tracking mode.');
+  const current = getMaterialTrackingMode(materialType, materialId);
+  if (mode === 'LEGACY' && current === 'LEDGER') {
+    const rawId = materialType === 'RAW_MATERIAL' ? materialId : null;
+    const pkgId = materialType === 'PACKAGING_MATERIAL' ? materialId : null;
+    const txCount = countPostedLedgerTransactions(materialType, rawId, pkgId);
+    if (txCount > 0) {
+      throw new Error('Cannot downgrade to LEGACY: posted ledger transactions exist for this material.');
+    }
+  }
+  if (mode === 'LEDGER' && current === 'LEGACY') {
+    activateMaterialLedgerTracking(materialType, materialId, 'setMaterialTrackingMode');
+    return;
+  }
   if (materialType === 'RAW_MATERIAL') {
     runQuery('UPDATE md_raw_materials SET inventory_tracking_mode = ? WHERE id = ?', [mode, materialId]);
   } else {

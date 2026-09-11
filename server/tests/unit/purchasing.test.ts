@@ -128,6 +128,7 @@ describe('Phase 1F purchasing', () => {
   it('40. over-receipt blocked', () => {
     const { supplierId, locA } = seedSupplierAndLocation(db);
     const pkgId = seedPackagingMaterial(db);
+    setMaterialTrackingMode('PACKAGING_MATERIAL', pkgId, 'LEDGER');
     const poId = createPurchaseOrder({ supplierId, orderDate: '2026-01-01' });
     const lineId = addPurchaseOrderLine({ purchaseOrderId: poId, materialType: 'PACKAGING_MATERIAL', packagingMaterialId: pkgId, orderedQuantity: 1000, unit: 'each', unitPrice: 1 });
     submitPurchaseOrder(poId);

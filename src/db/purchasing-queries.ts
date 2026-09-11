@@ -1,5 +1,5 @@
 import { derivePurchaseOrderStatusFromReceipts, assertPurchaseOrderStatusTransition, isPurchaseOrderEditable } from '../../shared/purchasing/status-transitions';
-import type { MaterialType } from '../../shared/material-inventory/constants';
+import { LEGACY_RECEIPT_BLOCK_MESSAGE, type MaterialType } from '../../shared/material-inventory/constants';
 import { validateMaterialIdentity, validateNonNegativeQuantity, validatePositiveQuantity } from '../../shared/material-inventory/validation';
 import type {
   AddPurchaseOrderLineInput,
@@ -15,10 +15,10 @@ import { insertRow, queryAll, queryOne, runQuery, withDatabaseTransaction } from
 import { nextBusinessCode } from './master-data-queries';
 import {
   createMaterialLot,
+  getMaterialTrackingMode,
   normalizeMaterialQuantity,
   postMaterialTransaction,
   reverseMaterialTransaction,
-  setMaterialTrackingMode,
 } from './material-inventory-queries';
 
 const now = () => new Date().toISOString();
@@ -308,11 +308,6 @@ export function addReceiptLine(input: AddReceiptLineInput): number {
       expirationDate: input.expirationDate,
       status: rejected > 0 && input.acceptedQuantity <= 0 ? 'Rejected' : 'Active',
     });
-    setMaterialTrackingMode(
-      input.materialType,
-      (input.rawMaterialId ?? input.packagingMaterialId)!,
-      'LEDGER',
-    );
   }
 
   return insertRow(
@@ -382,26 +377,56 @@ function nextMaterialGroupIdForReceipt(): string {
   return nextBusinessCode('materialOperationGroup', 'mat_transactions', 'transaction_group_id');
 }
 
+function validateReceiptLinesBeforePost(_receipt: PurReceipt, lines: PurReceiptLine[]): void {
+  let hasPostableLine = false;
+  for (const line of lines) {
+    if (line.accepted_quantity <= 0) continue;
+    hasPostableLine = true;
+    if (!line.material_lot_id) throw new Error('Receipt line missing material lot.');
+    const materialId = (line.raw_material_id ?? line.packaging_material_id)!;
+    if (getMaterialTrackingMode(line.material_type, materialId) !== 'LEDGER') {
+      throw new Error(LEGACY_RECEIPT_BLOCK_MESSAGE);
+    }
+    if (line.purchase_order_line_id) {
+      const remaining = getRemainingQuantity(line.purchase_order_line_id);
+      if (line.accepted_quantity > remaining + 1e-9) {
+        throw new Error(
+          `Over-receipt blocked: accepted ${line.accepted_quantity} exceeds remaining ${remaining} on PO line.`,
+        );
+      }
+    }
+    normalizeMaterialQuantity(
+      line.material_type,
+      line.raw_material_id,
+      line.packaging_material_id,
+      line.accepted_quantity,
+      line.unit,
+    );
+  }
+  if (!hasPostableLine) throw new Error('Receipt must have at least one line with accepted quantity.');
+}
+
 export function postReceipt(receiptId: number, receivedBy?: string | null): string {
   return withDatabaseTransaction(() => {
     const receipt = getReceipt(receiptId);
     if (!receipt) throw new Error('Receipt not found.');
-    if (receipt.status !== 'Draft') throw new Error('Only Draft receipts can be posted.');
+    if (receipt.status === 'Posted') throw new Error('Receipt already posted.');
+    if (receipt.status !== 'Draft') throw new Error(`Receipt cannot be posted from status ${receipt.status}.`);
     const lines = getReceiptLines(receiptId);
     if (lines.length === 0) throw new Error('Receipt must have at least one line.');
+    validateReceiptLinesBeforePost(receipt, lines);
 
     const groupId = nextMaterialGroupIdForReceipt();
 
     for (const line of lines) {
       if (line.accepted_quantity <= 0) continue;
-      if (!line.material_lot_id) throw new Error('Receipt line missing material lot.');
 
       postMaterialTransaction({
         transactionType: 'Purchase Receipt',
         materialType: line.material_type,
         rawMaterialId: line.raw_material_id,
         packagingMaterialId: line.packaging_material_id,
-        materialLotId: line.material_lot_id,
+        materialLotId: line.material_lot_id!,
         destinationLocationId: receipt.receiving_location_id,
         quantity: line.accepted_quantity,
         unit: line.unit,
@@ -410,6 +435,7 @@ export function postReceipt(receiptId: number, receivedBy?: string | null): stri
         purchaseOrderId: receipt.purchase_order_id ?? undefined,
         receiptId: receipt.id,
         unitCost: line.unit_cost,
+        costUnit: line.unit,
         currency: line.currency,
         transactionGroupId: groupId,
         transactionTimestamp: receipt.received_date,

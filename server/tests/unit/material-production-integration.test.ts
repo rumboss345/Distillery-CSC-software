@@ -7,6 +7,7 @@ import {
   getMaterialBalance,
   getMaterialLotBalance,
   postMaterialOpeningBalance,
+  postProductionIssue,
   postProductionReturn,
   setMaterialTrackingMode,
 } from '../../../src/db/material-inventory-queries';
@@ -210,18 +211,29 @@ describe('Phase 1F production material integration', () => {
     assert.equal(queryOne<{ count: number }>('SELECT COUNT(*) AS count FROM mat_transactions WHERE production_batch_id = 1')?.count, 0);
   });
 
-  it('65. Production Return restores inventory', () => {
+  it('65. Production Return restores inventory up to net issued', () => {
     const { locA } = seedSupplierAndLocation(db);
     const rawId = seedRawMaterial(db);
     setMaterialTrackingMode('RAW_MATERIAL', rawId, 'LEDGER');
     db.run(`INSERT INTO mat_lots (lot_code, material_type, raw_material_id, status) VALUES ('MLT-RET', 'RAW_MATERIAL', ?, 'Active')`, [rawId]);
     const lotId = queryOne<{ id: number }>('SELECT id FROM mat_lots WHERE lot_code = ?', ['MLT-RET'])!.id;
     postMaterialOpeningBalance({ materialType: 'RAW_MATERIAL', rawMaterialId: rawId, materialLotId: lotId, locationId: locA, quantity: 100, unit: 'kg' });
+    postProductionIssue({
+      materialType: 'RAW_MATERIAL', rawMaterialId: rawId, materialLotId: lotId, sourceLocationId: locA,
+      quantity: 50, unit: 'kg', baseQuantity: 50, baseUnit: 'kg', productionOrderId: 1, productionBatchId: 1, transactionGroupId: 'MGO-ISSUE',
+    });
     postProductionReturn({
       materialType: 'RAW_MATERIAL', rawMaterialId: rawId, materialLotId: lotId, destinationLocationId: locA,
-      quantity: 8, unit: 'kg', baseQuantity: 8, baseUnit: 'kg', productionOrderId: 1, productionBatchId: 1, transactionGroupId: 'MGO-TEST',
+      quantity: 8, unit: 'kg', baseQuantity: 8, baseUnit: 'kg', productionOrderId: 1, productionBatchId: 1, transactionGroupId: 'MGO-RET',
     });
-    assert.equal(getMaterialLotBalance(lotId), 108);
+    assert.equal(getMaterialLotBalance(lotId), 58);
+    assert.throws(
+      () => postProductionReturn({
+        materialType: 'RAW_MATERIAL', rawMaterialId: rawId, materialLotId: lotId, destinationLocationId: locA,
+        quantity: 50, unit: 'kg', baseQuantity: 50, baseUnit: 'kg', productionOrderId: 1, productionBatchId: 1, transactionGroupId: 'MGO-RET2',
+      }),
+      /exceeds net issued/,
+    );
   });
 
   it('multiple lots for same requirement', () => {

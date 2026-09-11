@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS mat_transactions (
   production_order_id INTEGER,
   production_batch_id INTEGER,
   unit_cost REAL,
+  cost_unit TEXT,
   currency TEXT,
   notes TEXT NOT NULL DEFAULT '',
   created_by TEXT,
@@ -248,5 +249,30 @@ export const MATERIAL_INVENTORY_V1F_NEW_COLUMNS: Array<{ table: string; column: 
     table: 'prod_batch_inputs',
     column: 'base_unit',
     ddl: 'ALTER TABLE prod_batch_inputs ADD COLUMN base_unit TEXT',
+  },
+  {
+    table: 'md_raw_materials',
+    column: 'ledger_activated_at',
+    ddl: 'ALTER TABLE md_raw_materials ADD COLUMN ledger_activated_at TEXT',
+  },
+  {
+    table: 'md_raw_materials',
+    column: 'ledger_activation_reference',
+    ddl: 'ALTER TABLE md_raw_materials ADD COLUMN ledger_activation_reference TEXT',
+  },
+  {
+    table: 'md_packaging_materials',
+    column: 'ledger_activated_at',
+    ddl: 'ALTER TABLE md_packaging_materials ADD COLUMN ledger_activated_at TEXT',
+  },
+  {
+    table: 'md_packaging_materials',
+    column: 'ledger_activation_reference',
+    ddl: 'ALTER TABLE md_packaging_materials ADD COLUMN ledger_activation_reference TEXT',
+  },
+  {
+    table: 'mat_transactions',
+    column: 'cost_unit',
+    ddl: 'ALTER TABLE mat_transactions ADD COLUMN cost_unit TEXT',
   },
 ];

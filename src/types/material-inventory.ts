@@ -58,6 +58,7 @@ export interface MatTransaction {
   production_order_id: number | null;
   production_batch_id: number | null;
   unit_cost: number | null;
+  cost_unit: string | null;
   currency: string | null;
   notes: string;
   created_by: string | null;
@@ -138,6 +139,7 @@ export interface PostMaterialTransactionInput {
   productionOrderId?: number | null;
   productionBatchId?: number | null;
   unitCost?: number | null;
+  costUnit?: string | null;
   currency?: string | null;
   transactionGroupId?: string | null;
   transactionTimestamp?: string;

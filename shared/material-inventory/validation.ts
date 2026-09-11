@@ -1,4 +1,4 @@
-import { ISSUEABLE_LOT_STATUSES, MATERIAL_TYPES, type MaterialType } from './constants.js';
+import { DISCRETE_COUNT_UNITS, ISSUEABLE_LOT_STATUSES, MATERIAL_TYPES, type MaterialType } from './constants.js';
 
 export function validatePositiveQuantity(qty: number, label = 'Quantity'): void {
   if (!Number.isFinite(qty) || qty <= 0) {
@@ -43,9 +43,25 @@ export function validateMaterialIdentity(input: {
   }
 }
 
-export function validateLotIssueable(status: string): void {
+export function validateLotIssueable(status: string, expirationDate?: string | null): void {
   if (!ISSUEABLE_LOT_STATUSES.includes(status as typeof ISSUEABLE_LOT_STATUSES[number])) {
     throw new Error(`Lot status "${status}" is not eligible for production issue.`);
+  }
+  if (expirationDate) {
+    const exp = new Date(expirationDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (!Number.isNaN(exp.getTime()) && exp < today) {
+      throw new Error(`Lot is past expiration date (${expirationDate}) and cannot be issued.`);
+    }
+  }
+}
+
+export function validateDiscreteBaseQuantity(baseQuantity: number, baseUnit: string): void {
+  const unit = baseUnit.toLowerCase();
+  if (!DISCRETE_COUNT_UNITS.includes(unit as typeof DISCRETE_COUNT_UNITS[number])) return;
+  if (Math.abs(baseQuantity - Math.round(baseQuantity)) > 1e-9) {
+    throw new Error(`Discrete unit "${baseUnit}" requires whole-number quantities; got ${baseQuantity}.`);
   }
 }
 

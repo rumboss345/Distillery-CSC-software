@@ -16,8 +16,14 @@ export const MAT_LOT_STATUSES = [
   'Inactive',
 ] as const;
 
-/** Lots eligible for normal production issue. */
+/** Lots eligible for normal production issue (Phase 1F). */
 export const ISSUEABLE_LOT_STATUSES = ['Active', 'Released'] as const;
+
+/** Base units treated as discrete count — fractional base quantities rejected. */
+export const DISCRETE_COUNT_UNITS = ['each', 'case', 'pallet', 'bag', 'drum', 'keg', 'tote'] as const;
+
+export const LEGACY_RECEIPT_BLOCK_MESSAGE =
+  'This material is still LEGACY-tracked. Activate ledger tracking and establish an opening balance before posting ledger inventory transactions.';
 
 export const MAT_TRANSACTION_TYPES = [
   'Opening Balance',

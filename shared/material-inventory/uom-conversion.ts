@@ -33,24 +33,35 @@ export function convertQuantity(
   conversions: readonly MaterialUomConversion[],
 ): number {
   if (fromUnit === toUnit) return quantity;
-  const direct = conversions.find((c) => c.from_unit === fromUnit && c.to_unit === toUnit);
-  if (direct) return quantity * direct.conversion_factor;
-  const inverse = conversions.find((c) => c.from_unit === toUnit && c.to_unit === fromUnit);
-  if (inverse && inverse.conversion_factor !== 0) return quantity / inverse.conversion_factor;
 
   const graph = buildConversionGraph(conversions);
   const queue: Array<{ unit: string; factor: number }> = [{ unit: fromUnit, factor: 1 }];
-  const visited = new Set<string>([fromUnit]);
+  const factorsToTarget = new Set<number>();
+  const visited = new Set<string>();
   while (queue.length > 0) {
     const current = queue.shift()!;
-    if (current.unit === toUnit) return quantity * current.factor;
+    const visitKey = `${current.unit}:${current.factor.toFixed(12)}`;
+    if (visited.has(visitKey)) continue;
+    visited.add(visitKey);
+    if (current.unit === toUnit) {
+      factorsToTarget.add(current.factor);
+      continue;
+    }
     for (const edge of graph.get(current.unit) ?? []) {
-      if (visited.has(edge.to)) continue;
-      visited.add(edge.to);
       queue.push({ unit: edge.to, factor: current.factor * edge.factor });
     }
   }
-  throw new Error(`No conversion from ${fromUnit} to ${toUnit}.`);
+  if (factorsToTarget.size === 0) {
+    throw new Error(`No conversion from ${fromUnit} to ${toUnit}.`);
+  }
+  const factors = [...factorsToTarget];
+  const first = factors[0]!;
+  for (const f of factors.slice(1)) {
+    if (Math.abs(f - first) / Math.max(Math.abs(first), 1e-9) > 1e-6) {
+      throw new Error(`Ambiguous conversion from ${fromUnit} to ${toUnit}: conflicting conversion paths.`);
+    }
+  }
+  return quantity * first;
 }
 
 /** Normalize to base inventory unit; returns stored quantity + base values. */

@@ -123,14 +123,16 @@ describe('Phase 1F material ledger', () => {
     assert.equal(getMaterialBalance('RAW_MATERIAL', rawId, null).onHand, 500);
   });
 
-  it('10. balance by location', () => {
+  it('10. balance by location — same lot split across locations', () => {
     const { locA, locB } = seedSupplierAndLocation(db);
     const rawId = seedRawMaterial(db);
     setMaterialTrackingMode('RAW_MATERIAL', rawId, 'LEDGER');
     const lotId = createMaterialLot({ materialType: 'RAW_MATERIAL', rawMaterialId: rawId });
-    postMaterialOpeningBalance({ materialType: 'RAW_MATERIAL', rawMaterialId: rawId, materialLotId: lotId, locationId: locA, quantity: 300, unit: 'kg' });
-    postMaterialOpeningBalance({ materialType: 'RAW_MATERIAL', rawMaterialId: rawId, materialLotId: createMaterialLot({ materialType: 'RAW_MATERIAL', rawMaterialId: rawId }), locationId: locB, quantity: 200, unit: 'kg' });
-    assert.equal(getMaterialBalanceByLocation('RAW_MATERIAL', rawId, null, locA), 300);
+    postMaterialOpeningBalance({ materialType: 'RAW_MATERIAL', rawMaterialId: rawId, materialLotId: lotId, locationId: locA, quantity: 600, unit: 'kg' });
+    postMaterialOpeningBalance({ materialType: 'RAW_MATERIAL', rawMaterialId: rawId, materialLotId: lotId, locationId: locB, quantity: 400, unit: 'kg' });
+    assert.equal(getMaterialBalanceByLocation('RAW_MATERIAL', rawId, null, locA), 600);
+    assert.equal(getMaterialBalanceByLocation('RAW_MATERIAL', rawId, null, locB), 400);
+    assert.equal(getMaterialLotBalance(lotId), 1000);
   });
 
   it('11. balance by lot', () => {
@@ -269,7 +271,7 @@ describe('Phase 1F material ledger', () => {
     postMaterialOpeningBalance({ materialType: 'RAW_MATERIAL', rawMaterialId: rawId, materialLotId: lotId, locationId: locA, quantity: 100, unit: 'kg' });
     assert.throws(
       () => postMaterialOpeningBalance({ materialType: 'RAW_MATERIAL', rawMaterialId: rawId, materialLotId: lotId, locationId: locA, quantity: 50, unit: 'kg' }),
-      /Opening Balance already exists/,
+      /Opening Balance already exists for this material lot at this location/,
     );
   });
 
