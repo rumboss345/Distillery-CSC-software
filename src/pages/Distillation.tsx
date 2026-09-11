@@ -14,6 +14,7 @@ import {
   getChargeableHoldingTanks,
   getHighWinesDestinationTanks,
   defaultHighWinesTankId,
+  defaultTankForCutType,
   getHoldingTanks,
   getHoldingTankContents,
   generateBatchNumber,
@@ -238,15 +239,15 @@ export function Distillation() {
     ? CUT_TYPES.filter((t) => t !== 'heads')
     : CUT_TYPES;
 
+  const suggestCutTank = (cutType: CutType, run?: DistillationRun, runCuts = cuts) =>
+    defaultTankForCutType(cutType, { run, existingCuts: runCuts });
+
   const openAddCutForm = () => {
     const run = runs.find((r) => r.id === selectedRunId);
-    const defaultTank = run?.run_type === 'low_wines'
-      ? (run.dest_holding_tank_equipment_id ?? defaultHighWinesTankId(run.source_holding_tank_equipment_id))
-      : null;
-    const headsTaken = hasHeadsCut;
+    const initialCutType: CutType = hasHeadsCut ? 'hearts' : 'heads';
     setCutForm({
-      cut_type: headsTaken ? 'hearts' : 'heads',
-      holding_tank_equipment_id: defaultTank,
+      cut_type: initialCutType,
+      holding_tank_equipment_id: suggestCutTank(initialCutType, run),
       start_time: new Date().toISOString().slice(0, 16),
       end_time: '',
       volume_gal: 0,
@@ -254,6 +255,14 @@ export function Distillation() {
       notes: '',
     });
     setShowCutForm(true);
+  };
+
+  const handleCutTypeChange = (cutType: CutType) => {
+    setCutForm({
+      ...cutForm,
+      cut_type: cutType,
+      holding_tank_equipment_id: suggestCutTank(cutType, selectedRun),
+    });
   };
 
   const fermenterLabel = (equipmentId: number | null) =>
@@ -273,12 +282,9 @@ export function Distillation() {
       alert('Heads can only be recorded once per run.');
       return;
     }
-    const run = runs.find((r) => r.id === selectedRunId);
-    const tankId = run?.run_type === 'low_wines' && run.dest_holding_tank_equipment_id
-      ? run.dest_holding_tank_equipment_id
-      : cutForm.holding_tank_equipment_id;
-    if (cutForm.volume_gal > 0 && !tankId) {
-      alert('Select a holding tank to collect this cut.');
+    const tankId = cutForm.holding_tank_equipment_id;
+    if (cutForm.volume_gal > 0 && !tankId && cutForm.cut_type !== 'heads') {
+      alert(`Select a holding tank to collect ${cutForm.cut_type}.`);
       return;
     }
     if (tankId && cutForm.volume_gal > 0) {
@@ -335,9 +341,7 @@ export function Distillation() {
     }
   };
 
-  const cutDestinationTanks = selectedRun?.run_type === 'low_wines' && selectedRun.dest_holding_tank_equipment_id
-    ? holdingTanks.filter((t) => t.id === selectedRun.dest_holding_tank_equipment_id)
-    : holdingTanks;
+  const cutDestinationTanks = holdingTanks;
 
   const heartsTotal = cuts.filter((c) => c.cut_type === 'hearts').reduce((s, c) => s + c.volume_gal, 0);
   const gpa = cuts.filter((c) => c.cut_type === 'hearts').reduce((s, c) => s + c.volume_gal * c.abv / 100, 0);
@@ -547,7 +551,7 @@ export function Distillation() {
                   </select>
                   {runForm.dest_holding_tank_equipment_id && (
                     <p className="field-hint">
-                      Hearts cuts from this run will be collected into this tank.
+                      Default tank for hearts cuts — heads and tails can use other tanks when recording cuts.
                     </p>
                   )}
                 </div>
@@ -622,7 +626,7 @@ export function Distillation() {
           <div className="form-grid">
             <div className="form-group">
               <label>Cut Type</label>
-              <select value={cutForm.cut_type} onChange={(e) => setCutForm({ ...cutForm, cut_type: e.target.value as CutType })}>
+              <select value={cutForm.cut_type} onChange={(e) => handleCutTypeChange(e.target.value as CutType)}>
                 {availableCutTypes.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
               {hasHeadsCut && (
@@ -630,7 +634,9 @@ export function Distillation() {
               )}
             </div>
             <div className="form-group">
-              <label>Holding Tank</label>
+              <label>
+                {cutForm.cut_type === 'heads' ? 'Heads Tank (optional)' : `${cutForm.cut_type.charAt(0).toUpperCase()}${cutForm.cut_type.slice(1)} Tank`}
+              </label>
               <select
                 value={cutForm.holding_tank_equipment_id ?? ''}
                 onChange={(e) => setCutForm({
@@ -638,15 +644,21 @@ export function Distillation() {
                   holding_tank_equipment_id: e.target.value ? parseInt(e.target.value) : null,
                 })}
               >
-                <option value="">— Select tank —</option>
+                <option value="">{cutForm.cut_type === 'heads' ? '— Discarded / no tank —' : '— Select tank —'}</option>
                 {cutDestinationTanks.map((t) => (
                   <option key={t.id} value={t.id}>{holdingTankLabel(t)}</option>
                 ))}
               </select>
-              {selectedRun?.run_type === 'low_wines' && selectedRun.dest_holding_tank_equipment_id && (
+              {selectedRun?.run_type === 'low_wines'
+                && cutForm.cut_type === 'hearts'
+                && selectedRun.dest_holding_tank_equipment_id
+                && cutForm.holding_tank_equipment_id === selectedRun.dest_holding_tank_equipment_id && (
                 <p className="field-hint">
-                  Fixed to {selectedRun.dest_holding_tank_name ?? 'high wines tank'} for this spirit run.
+                  Default high wines tank from this run — choose another tank if needed.
                 </p>
+              )}
+              {cutForm.cut_type === 'heads' && (
+                <p className="field-hint">Leave empty if heads are discarded rather than stored.</p>
               )}
               {selectedTankContents && selectedTankContents.volume_gal > 0 && cutForm.volume_gal > 0 && (
                 <p className="field-hint">
@@ -681,10 +693,8 @@ export function Distillation() {
             </div>
           </div>
           <p className="form-hint">
-            Volume is added to the selected tank and accumulates across distillation runs.
-            {selectedRun?.run_type === 'low_wines'
-              ? ' Hearts are collected into the high wines tank chosen on the run.'
-              : ' Multiple runs can share the same holding tank.'}
+            Each cut can go to a different holding tank — e.g. heads to stillage, hearts to high wines,
+            tails to low wines storage. Volume accumulates in the tank you choose.
           </p>
           <div className="form-actions">
             <button className="btn btn-secondary" onClick={() => setShowCutForm(false)}>Cancel</button>

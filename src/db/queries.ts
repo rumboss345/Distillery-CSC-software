@@ -7,6 +7,7 @@ import type {
   BlendProduct,
   BlendProductView,
   BottlingRun,
+  CutType,
   DistillationCut,
   DistillationCutView,
   HoldingTankContents,
@@ -367,6 +368,50 @@ export function defaultHighWinesTankId(excludeTankId?: number | null): number | 
     (t) => t.name.toLowerCase().includes('spirit') || t.name.toLowerCase().includes('high'),
   );
   return preferred?.id ?? tanks[0]?.id ?? null;
+}
+
+function findTankByKeywords(keywords: string[], excludeTankId?: number | null): number | null {
+  const tanks = getHoldingTanks().filter((t) => t.id !== excludeTankId);
+  const match = tanks.find((t) => {
+    const name = t.name.toLowerCase();
+    return keywords.some((k) => name.includes(k));
+  });
+  return match?.id ?? null;
+}
+
+/** Suggested holding tank for a cut type; reuses tank from an earlier cut of the same type on this run. */
+export function defaultTankForCutType(
+  cutType: CutType,
+  options?: {
+    run?: Pick<DistillationRun, 'run_type' | 'dest_holding_tank_equipment_id' | 'source_holding_tank_equipment_id'>;
+    existingCuts?: Pick<DistillationCut, 'cut_type' | 'holding_tank_equipment_id'>[];
+    excludeTankId?: number | null;
+  },
+): number | null {
+  const { run, existingCuts, excludeTankId } = options ?? {};
+  const priorSameType = existingCuts?.find(
+    (c) => c.cut_type === cutType && c.holding_tank_equipment_id,
+  );
+  if (priorSameType?.holding_tank_equipment_id) {
+    return priorSameType.holding_tank_equipment_id;
+  }
+
+  switch (cutType) {
+    case 'heads':
+      return findTankByKeywords(['stillage', 'dunder', 'heads'], excludeTankId);
+    case 'hearts':
+      if (run?.run_type === 'low_wines' && run.dest_holding_tank_equipment_id) {
+        return run.dest_holding_tank_equipment_id;
+      }
+      return findTankByKeywords(
+        ['high proof', 'spirit safe', 'hearts', 'vodka high', 'cane spirits', 'gold rum'],
+        excludeTankId,
+      ) ?? defaultHighWinesTankId(excludeTankId);
+    case 'tails':
+      return findTankByKeywords(['tails', 'low wine', 'low wines'], excludeTankId);
+    default:
+      return null;
+  }
 }
 
 export function syncHoldingTankStatuses(): void {
