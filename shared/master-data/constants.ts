@@ -71,6 +71,14 @@ export const CODE_PREFIXES = {
   packagingRun: 'PKR',
   fgLot: 'FGL',
   fgTransaction: 'FGT',
+  barrel: 'BRL',
+  barrelFill: 'BFL',
+  barrelObservation: 'BOB',
+  barrelDump: 'BDP',
+  qcSpec: 'QSP',
+  qcSample: 'QSM',
+  qcHold: 'QHD',
+  qcCoa: 'COA',
 } as const;
 
 export const DEFAULT_UNITS = [

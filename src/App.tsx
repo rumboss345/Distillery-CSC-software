@@ -61,6 +61,13 @@ import { FgInventoryPage } from './pages/finished-goods/FgInventoryPage';
 import { FgLotsPage } from './pages/finished-goods/FgLotsPage';
 import { PackagingRunsPage } from './pages/finished-goods/PackagingRunsPage';
 import { FgTransactionsPage } from './pages/finished-goods/FgTransactionsPage';
+import { QualityLayout } from './pages/quality/QualityLayout';
+import { QualityDashboardPage } from './pages/quality/QualityDashboardPage';
+import { SpecificationsPage } from './pages/quality/SpecificationsPage';
+import { SamplesPage } from './pages/quality/SamplesPage';
+import { HoldsPage } from './pages/quality/HoldsPage';
+import { CoaPage } from './pages/quality/CoaPage';
+import { RecallTracePage } from './pages/quality/RecallTracePage';
 import { useDatabaseReady } from './db/queries';
 
 function AppContent() {
@@ -127,6 +134,14 @@ function AppContent() {
               <Route path="lots" element={<FgLotsPage />} />
               <Route path="packaging-runs" element={<PackagingRunsPage />} />
               <Route path="transactions" element={<FgTransactionsPage />} />
+            </Route>
+            <Route path="/quality" element={<QualityLayout />}>
+              <Route index element={<QualityDashboardPage />} />
+              <Route path="specifications" element={<SpecificationsPage />} />
+              <Route path="samples" element={<SamplesPage />} />
+              <Route path="holds" element={<HoldsPage />} />
+              <Route path="coa" element={<CoaPage />} />
+              <Route path="recall" element={<RecallTracePage />} />
             </Route>
             <Route path="/costing" element={<CostingLayout />}>
               <Route index element={<CostingDashboardPage />} />

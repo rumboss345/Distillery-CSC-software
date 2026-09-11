@@ -34,6 +34,11 @@ import {
   FINISHED_GOODS_V1H_MIGRATION,
   FINISHED_GOODS_V1H_NEW_COLUMNS,
 } from './finished-goods-schema';
+import {
+  QUALITY_SCHEMA,
+  QUALITY_V1K_MIGRATION,
+  QUALITY_V1K_NEW_COLUMNS,
+} from './quality-schema';
 import { SCHEMA, SEED_DATA } from './schema';
 
 const FLOOR_MIGRATION = `
@@ -404,6 +409,7 @@ function runMigrations(): void {
   migrateMaterialInventory();
   migrateCosting();
   migrateFinishedGoods();
+  migrateQuality();
   persistDb();
 }
 
@@ -472,6 +478,23 @@ function migrateFinishedGoods(): void {
     db.run(FINISHED_GOODS_V1H_MIGRATION);
   }
   for (const col of FINISHED_GOODS_V1H_NEW_COLUMNS) {
+    if (!recipeColumnExists(col.table, col.column)) {
+      db.run(col.ddl);
+    }
+  }
+}
+
+function migrateQuality(): void {
+  if (!db) return;
+  const hasQuality = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='qc_specifications'",
+  );
+  if (!hasQuality) {
+    db.run(QUALITY_SCHEMA);
+  } else {
+    db.run(QUALITY_V1K_MIGRATION);
+  }
+  for (const col of QUALITY_V1K_NEW_COLUMNS) {
     if (!recipeColumnExists(col.table, col.column)) {
       db.run(col.ddl);
     }
@@ -688,6 +711,7 @@ export async function initDatabase(): Promise<Database> {
     migrateMaterialInventory();
     migrateCosting();
     migrateFinishedGoods();
+    migrateQuality();
     persistDb();
   }
 

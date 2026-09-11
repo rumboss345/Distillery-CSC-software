@@ -18,6 +18,7 @@ const navItems = [
   { to: '/purchasing', label: 'Purchasing', icon: '◧' },
   { to: '/costing', label: 'Costing', icon: '◈' },
   { to: '/finished-goods', label: 'Finished Goods', icon: '◫' },
+  { to: '/quality', label: 'Quality (QA/QC)', icon: '◉' },
   { to: '/production', label: 'Production', icon: '◷' },
   { to: '/recipes', label: 'Recipes', icon: '◎' },
   { to: '/master-data', label: 'Master Data', icon: '◫' },

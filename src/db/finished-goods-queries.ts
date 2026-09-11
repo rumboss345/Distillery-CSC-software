@@ -21,6 +21,7 @@ import { getLotVolumeInTank, postTransaction } from './liquid-ledger-queries';
 import { nextBusinessCode } from './master-data-queries';
 import { postProductionIssue } from './material-inventory-queries';
 import { getBatch, getOrder } from './production-orders-queries';
+import { assertEntityNotOnHold } from './quality-hold-guard';
 
 const now = () => new Date().toISOString();
 
@@ -610,6 +611,38 @@ export function postFgWriteOff(input: {
     reasonCode: input.reason,
     notes: input.reason,
     createdBy: input.createdBy ?? null,
+  });
+}
+
+export function postFgShipment(input: {
+  fgLotId: number;
+  sourceLocationId: number;
+  quantity: number;
+  referenceType?: string | null;
+  referenceId?: number | null;
+  notes?: string;
+  createdBy?: string | null;
+}): number {
+  return withDatabaseTransaction(() => {
+    const lot = queryOne<FgLot>('SELECT * FROM fg_lots WHERE id = ?', [input.fgLotId]);
+    if (!lot) throw new Error('Finished goods lot not found.');
+    assertEntityNotOnHold('fg_lot', input.fgLotId, `shipment for FG lot ${lot.fg_lot_code}`);
+    const balance = computeFgLotBalance(input.fgLotId, input.sourceLocationId);
+    if (balance < input.quantity) {
+      throw new Error(`Insufficient quantity for shipment (${balance} available).`);
+    }
+    return insertFgTransaction({
+      transactionType: 'Shipment',
+      fgLotId: input.fgLotId,
+      skuId: lot.sku_id,
+      sourceLocationId: input.sourceLocationId,
+      quantity: input.quantity,
+      referenceType: input.referenceType ?? 'shipment',
+      referenceId: input.referenceId ?? null,
+      unitCostKyd: lot.unit_cost_kyd,
+      notes: input.notes ?? 'FG shipment',
+      createdBy: input.createdBy ?? null,
+    });
   });
 }
 
