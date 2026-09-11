@@ -143,6 +143,10 @@ function computeLotBalanceFromLedger(lotId: number): { volumeLitres: number; lpa
   };
 }
 
+export function getLotVolumeInTank(lotId: number, tankId: number): { volumeLitres: number; lpa: number } {
+  return computeLotVolumeInTank(lotId, tankId);
+}
+
 function computeLotVolumeInTank(lotId: number, tankId: number): { volumeLitres: number; lpa: number } {
   const raw = aggregateLotInTank(lotId, tankId, loadAllLedgerTransactions());
   return {

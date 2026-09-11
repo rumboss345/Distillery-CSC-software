@@ -205,9 +205,7 @@ describe('Phase 1E production orders', () => {
   });
 
   it('5. recipe changes do not alter released order plan', () => {
-    const seeded = seedProductRecipe();
-    const { productId, recipeId, versionId } = seeded;
-    void productId;
+    const { productId, recipeId, versionId } = seedProductRecipe();
     const orderId = createOrder({ productId, recipeId, recipeVersionId: versionId, plannedBatchSize: 1000 });
     planOrder(orderId);
     releaseOrder(orderId);
@@ -232,9 +230,11 @@ describe('Phase 1E production orders', () => {
   it('7. release snapshots requirements count', () => {
     const { productId, recipeId, versionId } = seedProductRecipe();
     const orderId = createOrder({ productId, recipeId, recipeVersionId: versionId, plannedBatchSize: 1000 });
+    assert.equal(queryOne<{ count: number }>('SELECT COUNT(*) AS count FROM prod_order_requirements WHERE production_order_id = ?', [orderId])!.count, 0);
     planOrder(orderId);
     releaseOrder(orderId);
     assert.ok(getRequirements(orderId).length >= 2);
+    assert.ok(queryOne<{ count: number }>('SELECT COUNT(*) AS count FROM prod_order_requirements WHERE production_order_id = ?', [orderId])!.count >= 2);
   });
 
   it('8. release snapshots batch steps', () => {
@@ -325,15 +325,15 @@ describe('Phase 1E production orders', () => {
   it('17. planned vs actual variance', () => {
     const { productId, recipeId, versionId } = seedProductRecipe();
     const orderId = createOrder({ productId, recipeId, recipeVersionId: versionId, plannedBatchSize: 1000 });
-    const waterReq = getRequirements(orderId).find((r) => r.requirement_type === 'Water')!;
     planOrder(orderId);
     const batchId = releaseOrder(orderId);
+    const waterReq = getRequirements(orderId).find((r) => r.requirement_type === 'Water')!;
     startBatch(batchId);
     recordInput({ batchId, requirementId: waterReq.id, inputType: 'Water', actualQuantity: 590, unit: 'L', actualVolumeLitres: 590, actualAbv: 0 });
     const lines = getPlannedVsActual(batchId);
     const water = lines.find((l) => l.inputType === 'Water');
     assert.equal(water?.variance, -10);
-    assert.equal(ingredientVariancePercent(590, 600), -10 / 6);
+    assert.ok(Math.abs((ingredientVariancePercent(590, 600) ?? 0) + (10 / 6)) < 0.01);
   });
 
   it('18. water actual usage recorded', () => {
@@ -356,14 +356,18 @@ describe('Phase 1E production orders', () => {
     assert.throws(() => recordLoss({ batchId, lossType: 'Spill', reason: '' }), /Loss reason/);
   });
 
-  it('20. liquid process loss posts ledger', () => {
-    const { sourceTankId, lotId } = seedSpiritTank();
+  it('20. liquid process loss posts ledger on batch completion', () => {
+    const { sourceTankId, destTankId, lotId } = seedSpiritTank();
     const { productId, recipeId, versionId } = seedProductRecipe();
-    const orderId = createOrder({ productId, recipeId, recipeVersionId: versionId, plannedBatchSize: 1000 });
+    const orderId = createOrder({ productId, recipeId, recipeVersionId: versionId, plannedBatchSize: 1000, productionType: 'Proof Down' });
     planOrder(orderId);
     const batchId = releaseOrder(orderId);
     startBatch(batchId);
     recordLoss({ batchId, lossType: 'Sampling', tankId: sourceTankId, liquidLotId: lotId, volumeLitres: 1, abv: 96, reason: 'Sampling' });
+    assert.equal(queryOne<{ count: number }>('SELECT COUNT(*) AS count FROM liq_transactions WHERE transaction_type = ?', ['Sampling'])!.count, 0);
+    recordInput({ batchId, inputType: 'Liquid Lot', liquidLotId: lotId, sourceTankId, actualQuantity: 400, unit: 'L', actualVolumeLitres: 400, actualAbv: 96 });
+    recordInput({ batchId, inputType: 'Water', actualQuantity: 600, unit: 'L', actualVolumeLitres: 600, actualAbv: 0 });
+    completeBatch({ batchId, destinationTankId: destTankId, actualOutputLitres: 990, actualOutputAbv: 40, notes: 'Production variance' });
     assert.ok(queryOne<{ count: number }>('SELECT COUNT(*) AS count FROM liq_transactions WHERE transaction_type = ?', ['Sampling'])!.count >= 1);
   });
 

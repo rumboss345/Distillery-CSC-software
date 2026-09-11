@@ -1,4 +1,5 @@
 import { computeLpa } from '../../shared/liquid-ledger/balance';
+import { resolveOutputLpa } from '../../shared/production-orders/output-validation';
 import { SOURCE_DOCUMENT_TYPES } from '../../shared/production-orders/constants';
 import {
   assertBatchStatusTransition,
@@ -42,10 +43,13 @@ import {
 import {
   createBlend,
   getLotBalance,
+  getLotVolumeInTank,
   getTank,
+  getTankBalance,
   postProcessLoss,
   proofDown,
 } from './liquid-ledger-queries';
+import { validateSufficientBalance } from '../../shared/liquid-ledger/validation';
 import { nextBusinessCode } from './master-data-queries';
 import {
   getRecipe,
@@ -113,72 +117,141 @@ export function getOrder(id: number): ProdOrder | null {
   );
 }
 
-function buildPlannedRequirements(
-  orderId: number,
+function isRequirementsFrozen(status: string): boolean {
+  return ['Released', 'In Progress', 'Completed'].includes(status);
+}
+
+/** Compute scaled requirement lines without persisting (Draft/Planned display). */
+export function computeCalculatedRequirements(
   recipeVersionId: number,
   plannedBatchSize: number,
-): void {
+  productionOrderId = 0,
+): ProdOrderRequirement[] {
   const version = getRecipeVersion(recipeVersionId);
   if (!version) throw new Error('Recipe version not found.');
   const factor = recipeScaleFactor(version.target_batch_size, plannedBatchSize);
+  const rows: ProdOrderRequirement[] = [];
+  let seqId = -1;
 
-  const ingredients = getRecipeIngredients(recipeVersionId);
-  for (const ing of ingredients) {
+  for (const ing of getRecipeIngredients(recipeVersionId)) {
     const scales = ing.quantity_basis === 'Fixed Quantity' || ing.quantity_basis === 'Per Batch';
     const plannedQty = scales ? ing.quantity * factor : ing.quantity;
     const isLiquid = ing.ingredient_type === 'Bulk Spirit' || ing.ingredient_type === 'Water';
     const plannedVol = isLiquid && ing.unit === 'L' ? plannedQty : null;
     const plannedAbv = ing.ingredient_type === 'Bulk Spirit' ? (ing.bulk_spirit_abv ?? null) : (ing.ingredient_type === 'Water' ? 0 : null);
     const plannedLpa = plannedVol != null && plannedAbv != null ? computeLpa(plannedVol, plannedAbv) : null;
+    rows.push({
+      id: seqId--,
+      production_order_id: productionOrderId,
+      requirement_type: ing.ingredient_type === 'Water' ? 'Water' : ing.ingredient_type === 'Bulk Spirit' ? 'Bulk Spirit' : 'Raw Material',
+      raw_material_id: ing.raw_material_id,
+      bulk_spirit_id: ing.bulk_spirit_id,
+      liquid_lot_id: ing.source_lot_id,
+      packaging_material_id: null,
+      sku_id: null,
+      description: ing.material_name ?? ing.description ?? ing.ingredient_type,
+      planned_quantity: plannedQty,
+      unit: ing.unit,
+      planned_volume_litres: plannedVol,
+      planned_abv: plannedAbv,
+      planned_lpa: plannedLpa,
+      sequence: ing.sequence,
+      notes: ing.notes,
+      recipe_ingredient_id: ing.id,
+      recipe_packaging_id: null,
+    });
+  }
 
+  for (const pkg of getRecipePackaging(recipeVersionId)) {
+    const scales = pkg.quantity_basis === 'Fixed Quantity' || pkg.quantity_basis === 'Per Batch';
+    const plannedQty = scales ? pkg.quantity * factor : pkg.quantity;
+    rows.push({
+      id: seqId--,
+      production_order_id: productionOrderId,
+      requirement_type: 'Packaging',
+      raw_material_id: null,
+      bulk_spirit_id: null,
+      liquid_lot_id: null,
+      packaging_material_id: pkg.packaging_material_id,
+      sku_id: pkg.sku_id,
+      description: pkg.packaging_name ?? 'Packaging',
+      planned_quantity: plannedQty,
+      unit: 'each',
+      planned_volume_litres: null,
+      planned_abv: null,
+      planned_lpa: null,
+      sequence: 0,
+      notes: pkg.notes ?? '',
+      recipe_ingredient_id: null,
+      recipe_packaging_id: pkg.id,
+    });
+  }
+  return rows;
+}
+
+function persistPlannedRequirements(
+  orderId: number,
+  recipeVersionId: number,
+  plannedBatchSize: number,
+): void {
+  for (const row of computeCalculatedRequirements(recipeVersionId, plannedBatchSize, orderId)) {
     insertRow(
       `INSERT INTO prod_order_requirements (
         production_order_id, requirement_type, raw_material_id, bulk_spirit_id, liquid_lot_id,
         packaging_material_id, sku_id, description, planned_quantity, unit,
-        planned_volume_litres, planned_abv, planned_lpa, sequence, notes, recipe_ingredient_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        planned_volume_litres, planned_abv, planned_lpa, sequence, notes, recipe_ingredient_id, recipe_packaging_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        orderId,
-        ing.ingredient_type === 'Water' ? 'Water' : ing.ingredient_type === 'Bulk Spirit' ? 'Bulk Spirit' : 'Raw Material',
-        ing.raw_material_id,
-        ing.bulk_spirit_id,
-        ing.source_lot_id,
-        null,
-        null,
-        ing.material_name ?? ing.description ?? ing.ingredient_type,
-        plannedQty,
-        ing.unit,
-        plannedVol,
-        plannedAbv,
-        plannedLpa,
-        ing.sequence,
-        ing.notes,
-        ing.id,
+        orderId, row.requirement_type, row.raw_material_id, row.bulk_spirit_id, row.liquid_lot_id,
+        row.packaging_material_id, row.sku_id, row.description, row.planned_quantity, row.unit,
+        row.planned_volume_litres, row.planned_abv, row.planned_lpa, row.sequence, row.notes,
+        row.recipe_ingredient_id, row.recipe_packaging_id,
       ],
     );
   }
+}
 
-  const packaging = getRecipePackaging(recipeVersionId);
-  for (const pkg of packaging) {
-    const scales = pkg.quantity_basis === 'Fixed Quantity' || pkg.quantity_basis === 'Per Batch';
-    const plannedQty = scales ? pkg.quantity * factor : pkg.quantity;
-    insertRow(
-      `INSERT INTO prod_order_requirements (
-        production_order_id, requirement_type, packaging_material_id, sku_id, description,
-        planned_quantity, unit, sequence, notes, recipe_packaging_id
-      ) VALUES (?, 'Packaging', ?, ?, ?, ?, 'each', ?, ?, ?)`,
-      [
-        orderId,
-        pkg.packaging_material_id,
-        pkg.sku_id,
-        pkg.packaging_name ?? 'Packaging',
-        plannedQty,
-        0,
-        pkg.notes ?? '',
-        pkg.id,
-      ],
-    );
-  }
+function snapshotOrderSpecs(orderId: number, recipeVersionId: number, plannedBatchSize: number): void {
+  const version = getRecipeVersion(recipeVersionId);
+  if (!version) throw new Error('Recipe version not found.');
+  runQuery(
+    `UPDATE prod_orders SET
+      snapshot_target_abv = ?,
+      snapshot_expected_yield_percent = ?,
+      snapshot_target_brix = ?,
+      snapshot_target_ph = ?,
+      snapshot_target_carbonation_volumes = ?,
+      planned_output_litres = COALESCE(planned_output_litres, ?),
+      batch_size_unit = ?,
+      planned_abv = COALESCE(planned_abv, ?)
+     WHERE id = ?`,
+    [
+      version.target_abv,
+      version.expected_yield_percent,
+      version.target_brix,
+      version.target_ph,
+      version.target_carbonation_volumes,
+      plannedBatchSize,
+      version.batch_size_unit,
+      version.target_abv,
+      orderId,
+    ],
+  );
+}
+
+function batchHasPostedLiquidActivity(batchId: number): boolean {
+  const batch = getBatch(batchId);
+  if (batch?.transaction_group_id) return true;
+  const lossPosted = queryOne<{ count: number }>(
+    'SELECT COUNT(*) AS count FROM prod_batch_losses WHERE batch_id = ? AND transaction_id IS NOT NULL',
+    [batchId],
+  )?.count ?? 0;
+  const txCount = queryOne<{ count: number }>(
+    `SELECT COUNT(*) AS count FROM liq_transactions
+     WHERE source_document_type = ? AND source_document_id = ?`,
+    [SOURCE_DOCUMENT_TYPES.PRODUCTION_BATCH, batchId],
+  )?.count ?? 0;
+  return lossPosted > 0 || txCount > 0;
 }
 
 export function createOrder(input: CreateProductionOrderInput): number {
@@ -229,15 +302,14 @@ export function createOrder(input: CreateProductionOrderInput): number {
         input.createdBy ?? null,
         ts,
         ts,
-        version.target_abv,
-        version.expected_yield_percent,
-        version.target_brix,
-        version.target_ph,
-        version.target_carbonation_volumes,
+        null,
+        null,
+        null,
+        null,
+        null,
       ],
     );
 
-    buildPlannedRequirements(orderId, input.recipeVersionId, input.plannedBatchSize);
     insertEvent('Order Created', `Production order ${code} created`, orderId, null, input.createdBy);
     return orderId;
   });
@@ -252,10 +324,8 @@ export function updateDraftOrder(input: UpdateDraftOrderInput): void {
 
   withDatabaseTransaction(() => {
     const ts = now();
-    if (input.plannedBatchSize != null && input.plannedBatchSize !== order.planned_batch_size) {
+    if (input.plannedBatchSize != null) {
       validatePlannedBatchSize(input.plannedBatchSize);
-      runQuery('DELETE FROM prod_order_requirements WHERE production_order_id = ?', [order.id]);
-      buildPlannedRequirements(order.id, order.recipe_version_id, input.plannedBatchSize);
     }
     runQuery(
       `UPDATE prod_orders SET
@@ -341,14 +411,18 @@ export function releaseOrder(orderId: number, userId?: string | null): number {
   if (!version) throw new Error('Locked recipe version not found.');
   if (order.planned_batch_size <= 0) throw new Error('Planned batch size is required.');
 
-  const reqCount = queryOne<{ count: number }>(
-    'SELECT COUNT(*) AS count FROM prod_order_requirements WHERE production_order_id = ?',
-    [orderId],
-  )?.count ?? 0;
-  if (reqCount === 0) throw new Error('Production order has no planned requirements.');
-
   const ts = now();
   return withDatabaseTransaction(() => {
+    runQuery('DELETE FROM prod_order_requirements WHERE production_order_id = ?', [orderId]);
+    persistPlannedRequirements(orderId, order.recipe_version_id, order.planned_batch_size);
+    snapshotOrderSpecs(orderId, order.recipe_version_id, order.planned_batch_size);
+
+    const reqCount = queryOne<{ count: number }>(
+      'SELECT COUNT(*) AS count FROM prod_order_requirements WHERE production_order_id = ?',
+      [orderId],
+    )?.count ?? 0;
+    if (reqCount === 0) throw new Error('Production order has no planned requirements to freeze.');
+
     runQuery(
       `UPDATE prod_orders SET status = 'Released', released_at = ?, updated_at = ? WHERE id = ?`,
       [ts, ts, orderId],
@@ -389,10 +463,15 @@ export function cancelOrder(orderId: number, userId?: string | null): void {
 }
 
 export function getRequirements(orderId: number): ProdOrderRequirement[] {
-  return queryAll<ProdOrderRequirement>(
-    'SELECT * FROM prod_order_requirements WHERE production_order_id = ? ORDER BY sequence, id',
-    [orderId],
-  );
+  const order = getOrder(orderId);
+  if (!order) return [];
+  if (isRequirementsFrozen(order.status)) {
+    return queryAll<ProdOrderRequirement>(
+      'SELECT * FROM prod_order_requirements WHERE production_order_id = ? ORDER BY sequence, id',
+      [orderId],
+    );
+  }
+  return computeCalculatedRequirements(order.recipe_version_id, order.planned_batch_size, orderId);
 }
 
 export function getBatches(orderId: number): ProdBatch[] {
@@ -460,7 +539,7 @@ export function recordInput(input: RecordBatchInputData): number {
   }
 
   const lpa = computeActualLpa(input.actualVolumeLitres ?? input.actualQuantity, input.actualAbv ?? 0);
-  return insertRow(
+  const inputId = insertRow(
     `INSERT INTO prod_batch_inputs (
       batch_id, requirement_id, input_type, raw_material_id, bulk_spirit_id, liquid_lot_id,
       source_tank_id, packaging_material_id, actual_quantity, unit,
@@ -484,6 +563,8 @@ export function recordInput(input: RecordBatchInputData): number {
       now(),
     ],
   );
+  insertEvent('Input Recorded', `${input.inputType} input recorded`, batch.production_order_id, input.batchId);
+  return inputId;
 }
 
 export function recordLoss(input: RecordBatchLossInput): number {
@@ -494,20 +575,8 @@ export function recordLoss(input: RecordBatchLossInput): number {
     throw new Error('Losses can only be recorded on active batches.');
   }
 
-  let transactionId: number | null = null;
-  if (input.volumeLitres != null && input.volumeLitres > 0 && input.tankId != null) {
-    transactionId = postProcessLoss({
-      tankId: input.tankId,
-      lotId: input.liquidLotId,
-      volumeLitres: input.volumeLitres,
-      abv: input.abv ?? 0,
-      lossType: input.lossType,
-      reason: input.reason,
-      sourceDocumentType: SOURCE_DOCUMENT_TYPES.PRODUCTION_BATCH,
-      sourceDocumentId: batch.id,
-      transactionGroupId: batch.transaction_group_id ?? undefined,
-    });
-  }
+  // Model A: liquid losses are pending execution records until batch completion posts ledger txs.
+  const transactionId: number | null = null;
 
   const lossId = insertRow(
     `INSERT INTO prod_batch_losses (
@@ -547,6 +616,75 @@ function getWaterInputs(batchId: number): ProdBatchInput[] {
   );
 }
 
+function revalidateLiquidInputsAtCompletion(batchId: number): void {
+  for (const input of getLiquidInputs(batchId)) {
+    if (input.liquid_lot_id == null || input.source_tank_id == null) {
+      throw new Error('Liquid input missing source tank or lot.');
+    }
+    const vol = input.actual_volume_litres ?? input.actual_quantity;
+    const inTank = getLotVolumeInTank(input.liquid_lot_id, input.source_tank_id);
+    validateSufficientBalance(inTank.volumeLitres, vol, `Lot ${input.liquid_lot_id} in tank`);
+  }
+}
+
+function postPendingBatchLosses(batchId: number, groupId: string, operatorId?: string | null): void {
+  const losses = queryAll<{
+    id: number;
+    tank_id: number | null;
+    liquid_lot_id: number | null;
+    volume_litres: number | null;
+    abv: number | null;
+    loss_type: string;
+    reason: string;
+  }>(
+    `SELECT id, tank_id, liquid_lot_id, volume_litres, abv, loss_type, reason
+     FROM prod_batch_losses WHERE batch_id = ? AND transaction_id IS NULL
+     AND volume_litres IS NOT NULL AND volume_litres > 0 AND tank_id IS NOT NULL`,
+    [batchId],
+  );
+  for (const loss of losses) {
+    const txId = postProcessLoss({
+      tankId: loss.tank_id!,
+      lotId: loss.liquid_lot_id,
+      volumeLitres: loss.volume_litres!,
+      abv: loss.abv ?? 0,
+      lossType: loss.loss_type,
+      reason: loss.reason,
+      sourceDocumentType: SOURCE_DOCUMENT_TYPES.PRODUCTION_BATCH,
+      sourceDocumentId: batchId,
+      transactionGroupId: groupId,
+      createdBy: operatorId,
+    });
+    runQuery('UPDATE prod_batch_losses SET transaction_id = ? WHERE id = ?', [txId, loss.id]);
+  }
+}
+
+function sumLiquidInputLpa(batchId: number): number {
+  return getLiquidInputs(batchId).reduce(
+    (s, i) => s + (i.actual_lpa ?? computeLpa(i.actual_volume_litres ?? i.actual_quantity, i.actual_abv ?? 0)),
+    0,
+  );
+}
+
+function sumRecordedLossLpa(batchId: number): number {
+  return queryAll<{ lpa: number | null }>(
+    'SELECT lpa FROM prod_batch_losses WHERE batch_id = ?',
+    [batchId],
+  ).reduce((s, r) => s + (r.lpa ?? 0), 0);
+}
+
+function validateLpaConservation(batchId: number, outputLpa: number, notes?: string): void {
+  const spiritLpa = sumLiquidInputLpa(batchId);
+  if (spiritLpa <= 0) return;
+  const lossLpa = sumRecordedLossLpa(batchId);
+  const expectedOutput = spiritLpa - lossLpa;
+  if (Math.abs(outputLpa - expectedOutput) > 0.5 && !(notes ?? '').trim()) {
+    throw new Error(
+      `Output LPA (${outputLpa}) differs from spirit input LPA minus documented losses (${expectedOutput}). Record process losses or provide a note explaining variance.`,
+    );
+  }
+}
+
 function allocateOperationGroupId(): string {
   const seqType = 'operationGroup' as const;
   const prefix = codePrefixForEntity(seqType);
@@ -566,6 +704,9 @@ function allocateOperationGroupId(): string {
 export function completeBatch(input: CompleteBatchInput): { lotId: number; transactionIds: number[] } {
   const batch = getBatch(input.batchId);
   if (!batch) throw new Error('Batch not found.');
+  if (batch.status === 'Completed') {
+    throw new Error('Batch is already completed.');
+  }
   if (batch.status !== 'In Progress') {
     throw new Error('Only In Progress batches can be completed.');
   }
@@ -573,14 +714,27 @@ export function completeBatch(input: CompleteBatchInput): { lotId: number; trans
   if (!order) throw new Error('Production order not found.');
 
   validatePositiveVolume(input.actualOutputLitres, 'Output volume');
-  const outputLpa = computeLpa(input.actualOutputLitres, input.actualOutputAbv);
+  const outputLpa = resolveOutputLpa(input.actualOutputLitres, input.actualOutputAbv);
 
   return withDatabaseTransaction(() => {
+    revalidateLiquidInputsAtCompletion(batch.id);
+
+    const destBalance = getTankBalance(input.destinationTankId);
+    if (destBalance.trackingMode !== 'LEDGER') {
+      throw new Error('Destination tank must be LEDGER-managed.');
+    }
+    if (destBalance.volumeLitres + input.actualOutputLitres > destBalance.capacityLitres) {
+      throw new Error('Destination tank capacity would be exceeded at completion.');
+    }
+
     const groupId = batch.transaction_group_id ?? allocateOperationGroupId();
     const docType = SOURCE_DOCUMENT_TYPES.PRODUCTION_BATCH;
     const docId = batch.id;
     let lotId = 0;
     let transactionIds: number[] = [];
+
+    postPendingBatchLosses(batch.id, groupId, input.operatorId);
+    validateLpaConservation(batch.id, outputLpa, input.notes);
 
     const productionType = order.production_type;
 
@@ -690,8 +844,10 @@ export function completeBatch(input: CompleteBatchInput): { lotId: number; trans
 export function cancelBatch(batchId: number, userId?: string | null): void {
   const batch = getBatch(batchId);
   if (!batch) throw new Error('Batch not found.');
-  if (batch.transaction_group_id) {
-    throw new Error('Cannot cancel batch with posted ledger transactions. Use reversal workflow.');
+  if (batchHasPostedLiquidActivity(batchId)) {
+    throw new Error(
+      'This batch has posted liquid transactions. Reverse the posted liquid operations before cancellation.',
+    );
   }
   assertBatchStatusTransition(batch.status, 'Cancelled');
   runQuery(`UPDATE prod_batches SET status = 'Cancelled', updated_at = ? WHERE id = ?`, [now(), batchId]);
@@ -774,10 +930,38 @@ export function getBatchSteps(batchId: number): ProdBatchStep[] {
 }
 
 export function updateBatchStepStatus(stepId: number, status: string, completedBy?: string | null): void {
+  if (!['Completed', 'Skipped', 'Pending'].includes(status)) {
+    throw new Error(`Invalid batch step status: ${status}`);
+  }
+  const step = queryOne<{ batch_id: number; status: string }>(
+    'SELECT batch_id, status FROM prod_batch_steps WHERE id = ?',
+    [stepId],
+  );
+  if (!step) throw new Error('Batch step not found.');
+  const batch = getBatch(step.batch_id);
+  if (!batch) throw new Error('Batch not found.');
+  if (['Completed', 'Cancelled'].includes(batch.status)) {
+    throw new Error('Batch execution steps are read-only after batch completion or cancellation.');
+  }
+  if (step.status !== 'Pending') {
+    throw new Error('Only Pending steps can be updated.');
+  }
+  if (!['Completed', 'Skipped'].includes(status)) {
+    throw new Error('Steps may only transition to Completed or Skipped.');
+  }
+
   const ts = now();
   runQuery(
     `UPDATE prod_batch_steps SET status = ?, completed_at = ?, completed_by = ? WHERE id = ?`,
     [status, status === 'Completed' ? ts : null, completedBy ?? null, stepId],
+  );
+  const order = getOrder(batch.production_order_id);
+  insertEvent(
+    status === 'Completed' ? 'Step Completed' : 'Step Skipped',
+    `Batch step ${status.toLowerCase()}`,
+    order?.id,
+    batch.id,
+    completedBy,
   );
 }
 
@@ -793,6 +977,7 @@ export function getProductionProgress(orderId: number): ProductionProgress {
   if (!order) throw new Error('Production order not found.');
   const batches = getBatches(orderId);
   const completed = batches.filter((b) => b.status === 'Completed');
+  // Progress is volume-based: sum(completed actual output) / planned order output — not batch count.
   const plannedTotal = order.planned_output_litres ?? order.planned_batch_size;
   const completedActual = completed.reduce((s, b) => s + (b.actual_output_litres ?? 0), 0);
   return {

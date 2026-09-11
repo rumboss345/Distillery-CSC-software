@@ -78,6 +78,8 @@ export const PRODUCTION_EVENT_TYPES = [
   'Input Recorded',
   'Loss Recorded',
   'Output Recorded',
+  'Step Completed',
+  'Step Skipped',
   'Batch Completed',
   'Batch Cancelled',
 ] as const;
