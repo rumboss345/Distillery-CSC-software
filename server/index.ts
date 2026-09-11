@@ -17,6 +17,7 @@ import { isDatabaseConfigured } from './config.js';
 import { APP_URL, HOST, PORT, isProduction, JWT_SECRET } from './config.js';
 import { sendAdminApprovalEmail } from './email.js';
 import { adminMiddleware, authMiddleware, signToken } from './middleware/auth.js';
+import erpRoutes from './routes/erp/index.js';
 import productionRoutes from './routes/production.js';
 import { getHealthReport } from './services/health.js';
 import { initializeServerDatastores } from './startup.js';
@@ -57,6 +58,7 @@ app.get('/api/health', async (_req, res) => {
 });
 
 app.use('/api/production', productionRoutes);
+app.use('/api/erp', erpRoutes);
 
 app.post('/api/auth/register', async (req, res) => {
   const email = String(req.body.email ?? '').trim().toLowerCase();

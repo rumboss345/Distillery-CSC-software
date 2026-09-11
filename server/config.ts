@@ -1,6 +1,12 @@
 import { existsSync, readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
+import {
+  parseDatabaseMode,
+  type DatabaseMode,
+  DATABASE_MODES,
+  DATABASE_MODE_LABELS,
+} from '../shared/database-mode.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -45,4 +51,10 @@ export function requireDatabaseUrl(): string {
 
 export function isDatabaseConfigured(): boolean {
   return Boolean(DATABASE_URL);
+}
+
+export { parseDatabaseMode, type DatabaseMode, DATABASE_MODES, DATABASE_MODE_LABELS };
+
+export function getDatabaseMode(): DatabaseMode {
+  return parseDatabaseMode(process.env.DATABASE_MODE);
 }
