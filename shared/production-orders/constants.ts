@@ -94,4 +94,4 @@ export const SOURCE_DOCUMENT_TYPES = {
 } as const;
 
 export const MATERIAL_INVENTORY_PENDING_MESSAGE =
-  'Usage recorded for production execution. Inventory quantity posting will be enabled when the material inventory ledger is implemented.';
+  'Usage recorded as pending. Material inventory posts atomically at batch completion for LEDGER-managed materials.';

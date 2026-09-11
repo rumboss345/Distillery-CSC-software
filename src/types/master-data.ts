@@ -94,6 +94,9 @@ export interface MdRawMaterial {
   lot_tracked: number;
   expiration_tracked: number;
   notes: string;
+  inventory_tracking_mode?: 'LEGACY' | 'LEDGER';
+  ledger_activated_at?: string | null;
+  ledger_activation_reference?: string | null;
   created_at: string;
   updated_at: string;
   supplier_name?: string;
@@ -117,6 +120,9 @@ export interface MdPackagingMaterial {
   active: number;
   lot_tracked: number;
   notes: string;
+  inventory_tracking_mode?: 'LEGACY' | 'LEDGER';
+  ledger_activated_at?: string | null;
+  ledger_activation_reference?: string | null;
   created_at: string;
   updated_at: string;
   supplier_name?: string;

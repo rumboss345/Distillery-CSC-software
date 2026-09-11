@@ -1,9 +1,13 @@
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Modal } from '../../components/Modal';
+import { ActivateLedgerDialog, PostActivationBanner } from '../../components/material-inventory/ActivateLedgerDialog';
 import { ActiveBadge } from '../../components/master-data/ActiveBadge';
 import { masterDataRepository } from '../../db/repositories/master-data-repository';
+import { materialInventoryRepository } from '../../db/repositories';
 import { useRefreshKey } from '../../db/queries';
 import { LOOKUP_TYPES } from '../../../shared/master-data/constants';
+import { buildMaterialLedgerDisplay } from '../../../shared/material-inventory/ledger-activation-ui';
 import type { MdPackagingMaterial, MdRawMaterial } from '../../types/master-data';
 
 type Tab = 'raw' | 'packaging';
@@ -29,6 +33,9 @@ export function MaterialsPage() {
   const [rawForm, setRawForm] = useState(emptyRaw());
   const [pkgForm, setPkgForm] = useState(emptyPkg());
   const [error, setError] = useState('');
+  const [activateRaw, setActivateRaw] = useState<MdRawMaterial | null>(null);
+  const [activatePkg, setActivatePkg] = useState<MdPackagingMaterial | null>(null);
+  const [justActivated, setJustActivated] = useState<string | null>(null);
 
   void key;
   const suppliers = masterDataRepository.suppliers.list(true);
@@ -113,45 +120,106 @@ export function MaterialsPage() {
         <input className="form-control" placeholder="Search…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ maxWidth: 280 }} />
         <button className="btn btn-primary" onClick={openNew}>+ Add {tab === 'raw' ? 'Raw Material' : 'Packaging'}</button>
       </div>
+      {justActivated && (
+        <PostActivationBanner materialName={justActivated} onDismiss={() => setJustActivated(null)} />
+      )}
       {tab === 'raw' ? (
         <div className="table-wrap">
           <table>
-            <thead><tr><th>Code</th><th>Name</th><th>Type</th><th>Inv Unit</th><th>Purchase Unit</th><th>Factor</th><th>Supplier</th><th>Status</th><th></th></tr></thead>
+            <thead><tr><th>Code</th><th>Name</th><th>Type</th><th>Tracking</th><th>Ledger</th><th>Inv Unit</th><th>Supplier</th><th>Status</th><th></th></tr></thead>
             <tbody>
-              {rawItems.map((row) => (
-                <tr key={row.id}>
-                  <td>{row.material_code}</td><td>{row.name}</td><td>{row.material_type}</td>
-                  <td>{row.inventory_unit}</td><td>{row.purchase_unit}</td><td>{row.conversion_factor}</td>
-                  <td>{row.supplier_name ?? '—'}</td>
-                  <td><ActiveBadge active={row.active} /></td>
-                  <td>
-                    <button className="btn btn-ghost btn-sm" onClick={() => openEditRaw(row)}>Edit</button>
-                    <button className="btn btn-ghost btn-sm" onClick={() => toggleActive(row.id, row.active)}>{row.active ? 'Deactivate' : 'Activate'}</button>
-                  </td>
-                </tr>
-              ))}
+              {rawItems.map((row) => {
+                const info = materialInventoryRepository.tracking.getLedgerInfo('RAW_MATERIAL', row.id);
+                const display = buildMaterialLedgerDisplay({
+                  trackingMode: info.trackingMode,
+                  onHand: info.onHand,
+                  ledgerActivatedAt: info.ledgerActivatedAt,
+                  ledgerActivationReference: info.ledgerActivationReference,
+                  hasLedgerTransactions: info.hasLedgerTransactions,
+                });
+                return (
+                  <tr key={row.id}>
+                    <td>{row.material_code}</td><td>{row.name}</td><td>{row.material_type}</td>
+                    <td><strong>{display.trackingLabel}</strong></td>
+                    <td>{display.ledgerBalanceLabel}</td>
+                    <td>{row.inventory_unit}</td>
+                    <td>{row.supplier_name ?? '—'}</td>
+                    <td><ActiveBadge active={row.active} /></td>
+                    <td>
+                      {display.showActivateAction && (
+                        <button type="button" className="btn btn-sm btn-primary" onClick={() => setActivateRaw(row)}>Activate Ledger</button>
+                      )}
+                      <button className="btn btn-ghost btn-sm" onClick={() => openEditRaw(row)}>Edit</button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => toggleActive(row.id, row.active)}>{row.active ? 'Deactivate' : 'Activate'}</button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       ) : (
         <div className="table-wrap">
           <table>
-            <thead><tr><th>Code</th><th>Name</th><th>Type</th><th>Size</th><th>Inv Unit</th><th>Purchase Unit</th><th>Status</th><th></th></tr></thead>
+            <thead><tr><th>Code</th><th>Name</th><th>Type</th><th>Tracking</th><th>Ledger</th><th>Inv Unit</th><th>Status</th><th></th></tr></thead>
             <tbody>
-              {pkgItems.map((row) => (
-                <tr key={row.id}>
-                  <td>{row.packaging_code}</td><td>{row.name}</td><td>{row.packaging_type}</td><td>{row.size_description || '—'}</td>
-                  <td>{row.inventory_unit}</td><td>{row.purchase_unit}</td>
-                  <td><ActiveBadge active={row.active} /></td>
-                  <td>
-                    <button className="btn btn-ghost btn-sm" onClick={() => openEditPkg(row)}>Edit</button>
-                    <button className="btn btn-ghost btn-sm" onClick={() => toggleActive(row.id, row.active)}>{row.active ? 'Deactivate' : 'Activate'}</button>
-                  </td>
-                </tr>
-              ))}
+              {pkgItems.map((row) => {
+                const info = materialInventoryRepository.tracking.getLedgerInfo('PACKAGING_MATERIAL', row.id);
+                const display = buildMaterialLedgerDisplay({
+                  trackingMode: info.trackingMode,
+                  onHand: info.onHand,
+                  ledgerActivatedAt: info.ledgerActivatedAt,
+                  ledgerActivationReference: info.ledgerActivationReference,
+                  hasLedgerTransactions: info.hasLedgerTransactions,
+                });
+                return (
+                  <tr key={row.id}>
+                    <td>{row.packaging_code}</td><td>{row.name}</td><td>{row.packaging_type}</td>
+                    <td><strong>{display.trackingLabel}</strong></td>
+                    <td>{display.ledgerBalanceLabel}</td>
+                    <td>{row.inventory_unit}</td>
+                    <td><ActiveBadge active={row.active} /></td>
+                    <td>
+                      {display.showActivateAction && (
+                        <button type="button" className="btn btn-sm btn-primary" onClick={() => setActivatePkg(row)}>Activate Ledger</button>
+                      )}
+                      <button className="btn btn-ghost btn-sm" onClick={() => openEditPkg(row)}>Edit</button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => toggleActive(row.id, row.active)}>{row.active ? 'Deactivate' : 'Activate'}</button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
+      )}
+      <p className="text-muted" style={{ marginTop: '1rem' }}>
+        Ledger inventory is managed under <Link to="/material-inventory">Material Inventory</Link>.
+        Activating ledger tracking does not import legacy quantities.
+      </p>
+      {activateRaw && (
+        <ActivateLedgerDialog
+          materialName={activateRaw.name}
+          onClose={() => setActivateRaw(null)}
+          onConfirm={(reference) => {
+            materialInventoryRepository.tracking.activateLedger('RAW_MATERIAL', activateRaw.id, reference);
+            setJustActivated(activateRaw.name);
+            setActivateRaw(null);
+            refresh();
+          }}
+        />
+      )}
+      {activatePkg && (
+        <ActivateLedgerDialog
+          materialName={activatePkg.name}
+          onClose={() => setActivatePkg(null)}
+          onConfirm={(reference) => {
+            materialInventoryRepository.tracking.activateLedger('PACKAGING_MATERIAL', activatePkg.id, reference);
+            setJustActivated(activatePkg.name);
+            setActivatePkg(null);
+            refresh();
+          }}
+        />
       )}
       {showForm && (
         <Modal title={editId ? 'Edit Material' : 'Add Material'} onClose={() => setShowForm(false)}>
