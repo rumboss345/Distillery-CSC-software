@@ -59,7 +59,7 @@ export function Distillation() {
   const [runForm, setRunForm] = useState(emptyRun());
   const [selectedRunId, setSelectedRunId] = useState<number | null>(null);
   const [cutForm, setCutForm] = useState({
-    cut_type: 'hearts' as CutType,
+    cut_type: 'heads' as CutType,
     holding_tank_equipment_id: null as number | null,
     start_time: new Date().toISOString().slice(0, 16),
     end_time: '',
@@ -231,13 +231,21 @@ export function Distillation() {
     return mash?.batch_number ?? '—';
   };
 
+  const selectedRun = runs.find((r) => r.id === selectedRunId);
+  const cuts = selectedRunId ? getDistillationCuts(selectedRunId) : [];
+  const hasHeadsCut = cuts.some((c) => c.cut_type === 'heads');
+  const availableCutTypes = hasHeadsCut
+    ? CUT_TYPES.filter((t) => t !== 'heads')
+    : CUT_TYPES;
+
   const openAddCutForm = () => {
     const run = runs.find((r) => r.id === selectedRunId);
     const defaultTank = run?.run_type === 'low_wines'
       ? (run.dest_holding_tank_equipment_id ?? defaultHighWinesTankId(run.source_holding_tank_equipment_id))
       : null;
+    const headsTaken = hasHeadsCut;
     setCutForm({
-      cut_type: 'hearts',
+      cut_type: headsTaken ? 'hearts' : 'heads',
       holding_tank_equipment_id: defaultTank,
       start_time: new Date().toISOString().slice(0, 16),
       end_time: '',
@@ -261,6 +269,10 @@ export function Distillation() {
 
   const handleAddCut = () => {
     if (!selectedRunId) return;
+    if (cutForm.cut_type === 'heads' && hasHeadsCut) {
+      alert('Heads can only be recorded once per run.');
+      return;
+    }
     const run = runs.find((r) => r.id === selectedRunId);
     const tankId = run?.run_type === 'low_wines' && run.dest_holding_tank_equipment_id
       ? run.dest_holding_tank_equipment_id
@@ -293,7 +305,7 @@ export function Distillation() {
     });
     setShowCutForm(false);
     setCutForm({
-      cut_type: 'hearts',
+      cut_type: 'heads',
       holding_tank_equipment_id: null,
       start_time: new Date().toISOString().slice(0, 16),
       end_time: '',
@@ -323,12 +335,10 @@ export function Distillation() {
     }
   };
 
-  const selectedRun = runs.find((r) => r.id === selectedRunId);
   const cutDestinationTanks = selectedRun?.run_type === 'low_wines' && selectedRun.dest_holding_tank_equipment_id
     ? holdingTanks.filter((t) => t.id === selectedRun.dest_holding_tank_equipment_id)
     : holdingTanks;
 
-  const cuts = selectedRunId ? getDistillationCuts(selectedRunId) : [];
   const heartsTotal = cuts.filter((c) => c.cut_type === 'hearts').reduce((s, c) => s + c.volume_gal, 0);
   const gpa = cuts.filter((c) => c.cut_type === 'hearts').reduce((s, c) => s + c.volume_gal * c.abv / 100, 0);
 
@@ -613,8 +623,11 @@ export function Distillation() {
             <div className="form-group">
               <label>Cut Type</label>
               <select value={cutForm.cut_type} onChange={(e) => setCutForm({ ...cutForm, cut_type: e.target.value as CutType })}>
-                {CUT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                {availableCutTypes.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
+              {hasHeadsCut && (
+                <p className="field-hint">Heads already recorded for this run.</p>
+              )}
             </div>
             <div className="form-group">
               <label>Holding Tank</label>

@@ -608,6 +608,16 @@ export function getDistillationCuts(runId: number): DistillationCutView[] {
 }
 
 export function saveDistillationCut(cut: Omit<DistillationCut, 'id'>, id?: number): void {
+  if (cut.cut_type === 'heads') {
+    const existingHeads = queryOne<{ id: number }>(
+      `SELECT id FROM distillation_cuts
+       WHERE distillation_run_id = ? AND cut_type = 'heads' AND (? IS NULL OR id != ?)`,
+      [cut.distillation_run_id, id ?? null, id ?? 0],
+    );
+    if (existingHeads) {
+      throw new Error('Heads can only be recorded once per run.');
+    }
+  }
   if (id) {
     runQuery(
       `UPDATE distillation_cuts SET cut_type=?, holding_tank_equipment_id=?, start_time=?, end_time=?, volume_gal=?, abv=?, notes=? WHERE id=?`,
