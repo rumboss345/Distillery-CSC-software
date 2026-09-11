@@ -11,6 +11,8 @@ import type {
   DistillationCut,
   DistillationCutView,
   HoldingTankContents,
+  HoldingTankTransfer,
+  HoldingTankTransferView,
   DistillationRun,
   DistillationRunView,
   FermentationLog,
@@ -310,10 +312,26 @@ export function getHoldingTankContents(
       AND (? IS NULL OR id != ?)
   `, [tankId, excludeBlendId ?? null, excludeBlendId ?? -1]);
 
-  const volumeIn = ins?.volume_gal ?? 0;
-  const volumeOut = (runOuts?.volume_gal ?? 0) + (blendOuts?.volume_gal ?? 0);
-  const gpaIn = ins?.gpa ?? 0;
-  const gpaOut = (runOuts?.gpa ?? 0) + (blendOuts?.gpa ?? 0);
+  const transferIns = queryOne<{ volume_gal: number; gpa: number }>(`
+    SELECT
+      COALESCE(SUM(volume_gal), 0) as volume_gal,
+      COALESCE(SUM(volume_gal * abv / 100), 0) as gpa
+    FROM holding_tank_transfers
+    WHERE dest_tank_equipment_id = ?
+  `, [tankId]);
+
+  const transferOuts = queryOne<{ volume_gal: number; gpa: number }>(`
+    SELECT
+      COALESCE(SUM(volume_gal), 0) as volume_gal,
+      COALESCE(SUM(volume_gal * abv / 100), 0) as gpa
+    FROM holding_tank_transfers
+    WHERE source_tank_equipment_id = ?
+  `, [tankId]);
+
+  const volumeIn = (ins?.volume_gal ?? 0) + (transferIns?.volume_gal ?? 0);
+  const volumeOut = (runOuts?.volume_gal ?? 0) + (blendOuts?.volume_gal ?? 0) + (transferOuts?.volume_gal ?? 0);
+  const gpaIn = (ins?.gpa ?? 0) + (transferIns?.gpa ?? 0);
+  const gpaOut = (runOuts?.gpa ?? 0) + (blendOuts?.gpa ?? 0) + (transferOuts?.gpa ?? 0);
   const volume_gal = Math.max(0, volumeIn - volumeOut);
   const gpaRemaining = Math.max(0, gpaIn - gpaOut);
   const abv = volume_gal > 0 ? (gpaRemaining / volume_gal) * 100 : 0;
@@ -412,6 +430,60 @@ export function defaultTankForCutType(
     default:
       return null;
   }
+}
+
+export function getHoldingTankTransfers(): HoldingTankTransferView[] {
+  return queryAll(
+    `SELECT t.*,
+            src.name as source_tank_name,
+            dest.name as dest_tank_name
+     FROM holding_tank_transfers t
+     JOIN floor_equipment src ON src.id = t.source_tank_equipment_id
+     JOIN floor_equipment dest ON dest.id = t.dest_tank_equipment_id
+     ORDER BY t.transfer_date DESC, t.id DESC`,
+  );
+}
+
+export function getHoldingTanksWithContents(): (FloorEquipment & HoldingTankContents)[] {
+  return getHoldingTanks().map((tank) => ({
+    ...tank,
+    ...getHoldingTankContents(tank.id),
+  }));
+}
+
+export function saveHoldingTankTransfer(
+  transfer: Omit<HoldingTankTransfer, 'id' | 'created_at'>,
+): void {
+  if (transfer.source_tank_equipment_id === transfer.dest_tank_equipment_id) {
+    throw new Error('Source and destination tanks must be different.');
+  }
+  if (transfer.volume_gal <= 0) {
+    throw new Error('Transfer volume must be greater than zero.');
+  }
+  const available = getHoldingTankContents(transfer.source_tank_equipment_id);
+  if (transfer.volume_gal > available.volume_gal + 0.01) {
+    throw new Error(`Only ${available.volume_gal.toFixed(1)} gal available in the source tank.`);
+  }
+  insertRow(
+    `INSERT INTO holding_tank_transfers
+      (spirit_type, source_tank_equipment_id, dest_tank_equipment_id, volume_gal, abv, transfer_date, notes)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [
+      transfer.spirit_type,
+      transfer.source_tank_equipment_id,
+      transfer.dest_tank_equipment_id,
+      transfer.volume_gal,
+      transfer.abv,
+      transfer.transfer_date,
+      transfer.notes,
+    ],
+  );
+  syncHoldingTankStatuses();
+}
+
+export function deleteHoldingTankTransfer(id: number): void {
+  runQuery('DELETE FROM holding_tank_transfers WHERE id = ?', [id]);
+  syncHoldingTankStatuses();
 }
 
 export function syncHoldingTankStatuses(): void {

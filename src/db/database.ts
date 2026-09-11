@@ -77,6 +77,22 @@ const DEST_HOLDING_TANK_MIGRATION = `
 ALTER TABLE distillation_runs ADD COLUMN dest_holding_tank_equipment_id INTEGER REFERENCES floor_equipment(id);
 `;
 
+const TANK_TRANSFERS_MIGRATION = `
+CREATE TABLE IF NOT EXISTS holding_tank_transfers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  spirit_type TEXT NOT NULL DEFAULT 'low_wines',
+  source_tank_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
+  dest_tank_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
+  volume_gal REAL NOT NULL DEFAULT 0,
+  abv REAL NOT NULL DEFAULT 0,
+  transfer_date TEXT NOT NULL,
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_tank_transfers_source ON holding_tank_transfers(source_tank_equipment_id);
+CREATE INDEX IF NOT EXISTS idx_tank_transfers_dest ON holding_tank_transfers(dest_tank_equipment_id);
+`;
+
 const YEAST_LBS_MIGRATION = `
 ALTER TABLE mash_batches ADD COLUMN yeast_lbs REAL NOT NULL DEFAULT 0;
 `;
@@ -284,6 +300,14 @@ function runMigrations(): void {
   );
   if (!hasInventoryCategories) {
     db.run(INVENTORY_CATEGORIES_MIGRATION);
+    persistDb();
+  }
+
+  const hasTankTransfers = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='holding_tank_transfers'",
+  );
+  if (!hasTankTransfers) {
+    db.run(TANK_TRANSFERS_MIGRATION);
     persistDb();
   }
 

@@ -136,6 +136,21 @@ CREATE TABLE IF NOT EXISTS blend_ingredients (
 CREATE INDEX IF NOT EXISTS idx_blend_products_tank ON blend_products(source_holding_tank_equipment_id);
 CREATE INDEX IF NOT EXISTS idx_blend_ingredients_product ON blend_ingredients(blend_product_id);
 
+CREATE TABLE IF NOT EXISTS holding_tank_transfers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  spirit_type TEXT NOT NULL DEFAULT 'low_wines',
+  source_tank_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
+  dest_tank_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
+  volume_gal REAL NOT NULL DEFAULT 0,
+  abv REAL NOT NULL DEFAULT 0,
+  transfer_date TEXT NOT NULL,
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_tank_transfers_source ON holding_tank_transfers(source_tank_equipment_id);
+CREATE INDEX IF NOT EXISTS idx_tank_transfers_dest ON holding_tank_transfers(dest_tank_equipment_id);
+
 CREATE INDEX IF NOT EXISTS idx_fermentation_mash ON fermentation_logs(mash_batch_id);
 CREATE INDEX IF NOT EXISTS idx_fermentation_fermenter ON fermentation_logs(floor_equipment_id);
 CREATE INDEX IF NOT EXISTS idx_cuts_run ON distillation_cuts(distillation_run_id);

@@ -13,6 +13,8 @@ export type DistillationRunType = 'wash' | 'low_wines';
 
 export type CutType = 'heads' | 'hearts' | 'tails';
 
+export type SpiritTransferType = 'low_wines' | 'high_wines';
+
 export type BarrelStatus = 'aging' | 'empty' | 'dumped';
 
 export type EquipmentType =
@@ -153,6 +155,23 @@ export interface HoldingTankContents {
   abv: number;
   run_count: number;
   cut_count: number;
+}
+
+export interface HoldingTankTransfer {
+  id: number;
+  spirit_type: SpiritTransferType;
+  source_tank_equipment_id: number;
+  dest_tank_equipment_id: number;
+  volume_gal: number;
+  abv: number;
+  transfer_date: string;
+  notes: string;
+  created_at: string;
+}
+
+export interface HoldingTankTransferView extends HoldingTankTransfer {
+  source_tank_name?: string;
+  dest_tank_name?: string;
 }
 
 export interface Barrel {
