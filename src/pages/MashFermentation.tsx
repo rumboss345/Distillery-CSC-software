@@ -16,7 +16,7 @@ import {
 } from '../db/queries';
 import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
-import { estimateAbvFromBrix, formatAbvEstimate } from '../lib/fermentation';
+import { estimateAbvFromBrix, estimateSugarWash, formatAbvEstimate } from '../lib/fermentation';
 import type { MashBatch, MashStatus } from '../types';
 
 const STATUSES: MashStatus[] = ['planned', 'mashing', 'fermenting', 'complete', 'discarded'];
@@ -296,6 +296,7 @@ export function MashFermentation() {
   const selectedStartBrix = selectedBatch
     ? selectedBatch.actual_brix ?? selectedBatch.target_brix
     : null;
+  const sugarWash = estimateSugarWash(form.grain_lbs, form.water_gal);
 
   return (
     <div>
@@ -548,6 +549,32 @@ export function MashFermentation() {
                 </div>
               </>
             ) : null}
+
+            <div className="form-group full-width sugar-wash-calc">
+              <label>Sugar Wash Calculator</label>
+              <p className="form-hint">
+                Sugar (lbs) made up to Water (gal) total wash volume — same method as Essential Distilling.
+              </p>
+              {sugarWash ? (
+                <>
+                  <div className="sugar-wash-results">
+                    <span>Est. SG <strong>{sugarWash.sg.toFixed(3)}</strong></span>
+                    <span>Target Brix <strong>{sugarWash.brix.toFixed(1)}°</strong></span>
+                    <span>Water to add <strong>{sugarWash.waterGal.toFixed(1)} gal</strong></span>
+                    <span>Potential ABV <strong>{sugarWash.potentialAbv.toFixed(1)}%</strong></span>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => setForm({ ...form, target_brix: sugarWash.brix })}
+                  >
+                    Use as Target Start Brix
+                  </button>
+                </>
+              ) : (
+                <p className="form-hint">Enter sugar lbs and total wash volume to estimate target Brix.</p>
+              )}
+            </div>
 
             <div className="form-group">
               <label>Target Start Brix</label>
