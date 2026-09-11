@@ -55,6 +55,12 @@ import { LiquidValuationPage } from './pages/costing/LiquidValuationPage';
 import { BatchCostingPage } from './pages/costing/BatchCostingPage';
 import { CostAdjustmentsPage } from './pages/costing/CostAdjustmentsPage';
 import { PlannedCostEstimatePage } from './pages/costing/PlannedCostEstimatePage';
+import { FinishedGoodsLayout } from './pages/finished-goods/FinishedGoodsLayout';
+import { FinishedGoodsDashboardPage } from './pages/finished-goods/FinishedGoodsDashboardPage';
+import { FgInventoryPage } from './pages/finished-goods/FgInventoryPage';
+import { FgLotsPage } from './pages/finished-goods/FgLotsPage';
+import { PackagingRunsPage } from './pages/finished-goods/PackagingRunsPage';
+import { FgTransactionsPage } from './pages/finished-goods/FgTransactionsPage';
 import { useDatabaseReady } from './db/queries';
 
 function AppContent() {
@@ -114,6 +120,13 @@ function AppContent() {
             <Route path="/purchasing" element={<PurchasingLayout />}>
               <Route index element={<PurchaseOrdersPage />} />
               <Route path="receipts" element={<ReceiptsPage />} />
+            </Route>
+            <Route path="/finished-goods" element={<FinishedGoodsLayout />}>
+              <Route index element={<FinishedGoodsDashboardPage />} />
+              <Route path="inventory" element={<FgInventoryPage />} />
+              <Route path="lots" element={<FgLotsPage />} />
+              <Route path="packaging-runs" element={<PackagingRunsPage />} />
+              <Route path="transactions" element={<FgTransactionsPage />} />
             </Route>
             <Route path="/costing" element={<CostingLayout />}>
               <Route index element={<CostingDashboardPage />} />

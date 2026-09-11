@@ -29,6 +29,11 @@ import {
   COSTING_V1G_NEW_COLUMNS,
   COSTING_V1G_TRANSFER_MIGRATION,
 } from './costing-schema';
+import {
+  FINISHED_GOODS_SCHEMA,
+  FINISHED_GOODS_V1H_MIGRATION,
+  FINISHED_GOODS_V1H_NEW_COLUMNS,
+} from './finished-goods-schema';
 import { SCHEMA, SEED_DATA } from './schema';
 
 const FLOOR_MIGRATION = `
@@ -398,6 +403,7 @@ function runMigrations(): void {
   migrateProductionOrders();
   migrateMaterialInventory();
   migrateCosting();
+  migrateFinishedGoods();
   persistDb();
 }
 
@@ -449,6 +455,23 @@ function migrateMaterialInventory(): void {
     db.run(MATERIAL_INVENTORY_V1F_MIGRATION);
   }
   for (const col of MATERIAL_INVENTORY_V1F_NEW_COLUMNS) {
+    if (!recipeColumnExists(col.table, col.column)) {
+      db.run(col.ddl);
+    }
+  }
+}
+
+function migrateFinishedGoods(): void {
+  if (!db) return;
+  const hasFg = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='fg_lots'",
+  );
+  if (!hasFg) {
+    db.run(FINISHED_GOODS_SCHEMA);
+  } else {
+    db.run(FINISHED_GOODS_V1H_MIGRATION);
+  }
+  for (const col of FINISHED_GOODS_V1H_NEW_COLUMNS) {
     if (!recipeColumnExists(col.table, col.column)) {
       db.run(col.ddl);
     }
@@ -664,6 +687,7 @@ export async function initDatabase(): Promise<Database> {
     migrateProductionOrders();
     migrateMaterialInventory();
     migrateCosting();
+    migrateFinishedGoods();
     persistDb();
   }
 

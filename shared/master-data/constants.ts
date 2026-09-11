@@ -68,6 +68,9 @@ export const CODE_PREFIXES = {
   receipt: 'RCV',
   landedCost: 'LCD',
   costAdjustment: 'CADJ',
+  packagingRun: 'PKR',
+  fgLot: 'FGL',
+  fgTransaction: 'FGT',
 } as const;
 
 export const DEFAULT_UNITS = [

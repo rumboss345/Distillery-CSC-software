@@ -8,6 +8,7 @@ import { LIQUID_LEDGER_SCHEMA } from '../../../src/db/liquid-ledger-schema';
 import { PRODUCTION_ORDERS_SCHEMA } from '../../../src/db/production-orders-schema';
 import { MATERIAL_INVENTORY_SCHEMA, MATERIAL_INVENTORY_V1F_NEW_COLUMNS } from '../../../src/db/material-inventory-schema';
 import { COSTING_SCHEMA } from '../../../src/db/costing-schema';
+import { FINISHED_GOODS_SCHEMA } from '../../../src/db/finished-goods-schema';
 import { seedMasterDataIfEmpty } from '../../../src/db/master-data-queries';
 import { seedLiquidLedgerLookupsIfEmpty } from '../../../src/db/liquid-ledger-queries';
 import { seedProductionLookupsIfEmpty } from '../../../src/db/production-orders-queries';
@@ -40,6 +41,7 @@ export async function createMaterialTestDb(includeProduction = false): Promise<D
   if (includeProduction) db.run(PRODUCTION_ORDERS_SCHEMA);
   db.run(MATERIAL_INVENTORY_SCHEMA);
   db.run(COSTING_SCHEMA);
+  db.run(FINISHED_GOODS_SCHEMA);
   for (const col of MATERIAL_INVENTORY_V1F_NEW_COLUMNS) {
     try { db.run(col.ddl); } catch { /* column may exist */ }
   }
