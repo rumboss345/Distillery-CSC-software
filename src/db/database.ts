@@ -5,7 +5,12 @@ import { MASTER_DATA_SCHEMA, SUPPLIER_CLASSIFICATIONS_MIGRATION } from './master
 import { migrateSupplierClassificationsFromLegacy, seedMasterDataIfEmpty } from './master-data-queries';
 import { RECIPES_SCHEMA, RECIPES_V1C_MIGRATION, RECIPES_V1C_NEW_COLUMNS } from './recipes-schema';
 import { seedRecipeLookupsIfEmpty } from './recipes-queries';
-import { FLOOR_TRACKING_MODE_MIGRATION, LIQUID_LEDGER_SCHEMA } from './liquid-ledger-schema';
+import {
+  FLOOR_TRACKING_MODE_MIGRATION,
+  LIQUID_LEDGER_SCHEMA,
+  LIQUID_LEDGER_V1D_INTEGRITY_MIGRATION,
+  LIQUID_LEDGER_V1D_NEW_COLUMNS,
+} from './liquid-ledger-schema';
 import { seedLiquidLedgerLookupsIfEmpty } from './liquid-ledger-queries';
 import { SCHEMA, SEED_DATA } from './schema';
 
@@ -385,6 +390,15 @@ function floorColumnExists(column: string): boolean {
   return row != null;
 }
 
+function ledgerColumnExists(table: string, column: string): boolean {
+  if (!db) return false;
+  const row = queryOne<{ name: string }>(
+    `SELECT name FROM pragma_table_info('${table}') WHERE name = ?`,
+    [column],
+  );
+  return row != null;
+}
+
 function migrateLiquidLedger(): void {
   if (!db) return;
   const hasLedger = queryOne<{ name: string }>(
@@ -393,6 +407,13 @@ function migrateLiquidLedger(): void {
   if (!hasLedger) {
     db.run(LIQUID_LEDGER_SCHEMA);
     seedLiquidLedgerLookupsIfEmpty();
+  } else {
+    db.run(LIQUID_LEDGER_V1D_INTEGRITY_MIGRATION);
+    for (const col of LIQUID_LEDGER_V1D_NEW_COLUMNS) {
+      if (!ledgerColumnExists(col.table, col.column)) {
+        db.run(col.ddl);
+      }
+    }
   }
   if (!floorColumnExists('tracking_mode')) {
     db.run(FLOOR_TRACKING_MODE_MIGRATION);

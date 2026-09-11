@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS liq_lots (
   status TEXT NOT NULL DEFAULT 'Active',
   source_type TEXT NOT NULL DEFAULT 'Manual',
   source_reference_id INTEGER,
-  parent_lot_id INTEGER REFERENCES liq_lots(id),
+  parent_lot_id INTEGER REFERENCES liq_lots(id), -- deprecated: use liq_lot_parents for genealogy
   notes TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -53,6 +53,9 @@ CREATE TABLE IF NOT EXISTS liq_tanks (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_liq_tanks_floor_equipment_unique
+  ON liq_tanks(floor_equipment_id) WHERE floor_equipment_id IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS liq_transactions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   transaction_code TEXT NOT NULL UNIQUE,
@@ -71,8 +74,11 @@ CREATE TABLE IF NOT EXISTS liq_transactions (
   notes TEXT NOT NULL DEFAULT '',
   created_by TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  reversal_of_transaction_id INTEGER REFERENCES liq_transactions(id)
+  reversal_of_transaction_id INTEGER REFERENCES liq_transactions(id),
+  transaction_group_id TEXT
 );
+
+CREATE INDEX IF NOT EXISTS idx_liq_tx_group ON liq_transactions(transaction_group_id);
 
 CREATE TABLE IF NOT EXISTS liq_reconciliations (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -105,3 +111,14 @@ CREATE INDEX IF NOT EXISTS idx_liq_reconciliations_tank ON liq_reconciliations(t
 /** Add tracking_mode to floor_equipment for legacy compatibility. */
 export const FLOOR_TRACKING_MODE_MIGRATION =
   `ALTER TABLE floor_equipment ADD COLUMN tracking_mode TEXT NOT NULL DEFAULT 'LEGACY'`;
+
+/** Incremental Phase 1D integrity migrations. */
+export const LIQUID_LEDGER_V1D_INTEGRITY_MIGRATION = `
+CREATE UNIQUE INDEX IF NOT EXISTS idx_liq_tanks_floor_equipment_unique
+  ON liq_tanks(floor_equipment_id) WHERE floor_equipment_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_liq_tx_group ON liq_transactions(transaction_group_id);
+`;
+
+export const LIQUID_LEDGER_V1D_NEW_COLUMNS: Array<{ table: string; column: string; ddl: string }> = [
+  { table: 'liq_transactions', column: 'transaction_group_id', ddl: 'ALTER TABLE liq_transactions ADD COLUMN transaction_group_id TEXT' },
+];

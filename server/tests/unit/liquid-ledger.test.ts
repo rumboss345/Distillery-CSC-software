@@ -249,6 +249,20 @@ describe('atomic operations', () => {
   });
 });
 
+describe('physical tank identity', () => {
+  it('enforces one ledger tank per floor_equipment_id', async () => {
+    const db = await createLedgerDb();
+    db.run(`INSERT INTO liq_tanks (tank_code, name, capacity_litres, floor_equipment_id, tracking_mode)
+            VALUES ('TNK-0001', 'Linked', 5000, 1, 'LEDGER')`);
+    assert.throws(
+      () => db.run(`INSERT INTO liq_tanks (tank_code, name, capacity_litres, floor_equipment_id, tracking_mode)
+                    VALUES ('TNK-0002', 'Dup', 5000, 1, 'LEDGER')`),
+      /UNIQUE constraint failed/,
+    );
+    db.close();
+  });
+});
+
 describe('reconciliation preview', () => {
   it('does not insert transaction until adjustment posted', async () => {
     const db = await createLedgerDb();

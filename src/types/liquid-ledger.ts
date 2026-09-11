@@ -12,6 +12,7 @@ export interface LiqLot {
   status: string;
   source_type: string;
   source_reference_id: number | null;
+  /** @deprecated Use liq_lot_parents for genealogy; not authoritative. */
   parent_lot_id: number | null;
   notes: string;
   created_at: string;
@@ -78,6 +79,7 @@ export interface LiqTransaction {
   created_by: string | null;
   created_at: string;
   reversal_of_transaction_id: number | null;
+  transaction_group_id: string | null;
   source_tank_name?: string | null;
   destination_tank_name?: string | null;
   source_lot_code?: string | null;
@@ -91,11 +93,14 @@ export type LiqTransactionPostInput = Omit<
   | 'lpa'
   | 'created_at'
   | 'reversal_of_transaction_id'
+  | 'transaction_group_id'
   | 'source_tank_name'
   | 'destination_tank_name'
   | 'source_lot_code'
   | 'destination_lot_code'
->;
+> & {
+  transaction_group_id?: string | null;
+};
 
 export interface TankBalance {
   tankId: number;
@@ -230,7 +235,7 @@ export interface TankRepository {
 
 export interface LiquidLedgerRepository {
   postTransaction(input: LiqTransactionPostInput): number;
-  reverseTransaction(transactionId: number, createdBy?: string | null): number;
+  reverseTransaction(transactionId: number, createdBy?: string | null): number[];
   getTransactions(filters?: {
     tankId?: number;
     lotId?: number;

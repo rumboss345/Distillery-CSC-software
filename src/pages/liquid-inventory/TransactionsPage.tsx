@@ -22,7 +22,7 @@ export function TransactionsPage() {
     if (!window.confirm('Post a reversal for this transaction?')) return;
     try {
       liquidInventoryRepository.ledger.reverseTransaction(txId, user?.email ?? null);
-      refresh();
+      refresh(); // reverses full transaction group when applicable
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Reversal failed');
     }

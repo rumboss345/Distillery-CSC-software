@@ -46,6 +46,9 @@ CREATE TABLE IF NOT EXISTS liq_tanks (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_liq_tanks_floor_equipment_unique
+  ON liq_tanks(floor_equipment_id) WHERE floor_equipment_id IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS liq_transactions (
   id SERIAL PRIMARY KEY,
   transaction_code TEXT NOT NULL UNIQUE,
@@ -64,8 +67,11 @@ CREATE TABLE IF NOT EXISTS liq_transactions (
   notes TEXT NOT NULL DEFAULT '',
   created_by TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  reversal_of_transaction_id INTEGER REFERENCES liq_transactions(id) ON DELETE SET NULL
+  reversal_of_transaction_id INTEGER REFERENCES liq_transactions(id) ON DELETE SET NULL,
+  transaction_group_id TEXT
 );
+
+CREATE INDEX IF NOT EXISTS idx_liq_tx_group ON liq_transactions(transaction_group_id);
 
 CREATE TABLE IF NOT EXISTS liq_reconciliations (
   id SERIAL PRIMARY KEY,

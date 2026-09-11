@@ -1,10 +1,16 @@
 import {
+  aggregateLotBalance,
+  aggregateLotInTank,
+  aggregateTankBalance,
+} from '../../shared/liquid-ledger/balance-engine';
+import {
   balanceFromVolumeLpa,
   capacityUtilizationPercent,
   computeAbvFromLpa,
   computeLpa,
   type BalanceSnapshot,
 } from '../../shared/liquid-ledger/balance';
+import { formatBusinessCode, codePrefixForEntity } from '../../shared/master-data/codes';
 import { wouldCreateCircularGenealogy } from '../../shared/liquid-ledger/genealogy';
 import {
   DEFAULT_LOT_TYPES,
@@ -48,6 +54,69 @@ import { getHoldingTankContents, getHoldingTanks } from './queries';
 
 const now = () => new Date().toISOString();
 
+type LedgerTxRow = {
+  source_tank_id: number | null;
+  destination_tank_id: number | null;
+  source_lot_id: number | null;
+  destination_lot_id: number | null;
+  volume_litres: number;
+  lpa: number;
+};
+
+function loadAllLedgerTransactions(): LedgerTxRow[] {
+  return queryAll<LedgerTxRow>(
+    `SELECT source_tank_id, destination_tank_id, source_lot_id, destination_lot_id, volume_litres, lpa
+     FROM liq_transactions`,
+  );
+}
+
+function nextOperationGroupId(): string {
+  const seqType = 'operationGroup' as const;
+  const prefix = codePrefixForEntity(seqType);
+  const row = queryOne<{ last_number: number }>(
+    'SELECT last_number FROM md_code_sequences WHERE entity_type = ?',
+    [seqType],
+  );
+  const next = (row?.last_number ?? 0) + 1;
+  if (row) {
+    runQuery('UPDATE md_code_sequences SET last_number = ? WHERE entity_type = ?', [next, seqType]);
+  } else {
+    insertRow('INSERT INTO md_code_sequences (entity_type, last_number) VALUES (?, ?)', [seqType, next]);
+  }
+  return formatBusinessCode(prefix, next);
+}
+
+function assertFloorEquipmentLinkable(floorEquipmentId: number | null, excludeTankId?: number): void {
+  if (floorEquipmentId == null) return;
+  const equipment = queryOne<{ id: number; equipment_type: string; tracking_mode?: string }>(
+    'SELECT id, equipment_type, tracking_mode FROM floor_equipment WHERE id = ?',
+    [floorEquipmentId],
+  );
+  if (!equipment) throw new Error('Linked floor equipment not found.');
+  if (equipment.equipment_type !== 'holding_tank') {
+    throw new Error('Only holding tank floor equipment can link to a ledger tank.');
+  }
+  const existing = queryOne<{ id: number }>(
+    `SELECT id FROM liq_tanks WHERE floor_equipment_id = ?${excludeTankId != null ? ' AND id != ?' : ''}`,
+    excludeTankId != null ? [floorEquipmentId, excludeTankId] : [floorEquipmentId],
+  );
+  if (existing) {
+    throw new Error('This floor equipment tank is already linked to a ledger tank.');
+  }
+}
+
+function assertNoOpeningBalanceConflict(tankId: number): void {
+  const count = queryOne<{ count: number }>(
+    'SELECT COUNT(*) AS count FROM liq_transactions WHERE source_tank_id = ? OR destination_tank_id = ?',
+    [tankId, tankId],
+  )?.count ?? 0;
+  if (count > 0) {
+    throw new Error(
+      'Opening Balance cannot be posted: this tank already has ledger activity. Use adjustments instead.',
+    );
+  }
+}
+
 function assertLedgerTank(tankId: number): LiqTank {
   const tank = getTank(tankId);
   if (!tank) throw new Error('Tank not found.');
@@ -59,47 +128,27 @@ function assertLedgerTank(tankId: number): LiqTank {
 }
 
 function computeTankBalanceFromLedger(tankId: number): { volumeLitres: number; lpa: number } {
-  const ins = queryOne<{ volume: number; lpa: number }>(`
-    SELECT COALESCE(SUM(volume_litres), 0) AS volume, COALESCE(SUM(lpa), 0) AS lpa
-    FROM liq_transactions WHERE destination_tank_id = ? AND reversal_of_transaction_id IS NULL
-  `, [tankId]);
-  const outs = queryOne<{ volume: number; lpa: number }>(`
-    SELECT COALESCE(SUM(volume_litres), 0) AS volume, COALESCE(SUM(lpa), 0) AS lpa
-    FROM liq_transactions WHERE source_tank_id = ? AND reversal_of_transaction_id IS NULL
-  `, [tankId]);
-  const volume = (ins?.volume ?? 0) - (outs?.volume ?? 0);
-  const lpa = (ins?.lpa ?? 0) - (outs?.lpa ?? 0);
-  return { volumeLitres: Math.max(0, volume), lpa: volume > 0 ? Math.max(0, lpa) : 0 };
+  const raw = aggregateTankBalance(tankId, loadAllLedgerTransactions());
+  return {
+    volumeLitres: Math.max(0, raw.volumeLitres),
+    lpa: raw.volumeLitres > 0 ? Math.max(0, raw.lpa) : 0,
+  };
 }
 
 function computeLotBalanceFromLedger(lotId: number): { volumeLitres: number; lpa: number } {
-  const ins = queryOne<{ volume: number; lpa: number }>(`
-    SELECT COALESCE(SUM(volume_litres), 0) AS volume, COALESCE(SUM(lpa), 0) AS lpa
-    FROM liq_transactions WHERE destination_lot_id = ?
-  `, [lotId]);
-  const outs = queryOne<{ volume: number; lpa: number }>(`
-    SELECT COALESCE(SUM(volume_litres), 0) AS volume, COALESCE(SUM(lpa), 0) AS lpa
-    FROM liq_transactions WHERE source_lot_id = ?
-  `, [lotId]);
-  const volume = (ins?.volume ?? 0) - (outs?.volume ?? 0);
-  const lpa = (ins?.lpa ?? 0) - (outs?.lpa ?? 0);
-  return { volumeLitres: Math.max(0, volume), lpa: volume > 0 ? Math.max(0, lpa) : 0 };
+  const raw = aggregateLotBalance(lotId, loadAllLedgerTransactions());
+  return {
+    volumeLitres: Math.max(0, raw.volumeLitres),
+    lpa: raw.volumeLitres > 0 ? Math.max(0, raw.lpa) : 0,
+  };
 }
 
 function computeLotVolumeInTank(lotId: number, tankId: number): { volumeLitres: number; lpa: number } {
-  const ins = queryOne<{ volume: number; lpa: number }>(`
-    SELECT COALESCE(SUM(volume_litres), 0) AS volume, COALESCE(SUM(lpa), 0) AS lpa
-    FROM liq_transactions
-    WHERE destination_lot_id = ? AND destination_tank_id = ?
-  `, [lotId, tankId]);
-  const outs = queryOne<{ volume: number; lpa: number }>(`
-    SELECT COALESCE(SUM(volume_litres), 0) AS volume, COALESCE(SUM(lpa), 0) AS lpa
-    FROM liq_transactions
-    WHERE source_lot_id = ? AND source_tank_id = ?
-  `, [lotId, tankId]);
-  const volume = (ins?.volume ?? 0) - (outs?.volume ?? 0);
-  const lpa = (ins?.lpa ?? 0) - (outs?.lpa ?? 0);
-  return { volumeLitres: Math.max(0, volume), lpa: volume > 0 ? Math.max(0, lpa) : 0 };
+  const raw = aggregateLotInTank(lotId, tankId, loadAllLedgerTransactions());
+  return {
+    volumeLitres: Math.max(0, raw.volumeLitres),
+    lpa: raw.volumeLitres > 0 ? Math.max(0, raw.lpa) : 0,
+  };
 }
 
 function withTransaction<T>(fn: () => T): T {
@@ -294,6 +343,7 @@ export function saveTank(data: LiqTankSaveInput, id?: number): number {
   if (data.minimum_working_volume_litres != null) {
     validateNonNegativeVolume(data.minimum_working_volume_litres, 'Minimum working volume');
   }
+  assertFloorEquipmentLinkable(data.floor_equipment_id, id);
   const ts = now();
   if (id != null) {
     const existing = getTank(id);
@@ -319,7 +369,7 @@ export function saveTank(data: LiqTankSaveInput, id?: number): number {
     return id;
   }
   const code = nextBusinessCode('tank', 'liq_tanks', 'tank_code');
-  return insertRow(
+  const tankId = insertRow(
     `INSERT INTO liq_tanks (
       tank_code, name, tank_type, capacity_litres, minimum_working_volume_litres,
       location_id, floor_equipment_id, tracking_mode, status, notes, created_at, updated_at
@@ -329,6 +379,13 @@ export function saveTank(data: LiqTankSaveInput, id?: number): number {
       data.location_id, data.floor_equipment_id, data.tracking_mode ?? 'LEDGER', data.status, data.notes, ts, ts,
     ],
   );
+  if (data.floor_equipment_id != null) {
+    runQuery(
+      `UPDATE floor_equipment SET tracking_mode = 'LEDGER' WHERE id = ? AND equipment_type = 'holding_tank'`,
+      [data.floor_equipment_id],
+    );
+  }
+  return tankId;
 }
 
 export function getTankBalance(tankId: number): TankBalance {
@@ -382,17 +439,27 @@ export function listLegacyFloorTanks(): Array<{
   abv: number;
   trackingMode: string;
 }> {
-  return getHoldingTanks().map((t) => {
-    const contents = getHoldingTankContents(t.id);
-    const trackingMode = (t as { tracking_mode?: string }).tracking_mode ?? 'LEGACY';
-    return {
-      id: t.id,
-      name: t.name,
-      volumeGal: contents.volume_gal,
-      abv: contents.abv,
-      trackingMode,
-    };
-  });
+  return getHoldingTanks()
+    .filter((t) => {
+      const trackingMode = (t as { tracking_mode?: string }).tracking_mode ?? 'LEGACY';
+      if (trackingMode === 'LEDGER') return false;
+      const linked = queryOne<{ id: number }>(
+        'SELECT id FROM liq_tanks WHERE floor_equipment_id = ?',
+        [t.id],
+      );
+      return !linked;
+    })
+    .map((t) => {
+      const contents = getHoldingTankContents(t.id);
+      const trackingMode = (t as { tracking_mode?: string }).tracking_mode ?? 'LEGACY';
+      return {
+        id: t.id,
+        name: t.name,
+        volumeGal: contents.volume_gal,
+        abv: contents.abv,
+        trackingMode,
+      };
+    });
 }
 
 // ─── Transactions ───────────────────────────────────────────────────────────
@@ -408,15 +475,43 @@ function insertTransaction(input: LiqTransactionPostInput): number {
       transaction_code, transaction_type, transaction_timestamp,
       source_tank_id, destination_tank_id, source_lot_id, destination_lot_id,
       volume_litres, abv, lpa, reason_code, source_document_type, source_document_id,
-      notes, created_by, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      notes, created_by, created_at, transaction_group_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       code, input.transaction_type, input.transaction_timestamp,
       input.source_tank_id, input.destination_tank_id, input.source_lot_id, input.destination_lot_id,
       input.volume_litres, input.abv, lpa, input.reason_code, input.source_document_type,
-      input.source_document_id, input.notes, input.created_by, ts,
+      input.source_document_id, input.notes, input.created_by, ts, input.transaction_group_id ?? null,
     ],
   );
+}
+
+function createReversalTx(original: LiqTransaction, createdBy?: string | null, groupId?: string | null): number {
+  const code = nextBusinessCode('liquidTransaction', 'liq_transactions', 'transaction_code');
+  const ts = now();
+  return insertRow(
+    `INSERT INTO liq_transactions (
+      transaction_code, transaction_type, transaction_timestamp,
+      source_tank_id, destination_tank_id, source_lot_id, destination_lot_id,
+      volume_litres, abv, lpa, reason_code, notes, created_by, created_at, reversal_of_transaction_id, transaction_group_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      code, 'Correction / Reversal', ts,
+      original.destination_tank_id, original.source_tank_id,
+      original.destination_lot_id, original.source_lot_id,
+      original.volume_litres, original.abv, original.lpa,
+      'Measurement Correction',
+      `Reversal of ${original.transaction_code}`,
+      createdBy ?? null, ts, original.id, groupId ?? null,
+    ],
+  );
+}
+
+function isTransactionReversed(transactionId: number): boolean {
+  return queryOne<{ id: number }>(
+    'SELECT id FROM liq_transactions WHERE reversal_of_transaction_id = ?',
+    [transactionId],
+  ) != null;
 }
 
 export function postTransaction(input: LiqTransactionPostInput): number {
@@ -460,37 +555,34 @@ export function getTransactions(filters?: {
   `, params as (string | number | null)[]);
 }
 
-export function reverseTransaction(transactionId: number, createdBy?: string | null): number {
+export function reverseTransaction(transactionId: number, createdBy?: string | null): number[] {
   return withTransaction(() => {
     const original = queryOne<LiqTransaction>('SELECT * FROM liq_transactions WHERE id = ?', [transactionId]);
     if (!original) throw new Error('Transaction not found.');
     if (original.reversal_of_transaction_id) {
       throw new Error('Cannot reverse a reversal transaction.');
     }
-    const existingReversal = queryOne<{ id: number }>(
-      'SELECT id FROM liq_transactions WHERE reversal_of_transaction_id = ?',
-      [transactionId],
-    );
-    if (existingReversal) throw new Error('Transaction has already been reversed.');
 
-    const code = nextBusinessCode('liquidTransaction', 'liq_transactions', 'transaction_code');
-    const ts = now();
-    return insertRow(
-      `INSERT INTO liq_transactions (
-        transaction_code, transaction_type, transaction_timestamp,
-        source_tank_id, destination_tank_id, source_lot_id, destination_lot_id,
-        volume_litres, abv, lpa, reason_code, notes, created_by, created_at, reversal_of_transaction_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        code, 'Correction / Reversal', ts,
-        original.destination_tank_id, original.source_tank_id,
-        original.destination_lot_id, original.source_lot_id,
-        original.volume_litres, original.abv, original.lpa,
-        'Measurement Correction',
-        `Reversal of ${original.transaction_code}`,
-        createdBy ?? null, ts, transactionId,
-      ],
-    );
+    const targets = original.transaction_group_id
+      ? queryAll<LiqTransaction>(
+        `SELECT * FROM liq_transactions
+         WHERE transaction_group_id = ? AND reversal_of_transaction_id IS NULL
+         ORDER BY id`,
+        [original.transaction_group_id],
+      )
+      : [original];
+
+    const reversalGroupId = targets.length > 1 ? nextOperationGroupId() : null;
+    const reversalIds: number[] = [];
+
+    for (const tx of targets) {
+      if (isTransactionReversed(tx.id)) {
+        throw new Error(`Transaction ${tx.transaction_code} has already been reversed.`);
+      }
+      reversalIds.push(createReversalTx(tx, createdBy, reversalGroupId));
+    }
+
+    return reversalIds;
   });
 }
 
@@ -526,6 +618,7 @@ export function receiveBulkSpirit(input: BulkSpiritReceiptInput): { lotId: numbe
       notes: input.notes ?? '',
     });
 
+    const groupId = nextOperationGroupId();
     const transactionId = insertTransaction({
       transaction_type: 'Bulk Spirit Receipt',
       transaction_timestamp: input.receivedDate || now(),
@@ -540,6 +633,7 @@ export function receiveBulkSpirit(input: BulkSpiritReceiptInput): { lotId: numbe
       source_document_id: input.bulkSpiritId,
       notes: input.notes ?? '',
       created_by: input.createdBy ?? null,
+      transaction_group_id: groupId,
     });
 
     return { lotId, transactionId };
@@ -561,8 +655,6 @@ export function transferLiquid(input: TransferLiquidInput): number {
     const destBalance = computeTankBalanceFromLedger(dest.id);
     validateCapacity(destBalance.volumeLitres + input.volumeLitres, dest.capacity_litres);
 
-    const sourceAbv = computeAbvFromLpa(sourceBalance.volumeLitres, sourceBalance.lpa);
-
     let lotId = input.sourceLotId ?? null;
     if (lotId == null) {
       const components = getTankLotComponents(source.id);
@@ -573,8 +665,14 @@ export function transferLiquid(input: TransferLiquidInput): number {
 
     const lotInTank = computeLotVolumeInTank(lotId, source.id);
     validateSufficientBalance(lotInTank.volumeLitres, input.volumeLitres, 'Source lot');
+    const lotAbv = computeAbvFromLpa(lotInTank.volumeLitres, lotInTank.lpa);
+    const transferLpa = lotInTank.volumeLitres > 0
+      ? lotInTank.lpa * (input.volumeLitres / lotInTank.volumeLitres)
+      : 0;
+    validateSufficientBalance(lotInTank.lpa, transferLpa, 'Source lot LPA');
 
     const ts = now();
+    const groupId = nextOperationGroupId();
     insertTransaction({
       transaction_type: 'Tank Transfer Out',
       transaction_timestamp: ts,
@@ -583,12 +681,13 @@ export function transferLiquid(input: TransferLiquidInput): number {
       source_lot_id: lotId,
       destination_lot_id: null,
       volume_litres: input.volumeLitres,
-      abv: sourceAbv,
+      abv: lotAbv,
       reason_code: null,
       source_document_type: null,
       source_document_id: null,
       notes: input.notes ?? '',
       created_by: input.createdBy ?? null,
+      transaction_group_id: groupId,
     });
     return insertTransaction({
       transaction_type: 'Tank Transfer In',
@@ -598,12 +697,13 @@ export function transferLiquid(input: TransferLiquidInput): number {
       source_lot_id: null,
       destination_lot_id: lotId,
       volume_litres: input.volumeLitres,
-      abv: sourceAbv,
+      abv: lotAbv,
       reason_code: null,
       source_document_type: null,
       source_document_id: null,
       notes: input.notes ?? '',
       created_by: input.createdBy ?? null,
+      transaction_group_id: groupId,
     });
   });
 }
@@ -620,13 +720,17 @@ export function createBlend(input: BlendInput): { lotId: number; transactionIds:
     let totalLpa = 0;
     const txIds: number[] = [];
     const ts = now();
+    const groupId = nextOperationGroupId();
 
     for (const c of input.consumptions) {
       validatePositiveVolume(c.volumeLitres, 'Blend consumption volume');
       const inTank = computeLotVolumeInTank(c.lotId, sourceTank.id);
       validateSufficientBalance(inTank.volumeLitres, c.volumeLitres, `Lot ${c.lotId}`);
       const abv = computeAbvFromLpa(inTank.volumeLitres, inTank.lpa);
-      const lpa = computeLpa(c.volumeLitres, abv);
+      const lpa = inTank.volumeLitres > 0
+        ? inTank.lpa * (c.volumeLitres / inTank.volumeLitres)
+        : 0;
+      validateSufficientBalance(inTank.lpa, lpa, `Lot ${c.lotId} LPA`);
       totalVolume += c.volumeLitres;
       totalLpa += lpa;
       txIds.push(insertTransaction({
@@ -643,6 +747,7 @@ export function createBlend(input: BlendInput): { lotId: number; transactionIds:
         source_document_id: null,
         notes: input.notes ?? '',
         created_by: input.createdBy ?? null,
+        transaction_group_id: groupId,
       }));
     }
 
@@ -685,6 +790,7 @@ export function createBlend(input: BlendInput): { lotId: number; transactionIds:
       source_document_id: null,
       notes: input.notes ?? '',
       created_by: input.createdBy ?? null,
+      transaction_group_id: groupId,
     }));
 
     return { lotId, transactionIds: txIds };
@@ -720,6 +826,7 @@ export function proofDown(input: ProofDownInput): { lotId: number; transactionId
 
     const txIds: number[] = [];
     const ts = now();
+    const groupId = nextOperationGroupId();
 
     txIds.push(insertTransaction({
       transaction_type: 'Proof Down Consumption',
@@ -735,6 +842,7 @@ export function proofDown(input: ProofDownInput): { lotId: number; transactionId
       source_document_id: null,
       notes: input.notes ?? '',
       created_by: input.createdBy ?? null,
+      transaction_group_id: groupId,
     }));
 
     txIds.push(insertTransaction({
@@ -751,6 +859,7 @@ export function proofDown(input: ProofDownInput): { lotId: number; transactionId
       source_document_id: null,
       notes: 'Water addition for proof-down',
       created_by: input.createdBy ?? null,
+      transaction_group_id: groupId,
     }));
 
     const lotId = createLot({
@@ -764,7 +873,7 @@ export function proofDown(input: ProofDownInput): { lotId: number; transactionId
       status: 'Active',
       source_type: 'Proof Down',
       source_reference_id: input.sourceLotId,
-      parent_lot_id: input.sourceLotId,
+      parent_lot_id: null,
       notes: input.notes ?? '',
     });
     insertLotParent(lotId, input.sourceLotId, input.sourceVolumeLitres, sourceLpa);
@@ -783,6 +892,7 @@ export function proofDown(input: ProofDownInput): { lotId: number; transactionId
       source_document_id: null,
       notes: input.notes ?? '',
       created_by: input.createdBy ?? null,
+      transaction_group_id: groupId,
     }));
 
     return { lotId, transactionIds: txIds };
@@ -795,6 +905,7 @@ export function postOpeningBalance(input: OpeningBalanceInput): { lotId: number;
     validateAbv(input.abv);
     validatePositiveVolume(input.volumeLitres, 'Opening balance volume');
     validateCapacity(input.volumeLitres, tank.capacity_litres);
+    assertNoOpeningBalanceConflict(tank.id);
 
     const lotId = createLot({
       lot_type: input.lotType,
@@ -811,6 +922,7 @@ export function postOpeningBalance(input: OpeningBalanceInput): { lotId: number;
       notes: input.notes ?? '',
     });
 
+    const groupId = nextOperationGroupId();
     const transactionId = insertTransaction({
       transaction_type: 'Opening Balance',
       transaction_timestamp: input.effectiveDate || now(),
@@ -825,6 +937,7 @@ export function postOpeningBalance(input: OpeningBalanceInput): { lotId: number;
       source_document_id: null,
       notes: input.notes ?? '',
       created_by: input.createdBy ?? null,
+      transaction_group_id: groupId,
     });
 
     return { lotId, transactionId };
