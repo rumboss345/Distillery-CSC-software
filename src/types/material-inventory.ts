@@ -160,7 +160,21 @@ export interface TransferMaterialInput {
   createdBy?: string | null;
 }
 
+export interface MaterialLedgerInfo {
+  trackingMode: 'LEGACY' | 'LEDGER';
+  ledgerActivatedAt: string | null;
+  ledgerActivationReference: string | null;
+  onHand: number;
+  baseUnit: string;
+  hasLedgerTransactions: boolean;
+}
+
 export interface MaterialInventoryRepository {
+  tracking: {
+    getMode: (materialType: MaterialType, materialId: number) => 'LEGACY' | 'LEDGER';
+    getLedgerInfo: (materialType: MaterialType, materialId: number) => MaterialLedgerInfo;
+    activateLedger: (materialType: MaterialType, materialId: number, activationReference?: string | null) => void;
+  };
   lots: {
     create: (input: CreateMatLotInput) => number;
     get: (id: number) => MatLot | null;

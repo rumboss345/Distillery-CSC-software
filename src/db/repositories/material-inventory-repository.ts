@@ -1,12 +1,15 @@
 import type { MaterialInventoryRepository } from '../../types/material-inventory';
 import {
+  activateMaterialLedgerTracking,
   createMaterialLot,
   getAvailableMaterialLots,
   getMaterialBalance,
   getMaterialBalanceByLocation,
+  getMaterialLedgerInfo,
   getMaterialLot,
   getMaterialLotBalance,
   getMaterialLotBalanceByLocation,
+  getMaterialTrackingMode,
   getMaterialTransactions,
   getMaterialUomConversions,
   listMaterialLots,
@@ -21,6 +24,11 @@ import {
 } from '../material-inventory-queries';
 
 export const materialInventoryRepository: MaterialInventoryRepository = {
+  tracking: {
+    getMode: getMaterialTrackingMode,
+    getLedgerInfo: getMaterialLedgerInfo,
+    activateLedger: activateMaterialLedgerTracking,
+  },
   lots: {
     create: createMaterialLot,
     get: getMaterialLot,

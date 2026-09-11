@@ -4,6 +4,7 @@ const tabs = [
   { to: '/material-inventory', label: 'Dashboard', end: true },
   { to: '/material-inventory/raw-materials', label: 'Raw Materials' },
   { to: '/material-inventory/packaging', label: 'Packaging' },
+  { to: '/material-inventory/opening-balance', label: 'Opening Balance' },
   { to: '/material-inventory/lots', label: 'Lots' },
   { to: '/material-inventory/transactions', label: 'Transactions' },
   { to: '/material-inventory/reconciliation', label: 'Reconciliation' },

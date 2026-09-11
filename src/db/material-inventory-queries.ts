@@ -859,6 +859,50 @@ export function getBatchMaterialTransactions(batchId: number): MatTransaction[] 
   return getMaterialTransactions({ productionBatchId: batchId });
 }
 
+export interface MaterialLedgerInfo {
+  trackingMode: 'LEGACY' | 'LEDGER';
+  ledgerActivatedAt: string | null;
+  ledgerActivationReference: string | null;
+  onHand: number;
+  baseUnit: string;
+  hasLedgerTransactions: boolean;
+}
+
+export function getMaterialLedgerInfo(
+  materialType: MaterialType,
+  materialId: number,
+): MaterialLedgerInfo {
+  const trackingMode = getMaterialTrackingMode(materialType, materialId);
+  const rawId = materialType === 'RAW_MATERIAL' ? materialId : null;
+  const pkgId = materialType === 'PACKAGING_MATERIAL' ? materialId : null;
+  let ledgerActivatedAt: string | null = null;
+  let ledgerActivationReference: string | null = null;
+  if (materialType === 'RAW_MATERIAL') {
+    const row = queryOne<{ ledger_activated_at: string | null; ledger_activation_reference: string | null }>(
+      'SELECT ledger_activated_at, ledger_activation_reference FROM md_raw_materials WHERE id = ?',
+      [materialId],
+    );
+    ledgerActivatedAt = row?.ledger_activated_at ?? null;
+    ledgerActivationReference = row?.ledger_activation_reference ?? null;
+  } else {
+    const row = queryOne<{ ledger_activated_at: string | null; ledger_activation_reference: string | null }>(
+      'SELECT ledger_activated_at, ledger_activation_reference FROM md_packaging_materials WHERE id = ?',
+      [materialId],
+    );
+    ledgerActivatedAt = row?.ledger_activated_at ?? null;
+    ledgerActivationReference = row?.ledger_activation_reference ?? null;
+  }
+  const balance = getMaterialBalance(materialType, rawId, pkgId);
+  return {
+    trackingMode,
+    ledgerActivatedAt,
+    ledgerActivationReference,
+    onHand: balance.onHand,
+    baseUnit: balance.baseUnit,
+    hasLedgerTransactions: countPostedLedgerTransactions(materialType, rawId, pkgId) > 0,
+  };
+}
+
 export function setMaterialTrackingMode(
   materialType: MaterialType,
   materialId: number,

@@ -42,6 +42,7 @@ import { MaterialDashboardPage } from './pages/material-inventory/MaterialDashbo
 import { MaterialListPage } from './pages/material-inventory/MaterialListPage';
 import { MaterialLotsPage } from './pages/material-inventory/MaterialLotsPage';
 import { MaterialTransactionsPage } from './pages/material-inventory/MaterialTransactionsPage';
+import { MaterialOpeningBalancePage } from './pages/material-inventory/MaterialOpeningBalancePage';
 import { MaterialReconciliationPage } from './pages/material-inventory/MaterialReconciliationPage';
 import { PurchasingLayout } from './pages/purchasing/PurchasingLayout';
 import { PurchaseOrdersPage } from './pages/purchasing/PurchaseOrdersPage';
@@ -97,6 +98,7 @@ function AppContent() {
               <Route index element={<MaterialDashboardPage />} />
               <Route path="raw-materials" element={<MaterialListPage materialKind="raw" />} />
               <Route path="packaging" element={<MaterialListPage materialKind="packaging" />} />
+              <Route path="opening-balance" element={<MaterialOpeningBalancePage />} />
               <Route path="lots" element={<MaterialLotsPage />} />
               <Route path="transactions" element={<MaterialTransactionsPage />} />
               <Route path="reconciliation" element={<MaterialReconciliationPage />} />

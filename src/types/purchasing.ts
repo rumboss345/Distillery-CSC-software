@@ -173,6 +173,7 @@ export interface PurchasingRepository {
   createReceipt: (input: CreateReceiptInput) => number;
   addReceiptLine: (input: AddReceiptLineInput) => number;
   postReceipt: (receiptId: number, receivedBy?: string | null) => string;
+  getLegacyMaterialsOnReceipt: (receiptId: number) => Array<{ materialName: string; materialType: import('../../shared/material-inventory/constants').MaterialType }>;
   reverseReceipt: (receiptId: number, createdBy?: string | null) => number[];
   getReceipt: (id: number) => PurReceipt | null;
   listReceipts: (purchaseOrderId?: number) => PurReceipt[];

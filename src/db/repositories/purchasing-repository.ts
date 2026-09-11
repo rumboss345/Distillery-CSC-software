@@ -8,6 +8,7 @@ import {
   createReceipt,
   getPurchaseOrder,
   getPurchaseOrderLines,
+  getLegacyMaterialsOnReceipt,
   getReceipt,
   getReceiptLines,
   getReceivedQuantity,
@@ -41,6 +42,7 @@ export const purchasingRepository: PurchasingRepository = {
   getReceipt,
   listReceipts,
   getReceiptLines,
+  getLegacyMaterialsOnReceipt,
 };
 
 export { postDirectReceipt, postSupplierReturn };

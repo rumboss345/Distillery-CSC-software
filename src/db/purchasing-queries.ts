@@ -1,5 +1,6 @@
 import { derivePurchaseOrderStatusFromReceipts, assertPurchaseOrderStatusTransition, isPurchaseOrderEditable } from '../../shared/purchasing/status-transitions';
-import { LEGACY_RECEIPT_BLOCK_MESSAGE, type MaterialType } from '../../shared/material-inventory/constants';
+import { type MaterialType } from '../../shared/material-inventory/constants';
+import { formatLegacyReceiptBlockMessage } from '../../shared/material-inventory/receipt-post-errors';
 import { validateMaterialIdentity, validateNonNegativeQuantity, validatePositiveQuantity } from '../../shared/material-inventory/validation';
 import type {
   AddPurchaseOrderLineInput,
@@ -377,15 +378,44 @@ function nextMaterialGroupIdForReceipt(): string {
   return nextBusinessCode('materialOperationGroup', 'mat_transactions', 'transaction_group_id');
 }
 
+export function getLegacyMaterialsOnReceipt(receiptId: number): Array<{ materialName: string; materialType: MaterialType }> {
+  const lines = getReceiptLines(receiptId);
+  const seen = new Set<string>();
+  const result: Array<{ materialName: string; materialType: MaterialType }> = [];
+  for (const line of lines) {
+    if (line.accepted_quantity <= 0) continue;
+    const materialId = (line.raw_material_id ?? line.packaging_material_id)!;
+    const key = `${line.material_type}:${materialId}`;
+    if (seen.has(key)) continue;
+    if (getMaterialTrackingMode(line.material_type, materialId) !== 'LEDGER') {
+      seen.add(key);
+      result.push({
+        materialName: line.material_name ?? `Material #${materialId}`,
+        materialType: line.material_type,
+      });
+    }
+  }
+  return result;
+}
+
 function validateReceiptLinesBeforePost(_receipt: PurReceipt, lines: PurReceiptLine[]): void {
   let hasPostableLine = false;
+  const legacyMaterials: Array<{ materialName: string; materialType: MaterialType }> = [];
+  const legacySeen = new Set<string>();
   for (const line of lines) {
     if (line.accepted_quantity <= 0) continue;
     hasPostableLine = true;
     if (!line.material_lot_id) throw new Error('Receipt line missing material lot.');
     const materialId = (line.raw_material_id ?? line.packaging_material_id)!;
     if (getMaterialTrackingMode(line.material_type, materialId) !== 'LEDGER') {
-      throw new Error(LEGACY_RECEIPT_BLOCK_MESSAGE);
+      const key = `${line.material_type}:${materialId}`;
+      if (!legacySeen.has(key)) {
+        legacySeen.add(key);
+        legacyMaterials.push({
+          materialName: line.material_name ?? `Material #${materialId}`,
+          materialType: line.material_type,
+        });
+      }
     }
     if (line.purchase_order_line_id) {
       const remaining = getRemainingQuantity(line.purchase_order_line_id);
@@ -402,6 +432,9 @@ function validateReceiptLinesBeforePost(_receipt: PurReceipt, lines: PurReceiptL
       line.accepted_quantity,
       line.unit,
     );
+  }
+  if (legacyMaterials.length > 0) {
+    throw new Error(formatLegacyReceiptBlockMessage(legacyMaterials));
   }
   if (!hasPostableLine) throw new Error('Receipt must have at least one line with accepted quantity.');
 }
