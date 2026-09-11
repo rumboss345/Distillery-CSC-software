@@ -260,7 +260,7 @@ export function MashFermentation() {
     if (fermenterForm.split && fermenterForm.fermenter1Id && fermenterForm.fermenter2Id) {
       const total = fermenterForm.volume1 + fermenterForm.volume2;
       if (form.water_gal > 0 && Math.abs(total - form.water_gal) > 0.5) {
-        if (!confirm(`Split volumes (${total} gal) don't match wash volume (${form.water_gal} gal). Save anyway?`)) {
+        if (!confirm(`Split volumes (${total} gal) don't match batch size (${form.water_gal} gal). Save anyway?`)) {
           return;
         }
       }
@@ -331,7 +331,7 @@ export function MashFermentation() {
                 <th>Batch #</th>
                 <th>Recipe</th>
                 <th>Sugar (lbs)</th>
-                <th>Water (gal)</th>
+                <th>Batch Size</th>
                 <th>Fermenter(s)</th>
                 <th>Start → Current Brix</th>
                 <th>Est. ABV</th>
@@ -451,7 +451,7 @@ export function MashFermentation() {
               <input type="number" min="0" step="0.1" value={form.grain_lbs || ''} onChange={(e) => setForm({ ...form, grain_lbs: parseFloat(e.target.value) || 0 })} placeholder="400" />
             </div>
             <div className="form-group">
-              <label>Water (gal)</label>
+              <label>Batch Size</label>
               <input type="number" step="0.1" value={form.water_gal || ''} onChange={(e) => setForm({ ...form, water_gal: parseFloat(e.target.value) || 0 })} />
             </div>
             <div className="form-group">
@@ -561,7 +561,7 @@ export function MashFermentation() {
             <div className="form-group full-width sugar-wash-calc">
               <label>Sugar Wash Calculator</label>
               <p className="form-hint">
-                Sugar (lbs) made up to Water (gal) total wash volume — same method as Essential Distilling.
+                Sugar (lbs) made up to batch size (gal) — same method as Essential Distilling.
               </p>
               {sugarWash ? (
                 <>
@@ -580,7 +580,7 @@ export function MashFermentation() {
                   </button>
                 </>
               ) : (
-                <p className="form-hint">Enter sugar lbs and total wash volume to estimate target Brix.</p>
+                <p className="form-hint">Enter sugar lbs and batch size to estimate target Brix.</p>
               )}
             </div>
 
