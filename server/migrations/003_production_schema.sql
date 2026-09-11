@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS floor_plans (
 
 CREATE TABLE IF NOT EXISTS floor_equipment (
   id SERIAL PRIMARY KEY,
-  floor_plan_id INTEGER NOT NULL REFERENCES floor_plans(id) ON DELETE CASCADE,
+  floor_plan_id INTEGER NOT NULL REFERENCES floor_plans(id) ON DELETE RESTRICT,
   name TEXT NOT NULL,
   equipment_type TEXT NOT NULL DEFAULT 'fermenter',
   pos_x_ft NUMERIC(10, 2) NOT NULL DEFAULT 4,
@@ -77,8 +77,8 @@ CREATE TABLE IF NOT EXISTS mash_batches (
 
 CREATE TABLE IF NOT EXISTS mash_fermenter_assignments (
   id SERIAL PRIMARY KEY,
-  mash_batch_id INTEGER NOT NULL REFERENCES mash_batches(id) ON DELETE CASCADE,
-  floor_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id) ON DELETE CASCADE,
+  mash_batch_id INTEGER NOT NULL REFERENCES mash_batches(id) ON DELETE RESTRICT,
+  floor_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id) ON DELETE RESTRICT,
   volume_litres NUMERIC(14, 4) NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -87,8 +87,8 @@ CREATE TABLE IF NOT EXISTS mash_fermenter_assignments (
 
 CREATE TABLE IF NOT EXISTS fermentation_logs (
   id SERIAL PRIMARY KEY,
-  mash_batch_id INTEGER NOT NULL REFERENCES mash_batches(id) ON DELETE CASCADE,
-  floor_equipment_id INTEGER REFERENCES floor_equipment(id),
+  mash_batch_id INTEGER NOT NULL REFERENCES mash_batches(id) ON DELETE RESTRICT,
+  floor_equipment_id INTEGER REFERENCES floor_equipment(id) ON DELETE SET NULL,
   logged_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   temperature_f NUMERIC(8, 2),
   brix NUMERIC(8, 3),
@@ -118,7 +118,7 @@ CREATE TABLE IF NOT EXISTS distillation_runs (
 
 CREATE TABLE IF NOT EXISTS distillation_cuts (
   id SERIAL PRIMARY KEY,
-  distillation_run_id INTEGER NOT NULL REFERENCES distillation_runs(id) ON DELETE CASCADE,
+  distillation_run_id INTEGER NOT NULL REFERENCES distillation_runs(id) ON DELETE RESTRICT,
   cut_type TEXT NOT NULL,
   holding_tank_equipment_id INTEGER REFERENCES floor_equipment(id),
   start_time TIMESTAMPTZ NOT NULL,
@@ -164,7 +164,7 @@ CREATE TABLE IF NOT EXISTS blend_products (
 
 CREATE TABLE IF NOT EXISTS blend_ingredients (
   id SERIAL PRIMARY KEY,
-  blend_product_id INTEGER NOT NULL REFERENCES blend_products(id) ON DELETE CASCADE,
+  blend_product_id INTEGER NOT NULL REFERENCES blend_products(id) ON DELETE RESTRICT,
   ingredient_type TEXT NOT NULL DEFAULT 'other',
   name TEXT NOT NULL DEFAULT '',
   amount NUMERIC(14, 4) NOT NULL DEFAULT 0,

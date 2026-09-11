@@ -472,7 +472,21 @@ export function getDb(): Database {
   return db;
 }
 
+function assertLocalWriteAllowed(): void {
+  try {
+    const raw = sessionStorage.getItem('csc-production-mode-cache');
+    if (!raw) return;
+    const status = JSON.parse(raw) as { serverAuthoritative?: boolean; migrationState?: string };
+    if (status.serverAuthoritative || status.migrationState === 'SERVER_AUTHORITATIVE') {
+      throw new Error('Central production database unavailable. Changes cannot be recorded.');
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message.includes('Changes cannot be recorded')) throw err;
+  }
+}
+
 export function runQuery(sql: string, params: SqlValue[] = []): void {
+  assertLocalWriteAllowed();
   getDb().run(sql, params);
   scheduleSave();
 }
@@ -481,7 +495,9 @@ export function insertRow(
   sql: string,
   params: SqlValue[] = [],
 ): number {
-  runQuery(sql, params);
+  assertLocalWriteAllowed();
+  getDb().run(sql, params);
+  scheduleSave();
   const result = queryOne<{ id: number }>('SELECT last_insert_rowid() as id');
   return result?.id ?? 0;
 }

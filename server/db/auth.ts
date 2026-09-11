@@ -1,10 +1,10 @@
 import bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
 import Database from 'better-sqlite3';
-import { existsSync } from 'fs';
+import { copyFileSync, existsSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import { query, queryOne } from './pool.js';
+import { query, queryOne, withTransaction } from './pool.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const LEGACY_AUTH_DB = join(__dirname, '..', 'data', 'auth.db');
@@ -25,10 +25,56 @@ export interface User {
   updated_at: string;
 }
 
-export async function migrateAuthFromSqliteIfNeeded(): Promise<number> {
+export interface AuthMigrationResult {
+  status: 'completed' | 'skipped' | 'failed' | 'no_legacy_db';
+  usersFound: number;
+  usersImported: number;
+  legacyBackupPath: string | null;
+  message: string;
+}
+
+export async function migrateAuthFromSqliteIfNeeded(): Promise<AuthMigrationResult> {
+  const prior = await queryOne<{ status: string }>(
+    `SELECT status FROM auth_migration_audit WHERE status = 'completed' ORDER BY id DESC LIMIT 1`,
+  );
+  if (prior) {
+    return {
+      status: 'skipped',
+      usersFound: 0,
+      usersImported: 0,
+      legacyBackupPath: null,
+      message: 'Auth migration already completed (idempotent skip).',
+    };
+  }
+
   const pgCount = await queryOne<{ count: string }>('SELECT COUNT(*)::text AS count FROM users');
-  if (Number(pgCount?.count ?? 0) > 0) return 0;
-  if (!existsSync(LEGACY_AUTH_DB)) return 0;
+  if (Number(pgCount?.count ?? 0) > 0) {
+    await query(
+      `INSERT INTO auth_migration_audit (status, users_found, users_imported, completed_at, error_message)
+       VALUES ('skipped', 0, $1, NOW(), 'PostgreSQL users table already populated')`,
+      [Number(pgCount.count)],
+    );
+    return {
+      status: 'skipped',
+      usersFound: Number(pgCount.count),
+      usersImported: Number(pgCount.count),
+      legacyBackupPath: null,
+      message: 'PostgreSQL already has users; legacy auth.db was not imported.',
+    };
+  }
+
+  if (!existsSync(LEGACY_AUTH_DB)) {
+    return {
+      status: 'no_legacy_db',
+      usersFound: 0,
+      usersImported: 0,
+      legacyBackupPath: null,
+      message: 'No legacy auth.db found; PostgreSQL auth will be seeded from environment only.',
+    };
+  }
+
+  const backupPath = `${LEGACY_AUTH_DB}.preserved-${Date.now()}`;
+  copyFileSync(LEGACY_AUTH_DB, backupPath);
 
   const sqlite = new Database(LEGACY_AUTH_DB, { readonly: true });
   const rows = sqlite.prepare('SELECT * FROM users ORDER BY id').all() as Array<{
@@ -43,21 +89,60 @@ export async function migrateAuthFromSqliteIfNeeded(): Promise<number> {
   }>;
   sqlite.close();
 
-  for (const row of rows) {
+  console.log(`Auth migration: found ${rows.length} user(s) in legacy auth.db (preserved at ${backupPath}).`);
+
+  try {
+    await withTransaction(async (client) => {
+      await client.query(
+        `INSERT INTO auth_migration_audit (status, legacy_auth_path, legacy_backup_path, users_found)
+         VALUES ('started', $1, $2, $3)`,
+        [LEGACY_AUTH_DB, backupPath, rows.length],
+      );
+
+      for (const row of rows) {
+        await client.query(
+          `INSERT INTO users (id, email, password_hash, name, role, status, approval_token, created_at, updated_at)
+           OVERRIDING SYSTEM VALUE
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8::timestamptz, $8::timestamptz)`,
+          [row.id, row.email, row.password_hash, row.name, row.role, row.status, row.approval_token, row.created_at],
+        );
+      }
+
+      if (rows.length > 0) {
+        await client.query(
+          `SELECT setval(pg_get_serial_sequence('users', 'id'), (SELECT COALESCE(MAX(id), 1) FROM users))`,
+        );
+      }
+
+      const verify = await client.query<{ count: string }>('SELECT COUNT(*)::text AS count FROM users');
+      const imported = Number(verify.rows[0]?.count ?? 0);
+      if (imported < rows.length) {
+        throw new Error(`Auth import validation failed: expected ${rows.length}, got ${imported}`);
+      }
+
+      await client.query(
+        `INSERT INTO auth_migration_audit (status, legacy_auth_path, legacy_backup_path, users_found, users_imported, completed_at)
+         VALUES ('completed', $1, $2, $3, $4, NOW())`,
+        [LEGACY_AUTH_DB, backupPath, rows.length, imported],
+      );
+    });
+  } catch (err) {
     await query(
-      `INSERT INTO users (id, email, password_hash, name, role, status, approval_token, created_at, updated_at)
-       OVERRIDING SYSTEM VALUE
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::timestamptz, $8::timestamptz)`,
-      [row.id, row.email, row.password_hash, row.name, row.role, row.status, row.approval_token, row.created_at],
+      `INSERT INTO auth_migration_audit (status, legacy_auth_path, legacy_backup_path, users_found, users_imported, error_message, completed_at)
+       VALUES ('failed', $1, $2, $3, 0, $4, NOW())`,
+      [LEGACY_AUTH_DB, backupPath, rows.length, err instanceof Error ? err.message : 'Auth migration failed'],
     );
+    throw err;
   }
 
-  if (rows.length > 0) {
-    await query(`SELECT setval(pg_get_serial_sequence('users', 'id'), (SELECT COALESCE(MAX(id), 1) FROM users))`);
-  }
-
-  console.log(`Migrated ${rows.length} auth user(s) from legacy auth.db to PostgreSQL.`);
-  return rows.length;
+  console.log(`Migrated ${rows.length} auth user(s) to PostgreSQL. Legacy auth.db preserved (not deleted).`);
+  return {
+    status: 'completed',
+    usersFound: rows.length,
+    usersImported: rows.length,
+    legacyBackupPath: backupPath,
+    message: `Imported ${rows.length} user(s) from legacy auth.db.`,
+  };
 }
 
 export async function getUserByEmail(email: string): Promise<User | undefined> {

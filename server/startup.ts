@@ -23,6 +23,7 @@ export async function initializeServerDatastores(): Promise<void> {
     console.log(`Applied ${applied.length} database migration(s).`);
   }
 
-  await migrateAuthFromSqliteIfNeeded();
+  const authMigration = await migrateAuthFromSqliteIfNeeded();
+  console.log(`Auth migration: ${authMigration.message}`);
   await syncAdminFromEnv();
 }

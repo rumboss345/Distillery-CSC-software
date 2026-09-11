@@ -18,6 +18,7 @@ import { APP_URL, HOST, PORT, isProduction, JWT_SECRET } from './config.js';
 import { sendAdminApprovalEmail } from './email.js';
 import { adminMiddleware, authMiddleware, signToken } from './middleware/auth.js';
 import productionRoutes from './routes/production.js';
+import { getHealthReport } from './services/health.js';
 import { initializeServerDatastores } from './startup.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -40,19 +41,23 @@ app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '50mb' }));
 
 app.get('/api/health', async (_req, res) => {
-  const dbOk = isDatabaseConfigured() ? await pingDatabase() : false;
-  res.json({
-    ok: true,
-    databaseConfigured: isDatabaseConfigured(),
-    databaseConnected: dbOk,
-  });
+  try {
+    const report = await getHealthReport();
+    res.status(report.ok ? 200 : 503).json(report);
+  } catch {
+    res.status(503).json({
+      ok: false,
+      application: 'running',
+      postgresql: { configured: isDatabaseConfigured(), reachable: false },
+    });
+  }
 });
 
 app.use('/api/production', productionRoutes);
 
 app.post('/api/auth/register', async (req, res) => {
   if (!isDatabaseConfigured()) {
-    res.status(503).json({ error: 'Server database is not configured' });
+    res.status(503).json({ error: 'Service temporarily unavailable' });
     return;
   }
 
@@ -99,7 +104,7 @@ app.post('/api/auth/register', async (req, res) => {
 
 app.post('/api/auth/login', async (req, res) => {
   if (!isDatabaseConfigured()) {
-    res.status(503).json({ error: 'Server database is not configured' });
+    res.status(503).json({ error: 'Service temporarily unavailable' });
     return;
   }
 

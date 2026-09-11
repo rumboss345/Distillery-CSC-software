@@ -67,7 +67,9 @@ CREATE TABLE IF NOT EXISTS data_import_runs (
   status TEXT NOT NULL DEFAULT 'preview' CHECK (status IN ('preview', 'imported', 'failed', 'cancelled')),
   preview_summary JSONB NOT NULL DEFAULT '{}'::jsonb,
   validation_summary JSONB NOT NULL DEFAULT '{}'::jsonb,
-  backup_payload TEXT,
+  backup_blob BYTEA,
+  backup_size_bytes BIGINT,
+  backup_sha256 TEXT,
   notes TEXT NOT NULL DEFAULT '',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   completed_at TIMESTAMPTZ

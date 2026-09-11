@@ -24,13 +24,16 @@ async function insertWithId(
   id: number,
   columns: string[],
   values: unknown[],
+  importRunId?: number,
 ) {
-  const placeholders = values.map((_, i) => `$${i + 2}`).join(', ');
+  const cols = importRunId != null ? [...columns, 'import_run_id'] : columns;
+  const vals = importRunId != null ? [...values, importRunId] : values;
+  const placeholders = vals.map((_, i) => `$${i + 2}`).join(', ');
   await client.query(
-    `INSERT INTO ${table} (id, ${columns.join(', ')})
+    `INSERT INTO ${table} (id, ${cols.join(', ')})
      OVERRIDING SYSTEM VALUE
      VALUES ($1, ${placeholders})`,
-    [id, ...values],
+    [id, ...vals],
   );
 }
 
@@ -65,16 +68,19 @@ async function clearProductionTables(client: pg.PoolClient) {
 export async function importSqlJsIntoPostgres(
   db: Database,
   client: pg.PoolClient,
+  importRunId: number,
 ): Promise<TableCounts> {
   await clearProductionTables(client);
 
   if (tableExists(db, 'inventory_categories')) {
     for (const row of selectAll(db, 'inventory_categories')) {
-      await insertWithId(client, 'inventory_categories', num(row.id), ['name', 'created_at', 'updated_at'], [
+      await insertWithId(client, 'inventory_categories', num(row.id), [
+        'name', 'created_at', 'updated_at',
+      ], [
         str(row.name),
         str(row.created_at, new Date().toISOString()),
         str(row.created_at, new Date().toISOString()),
-      ]);
+      ], importRunId);
     }
     await resetSequence(client, 'inventory_categories');
   }
@@ -92,7 +98,7 @@ export async function importSqlJsIntoPostgres(
         str(row.notes),
         str(row.created_at, new Date().toISOString()),
         str(row.updated_at ?? row.created_at, new Date().toISOString()),
-      ]);
+      ], importRunId);
     }
     await resetSequence(client, 'inventory_items');
   }
@@ -108,7 +114,7 @@ export async function importSqlJsIntoPostgres(
         str(row.notes),
         new Date().toISOString(),
         new Date().toISOString(),
-      ]);
+      ], importRunId);
     }
     await resetSequence(client, 'floor_plans');
   }
@@ -137,7 +143,7 @@ export async function importSqlJsIntoPostgres(
         str(row.notes),
         str(row.created_at, new Date().toISOString()),
         str(row.created_at, new Date().toISOString()),
-      ]);
+      ], importRunId);
     }
     await resetSequence(client, 'mash_batches');
   }
@@ -164,7 +170,7 @@ export async function importSqlJsIntoPostgres(
         str(row.notes),
         str(row.created_at, new Date().toISOString()),
         str(row.created_at, new Date().toISOString()),
-      ]);
+      ], importRunId);
     }
     await resetSequence(client, 'floor_equipment');
   }
@@ -180,7 +186,7 @@ export async function importSqlJsIntoPostgres(
         volumeLitres,
         new Date().toISOString(),
         new Date().toISOString(),
-      ]);
+      ], importRunId);
     }
     await resetSequence(client, 'mash_fermenter_assignments');
   }
@@ -200,7 +206,7 @@ export async function importSqlJsIntoPostgres(
         str(row.notes),
         new Date().toISOString(),
         new Date().toISOString(),
-      ]);
+      ], importRunId);
     }
     await resetSequence(client, 'fermentation_logs');
   }
@@ -229,7 +235,7 @@ export async function importSqlJsIntoPostgres(
         str(row.notes),
         str(row.created_at, new Date().toISOString()),
         str(row.created_at, new Date().toISOString()),
-      ]);
+      ], importRunId);
     }
     await resetSequence(client, 'distillation_runs');
   }
@@ -251,7 +257,7 @@ export async function importSqlJsIntoPostgres(
         str(row.notes),
         new Date().toISOString(),
         new Date().toISOString(),
-      ]);
+      ], importRunId);
     }
     await resetSequence(client, 'distillation_cuts');
   }
@@ -272,7 +278,7 @@ export async function importSqlJsIntoPostgres(
         str(row.notes),
         str(row.created_at, new Date().toISOString()),
         str(row.created_at, new Date().toISOString()),
-      ]);
+      ], importRunId);
     }
     await resetSequence(client, 'holding_tank_transfers');
   }
@@ -297,7 +303,7 @@ export async function importSqlJsIntoPostgres(
         str(row.notes),
         str(row.created_at, new Date().toISOString()),
         str(row.created_at, new Date().toISOString()),
-      ]);
+      ], importRunId);
     }
     await resetSequence(client, 'blend_products');
   }
@@ -321,7 +327,7 @@ export async function importSqlJsIntoPostgres(
         str(row.notes),
         new Date().toISOString(),
         new Date().toISOString(),
-      ]);
+      ], importRunId);
     }
     await resetSequence(client, 'blend_ingredients');
   }
@@ -345,7 +351,7 @@ export async function importSqlJsIntoPostgres(
         str(row.notes),
         str(row.created_at, new Date().toISOString()),
         str(row.created_at, new Date().toISOString()),
-      ]);
+      ], importRunId);
     }
     await resetSequence(client, 'barrels');
   }
@@ -368,7 +374,7 @@ export async function importSqlJsIntoPostgres(
         str(row.notes),
         str(row.created_at, new Date().toISOString()),
         str(row.created_at, new Date().toISOString()),
-      ]);
+      ], importRunId);
     }
     await resetSequence(client, 'bottling_runs');
   }
