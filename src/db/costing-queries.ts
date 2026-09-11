@@ -27,8 +27,28 @@ import type {
   MaterialLotValuationRow,
 } from '../types/costing';
 import { insertRow, queryAll, queryOne, runQuery, withDatabaseTransaction } from './database';
+import {
+  assignInitialLiquidPositionFromLayer,
+  getLiquidPositionCostForVolume,
+  listLiquidValuationPositions,
+} from './liquid-cost-movement-queries';
 import { nextBusinessCode } from './master-data-queries';
 import { getMaterialLotBalance } from './material-inventory-queries';
+
+export {
+  assignInitialLiquidPositionFromLayer,
+  getLiquidPositionCostForVolume,
+  listLiquidValuationPositions,
+  listLiquidCostMovements,
+  getLiquidCostTraceability,
+  getLiquidLotEconomicCost,
+  getLiquidLotPositionCostTotal,
+  getLiquidPositionCost,
+  rebuildLiquidTransferCostMovements,
+  recordLiquidTransferCostMovement,
+  reverseLiquidTransferCostMovement,
+  recordLiquidProductionConsumption,
+} from './liquid-cost-movement-queries';
 
 const now = () => new Date().toISOString();
 
@@ -307,7 +327,7 @@ export function createLiquidCostLayer(input: {
   const total = input.inputCostKyd + conversion;
   const costPerL = input.volumeLitres > 0 ? total / input.volumeLitres : null;
   const costPerLpa = input.lpa > 0 ? total / input.lpa : null;
-  return insertRow(
+  const layerId = insertRow(
     `INSERT INTO cost_liquid_lot_layers (
       liquid_lot_id, source_type, source_id, production_batch_id, effective_date,
       volume_litres, lpa, input_cost_kyd, conversion_cost_kyd, total_cost_kyd,
@@ -330,6 +350,16 @@ export function createLiquidCostLayer(input: {
       now(),
     ],
   );
+
+  assignInitialLiquidPositionFromLayer(
+    input.liquidLotId,
+    layerId,
+    total,
+    input.volumeLitres,
+    input.lpa,
+  );
+
+  return layerId;
 }
 
 export function getLiquidLotCostLayers(liquidLotId: number): CostLiquidLotLayer[] {
@@ -930,50 +960,42 @@ export function listMaterialValuations(filters?: {
 }
 
 export function listLiquidValuations(): LiquidLotValuationRow[] {
-  const lots = queryAll<{
-    id: number;
-    lot_code: string;
-    lot_type: string;
-  }>(
-    `SELECT l.id, l.lot_code, l.lot_type FROM liq_lots l
-     JOIN liq_transactions t ON t.destination_lot_id = l.id OR t.source_lot_id = l.id
-     LEFT JOIN liq_tanks tk ON tk.id = t.destination_tank_id OR tk.id = t.source_tank_id
-     WHERE tk.tracking_mode = 'LEDGER' OR tk.id IS NULL
-     GROUP BY l.id`,
-  );
+  const positions = listLiquidValuationPositions();
+  const lotMap = new Map<number, LiquidLotValuationRow>();
 
-  return lots.map((lot) => {
-    const balance = queryOne<{ vol: number; abv: number }>(
-      `SELECT
-        COALESCE(SUM(CASE WHEN destination_lot_id = ? THEN volume_litres ELSE 0 END), 0) -
-        COALESCE(SUM(CASE WHEN source_lot_id = ? THEN volume_litres ELSE 0 END), 0) AS vol,
-        MAX(CASE WHEN destination_lot_id = ? THEN abv ELSE NULL END) AS abv
-       FROM liq_transactions WHERE source_lot_id = ? OR destination_lot_id = ?`,
-      [lot.id, lot.id, lot.id, lot.id, lot.id],
-    );
-    const vol = balance?.vol ?? 0;
-    const abv = balance?.abv ?? 0;
-    const lpa = vol * (abv / 100);
-    const val = getLiquidLotValuation(lot.id, vol, lpa);
-    const batchCode = queryOne<{ batch_code: string }>(
-      `SELECT b.batch_code FROM prod_batches b
-       JOIN cost_liquid_lot_layers cl ON cl.production_batch_id = b.id
-       WHERE cl.liquid_lot_id = ? LIMIT 1`,
-      [lot.id],
-    )?.batch_code ?? null;
-    return {
-      liquid_lot_id: lot.id,
-      lot_code: lot.lot_code,
-      lot_type: lot.lot_type,
-      current_volume_litres: vol,
-      current_abv: abv,
-      current_lpa: lpa,
-      accumulated_cost_kyd: val.accumulatedCostKyd,
-      cost_per_litre_kyd: val.costPerLitreKyd,
-      cost_per_lpa_kyd: val.costPerLpaKyd,
-      cost_status: val.costStatus,
-      source_batch_code: batchCode,
-    };
+  for (const pos of positions) {
+    const existing = lotMap.get(pos.liquid_lot_id);
+    if (existing) {
+      existing.current_volume_litres += pos.current_volume_litres;
+      existing.current_lpa += pos.current_lpa;
+      existing.accumulated_cost_kyd = pos.lot_economic_cost_kyd;
+    } else {
+      lotMap.set(pos.liquid_lot_id, {
+        liquid_lot_id: pos.liquid_lot_id,
+        lot_code: pos.lot_code,
+        lot_type: pos.lot_type,
+        current_volume_litres: pos.current_volume_litres,
+        current_abv: pos.current_abv,
+        current_lpa: pos.current_lpa,
+        accumulated_cost_kyd: pos.lot_economic_cost_kyd,
+        cost_per_litre_kyd: null,
+        cost_per_lpa_kyd: null,
+        cost_status: pos.cost_status,
+        source_batch_code: pos.source_batch_code,
+      });
+    }
+  }
+
+  return [...lotMap.values()].map((row) => {
+    row.current_abv = row.current_volume_litres > 0
+      ? (row.current_lpa / row.current_volume_litres) * 100
+      : 0;
+    const val = getLiquidLotValuation(row.liquid_lot_id, row.current_volume_litres, row.current_lpa);
+    row.cost_per_litre_kyd = val.costPerLitreKyd;
+    row.cost_per_lpa_kyd = val.costPerLpaKyd;
+    row.cost_status = val.costStatus;
+    row.accumulated_cost_kyd = val.accumulatedCostKyd;
+    return row;
   });
 }
 
@@ -1011,8 +1033,10 @@ export function getBatchCostBreakdown(batchId: number): BatchCostBreakdown {
     actual_quantity: number;
     actual_abv: number | null;
     liquid_lot_id: number;
+    source_tank_id: number | null;
   }>(
-    `SELECT ll.lot_code, bi.actual_volume_litres, bi.actual_quantity, bi.actual_abv, bi.liquid_lot_id
+    `SELECT ll.lot_code, bi.actual_volume_litres, bi.actual_quantity, bi.actual_abv,
+            bi.liquid_lot_id, bi.source_tank_id
      FROM prod_batch_inputs bi
      JOIN liq_lots ll ON ll.id = bi.liquid_lot_id
      WHERE bi.batch_id = ? AND bi.input_type = 'Liquid Lot'`,
@@ -1021,15 +1045,19 @@ export function getBatchCostBreakdown(batchId: number): BatchCostBreakdown {
     const vol = li.actual_volume_litres ?? li.actual_quantity;
     const abv = li.actual_abv ?? 0;
     const lpa = vol * (abv / 100);
-    const val = getLiquidLotValuation(li.liquid_lot_id, vol, lpa);
-    const extended = val.costPerLitreKyd != null ? val.costPerLitreKyd * vol : null;
+    const extended =
+      li.source_tank_id != null
+        ? getLiquidPositionCostForVolume(li.liquid_lot_id, li.source_tank_id, vol)
+        : null;
+    const costPerL = extended != null && vol > 0 ? extended / vol : null;
+    const costPerLpa = extended != null && lpa > 0 ? extended / lpa : null;
     return {
       lotCode: li.lot_code,
       volumeLitres: vol,
       abv,
       lpa,
-      costPerLitreKyd: val.costPerLitreKyd,
-      costPerLpaKyd: val.costPerLpaKyd,
+      costPerLitreKyd: costPerL,
+      costPerLpaKyd: costPerLpa,
       extendedCostKyd: extended,
       sourceBatchCode: null as string | null,
     };

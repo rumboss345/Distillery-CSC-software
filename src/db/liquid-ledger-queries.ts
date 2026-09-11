@@ -49,6 +49,10 @@ import type {
   TransferLiquidInput,
 } from '../types/liquid-ledger';
 import { insertRow, queryAll, queryOne, runQuery, withDatabaseTransaction } from './database';
+import {
+  recordLiquidTransferCostMovement,
+  reverseLiquidTransferCostMovement,
+} from './liquid-cost-movement-queries';
 import { addLookupValue, getLookupNames, nextBusinessCode } from './master-data-queries';
 import { getHoldingTankContents, getHoldingTanks } from './queries';
 
@@ -578,6 +582,13 @@ export function reverseTransaction(transactionId: number, createdBy?: string | n
       reversalIds.push(createReversalTx(tx, createdBy, reversalGroupId));
     }
 
+    if (original.transaction_group_id) {
+      const hasTransfer = targets.some((tx) => tx.transaction_type === 'Tank Transfer Out');
+      if (hasTransfer) {
+        reverseLiquidTransferCostMovement(original.transaction_group_id);
+      }
+    }
+
     return reversalIds;
   });
 }
@@ -669,7 +680,8 @@ export function transferLiquid(input: TransferLiquidInput): number {
 
     const ts = now();
     const groupId = nextOperationGroupId();
-    insertTransaction({
+
+    const outTxId = insertTransaction({
       transaction_type: 'Tank Transfer Out',
       transaction_timestamp: ts,
       source_tank_id: source.id,
@@ -685,7 +697,8 @@ export function transferLiquid(input: TransferLiquidInput): number {
       created_by: input.createdBy ?? null,
       transaction_group_id: groupId,
     });
-    return insertTransaction({
+
+    const inTxId = insertTransaction({
       transaction_type: 'Tank Transfer In',
       transaction_timestamp: ts,
       source_tank_id: null,
@@ -701,6 +714,19 @@ export function transferLiquid(input: TransferLiquidInput): number {
       created_by: input.createdBy ?? null,
       transaction_group_id: groupId,
     });
+
+    recordLiquidTransferCostMovement({
+      outTransactionId: outTxId,
+      transactionGroupId: groupId,
+      liquidLotId: lotId,
+      sourceTankId: source.id,
+      destinationTankId: dest.id,
+      volumeLitres: input.volumeLitres,
+      lpa: transferLpa,
+      sourceVolumeAtTransfer: lotInTank.volumeLitres,
+    });
+
+    return inTxId;
   });
 }
 

@@ -74,7 +74,8 @@ import {
   createPreliminaryBatchSnapshot,
   getBatchMaterialCost,
   getBatchConversionCostTotal,
-  getLiquidLotTotalCost,
+  getLiquidPositionCostForVolume,
+  recordLiquidProductionConsumption,
   recordBatchCostError,
 } from './costing-queries';
 import { validateSufficientMaterialBalance } from '../../shared/material-inventory/validation';
@@ -852,9 +853,24 @@ export function completeBatch(input: CompleteBatchInput): { lotId: number; trans
     validateLpaConservation(batch.id, outputLpa, input.notes);
 
     const productionType = order.production_type;
+    const liquidInputsBeforeCompletion = getLiquidInputs(batch.id);
+    const liquidCostSnapshots = liquidInputsBeforeCompletion.map((li) => {
+      const vol = li.actual_volume_litres ?? li.actual_quantity;
+      const abv = li.actual_abv ?? 0;
+      return {
+        lotId: li.liquid_lot_id!,
+        tankId: li.source_tank_id!,
+        volumeLitres: vol,
+        lpa: vol * (abv / 100),
+        costKyd:
+          li.liquid_lot_id != null && li.source_tank_id != null
+            ? getLiquidPositionCostForVolume(li.liquid_lot_id, li.source_tank_id, vol)
+            : 0,
+      };
+    });
 
     if (productionType === 'Blending') {
-      const liquidInputs = getLiquidInputs(batch.id);
+      const liquidInputs = liquidInputsBeforeCompletion;
       if (liquidInputs.length < 2) throw new Error('Blend requires at least two liquid inputs.');
       const sourceTankId = liquidInputs[0]?.source_tank_id;
       if (sourceTankId == null) throw new Error('Blend requires a source tank.');
@@ -944,10 +960,9 @@ export function completeBatch(input: CompleteBatchInput): { lotId: number; trans
       const conversionCost = getBatchConversionCostTotal(batch.id);
 
       if (productionType === 'Blending') {
-        const liquidInputs = getLiquidInputs(batch.id);
-        const inputLotCosts = liquidInputs.map((li) => ({
-          lotId: li.liquid_lot_id!,
-          costKyd: getLiquidLotTotalCost(li.liquid_lot_id!),
+        const inputLotCosts = liquidCostSnapshots.map((snap) => ({
+          lotId: snap.lotId,
+          costKyd: snap.costKyd,
         }));
         createLiquidCostFromBlend({
           outputLotId: lotId,
@@ -959,8 +974,19 @@ export function completeBatch(input: CompleteBatchInput): { lotId: number; trans
           outputVolumeLitres: input.actualOutputLitres,
           outputLpa: outputLpa,
         });
+        for (const snap of liquidCostSnapshots) {
+          recordLiquidProductionConsumption({
+            liquidLotId: snap.lotId,
+            sourceTankId: snap.tankId,
+            volumeLitres: snap.volumeLitres,
+            lpa: snap.lpa,
+            costKyd: snap.costKyd,
+            productionBatchId: batch.id,
+            transactionGroupId: groupId,
+          });
+        }
       } else if (productionType === 'Proof Down' || productionType.includes('Proof')) {
-        const spiritInput = getLiquidInputs(batch.id)[0];
+        const spiritSnapshot = liquidCostSnapshots[0];
         const waterInputs = getWaterInputs(batch.id);
         let waterCost = 0;
         for (const wi of waterInputs) {
@@ -973,9 +999,18 @@ export function completeBatch(input: CompleteBatchInput): { lotId: number; trans
             waterCost += consumptions.reduce((s, c) => s + (c.extended_cost_kyd ?? 0), 0);
           }
         }
-        const spiritCost = spiritInput?.liquid_lot_id
-          ? getLiquidLotTotalCost(spiritInput.liquid_lot_id)
-          : 0;
+        const spiritCost = spiritSnapshot?.costKyd ?? 0;
+        if (spiritSnapshot) {
+          recordLiquidProductionConsumption({
+            liquidLotId: spiritSnapshot.lotId,
+            sourceTankId: spiritSnapshot.tankId,
+            volumeLitres: spiritSnapshot.volumeLitres,
+            lpa: spiritSnapshot.lpa,
+            costKyd: spiritSnapshot.costKyd,
+            productionBatchId: batch.id,
+            transactionGroupId: groupId,
+          });
+        }
         createLiquidCostFromProofDown({
           outputLotId: lotId,
           productionBatchId: batch.id,
@@ -983,8 +1018,8 @@ export function completeBatch(input: CompleteBatchInput): { lotId: number; trans
           inputTotalCostKyd: spiritCost + (materialCost.total ?? 0),
           waterCostKyd: waterCost,
           conversionCostKyd: conversionCost,
-          inputVolumeLitres: spiritInput?.actual_volume_litres ?? spiritInput?.actual_quantity ?? 0,
-          inputAbv: spiritInput?.actual_abv ?? order.snapshot_target_abv ?? 96,
+          inputVolumeLitres: spiritSnapshot?.volumeLitres ?? 0,
+          inputAbv: liquidInputsBeforeCompletion[0]?.actual_abv ?? order.snapshot_target_abv ?? 96,
           outputVolumeLitres: input.actualOutputLitres,
           outputAbv: input.actualOutputAbv,
         });

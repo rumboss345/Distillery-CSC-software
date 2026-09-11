@@ -182,6 +182,44 @@ export type LiquidLotValuationRow = {
   source_batch_code: string | null;
 };
 
+export type LiquidPositionValuationRow = {
+  liquid_lot_id: number;
+  lot_code: string;
+  lot_type: string;
+  tank_id: number;
+  tank_name: string;
+  current_volume_litres: number;
+  current_abv: number;
+  current_lpa: number;
+  position_cost_kyd: number;
+  cost_per_litre_kyd: number | null;
+  cost_per_lpa_kyd: number | null;
+  cost_status: CostStatus;
+  lot_economic_cost_kyd: number;
+  source_batch_code: string | null;
+};
+
+export type CostLiquidMovement = {
+  id: number;
+  liquid_transaction_id: number | null;
+  transaction_group_id: string | null;
+  liquid_lot_id: number;
+  source_tank_id: number | null;
+  destination_tank_id: number | null;
+  volume_litres: number;
+  lpa: number | null;
+  transferred_cost_kyd: number;
+  cost_per_litre_snapshot: number | null;
+  cost_per_lpa_snapshot: number | null;
+  movement_type: string;
+  status: string;
+  reversal_of_id: number | null;
+  costing_status: string;
+  source_cost_layer_id: number | null;
+  notes: string;
+  created_at: string;
+};
+
 export type BatchCostBreakdown = {
   batchId: number;
   batchCode: string;

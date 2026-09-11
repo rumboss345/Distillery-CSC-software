@@ -27,6 +27,7 @@ import {
   COSTING_SCHEMA,
   COSTING_V1G_MIGRATION,
   COSTING_V1G_NEW_COLUMNS,
+  COSTING_V1G_TRANSFER_MIGRATION,
 } from './costing-schema';
 import { SCHEMA, SEED_DATA } from './schema';
 
@@ -463,6 +464,7 @@ function migrateCosting(): void {
     db.run(COSTING_SCHEMA);
   } else {
     db.run(COSTING_V1G_MIGRATION);
+    db.run(COSTING_V1G_TRANSFER_MIGRATION);
   }
   for (const col of COSTING_V1G_NEW_COLUMNS) {
     if (!recipeColumnExists(col.table, col.column)) {

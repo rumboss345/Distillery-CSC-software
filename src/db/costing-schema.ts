@@ -186,6 +186,27 @@ CREATE TABLE IF NOT EXISTS cost_post_consumption_flags (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS cost_liquid_movements (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  liquid_transaction_id INTEGER REFERENCES liq_transactions(id),
+  transaction_group_id TEXT,
+  liquid_lot_id INTEGER NOT NULL REFERENCES liq_lots(id),
+  source_tank_id INTEGER REFERENCES liq_tanks(id),
+  destination_tank_id INTEGER REFERENCES liq_tanks(id),
+  volume_litres REAL NOT NULL DEFAULT 0,
+  lpa REAL,
+  transferred_cost_kyd REAL NOT NULL DEFAULT 0,
+  cost_per_litre_snapshot REAL,
+  cost_per_lpa_snapshot REAL,
+  movement_type TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'Active',
+  reversal_of_id INTEGER REFERENCES cost_liquid_movements(id),
+  costing_status TEXT NOT NULL DEFAULT 'Recorded',
+  source_cost_layer_id INTEGER REFERENCES cost_liquid_lot_layers(id),
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_cost_lcd_receipt ON cost_landed_cost_documents(receipt_id);
 CREATE INDEX IF NOT EXISTS idx_cost_lcd_status ON cost_landed_cost_documents(status);
 CREATE INDEX IF NOT EXISTS idx_cost_lcc_document ON cost_landed_cost_components(landed_cost_document_id);
@@ -200,11 +221,43 @@ CREATE INDEX IF NOT EXISTS idx_cost_bs_batch ON cost_batch_snapshots(production_
 CREATE INDEX IF NOT EXISTS idx_cost_po_batch ON cost_production_outputs(production_batch_id);
 CREATE INDEX IF NOT EXISTS idx_cost_adj_target ON cost_adjustments(target_type, target_id);
 CREATE INDEX IF NOT EXISTS idx_cost_pcf_batch ON cost_post_consumption_flags(production_batch_id);
+CREATE INDEX IF NOT EXISTS idx_clm_lot ON cost_liquid_movements(liquid_lot_id);
+CREATE INDEX IF NOT EXISTS idx_clm_group ON cost_liquid_movements(transaction_group_id);
+CREATE INDEX IF NOT EXISTS idx_clm_tx ON cost_liquid_movements(liquid_transaction_id);
+CREATE INDEX IF NOT EXISTS idx_clm_reversal ON cost_liquid_movements(reversal_of_id);
 `;
 
 export const COSTING_V1G_MIGRATION = `
 CREATE INDEX IF NOT EXISTS idx_cost_lcd_receipt ON cost_landed_cost_documents(receipt_id);
 CREATE INDEX IF NOT EXISTS idx_cost_mll_lot ON cost_material_lot_layers(material_lot_id);
+`;
+
+/** Phase 1G liquid transfer cost persistence — additive for existing browser DBs. */
+export const COSTING_V1G_TRANSFER_MIGRATION = `
+CREATE TABLE IF NOT EXISTS cost_liquid_movements (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  liquid_transaction_id INTEGER REFERENCES liq_transactions(id),
+  transaction_group_id TEXT,
+  liquid_lot_id INTEGER NOT NULL REFERENCES liq_lots(id),
+  source_tank_id INTEGER REFERENCES liq_tanks(id),
+  destination_tank_id INTEGER REFERENCES liq_tanks(id),
+  volume_litres REAL NOT NULL DEFAULT 0,
+  lpa REAL,
+  transferred_cost_kyd REAL NOT NULL DEFAULT 0,
+  cost_per_litre_snapshot REAL,
+  cost_per_lpa_snapshot REAL,
+  movement_type TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'Active',
+  reversal_of_id INTEGER REFERENCES cost_liquid_movements(id),
+  costing_status TEXT NOT NULL DEFAULT 'Recorded',
+  source_cost_layer_id INTEGER REFERENCES cost_liquid_lot_layers(id),
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_clm_lot ON cost_liquid_movements(liquid_lot_id);
+CREATE INDEX IF NOT EXISTS idx_clm_group ON cost_liquid_movements(transaction_group_id);
+CREATE INDEX IF NOT EXISTS idx_clm_tx ON cost_liquid_movements(liquid_transaction_id);
+CREATE INDEX IF NOT EXISTS idx_clm_reversal ON cost_liquid_movements(reversal_of_id);
 `;
 
 export const COSTING_V1G_NEW_COLUMNS: Array<{ table: string; column: string; ddl: string }> = [];
