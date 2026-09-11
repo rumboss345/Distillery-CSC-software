@@ -1,10 +1,16 @@
 import initSqlJs, { Database, SqlValue } from 'sql.js/dist/sql-wasm.js';
-import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 import { buildCscFloorEquipmentRows, CSC_FLOOR_PLAN_SIZE } from '../lib/csc-floor-equipment';
 import { MASTER_DATA_SCHEMA, SUPPLIER_CLASSIFICATIONS_MIGRATION } from './master-data-schema';
 import { migrateSupplierClassificationsFromLegacy, seedMasterDataIfEmpty } from './master-data-queries';
 import { RECIPES_SCHEMA, RECIPES_V1C_MIGRATION, RECIPES_V1C_NEW_COLUMNS } from './recipes-schema';
 import { seedRecipeLookupsIfEmpty } from './recipes-queries';
+import {
+  FLOOR_TRACKING_MODE_MIGRATION,
+  LIQUID_LEDGER_SCHEMA,
+  LIQUID_LEDGER_V1D_INTEGRITY_MIGRATION,
+  LIQUID_LEDGER_V1D_NEW_COLUMNS,
+} from './liquid-ledger-schema';
+import { seedLiquidLedgerLookupsIfEmpty } from './liquid-ledger-queries';
 import { SCHEMA, SEED_DATA } from './schema';
 
 const FLOOR_MIGRATION = `
@@ -370,7 +376,47 @@ function runMigrations(): void {
   migrateFloorPlanPages();
   migrateMasterData();
   migrateRecipes();
+  migrateLiquidLedger();
   persistDb();
+}
+
+function floorColumnExists(column: string): boolean {
+  if (!db) return false;
+  const row = queryOne<{ name: string }>(
+    `SELECT name FROM pragma_table_info('floor_equipment') WHERE name = ?`,
+    [column],
+  );
+  return row != null;
+}
+
+function ledgerColumnExists(table: string, column: string): boolean {
+  if (!db) return false;
+  const row = queryOne<{ name: string }>(
+    `SELECT name FROM pragma_table_info('${table}') WHERE name = ?`,
+    [column],
+  );
+  return row != null;
+}
+
+function migrateLiquidLedger(): void {
+  if (!db) return;
+  const hasLedger = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='liq_lots'",
+  );
+  if (!hasLedger) {
+    db.run(LIQUID_LEDGER_SCHEMA);
+    seedLiquidLedgerLookupsIfEmpty();
+  } else {
+    db.run(LIQUID_LEDGER_V1D_INTEGRITY_MIGRATION);
+    for (const col of LIQUID_LEDGER_V1D_NEW_COLUMNS) {
+      if (!ledgerColumnExists(col.table, col.column)) {
+        db.run(col.ddl);
+      }
+    }
+  }
+  if (!floorColumnExists('tracking_mode')) {
+    db.run(FLOOR_TRACKING_MODE_MIGRATION);
+  }
 }
 
 function recipeColumnExists(table: string, column: string): boolean {
@@ -495,10 +541,25 @@ function scheduleSave(): void {
   saveTimer = setTimeout(persistDb, 300);
 }
 
+async function resolveWasmLocateFile(): Promise<(file: string) => string> {
+  if (typeof window === 'undefined') {
+    const { dirname, join } = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const wasmPath = join(
+      dirname(fileURLToPath(import.meta.url)),
+      '../../node_modules/sql.js/dist/sql-wasm.wasm',
+    );
+    return () => wasmPath;
+  }
+  const { default: wasmUrl } = await import('sql.js/dist/sql-wasm.wasm?url');
+  return () => wasmUrl;
+}
+
 export async function initDatabase(): Promise<Database> {
   if (db) return db;
 
-  const SQL = await initSqlJs({ locateFile: () => wasmUrl });
+  const locateFile = await resolveWasmLocateFile();
+  const SQL = await initSqlJs({ locateFile });
 
   let stored = localStorage.getItem(DB_STORAGE_KEY);
   if (!stored) {
@@ -513,10 +574,13 @@ export async function initDatabase(): Promise<Database> {
     db.run(SCHEMA);
     db.run(MASTER_DATA_SCHEMA);
     db.run(RECIPES_SCHEMA);
+    db.run(LIQUID_LEDGER_SCHEMA);
     db.run(SEED_DATA);
     seedMasterDataIfEmpty();
     seedRecipeLookupsIfEmpty();
+    seedLiquidLedgerLookupsIfEmpty();
     seedCscFloorEquipment({ assignSequentialIds: true, demoStatusForFirstTwo: true });
+    migrateLiquidLedger();
     persistDb();
   }
 
@@ -526,6 +590,14 @@ export async function initDatabase(): Promise<Database> {
 export function getDb(): Database {
   if (!db) throw new Error('Database not initialized');
   return db;
+}
+
+/** Test-only: inject an initialized sql.js instance for integration tests. */
+export function __injectDatabaseForTests(instance: Database | null): void {
+  if (db && db !== instance) {
+    db.close();
+  }
+  db = instance;
 }
 
 function assertLocalWriteAllowed(): void {

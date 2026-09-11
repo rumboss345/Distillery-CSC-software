@@ -27,6 +27,12 @@ import { LocationsPage } from './pages/master-data/LocationsPage';
 import { RecipesLayout } from './pages/recipes/RecipesLayout';
 import { RecipesPage } from './pages/recipes/RecipesPage';
 import { RecipeDetailPage } from './pages/recipes/RecipeDetailPage';
+import { LiquidInventoryLayout } from './pages/liquid-inventory/LiquidInventoryLayout';
+import { TankBoardPage } from './pages/liquid-inventory/TankBoardPage';
+import { LiquidLotsPage } from './pages/liquid-inventory/LiquidLotsPage';
+import { LiquidLotDetailPage } from './pages/liquid-inventory/LiquidLotDetailPage';
+import { TransactionsPage } from './pages/liquid-inventory/TransactionsPage';
+import { ReconciliationPage } from './pages/liquid-inventory/ReconciliationPage';
 import { useDatabaseReady } from './db/queries';
 
 function AppContent() {
@@ -68,6 +74,13 @@ function AppContent() {
             <Route path="/recipes" element={<RecipesLayout />}>
               <Route index element={<RecipesPage />} />
               <Route path=":id" element={<RecipeDetailPage />} />
+            </Route>
+            <Route path="/liquid-inventory" element={<LiquidInventoryLayout />}>
+              <Route index element={<TankBoardPage />} />
+              <Route path="lots" element={<LiquidLotsPage />} />
+              <Route path="lots/:id" element={<LiquidLotDetailPage />} />
+              <Route path="transactions" element={<TransactionsPage />} />
+              <Route path="reconciliation" element={<ReconciliationPage />} />
             </Route>
             <Route path="/master-data" element={<MasterDataLayout />}>
               <Route index element={<Navigate to="products" replace />} />

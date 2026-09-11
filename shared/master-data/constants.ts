@@ -55,6 +55,10 @@ export const CODE_PREFIXES = {
   supplier: 'SUP',
   location: 'LOC',
   recipe: 'REC',
+  lot: 'LOT',
+  tank: 'TNK',
+  liquidTransaction: 'LTX',
+  operationGroup: 'LGO',
 } as const;
 
 export const DEFAULT_UNITS = [
