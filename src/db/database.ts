@@ -44,6 +44,11 @@ import {
   QUALITY_V1K_MIGRATION,
   QUALITY_V1K_NEW_COLUMNS,
 } from './quality-schema';
+import {
+  MULTI_LOCATION_SCHEMA,
+  MULTI_LOCATION_V1I_MIGRATION,
+  MULTI_LOCATION_V1I_NEW_COLUMNS,
+} from './multi-location-schema';
 import { SCHEMA, SEED_DATA } from './schema';
 
 const FLOOR_MIGRATION = `
@@ -416,6 +421,7 @@ function runMigrations(): void {
   migrateFinishedGoods();
   migrateBarrelAging();
   migrateQuality();
+  migrateMultiLocation();
   persistDb();
 }
 
@@ -518,6 +524,23 @@ function migrateQuality(): void {
     db.run(QUALITY_V1K_MIGRATION);
   }
   for (const col of QUALITY_V1K_NEW_COLUMNS) {
+    if (!recipeColumnExists(col.table, col.column)) {
+      db.run(col.ddl);
+    }
+  }
+}
+
+function migrateMultiLocation(): void {
+  if (!db) return;
+  const hasMultiLocation = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='inv_transfer_documents'",
+  );
+  if (!hasMultiLocation) {
+    db.run(MULTI_LOCATION_SCHEMA);
+  } else {
+    db.run(MULTI_LOCATION_V1I_MIGRATION);
+  }
+  for (const col of MULTI_LOCATION_V1I_NEW_COLUMNS) {
     if (!recipeColumnExists(col.table, col.column)) {
       db.run(col.ddl);
     }
@@ -736,6 +759,7 @@ export async function initDatabase(): Promise<Database> {
     migrateFinishedGoods();
     migrateBarrelAging();
     migrateQuality();
+    migrateMultiLocation();
     persistDb();
   }
 

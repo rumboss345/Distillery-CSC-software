@@ -74,6 +74,12 @@ import { SamplesPage } from './pages/quality/SamplesPage';
 import { HoldsPage } from './pages/quality/HoldsPage';
 import { CoaPage } from './pages/quality/CoaPage';
 import { RecallTracePage } from './pages/quality/RecallTracePage';
+import { WarehouseLayout } from './pages/warehouse/WarehouseLayout';
+import { WarehouseDashboardPage } from './pages/warehouse/WarehouseDashboardPage';
+import { LocationHierarchyPage } from './pages/warehouse/LocationHierarchyPage';
+import { TransferDocumentsPage } from './pages/warehouse/TransferDocumentsPage';
+import { CycleCountsPage } from './pages/warehouse/CycleCountsPage';
+import { BarcodesLabelsPage } from './pages/warehouse/BarcodesLabelsPage';
 import { useDatabaseReady } from './db/queries';
 
 function AppContent() {
@@ -148,6 +154,13 @@ function AppContent() {
               <Route path="lots" element={<FgLotsPage />} />
               <Route path="packaging-runs" element={<PackagingRunsPage />} />
               <Route path="transactions" element={<FgTransactionsPage />} />
+            </Route>
+            <Route path="/warehouse" element={<WarehouseLayout />}>
+              <Route index element={<WarehouseDashboardPage />} />
+              <Route path="locations" element={<LocationHierarchyPage />} />
+              <Route path="transfers" element={<TransferDocumentsPage />} />
+              <Route path="cycle-counts" element={<CycleCountsPage />} />
+              <Route path="barcodes" element={<BarcodesLabelsPage />} />
             </Route>
             <Route path="/quality" element={<QualityLayout />}>
               <Route index element={<QualityDashboardPage />} />

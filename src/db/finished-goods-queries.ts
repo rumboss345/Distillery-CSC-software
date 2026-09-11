@@ -614,6 +614,38 @@ export function postFgWriteOff(input: {
   });
 }
 
+export function postFgCycleCountAdjustment(input: {
+  fgLotId: number;
+  locationId: number;
+  varianceQuantity: number;
+  notes?: string;
+  createdBy?: string | null;
+}): number {
+  const lot = queryOne<FgLot>('SELECT * FROM fg_lots WHERE id = ?', [input.fgLotId]);
+  if (!lot) throw new Error('Finished goods lot not found.');
+  if (Math.abs(input.varianceQuantity) < 1e-9) {
+    throw new Error('No variance to post.');
+  }
+  const isIncrease = input.varianceQuantity > 0;
+  const absQty = Math.abs(input.varianceQuantity);
+  if (!isIncrease) {
+    const balance = computeFgLotBalance(input.fgLotId, input.locationId);
+    if (balance < absQty) throw new Error('Insufficient quantity for cycle count decrease.');
+  }
+  return insertFgTransaction({
+    transactionType: 'Reconciliation',
+    fgLotId: input.fgLotId,
+    skuId: lot.sku_id,
+    sourceLocationId: isIncrease ? null : input.locationId,
+    destinationLocationId: isIncrease ? input.locationId : null,
+    quantity: absQty,
+    unitCostKyd: lot.unit_cost_kyd,
+    reasonCode: 'Cycle Count',
+    notes: input.notes ?? 'Cycle count reconciliation',
+    createdBy: input.createdBy ?? null,
+  });
+}
+
 export function postFgShipment(input: {
   fgLotId: number;
   sourceLocationId: number;

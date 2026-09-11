@@ -79,6 +79,8 @@ export const CODE_PREFIXES = {
   qcSample: 'QSM',
   qcHold: 'QHD',
   qcCoa: 'COA',
+  inventoryTransfer: 'INV-TR',
+  cycleCount: 'CNT',
 } as const;
 
 export const DEFAULT_UNITS = [
