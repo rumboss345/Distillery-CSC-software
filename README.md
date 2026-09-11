@@ -33,15 +33,15 @@ Set in the Render dashboard (not GitHub):
 
 | Variable | Required |
 |----------|----------|
-| `DATABASE_URL` | Yes — attach a Render PostgreSQL instance |
 | `JWT_SECRET` | Yes |
 | `ADMIN_EMAIL` | Yes |
 | `ADMIN_PASSWORD` | Yes |
 | `APP_URL` | Yes — your Render URL |
+| `DATABASE_URL` | Optional during testing — omit to use browser-local production data |
 
 The admin account is created or updated automatically on each server start from `ADMIN_EMAIL` and `ADMIN_PASSWORD`.
 
-Render sets `PORT` and `NODE_ENV=production` automatically. The Node server serves the built frontend from `dist/`, handles `/api` auth routes, and stores production data in PostgreSQL.
+Render sets `PORT` and `NODE_ENV=production` automatically. The Node server serves the built frontend from `dist/` and handles `/api` auth routes. Without `DATABASE_URL`, auth uses local SQLite and production data stays in the browser until you enable PostgreSQL migration.
 
 Optional: run `npm run reset-admin` locally to update the admin password without restarting.
 

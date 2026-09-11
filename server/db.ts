@@ -122,6 +122,11 @@ export function rejectUserById(id: number): User | null {
   return getUserById(id)!;
 }
 
+export function getUserCount(): number {
+  const row = ensureDb().prepare('SELECT COUNT(*) AS c FROM users').get() as { c: number };
+  return Number(row.c);
+}
+
 export function listPendingUsers(): Omit<User, 'password_hash' | 'approval_token'>[] {
   return ensureDb()
     .prepare(

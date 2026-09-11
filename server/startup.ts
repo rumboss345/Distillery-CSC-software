@@ -1,14 +1,15 @@
 import { isDatabaseConfigured } from './config.js';
-import { migrateAuthFromSqliteIfNeeded, syncAdminFromEnv } from './db/auth.js';
+import { initializeAuthStore, migrateAuthFromSqliteIfNeeded, syncAdminFromEnv } from './db/auth.js';
 import { runMigrations } from './db/migrate.js';
 import { pingDatabase } from './db/pool.js';
 
 export async function initializeServerDatastores(): Promise<void> {
   if (!isDatabaseConfigured()) {
     console.warn(
-      'DATABASE_URL is not set. Auth and production APIs require PostgreSQL. ' +
-      'Use docker-compose up -d for local development or attach Render Postgres in production.',
+      'DATABASE_URL is not set. Running in browser-local production mode with SQLite auth. ' +
+      'Set DATABASE_URL when you are ready to enable PostgreSQL migration features.',
     );
+    await initializeAuthStore();
     return;
   }
 

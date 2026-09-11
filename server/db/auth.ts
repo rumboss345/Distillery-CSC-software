@@ -4,26 +4,27 @@ import Database from 'better-sqlite3';
 import { copyFileSync, existsSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
+import { isDatabaseConfigured } from '../config.js';
+import {
+  approveLocalUserById,
+  approveLocalUserByToken,
+  createLocalUser,
+  getLocalUserByApprovalToken,
+  getLocalUserByEmail,
+  getLocalUserById,
+  initializeLocalAuthDatabase,
+  listLocalPendingUsers,
+  rejectLocalUserById,
+  resetLocalAdminAccount,
+  syncLocalAdminFromEnv,
+} from './auth-local.js';
 import { query, queryOne, withTransaction } from './pool.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const LEGACY_AUTH_DB = join(__dirname, '..', 'data', 'auth.db');
 
-export type UserRole = 'admin' | 'user';
-export type UserStatus = 'pending' | 'approved' | 'rejected';
-
-export interface User {
-  id: number;
-  email: string;
-  password_hash: string;
-  name: string | null;
-  role: UserRole;
-  status: UserStatus;
-  approval_token: string | null;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-}
+export type { User, UserRole, UserStatus } from './auth-types.js';
+import type { User, UserRole, UserStatus } from './auth-types.js';
 
 export interface AuthMigrationResult {
   status: 'completed' | 'skipped' | 'failed' | 'no_legacy_db';
@@ -145,7 +146,14 @@ export async function migrateAuthFromSqliteIfNeeded(): Promise<AuthMigrationResu
   };
 }
 
+export async function initializeAuthStore(): Promise<void> {
+  if (isDatabaseConfigured()) return;
+  initializeLocalAuthDatabase();
+  syncLocalAdminFromEnv();
+}
+
 export async function getUserByEmail(email: string): Promise<User | undefined> {
+  if (!isDatabaseConfigured()) return getLocalUserByEmail(email);
   const row = await queryOne<User>(
     'SELECT * FROM users WHERE lower(email) = lower($1) AND is_active = TRUE',
     [email],
@@ -154,16 +162,19 @@ export async function getUserByEmail(email: string): Promise<User | undefined> {
 }
 
 export async function getUserById(id: number): Promise<User | undefined> {
+  if (!isDatabaseConfigured()) return getLocalUserById(id);
   const row = await queryOne<User>('SELECT * FROM users WHERE id = $1 AND is_active = TRUE', [id]);
   return row ?? undefined;
 }
 
 export async function getUserByApprovalToken(token: string): Promise<User | undefined> {
+  if (!isDatabaseConfigured()) return getLocalUserByApprovalToken(token);
   const row = await queryOne<User>('SELECT * FROM users WHERE approval_token = $1', [token]);
   return row ?? undefined;
 }
 
 export async function createUser(email: string, passwordHash: string, name: string | null): Promise<User> {
+  if (!isDatabaseConfigured()) return createLocalUser(email, passwordHash, name);
   const token = randomBytes(32).toString('hex');
   const row = await queryOne<User>(
     `INSERT INTO users (email, password_hash, name, role, status, approval_token)
@@ -175,6 +186,7 @@ export async function createUser(email: string, passwordHash: string, name: stri
 }
 
 export async function approveUserByToken(token: string): Promise<User | null> {
+  if (!isDatabaseConfigured()) return approveLocalUserByToken(token);
   const user = await getUserByApprovalToken(token);
   if (!user || user.status !== 'pending') return null;
   return queryOne<User>(
@@ -185,6 +197,7 @@ export async function approveUserByToken(token: string): Promise<User | null> {
 }
 
 export async function approveUserById(id: number): Promise<User | null> {
+  if (!isDatabaseConfigured()) return approveLocalUserById(id);
   const user = await getUserById(id);
   if (!user || user.role === 'admin' || user.status !== 'pending') return null;
   return queryOne<User>(
@@ -195,6 +208,7 @@ export async function approveUserById(id: number): Promise<User | null> {
 }
 
 export async function rejectUserById(id: number): Promise<User | null> {
+  if (!isDatabaseConfigured()) return rejectLocalUserById(id);
   const user = await getUserById(id);
   if (!user || user.role === 'admin' || user.status !== 'pending') return null;
   return queryOne<User>(
@@ -205,6 +219,7 @@ export async function rejectUserById(id: number): Promise<User | null> {
 }
 
 export async function listPendingUsers() {
+  if (!isDatabaseConfigured()) return listLocalPendingUsers();
   const result = await query<Omit<User, 'password_hash' | 'approval_token'>>(
     `SELECT id, email, name, role, status, is_active, created_at, updated_at FROM users
      WHERE status = 'pending' AND role = 'user' AND is_active = TRUE
@@ -214,6 +229,10 @@ export async function listPendingUsers() {
 }
 
 export async function resetAdminAccount(email: string, password: string, name = 'Admin') {
+  if (!isDatabaseConfigured()) {
+    resetLocalAdminAccount(email, password, name);
+    return;
+  }
   const normalized = email.toLowerCase();
   const passwordHash = bcrypt.hashSync(password, 12);
   const existing = await queryOne<{ id: number }>(

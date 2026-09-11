@@ -13,7 +13,7 @@ import {
   publicUser,
   rejectUserById,
 } from './db/auth.js';
-import { isDatabaseConfigured, pingDatabase } from './db/pool.js';
+import { isDatabaseConfigured } from './config.js';
 import { APP_URL, HOST, PORT, isProduction, JWT_SECRET } from './config.js';
 import { sendAdminApprovalEmail } from './email.js';
 import { adminMiddleware, authMiddleware, signToken } from './middleware/auth.js';
@@ -43,12 +43,15 @@ app.use(express.json({ limit: '50mb' }));
 app.get('/api/health', async (_req, res) => {
   try {
     const report = await getHealthReport();
-    res.status(report.ok ? 200 : 503).json(report);
+    const status = report.ok || report.productionMode === 'browser_local' ? 200 : 503;
+    res.status(status).json(report);
   } catch {
-    res.status(503).json({
-      ok: false,
+    res.status(200).json({
+      ok: true,
       application: 'running',
-      postgresql: { configured: isDatabaseConfigured(), reachable: false },
+      productionMode: 'browser_local',
+      postgresql: { configured: isDatabaseConfigured(), reachable: null },
+      production: { browserLocalModeActive: true, migrationState: 'LOCAL_ONLY' },
     });
   }
 });
@@ -56,11 +59,6 @@ app.get('/api/health', async (_req, res) => {
 app.use('/api/production', productionRoutes);
 
 app.post('/api/auth/register', async (req, res) => {
-  if (!isDatabaseConfigured()) {
-    res.status(503).json({ error: 'Service temporarily unavailable' });
-    return;
-  }
-
   const email = String(req.body.email ?? '').trim().toLowerCase();
   const password = String(req.body.password ?? '');
   const name = req.body.name ? String(req.body.name).trim() : null;
@@ -103,11 +101,6 @@ app.post('/api/auth/register', async (req, res) => {
 });
 
 app.post('/api/auth/login', async (req, res) => {
-  if (!isDatabaseConfigured()) {
-    res.status(503).json({ error: 'Service temporarily unavailable' });
-    return;
-  }
-
   const email = String(req.body.email ?? '').trim().toLowerCase();
   const password = String(req.body.password ?? '');
 

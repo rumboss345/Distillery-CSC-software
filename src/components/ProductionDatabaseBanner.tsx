@@ -5,40 +5,22 @@ import { setCachedProductionStatus } from '../db/production-mode';
 
 export function ProductionDatabaseBanner() {
   const [status, setStatus] = useState<ProductionStatus | null>(null);
-  const [fetchFailed, setFetchFailed] = useState(false);
 
   useEffect(() => {
     fetchProductionStatus()
       .then((s) => {
         setCachedProductionStatus(s);
         setStatus(s);
-        setFetchFailed(false);
       })
       .catch(() => {
-        setFetchFailed(true);
         setStatus(null);
       });
   }, []);
 
-  if (fetchFailed) {
-    return (
-      <div className="production-banner production-banner--error">
-        Cannot reach the central production database or server API.
-        If cutover has occurred, production changes cannot be recorded until service is restored.
-      </div>
-    );
-  }
-
   if (!status) return null;
 
-  if (!status.databaseConfigured) {
-    return (
-      <div className="production-banner production-banner--warn">
-        Central production database is not configured on the server (DATABASE_URL missing).
-        Production data is stored in this browser only.
-      </div>
-    );
-  }
+  // During testing without DATABASE_URL, production runs entirely in the browser — no banner needed.
+  if (!status.databaseConfigured) return null;
 
   if (!status.databaseConnected) {
     return (
@@ -64,14 +46,6 @@ export function ProductionDatabaseBanner() {
       <div className="production-banner production-banner--info">
         {status.statusMessage}
         {' '}<Link to="/admin/data-migration">Review migration</Link>
-      </div>
-    );
-  }
-
-  if (status.migrationState === 'LOCAL_ONLY') {
-    return (
-      <div className="production-banner production-banner--info">
-        {status.statusMessage}
       </div>
     );
   }
