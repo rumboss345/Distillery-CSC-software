@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { computeFgLotBalance } from '../../db/erp/balance-engine.js';
 import { postFgShipment, transferFgLot } from '../../db/erp/handlers/finished-goods.js';
+import { listFgLots, listFgTransactions } from '../../db/erp/read/domain-lists.js';
 import { requireErpAction } from '../../middleware/erp-permissions.js';
 import { auditErpMutation } from '../../middleware/audit-log.js';
 
@@ -9,6 +10,26 @@ const router = Router();
 function safeError(err: unknown): string {
   return err instanceof Error ? err.message : 'Request failed';
 }
+
+router.get('/lots', async (_req, res) => {
+  try {
+    const lots = await listFgLots();
+    res.json({ lots });
+  } catch (err) {
+    res.status(500).json({ error: safeError(err) });
+  }
+});
+
+router.get('/transactions', async (req, res) => {
+  try {
+    const transactions = await listFgTransactions(
+      req.query.fgLotId != null ? Number(req.query.fgLotId) : undefined,
+    );
+    res.json({ transactions });
+  } catch (err) {
+    res.status(500).json({ error: safeError(err) });
+  }
+});
 
 router.get('/lots/:lotId/balance', async (req, res) => {
   try {

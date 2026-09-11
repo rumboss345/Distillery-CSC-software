@@ -1,15 +1,18 @@
 import { Router } from 'express';
 import { authMiddleware } from '../../middleware/auth.js';
 import { isDatabaseConfigured } from '../../config.js';
+import { DOMAIN_CAPABILITIES } from '../../db/erp/domain-capabilities.js';
 import accountingRoutes from './accounting.js';
 import adminRoutes from './admin.js';
 import barrelRoutes from './barrel.js';
+import bootstrapRoutes from './bootstrap.js';
 import costingRoutes from './costing.js';
 import finishedGoodsRoutes from './finished-goods.js';
 import liquidRoutes from './liquid.js';
 import materialRoutes from './material.js';
 import productionRoutes from './production.js';
 import qualityRoutes from './quality.js';
+import readRoutes from './read.js';
 import reportingRoutes from './reporting.js';
 import salesRoutes from './sales.js';
 import warehouseRoutes from './warehouse.js';
@@ -46,6 +49,9 @@ function requirePostgres(_req: import('express').Request, res: import('express')
 router.use(requirePostgres);
 router.use(authMiddleware);
 
+router.use('/bootstrap', bootstrapRoutes);
+router.use('/read', readRoutes);
+
 router.use('/material', materialRoutes);
 router.use('/liquid', liquidRoutes);
 router.use('/finished-goods', finishedGoodsRoutes);
@@ -63,6 +69,7 @@ router.get('/status', (_req, res) => {
   res.json({
     ready: true,
     domains: ERP_API_DOMAINS,
+    capabilities: DOMAIN_CAPABILITIES,
     handlersRegistered: true,
   });
 });

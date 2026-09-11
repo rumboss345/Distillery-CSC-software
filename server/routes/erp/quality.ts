@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { placeHold, releaseHold } from '../../db/erp/handlers/quality.js';
+import { listQualityHolds, listQualitySamples } from '../../db/erp/read/domain-lists.js';
 import { auditErpMutation } from '../../middleware/audit-log.js';
 import { requireErpAction } from '../../middleware/erp-permissions.js';
 
@@ -8,6 +9,32 @@ const router = Router();
 function safeError(err: unknown): string {
   return err instanceof Error ? err.message : 'Request failed';
 }
+
+router.get('/holds', async (req, res) => {
+  try {
+    const holds = await listQualityHolds({
+      status: typeof req.query.status === 'string' ? req.query.status : undefined,
+      entityType: typeof req.query.entityType === 'string' ? req.query.entityType : undefined,
+    });
+    res.json({ holds });
+  } catch (err) {
+    res.status(500).json({ error: safeError(err) });
+  }
+});
+
+router.get('/samples', async (req, res) => {
+  try {
+    const samples = await listQualitySamples({
+      sourceEntityType:
+        typeof req.query.sourceEntityType === 'string' ? req.query.sourceEntityType : undefined,
+      sourceEntityId:
+        req.query.sourceEntityId != null ? Number(req.query.sourceEntityId) : undefined,
+    });
+    res.json({ samples });
+  } catch (err) {
+    res.status(500).json({ error: safeError(err) });
+  }
+});
 
 router.post(
   '/holds',

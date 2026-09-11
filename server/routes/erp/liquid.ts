@@ -1,12 +1,37 @@
 import { Router } from 'express';
 import { computeLiquidLotVolume } from '../../db/erp/balance-engine.js';
 import { postLiquidTransaction, transferLiquid } from '../../db/erp/handlers/liquid.js';
+import { listLiquidLots, listLiquidTransactions } from '../../db/erp/read/domain-lists.js';
 
 const router = Router();
 
 function safeError(err: unknown): string {
   return err instanceof Error ? err.message : 'Request failed';
 }
+
+router.get('/lots', async (req, res) => {
+  try {
+    const lots = await listLiquidLots(
+      typeof req.query.status === 'string' ? req.query.status : undefined,
+    );
+    res.json({ lots });
+  } catch (err) {
+    res.status(500).json({ error: safeError(err) });
+  }
+});
+
+router.get('/transactions', async (req, res) => {
+  try {
+    const transactions = await listLiquidTransactions({
+      lotId: req.query.lotId != null ? Number(req.query.lotId) : undefined,
+      tankId: req.query.tankId != null ? Number(req.query.tankId) : undefined,
+      limit: req.query.limit != null ? Number(req.query.limit) : undefined,
+    });
+    res.json({ transactions });
+  } catch (err) {
+    res.status(500).json({ error: safeError(err) });
+  }
+});
 
 router.get('/lots/:lotId/volume', async (req, res) => {
   try {
