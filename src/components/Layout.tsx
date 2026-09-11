@@ -1,4 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom';
+import { ProductionDatabaseBanner } from './ProductionDatabaseBanner';
 import { useAuth } from '../context/AuthContext';
 
 const navItems = [
@@ -38,15 +39,26 @@ export function Layout() {
             </NavLink>
           ))}
           {user?.role === 'admin' && (
-            <NavLink
-              to="/admin/users"
-              className={({ isActive }) =>
-                `nav-link${isActive ? ' active' : ''}`
-              }
-            >
-              <span className="nav-icon">✉</span>
-              User approvals
-            </NavLink>
+            <>
+              <NavLink
+                to="/admin/users"
+                className={({ isActive }) =>
+                  `nav-link${isActive ? ' active' : ''}`
+                }
+              >
+                <span className="nav-icon">✉</span>
+                User approvals
+              </NavLink>
+              <NavLink
+                to="/admin/data-migration"
+                className={({ isActive }) =>
+                  `nav-link${isActive ? ' active' : ''}`
+                }
+              >
+                <span className="nav-icon">⇄</span>
+                Data migration
+              </NavLink>
+            </>
           )}
         </nav>
         <div className="sidebar-footer">
@@ -60,6 +72,7 @@ export function Layout() {
         </div>
       </aside>
       <main className="main-content">
+        <ProductionDatabaseBanner />
         <Outlet />
       </main>
     </div>

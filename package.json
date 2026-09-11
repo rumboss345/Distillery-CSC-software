@@ -10,9 +10,12 @@
     "build": "tsc -b && vite build",
     "start": "tsx server/index.ts",
     "reset-admin": "tsx server/reset-admin.ts",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --import tsx --test server/tests/unit/*.test.ts server/tests/integration/*.test.ts",
+    "test:unit": "node --import tsx --test server/tests/unit/*.test.ts"
   },
   "dependencies": {
+    "@types/pg": "^8.23.1",
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^11.7.0",
     "cors": "^2.8.5",
@@ -20,6 +23,7 @@
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
     "nodemailer": "^6.9.16",
+    "pg": "^8.23.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.28.0",
