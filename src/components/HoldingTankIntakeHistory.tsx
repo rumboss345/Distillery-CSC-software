@@ -8,6 +8,8 @@ interface HoldingTankIntakeHistoryProps {
   selectedKey?: string | null;
   onSelect?: (entry: HoldingTankIntakeEntry) => void;
   title?: string;
+  hint?: string | false;
+  emptyMessage?: string;
 }
 
 export function HoldingTankIntakeHistory({
@@ -16,11 +18,25 @@ export function HoldingTankIntakeHistory({
   selectedKey = null,
   onSelect,
   title = 'Recent intake',
+  hint,
+  emptyMessage,
 }: HoldingTankIntakeHistoryProps) {
   if (!tankId) return null;
 
   const history = getHoldingTankIntakeHistory(tankId, limit);
-  if (history.length === 0) return null;
+  if (history.length === 0) {
+    if (!emptyMessage) return null;
+    return (
+      <div className="tank-intake-history">
+        <p className="tank-intake-history-title">{title}</p>
+        <p className="field-hint">{emptyMessage}</p>
+      </div>
+    );
+  }
+
+  const hintText = hint === false
+    ? null
+    : hint ?? (onSelect ? 'Select an entry to use its volume and ABV.' : 'Click an entry to highlight its source.');
 
   return (
     <div className="tank-intake-history">
@@ -50,8 +66,8 @@ export function HoldingTankIntakeHistory({
           );
         })}
       </ul>
-      {onSelect && (
-        <p className="field-hint">Select an entry to use its volume and ABV.</p>
+      {hintText && (
+        <p className="field-hint">{hintText}</p>
       )}
     </div>
   );

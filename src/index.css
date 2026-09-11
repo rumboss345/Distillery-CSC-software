@@ -1052,6 +1052,12 @@ tr:hover td {
   margin-top: 0.65rem;
 }
 
+.floor-sidebar .tank-intake-history {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border-subtle);
+}
+
 .tank-intake-history-title {
   font-size: 0.75rem;
   font-weight: 600;

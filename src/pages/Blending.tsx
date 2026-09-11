@@ -9,10 +9,8 @@ import {
   getHoldingTankContents,
   getHoldingTanks,
   generateBatchNumber,
-  holdingTankIntakeKey,
   useRefreshKey,
 } from '../db/queries';
-import { HoldingTankIntakeHistory } from '../components/HoldingTankIntakeHistory';
 import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
 import {
@@ -21,7 +19,7 @@ import {
   computeBlendTotals,
   defaultIngredientUnit,
 } from '../lib/blending';
-import type { BlendIngredientInput, BlendProduct, BlendStatus, HoldingTankIntakeEntry } from '../types';
+import type { BlendIngredientInput, BlendProduct, BlendStatus } from '../types';
 
 const BLEND_STATUSES: BlendStatus[] = ['draft', 'blended', 'bottled'];
 
@@ -55,14 +53,8 @@ export function Blending() {
   const [ingredients, setIngredients] = useState<BlendIngredientInput[]>([
     emptyIngredient('water'),
   ]);
-  const [selectedIntakeKey, setSelectedIntakeKey] = useState<string | null>(null);
 
   void key;
-
-  const applyIntakeVolume = (entry: HoldingTankIntakeEntry) => ({
-    volume: Math.round(entry.volume_gal * 10) / 10,
-    abv: Math.round(entry.abv * 10) / 10,
-  });
 
   const chargeableTanks = getChargeableHoldingTanksForBlend(editId);
   const tankOptions = (() => {
@@ -93,7 +85,6 @@ export function Blending() {
     setEditId(undefined);
     setForm(emptyProduct());
     setIngredients([emptyIngredient('water')]);
-    setSelectedIntakeKey(null);
     setShowForm(true);
   };
 
@@ -126,7 +117,6 @@ export function Blending() {
   };
 
   const handleTankChange = (tankId: number) => {
-    setSelectedIntakeKey(null);
     const tank = chargeableTanks.find((t) => t.id === tankId);
     setForm({
       ...form,
@@ -314,19 +304,6 @@ export function Blending() {
                   Available: {selectedTankAvailable.volume_gal.toFixed(1)} gal @ {selectedTankAvailable.abv.toFixed(1)}% ABV
                 </p>
               )}
-              <HoldingTankIntakeHistory
-                tankId={form.source_holding_tank_equipment_id || null}
-                selectedKey={selectedIntakeKey}
-                onSelect={(entry) => {
-                  const { volume, abv } = applyIntakeVolume(entry);
-                  setSelectedIntakeKey(holdingTankIntakeKey(entry));
-                  setForm({
-                    ...form,
-                    base_spirit_volume_gal: volume,
-                    base_spirit_abv: abv,
-                  });
-                }}
-              />
             </div>
             <div className="form-group">
               <label>Base Spirit Volume (gal)</label>

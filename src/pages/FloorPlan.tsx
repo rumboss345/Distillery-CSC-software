@@ -11,8 +11,10 @@ import {
   useRefreshKey,
 } from '../db/queries';
 import { FloorCanvas, FloorLegend } from '../components/FloorCanvas';
+import { HoldingTankIntakeHistory } from '../components/HoldingTankIntakeHistory';
 import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
+import { holdingTankIntakeKey } from '../db/queries';
 import {
   EQUIPMENT_TYPES,
   EQUIPMENT_STATUSES,
@@ -53,8 +55,14 @@ export function FloorPlanPage() {
   const [pageName, setPageName] = useState('');
   const [draggingEquipmentId, setDraggingEquipmentId] = useState<number | null>(null);
   const [dropTargetPlanId, setDropTargetPlanId] = useState<number | null>(null);
+  const [selectedIntakeKey, setSelectedIntakeKey] = useState<string | null>(null);
 
   void key;
+
+  const selectEquipment = (id: number | null) => {
+    setSelectedId(id);
+    setSelectedIntakeKey(null);
+  };
 
   useEffect(() => {
     if (!draggingEquipmentId) {
@@ -114,7 +122,7 @@ export function FloorPlanPage() {
   const handleDelete = (id: number) => {
     if (confirm('Remove this equipment from the floor plan?')) {
       deleteFloorEquipment(id);
-      if (selectedId === id) setSelectedId(null);
+      if (selectedId === id) selectEquipment(null);
       refresh();
     }
   };
@@ -126,7 +134,7 @@ export function FloorPlanPage() {
 
   const handleMoveToPlan = (equipmentId: number, targetPlanId: number) => {
     moveEquipmentToPlan(equipmentId, targetPlanId);
-    if (selectedId === equipmentId) setSelectedId(null);
+    if (selectedId === equipmentId) selectEquipment(null);
     setActivePlanId(targetPlanId);
     refresh();
   };
@@ -181,7 +189,7 @@ export function FloorPlanPage() {
             type="button"
             data-plan-drop-id={p.id}
             className={`floor-plan-tab${activePlanId === p.id ? ' active' : ''}${dropTargetPlanId === p.id ? ' drop-target' : ''}`}
-            onClick={() => { setActivePlanId(p.id); setSelectedId(null); }}
+            onClick={() => { setActivePlanId(p.id); selectEquipment(null); }}
             onDragOver={(e) => handleTabDragOver(e, p.id)}
             onDragLeave={handleTabDragLeave}
             onDrop={(e) => handleTabDrop(e, p.id)}
@@ -197,7 +205,7 @@ export function FloorPlanPage() {
             plan={plan}
             equipment={equipment}
             selectedId={selectedId}
-            onSelect={setSelectedId}
+            onSelect={selectEquipment}
             onMoveEnd={handleMove}
             onMoveToPlan={handleMoveToPlan}
             onDragChange={setDraggingEquipmentId}
@@ -236,6 +244,16 @@ export function FloorPlanPage() {
                     </dd>
                   </>
                 )}
+                {selected.equipment_type === 'holding_tank' && selected.active_volume_gal != null && selected.active_volume_gal > 0 && (
+                  <>
+                    <dt>Contents</dt>
+                    <dd>
+                      {selected.active_volume_gal.toFixed(1)} gal
+                      {selected.active_abv != null ? ` @ ${selected.active_abv.toFixed(1)}% ABV` : ''}
+                      {selected.active_run_count ? ` · ${selected.active_run_count} run${selected.active_run_count === 1 ? '' : 's'}` : ''}
+                    </dd>
+                  </>
+                )}
                 {selected.equipment_type === 'fermenter' && selected.status === 'empty' && (
                   <dd className="form-hint" style={{ gridColumn: '1 / -1' }}>
                     Assign this fermenter from Wash & Fermentation.
@@ -248,6 +266,21 @@ export function FloorPlanPage() {
                   </>
                 )}
               </dl>
+              {selected.equipment_type === 'holding_tank' && (
+                <HoldingTankIntakeHistory
+                  tankId={selected.id}
+                  selectedKey={selectedIntakeKey}
+                  title="Where it came from"
+                  emptyMessage="No cuts or transfers into this tank yet."
+                  onSelect={(entry) => {
+                    setSelectedIntakeKey(
+                      selectedIntakeKey === holdingTankIntakeKey(entry)
+                        ? null
+                        : holdingTankIntakeKey(entry),
+                    );
+                  }}
+                />
+              )}
               <div className="floor-sidebar-actions">
                 <button className="btn btn-sm btn-secondary" onClick={() => openEdit(selected)}>Edit</button>
                 <button className="btn btn-sm btn-danger" onClick={() => handleDelete(selected.id)}>Remove</button>
@@ -268,7 +301,7 @@ export function FloorPlanPage() {
                     type="button"
                     draggable
                     className={`floor-list-btn${selectedId === item.id ? ' active' : ''}${draggingEquipmentId === item.id ? ' dragging' : ''}`}
-                    onClick={() => setSelectedId(item.id)}
+                    onClick={() => selectEquipment(item.id)}
                     onDragStart={(e) => handleListDragStart(e, item.id)}
                     onDragEnd={handleListDragEnd}
                   >
