@@ -585,6 +585,16 @@ export function postMaterialOpeningBalance(input: {
     input.unit,
   );
 
+  if (input.unitCostKyd != null && input.totalCostKyd != null) {
+    const expected = input.unitCostKyd * baseQuantity;
+    if (Math.abs(expected - input.totalCostKyd) > 0.01) {
+      throw new Error(
+        `Opening balance unit cost (${input.unitCostKyd}) × quantity (${baseQuantity}) ` +
+          `does not match total cost (${input.totalCostKyd}).`,
+      );
+    }
+  }
+
   const txId = postMaterialTransaction({
     transactionType: 'Opening Balance',
     materialType: input.materialType,
@@ -607,6 +617,7 @@ export function postMaterialOpeningBalance(input: {
     quantityBasis: baseQuantity,
     unitCostKyd: input.unitCostKyd,
     totalCostKyd: input.totalCostKyd,
+    knownZeroCost: input.unitCostKyd === 0,
   });
 
   return txId;

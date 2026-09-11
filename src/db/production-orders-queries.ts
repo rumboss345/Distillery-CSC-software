@@ -75,6 +75,7 @@ import {
   getBatchMaterialCost,
   getBatchConversionCostTotal,
   getLiquidLotTotalCost,
+  recordBatchCostError,
 } from './costing-queries';
 import { validateSufficientMaterialBalance } from '../../shared/material-inventory/validation';
 import type { MaterialType } from '../../shared/material-inventory/constants';
@@ -990,8 +991,13 @@ export function completeBatch(input: CompleteBatchInput): { lotId: number; trans
       }
 
       createPreliminaryBatchSnapshot(batch.id, input.actualOutputLitres, outputLpa);
-    } catch {
-      createPreliminaryBatchSnapshot(batch.id, input.actualOutputLitres, outputLpa);
+    } catch (costErr) {
+      const msg = costErr instanceof Error ? costErr.message : 'Cost calculation failed';
+      try {
+        recordBatchCostError(batch.id, msg);
+      } catch {
+        createPreliminaryBatchSnapshot(batch.id, input.actualOutputLitres, outputLpa);
+      }
     }
 
     const openBatches = queryOne<{ count: number }>(

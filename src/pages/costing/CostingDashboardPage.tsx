@@ -12,23 +12,32 @@ export function CostingDashboardPage() {
 
   if (!summary) return <p>Loading costing dashboard...</p>;
 
+  const materialPartial = summary.valuationStatus === 'PARTIALLY_VALUED' || summary.unvaluedMaterialLots > 0;
+  const liquidPartial = summary.valuationStatus === 'PARTIALLY_VALUED' || summary.unvaluedLiquidLots > 0;
+
   return (
     <div className="dashboard-grid">
       <div className="stat-card">
-        <h3>Material Inventory Value</h3>
+        <h3>Known Material Inventory Value</h3>
         <p className="stat-value">
-          {summary.materialInventoryValueKyd != null
-            ? `KYD ${summary.materialInventoryValueKyd.toFixed(2)}`
-            : formatCostDisplay(null, summary.valuationStatus)}
+          {summary.knownMaterialInventoryValueKyd != null
+            ? `KYD ${summary.knownMaterialInventoryValueKyd.toFixed(2)}`
+            : formatCostDisplay(null, 'UNVALUED')}
         </p>
+        {materialPartial && (
+          <p className="muted">Valuation Status: PARTIAL — Unvalued Lots: {summary.unvaluedMaterialLots}</p>
+        )}
       </div>
       <div className="stat-card">
-        <h3>Liquid Inventory Value</h3>
+        <h3>Known Liquid Inventory Value</h3>
         <p className="stat-value">
-          {summary.liquidInventoryValueKyd != null
-            ? `KYD ${summary.liquidInventoryValueKyd.toFixed(2)}`
-            : formatCostDisplay(null, summary.valuationStatus)}
+          {summary.knownLiquidInventoryValueKyd != null
+            ? `KYD ${summary.knownLiquidInventoryValueKyd.toFixed(2)}`
+            : formatCostDisplay(null, 'UNVALUED')}
         </p>
+        {liquidPartial && (
+          <p className="muted">Valuation Status: PARTIAL — Unvalued Lots: {summary.unvaluedLiquidLots}</p>
+        )}
       </div>
       <div className="stat-card">
         <h3>Unvalued Material Lots</h3>
@@ -43,7 +52,7 @@ export function CostingDashboardPage() {
         <p className="stat-value">{summary.batchesAwaitingCostFinalization}</p>
       </div>
       <div className="stat-card">
-        <h3>Valuation Status</h3>
+        <h3>Overall Valuation Status</h3>
         <p className="stat-value">{summary.valuationStatus.replace(/_/g, ' ')}</p>
       </div>
 
@@ -54,11 +63,7 @@ export function CostingDashboardPage() {
         ) : (
           <table className="data-table">
             <thead>
-              <tr>
-                <th>Code</th>
-                <th>Status</th>
-                <th>Effective Date</th>
-              </tr>
+              <tr><th>Code</th><th>Status</th><th>Effective Date</th></tr>
             </thead>
             <tbody>
               {summary.recentLandedCostDocuments.map((doc) => (
@@ -80,12 +85,7 @@ export function CostingDashboardPage() {
         ) : (
           <table className="data-table">
             <thead>
-              <tr>
-                <th>Code</th>
-                <th>Target</th>
-                <th>Amount (KYD)</th>
-                <th>Reason</th>
-              </tr>
+              <tr><th>Code</th><th>Target</th><th>Amount (KYD)</th><th>Reason</th></tr>
             </thead>
             <tbody>
               {summary.recentAdjustments.map((adj) => (

@@ -9,6 +9,7 @@ export const COST_STATUSES = [
   'ADJUSTED',
   'INCOMPLETE',
   'ERROR',
+  'INCOMPLETE',
 ] as const;
 
 export type CostStatus = (typeof COST_STATUSES)[number];

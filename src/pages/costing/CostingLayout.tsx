@@ -6,6 +6,7 @@ const tabs = [
   { to: '/costing/material-valuation', label: 'Material Valuation' },
   { to: '/costing/liquid-valuation', label: 'Liquid Valuation' },
   { to: '/costing/batch-costing', label: 'Batch Costing' },
+  { to: '/costing/planned-estimate', label: 'Planned Estimate' },
   { to: '/costing/adjustments', label: 'Adjustments' },
 ];
 

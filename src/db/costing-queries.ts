@@ -55,9 +55,24 @@ export function createMaterialLotCostLayer(input: {
   exchangeRateSnapshot?: number | null;
   costStatus?: string;
 }): number {
+  if (input.sourceId != null) {
+    const dup = queryOne<{ id: number }>(
+      `SELECT id FROM cost_material_lot_layers
+       WHERE material_lot_id = ? AND source_type = ? AND source_id = ? AND status = 'Active'`,
+      [input.materialLotId, input.sourceType, input.sourceId],
+    );
+    if (dup) {
+      throw new Error(
+        `Duplicate cost layer blocked: ${input.sourceType} #${input.sourceId} already applied to lot ${input.materialLotId}.`,
+      );
+    }
+  }
+
   const total = input.purchaseCostKyd + input.landedCostKyd;
   const unitCost = input.quantityBasis > 0 ? total / input.quantityBasis : null;
-  const status = input.costStatus ?? (total > 0 || input.purchaseCostKyd === 0 ? 'VALUED' : 'UNVALUED');
+  const status =
+    input.costStatus ??
+    (total > 0 ? 'VALUED' : input.purchaseCostKyd === 0 && input.landedCostKyd === 0 ? 'UNVALUED' : 'VALUED');
   return insertRow(
     `INSERT INTO cost_material_lot_layers (
       material_lot_id, source_type, source_id, effective_date, quantity_basis,
@@ -131,7 +146,20 @@ export function createOpeningBalanceCostLayer(input: {
   quantityBasis: number;
   unitCostKyd?: number | null;
   totalCostKyd?: number | null;
+  knownZeroCost?: boolean;
 }): number {
+  if (input.knownZeroCost) {
+    return createMaterialLotCostLayer({
+      materialLotId: input.materialLotId,
+      sourceType: 'Opening Cost',
+      sourceId: null,
+      effectiveDate: input.effectiveDate,
+      quantityBasis: input.quantityBasis,
+      purchaseCostKyd: 0,
+      landedCostKyd: 0,
+      costStatus: 'VALUED',
+    });
+  }
   if (input.unitCostKyd == null && input.totalCostKyd == null) {
     return createMaterialLotCostLayer({
       materialLotId: input.materialLotId,
@@ -515,6 +543,37 @@ export function calculateBatchCostForBatch(
   );
 }
 
+export function recalculatePreliminaryBatchSnapshot(
+  batchId: number,
+  outputVolumeLitres: number,
+  outputLpa: number,
+  plannedCostKyd?: number | null,
+): number {
+  const existingFinal = queryOne<{ id: number }>(
+    `SELECT id FROM cost_batch_snapshots WHERE production_batch_id = ? AND snapshot_type = 'Final' AND status = 'Finalized'`,
+    [batchId],
+  );
+  if (existingFinal) {
+    throw new Error('Cannot recalculate preliminary cost: batch has a finalized cost snapshot.');
+  }
+  return createPreliminaryBatchSnapshot(batchId, outputVolumeLitres, outputLpa, plannedCostKyd);
+}
+
+export function recordBatchCostError(batchId: number, errorMessage: string): number {
+  const batch = queryOne<{ actual_output_litres: number; actual_output_abv: number }>(
+    'SELECT actual_output_litres, actual_output_abv FROM prod_batches WHERE id = ?',
+    [batchId],
+  );
+  const outputLpa = (batch?.actual_output_litres ?? 0) * ((batch?.actual_output_abv ?? 0) / 100);
+  return insertRow(
+    `INSERT INTO cost_batch_snapshots (
+      production_batch_id, snapshot_type, status, conversion_cost_kyd, output_volume_litres,
+      output_lpa, unvalued_input_count, created_at, notes
+    ) VALUES (?, 'Preliminary', 'ERROR', 0, ?, ?, 0, ?, ?)`,
+    [batchId, batch?.actual_output_litres ?? 0, outputLpa, now(), errorMessage.slice(0, 500)],
+  );
+}
+
 export function createPreliminaryBatchSnapshot(
   batchId: number,
   outputVolumeLitres: number,
@@ -522,15 +581,18 @@ export function createPreliminaryBatchSnapshot(
   plannedCostKyd?: number | null,
 ): number {
   const result = calculateBatchCostForBatch(batchId, outputVolumeLitres, outputLpa, plannedCostKyd);
+  const status =
+    result.unvaluedInputCount > 0 ? 'PARTIALLY_VALUED' : result.totalInputCostKyd != null ? 'Draft' : 'INCOMPLETE';
   return insertRow(
     `INSERT INTO cost_batch_snapshots (
       production_batch_id, snapshot_type, status, material_cost_kyd, liquid_cost_kyd,
       conversion_cost_kyd, total_cost_kyd, output_volume_litres, output_lpa,
       cost_per_litre_kyd, cost_per_lpa_kyd, planned_cost_kyd, variance_kyd,
       variance_percent, unvalued_input_count, created_at, notes
-    ) VALUES (?, 'Preliminary', 'Draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '')`,
+    ) VALUES (?, 'Preliminary', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '')`,
     [
       batchId,
+      status,
       result.materialCostKyd,
       result.liquidCostKyd,
       result.conversionCostKyd,
@@ -546,6 +608,27 @@ export function createPreliminaryBatchSnapshot(
       now(),
     ],
   );
+}
+
+/** Attempt direct update of finalized batch snapshot — always blocked. */
+export function updateBatchSnapshot(
+  snapshotId: number,
+  fields: Partial<{ total_cost_kyd: number; material_cost_kyd: number }>,
+): void {
+  const snap = queryOne<{ status: string; snapshot_type: string }>(
+    'SELECT status, snapshot_type FROM cost_batch_snapshots WHERE id = ?',
+    [snapshotId],
+  );
+  if (!snap) throw new Error('Snapshot not found.');
+  if (snap.status === 'Finalized' || snap.snapshot_type === 'Final') {
+    assertBatchSnapshotMutable('Finalized');
+  }
+  if (fields.total_cost_kyd != null) {
+    runQuery('UPDATE cost_batch_snapshots SET total_cost_kyd = ? WHERE id = ?', [
+      fields.total_cost_kyd,
+      snapshotId,
+    ]);
+  }
 }
 
 export function finalizeBatchCost(batchId: number, acceptIncomplete = false): number {
@@ -654,6 +737,81 @@ export function assertBatchSnapshotNotFinalized(batchId: number): void {
     [batchId],
   );
   if (snap) assertBatchSnapshotMutable('Finalized');
+}
+
+export function reverseCostAdjustment(
+  adjustmentId: number,
+  reason: string,
+  createdBy?: string | null,
+): number {
+  const adj = queryOne<CostAdjustment>('SELECT * FROM cost_adjustments WHERE id = ?', [adjustmentId]);
+  if (!adj) throw new Error('Adjustment not found.');
+  return createCostAdjustment({
+    targetType: adj.target_type,
+    targetId: adj.target_id,
+    reason: `Reversal: ${reason}`,
+    amountKyd: -adj.amount_kyd,
+    effectiveDate: now(),
+    sourceDocumentType: 'Cost Adjustment',
+    sourceDocumentId: adjustmentId,
+    createdBy,
+    reversalOfAdjustmentId: adjustmentId,
+  });
+}
+
+export function getEffectiveBatchCostWithAdjustments(batchId: number): number | null {
+  const snap = getBatchSnapshot(batchId, 'Final') ?? getBatchSnapshot(batchId, 'Preliminary');
+  const base = snap?.total_cost_kyd ?? null;
+  if (base == null) return null;
+  const adjSum =
+    queryAll<{ amount_kyd: number }>(
+      `SELECT amount_kyd FROM cost_adjustments WHERE target_type = 'Production Batch' AND target_id = ?`,
+      [batchId],
+    ).reduce((s, a) => s + a.amount_kyd, 0) ?? 0;
+  return base + adjSum;
+}
+
+export function getPostConsumptionFlags(filters?: { batchId?: number; lotId?: number }) {
+  let sql = 'SELECT * FROM cost_post_consumption_flags WHERE 1=1';
+  const params: number[] = [];
+  if (filters?.batchId) {
+    sql += ' AND production_batch_id = ?';
+    params.push(filters.batchId);
+  }
+  if (filters?.lotId) {
+    sql += ' AND material_lot_id = ?';
+    params.push(filters.lotId);
+  }
+  sql += ' ORDER BY created_at DESC';
+  return queryAll<{
+    id: number;
+    material_lot_id: number;
+    production_batch_id: number;
+    landed_cost_document_id: number;
+    adjustment_amount_kyd: number;
+    status: string;
+    notes: string;
+  }>(sql, params);
+}
+
+export function allocateProductionOutputsManual(input: {
+  batchId: number;
+  allocations: { outputId: number; percent: number }[];
+}): void {
+  const snap = getBatchSnapshot(input.batchId, 'Final');
+  const total = snap?.total_cost_kyd;
+  if (total == null) throw new Error('Batch total cost required for output allocation.');
+  const pctSum = input.allocations.reduce((s, a) => s + a.percent, 0);
+  if (Math.abs(pctSum - 100) > 0.01) {
+    throw new Error('Manual output allocation must total 100%.');
+  }
+  for (const alloc of input.allocations) {
+    const amount = (total * alloc.percent) / 100;
+    runQuery(
+      `UPDATE cost_production_outputs SET allocated_batch_cost_kyd = ?, cost_status = 'VALUED' WHERE id = ?`,
+      [amount, alloc.outputId],
+    );
+  }
 }
 
 export function createCostAdjustment(input: {
@@ -779,6 +937,8 @@ export function listLiquidValuations(): LiquidLotValuationRow[] {
   }>(
     `SELECT l.id, l.lot_code, l.lot_type FROM liq_lots l
      JOIN liq_transactions t ON t.destination_lot_id = l.id OR t.source_lot_id = l.id
+     LEFT JOIN liq_tanks tk ON tk.id = t.destination_tank_id OR tk.id = t.source_tank_id
+     WHERE tk.tracking_mode = 'LEDGER' OR tk.id IS NULL
      GROUP BY l.id`,
   );
 
@@ -952,13 +1112,36 @@ export function getCostDashboardSummary(): CostDashboardSummary {
   const valuedMaterial = materialRows.filter((r) => r.cost_status === 'VALUED');
   const valuedLiquid = liquidRows.filter((r) => r.cost_status === 'VALUED');
 
-  const materialValue = valuedMaterial.length === materialRows.length && materialRows.length > 0
-    ? valuedMaterial.reduce((s, r) => s + (r.remaining_value_kyd ?? 0), 0)
-    : null;
+  const knownMaterialValue =
+    valuedMaterial.length > 0
+      ? valuedMaterial.reduce((s, r) => s + (r.remaining_value_kyd ?? 0), 0)
+      : null;
 
-  const liquidValue = valuedLiquid.length === liquidRows.length && liquidRows.length > 0
-    ? valuedLiquid.reduce((s, r) => s + r.accumulated_cost_kyd, 0)
-    : null;
+  const knownLiquidValue =
+    valuedLiquid.length > 0
+      ? valuedLiquid.reduce((s, r) => s + r.accumulated_cost_kyd, 0)
+      : null;
+
+  const materialHasPartial = materialRows.some(
+    (r) => r.cost_status === 'UNVALUED' || r.cost_status === 'PARTIALLY_VALUED',
+  );
+  const liquidHasPartial = liquidRows.some(
+    (r) => r.cost_status === 'UNVALUED' || r.cost_status === 'PARTIALLY_VALUED',
+  );
+
+  const materialValue =
+    valuedMaterial.length === materialRows.length && materialRows.length > 0
+      ? knownMaterialValue
+      : materialHasPartial
+        ? knownMaterialValue
+        : null;
+
+  const liquidValue =
+    valuedLiquid.length === liquidRows.length && liquidRows.length > 0
+      ? knownLiquidValue
+      : liquidHasPartial
+        ? knownLiquidValue
+        : null;
 
   const unvaluedMaterial = materialRows.filter((r) => r.cost_status === 'UNVALUED').length;
   const unvaluedLiquid = liquidRows.filter((r) => r.cost_status === 'UNVALUED').length;
@@ -986,6 +1169,8 @@ export function getCostDashboardSummary(): CostDashboardSummary {
     unvaluedLiquid > 0;
 
   return {
+    knownMaterialInventoryValueKyd: knownMaterialValue,
+    knownLiquidInventoryValueKyd: knownLiquidValue,
     materialInventoryValueKyd: materialValue,
     liquidInventoryValueKyd: liquidValue,
     unvaluedMaterialLots: unvaluedMaterial,

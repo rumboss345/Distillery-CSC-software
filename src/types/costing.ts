@@ -224,7 +224,13 @@ export type CostTraceabilityNode = {
 };
 
 export type CostDashboardSummary = {
+  /** Sum of known-valued material lots only; null when no valued lots exist. */
+  knownMaterialInventoryValueKyd: number | null;
+  /** Sum of known-valued liquid lots only; null when no valued lots exist. */
+  knownLiquidInventoryValueKyd: number | null;
+  /** @deprecated use knownMaterialInventoryValueKyd */
   materialInventoryValueKyd: number | null;
+  /** @deprecated use knownLiquidInventoryValueKyd */
   liquidInventoryValueKyd: number | null;
   unvaluedMaterialLots: number;
   unvaluedLiquidLots: number;

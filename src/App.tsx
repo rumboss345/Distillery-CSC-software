@@ -54,6 +54,7 @@ import { MaterialValuationPage } from './pages/costing/MaterialValuationPage';
 import { LiquidValuationPage } from './pages/costing/LiquidValuationPage';
 import { BatchCostingPage } from './pages/costing/BatchCostingPage';
 import { CostAdjustmentsPage } from './pages/costing/CostAdjustmentsPage';
+import { PlannedCostEstimatePage } from './pages/costing/PlannedCostEstimatePage';
 import { useDatabaseReady } from './db/queries';
 
 function AppContent() {
@@ -120,6 +121,7 @@ function AppContent() {
               <Route path="material-valuation" element={<MaterialValuationPage />} />
               <Route path="liquid-valuation" element={<LiquidValuationPage />} />
               <Route path="batch-costing" element={<BatchCostingPage />} />
+              <Route path="planned-estimate" element={<PlannedCostEstimatePage />} />
               <Route path="adjustments" element={<CostAdjustmentsPage />} />
             </Route>
             <Route path="/liquid-inventory" element={<LiquidInventoryLayout />}>

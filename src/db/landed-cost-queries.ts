@@ -175,6 +175,18 @@ export function previewAllocation(
   );
 }
 
+type PendingAllocation = {
+  componentId: number;
+  line: {
+    receiptLineId: number;
+    materialLotId: number | null;
+    allocationBasis: string;
+    basisValue: number | null;
+    allocationPercent: number | null;
+    allocatedKydAmount: number;
+  };
+};
+
 export function finalizeLandedCost(documentId: number, createdBy?: string | null): void {
   withDatabaseTransaction(() => {
     const doc = getLandedCostDocument(documentId);
@@ -187,6 +199,7 @@ export function finalizeLandedCost(documentId: number, createdBy?: string | null
     if (components.length === 0) throw new Error('At least one component is required.');
 
     const receiptLines = buildReceiptLineBasis(doc.receipt_id);
+    const pending: PendingAllocation[] = [];
 
     for (const component of components) {
       const preview = previewLandedCostAllocation(
@@ -198,42 +211,44 @@ export function finalizeLandedCost(documentId: number, createdBy?: string | null
         preview.lines.map((l) => l.allocatedKydAmount),
         component.kyd_amount,
       );
-
       for (const line of preview.lines) {
         if (!line.materialLotId) continue;
-
-        insertRow(
-          `INSERT INTO cost_landed_cost_allocations (
-            landed_cost_document_id, component_id, receipt_id, receipt_line_id, material_lot_id,
-            allocation_basis, basis_value, allocation_percent, allocated_kyd_amount, created_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            documentId,
-            component.id,
-            doc.receipt_id,
-            line.receiptLineId,
-            line.materialLotId,
-            line.allocationBasis,
-            line.basisValue,
-            line.allocationPercent,
-            line.allocatedKydAmount,
-            now(),
-          ],
-        );
-
-        const lotVal = getMaterialLotValuation(line.materialLotId);
-        const qtyBasis = lotVal.originalReceivedQuantity || lotVal.currentQuantity || 1;
-
-        addLandedCostToMaterialLot(
-          line.materialLotId,
-          documentId,
-          doc.effective_date,
-          line.allocatedKydAmount,
-          qtyBasis,
-        );
-
-        checkLateLandedCostImpact(line.materialLotId, documentId, line.allocatedKydAmount);
+        pending.push({ componentId: component.id, line: { ...line, materialLotId: line.materialLotId } });
       }
+    }
+
+    for (const item of pending) {
+      insertRow(
+        `INSERT INTO cost_landed_cost_allocations (
+          landed_cost_document_id, component_id, receipt_id, receipt_line_id, material_lot_id,
+          allocation_basis, basis_value, allocation_percent, allocated_kyd_amount, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          documentId,
+          item.componentId,
+          doc.receipt_id,
+          item.line.receiptLineId,
+          item.line.materialLotId,
+          item.line.allocationBasis,
+          item.line.basisValue,
+          item.line.allocationPercent,
+          item.line.allocatedKydAmount,
+          now(),
+        ],
+      );
+
+      const lotVal = getMaterialLotValuation(item.line.materialLotId!);
+      const qtyBasis = lotVal.originalReceivedQuantity || lotVal.currentQuantity || 1;
+
+      addLandedCostToMaterialLot(
+        item.line.materialLotId!,
+        documentId,
+        doc.effective_date,
+        item.line.allocatedKydAmount,
+        qtyBasis,
+      );
+
+      checkLateLandedCostImpact(item.line.materialLotId!, documentId, item.line.allocatedKydAmount);
     }
 
     runQuery(
