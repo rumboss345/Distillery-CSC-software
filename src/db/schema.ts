@@ -203,12 +203,12 @@ INSERT OR IGNORE INTO mash_batches (id, batch_number, recipe_name, grain_type, g
   (2, 'M-2025-002', 'Cane Sugar Wash', 'Raw Cane Sugar', 750, 225, 'Distillers Yeast DADY', '2025-06-15', 17.1, 16.8, 2.0, NULL, 'fermenting', 'Day 5 of fermentation');
 
 INSERT OR IGNORE INTO distillation_runs (id, batch_number, source_mash_batch_id, still_name, run_date, charge_volume_gal, status, notes) VALUES
-  (1, 'D-2025-001', 1, 'Pot Still #1', '2025-06-10', 150, 'complete', 'First run of the season');
+  (1, 'D-2025-001', 1, 'Latina 500L', '2025-06-10', 150, 'complete', 'First run of the season');
 
 INSERT OR IGNORE INTO distillation_cuts (id, distillation_run_id, cut_type, holding_tank_equipment_id, start_time, end_time, volume_gal, abv, notes) VALUES
   (1, 1, 'heads', NULL, '2025-06-10T08:00', '2025-06-10T08:45', 2.1, 82, 'Discarded'),
-  (2, 1, 'hearts', 5, '2025-06-10T08:45', '2025-06-10T14:30', 25.1, 68, 'Clean hearts cut'),
-  (3, 1, 'tails', 6, '2025-06-10T14:30', '2025-06-10T16:00', 5.8, 25, 'Set aside for re-distillation');
+  (2, 1, 'hearts', 12, '2025-06-10T08:45', '2025-06-10T14:30', 25.1, 68, 'Clean hearts cut'),
+  (3, 1, 'tails', 17, '2025-06-10T14:30', '2025-06-10T16:00', 5.8, 25, 'Set aside for re-distillation');
 
 INSERT OR IGNORE INTO barrels (id, barrel_number, wood_type, capacity_gal, fill_date, spirit_type, source_run_id, initial_abv, current_volume_gal, warehouse_location, status, notes) VALUES
   (1, 'B-001', 'American Oak', 53, '2025-06-11', 'New Make Spirit', 1, 63.5, 50, 'Warehouse A - Row 1', 'aging', 'Filled from D-2025-001 hearts');
@@ -217,15 +217,7 @@ INSERT OR IGNORE INTO bottling_runs (id, batch_number, source_barrel_id, bottlin
   (1, 'BT-2024-012', NULL, '2025-05-20', 750, 480, 43, 'Island Reserve Rum', 'L-2405', 'Previous season bottling');
 
 INSERT OR IGNORE INTO floor_plans (id, name, width_ft, height_ft, notes) VALUES
-  (1, 'Production Floor', 80, 60, 'Main distillery production area');
-
-INSERT OR IGNORE INTO floor_equipment (id, floor_plan_id, name, equipment_type, pos_x_ft, pos_y_ft, width_ft, depth_ft, capacity_gal, status, linked_mash_batch_id, notes) VALUES
-  (1, 1, 'Fermenter #1', 'fermenter', 6, 8, 10, 10, 500, 'in_use', 2, '500 gal conical fermenter'),
-  (2, 1, 'Fermenter #2', 'fermenter', 20, 8, 10, 10, 500, 'in_use', 2, 'Available for next batch'),
-  (3, 1, 'Wash Tank', 'mash_tun', 6, 28, 14, 12, 600, 'empty', NULL, 'Copper wash tank'),
-  (4, 1, 'Pot Still #1', 'pot_still', 48, 10, 12, 14, 200, 'offline', NULL, 'Primary pot still'),
-  (5, 1, 'Spirit Safe', 'holding_tank', 64, 12, 6, 4, 50, 'in_use', NULL, 'Hearts collection'),
-  (6, 1, 'Low Wines Receiver', 'holding_tank', 64, 22, 8, 6, 100, 'in_use', NULL, '');
+  (1, 'Production Floor', 160, 120, 'CSC distillery production floor');
 
 INSERT OR IGNORE INTO mash_fermenter_assignments (id, mash_batch_id, floor_equipment_id, volume_gal) VALUES
   (1, 2, 1, 112.5),

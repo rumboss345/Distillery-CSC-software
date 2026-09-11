@@ -1,5 +1,6 @@
 import initSqlJs, { Database, SqlValue } from 'sql.js/dist/sql-wasm.js';
 import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
+import { buildCscFloorEquipmentRows, CSC_FLOOR_PLAN_SIZE } from '../lib/csc-floor-equipment';
 import { SCHEMA, SEED_DATA } from './schema';
 
 const FLOOR_MIGRATION = `
@@ -126,6 +127,59 @@ CREATE TABLE IF NOT EXISTS blend_ingredients (
 CREATE INDEX IF NOT EXISTS idx_blend_products_tank ON blend_products(source_holding_tank_equipment_id);
 CREATE INDEX IF NOT EXISTS idx_blend_ingredients_product ON blend_ingredients(blend_product_id);
 `;
+
+function seedCscFloorEquipment(options: {
+  onlyMissing?: boolean;
+  assignSequentialIds?: boolean;
+  demoStatusForFirstTwo?: boolean;
+} = {}): void {
+  if (!db) return;
+
+  db.run(
+    `UPDATE floor_plans SET width_ft=?, height_ft=?, notes=? WHERE id=1`,
+    [CSC_FLOOR_PLAN_SIZE.width_ft, CSC_FLOOR_PLAN_SIZE.height_ft, 'CSC distillery production floor'],
+  );
+
+  const rows = buildCscFloorEquipmentRows(1, {
+    demoStatusForFirstTwo: options.demoStatusForFirstTwo,
+  });
+
+  rows.forEach((row, index) => {
+    if (options.onlyMissing) {
+      const exists = queryOne<{ id: number }>(
+        'SELECT id FROM floor_equipment WHERE name = ? COLLATE NOCASE',
+        [row.name],
+      );
+      if (exists) return;
+    }
+
+    const params: SqlValue[] = [
+      row.floor_plan_id,
+      row.name,
+      row.equipment_type,
+      row.pos_x_ft,
+      row.pos_y_ft,
+      row.width_ft,
+      row.depth_ft,
+      row.capacity_gal,
+      row.status,
+      row.linked_mash_batch_id,
+      row.notes,
+    ];
+
+    if (options.assignSequentialIds) {
+      db!.run(
+        `INSERT OR IGNORE INTO floor_equipment (id, floor_plan_id, name, equipment_type, pos_x_ft, pos_y_ft, width_ft, depth_ft, capacity_gal, status, linked_mash_batch_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [index + 1, ...params],
+      );
+    } else {
+      db!.run(
+        `INSERT INTO floor_equipment (floor_plan_id, name, equipment_type, pos_x_ft, pos_y_ft, width_ft, depth_ft, capacity_gal, status, linked_mash_batch_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        params,
+      );
+    }
+  });
+}
 
 function runMigrations(): void {
   if (!db) return;
@@ -283,6 +337,7 @@ function runMigrations(): void {
         notes = CASE WHEN notes = 'Copper mash tun' THEN 'Copper wash tank' ELSE notes END
     WHERE name = 'Mash Tun' AND equipment_type = 'mash_tun'
   `);
+  seedCscFloorEquipment({ onlyMissing: true });
   persistDb();
 }
 
@@ -367,6 +422,7 @@ export async function initDatabase(): Promise<Database> {
     db = new SQL.Database();
     db.run(SCHEMA);
     db.run(SEED_DATA);
+    seedCscFloorEquipment({ assignSequentialIds: true, demoStatusForFirstTwo: true });
     persistDb();
   }
 
