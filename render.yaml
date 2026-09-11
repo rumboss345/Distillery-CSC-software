@@ -1,0 +1,25 @@
+# Render Blueprint — CSC Distillery Tracker
+# Deploy: Render Dashboard → New → Blueprint → connect this repo
+#
+# Set sensitive values in the Render dashboard (never commit secrets):
+#   JWT_SECRET, ADMIN_EMAIL, ADMIN_PASSWORD, APP_URL
+
+services:
+  - type: web
+    name: csc-distillery
+    runtime: node
+    plan: starter
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: APP_URL
+        sync: false
