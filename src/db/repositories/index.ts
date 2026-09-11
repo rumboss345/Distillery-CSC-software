@@ -1,6 +1,7 @@
 import { isServerAuthoritative } from '../production-mode';
 import { localInventoryRepository } from './local-inventory-repository';
 import { masterDataRepository } from './master-data-repository';
+import { recipesRepository } from './recipes-repository';
 import type { InventoryRepository } from './types';
 
 export function getInventoryRepository(): InventoryRepository {
@@ -10,5 +11,5 @@ export function getInventoryRepository(): InventoryRepository {
   return localInventoryRepository;
 }
 
-export { masterDataRepository };
+export { masterDataRepository, recipesRepository };
 export type { InventoryRepository } from './types';

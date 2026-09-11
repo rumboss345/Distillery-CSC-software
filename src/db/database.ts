@@ -3,6 +3,8 @@ import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 import { buildCscFloorEquipmentRows, CSC_FLOOR_PLAN_SIZE } from '../lib/csc-floor-equipment';
 import { MASTER_DATA_SCHEMA, SUPPLIER_CLASSIFICATIONS_MIGRATION } from './master-data-schema';
 import { migrateSupplierClassificationsFromLegacy, seedMasterDataIfEmpty } from './master-data-queries';
+import { RECIPES_SCHEMA } from './recipes-schema';
+import { seedRecipeLookupsIfEmpty } from './recipes-queries';
 import { SCHEMA, SEED_DATA } from './schema';
 
 const FLOOR_MIGRATION = `
@@ -367,7 +369,19 @@ function runMigrations(): void {
   db.run(`UPDATE floor_equipment SET capacity_gal = 1000 WHERE equipment_type = 'fermenter'`);
   migrateFloorPlanPages();
   migrateMasterData();
+  migrateRecipes();
   persistDb();
+}
+
+function migrateRecipes(): void {
+  if (!db) return;
+  const hasRecipes = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='rc_recipes'",
+  );
+  if (!hasRecipes) {
+    db.run(RECIPES_SCHEMA);
+    seedRecipeLookupsIfEmpty();
+  }
 }
 
 function migrateMasterData(): void {
@@ -477,8 +491,10 @@ export async function initDatabase(): Promise<Database> {
     db = new SQL.Database();
     db.run(SCHEMA);
     db.run(MASTER_DATA_SCHEMA);
+    db.run(RECIPES_SCHEMA);
     db.run(SEED_DATA);
     seedMasterDataIfEmpty();
+    seedRecipeLookupsIfEmpty();
     seedCscFloorEquipment({ assignSequentialIds: true, demoStatusForFirstTwo: true });
     persistDb();
   }

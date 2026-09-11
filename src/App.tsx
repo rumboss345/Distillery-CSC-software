@@ -24,6 +24,9 @@ import { MaterialsPage } from './pages/master-data/MaterialsPage';
 import { BulkSpiritsPage } from './pages/master-data/BulkSpiritsPage';
 import { SuppliersPage } from './pages/master-data/SuppliersPage';
 import { LocationsPage } from './pages/master-data/LocationsPage';
+import { RecipesLayout } from './pages/recipes/RecipesLayout';
+import { RecipesPage } from './pages/recipes/RecipesPage';
+import { RecipeDetailPage } from './pages/recipes/RecipeDetailPage';
 import { useDatabaseReady } from './db/queries';
 
 function AppContent() {
@@ -62,6 +65,10 @@ function AppContent() {
             <Route path="/barrels" element={<Barrels />} />
             <Route path="/bottling" element={<Bottling />} />
             <Route path="/inventory" element={<Inventory />} />
+            <Route path="/recipes" element={<RecipesLayout />}>
+              <Route index element={<RecipesPage />} />
+              <Route path=":id" element={<RecipeDetailPage />} />
+            </Route>
             <Route path="/master-data" element={<MasterDataLayout />}>
               <Route index element={<Navigate to="products" replace />} />
               <Route path="products" element={<ProductsPage />} />

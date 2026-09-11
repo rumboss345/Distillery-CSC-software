@@ -54,6 +54,7 @@ export const CODE_PREFIXES = {
   bulkSpirit: 'BS',
   supplier: 'SUP',
   location: 'LOC',
+  recipe: 'REC',
 } as const;
 
 export const DEFAULT_UNITS = [
