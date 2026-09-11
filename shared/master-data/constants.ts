@@ -81,6 +81,9 @@ export const CODE_PREFIXES = {
   qcCoa: 'COA',
   inventoryTransfer: 'INV-TR',
   cycleCount: 'CNT',
+  mwo: 'MWO',
+  pmSchedule: 'PMS',
+  downtime: 'DTN',
 } as const;
 
 export const DEFAULT_UNITS = [

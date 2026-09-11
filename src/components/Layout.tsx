@@ -20,6 +20,7 @@ const navItems = [
   { to: '/finished-goods', label: 'Finished Goods', icon: '◫' },
   { to: '/warehouse', label: 'Warehouses', icon: '▦' },
   { to: '/quality', label: 'Quality (QA/QC)', icon: '◉' },
+  { to: '/maintenance', label: 'Maintenance', icon: '⚙' },
   { to: '/production', label: 'Production', icon: '◷' },
   { to: '/recipes', label: 'Recipes', icon: '◎' },
   { to: '/master-data', label: 'Master Data', icon: '◫' },

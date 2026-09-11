@@ -12,6 +12,7 @@ import { FINISHED_GOODS_SCHEMA } from '../../../src/db/finished-goods-schema';
 import { BARREL_AGING_SCHEMA } from '../../../src/db/barrel-aging-schema';
 import { QUALITY_SCHEMA } from '../../../src/db/quality-schema';
 import { MULTI_LOCATION_SCHEMA, MULTI_LOCATION_V1I_NEW_COLUMNS } from '../../../src/db/multi-location-schema';
+import { MAINTENANCE_FLOOR_EQUIPMENT_COLUMNS, MAINTENANCE_SCHEMA } from '../../../src/db/maintenance-schema';
 import { seedMasterDataIfEmpty } from '../../../src/db/master-data-queries';
 import { seedLiquidLedgerLookupsIfEmpty } from '../../../src/db/liquid-ledger-queries';
 import { seedProductionLookupsIfEmpty } from '../../../src/db/production-orders-queries';
@@ -48,6 +49,10 @@ export async function createMaterialTestDb(includeProduction = false): Promise<D
   db.run(BARREL_AGING_SCHEMA);
   db.run(QUALITY_SCHEMA);
   db.run(MULTI_LOCATION_SCHEMA);
+  for (const col of MAINTENANCE_FLOOR_EQUIPMENT_COLUMNS) {
+    try { db.run(col.ddl); } catch { /* column may exist */ }
+  }
+  db.run(MAINTENANCE_SCHEMA);
   for (const col of MULTI_LOCATION_V1I_NEW_COLUMNS) {
     try { db.run(col.ddl); } catch { /* column may exist */ }
   }

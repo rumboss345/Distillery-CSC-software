@@ -49,6 +49,12 @@ import {
   MULTI_LOCATION_V1I_MIGRATION,
   MULTI_LOCATION_V1I_NEW_COLUMNS,
 } from './multi-location-schema';
+import {
+  MAINTENANCE_FLOOR_EQUIPMENT_COLUMNS,
+  MAINTENANCE_SCHEMA,
+  MAINTENANCE_V1L_MIGRATION,
+  MAINTENANCE_V1L_NEW_COLUMNS,
+} from './maintenance-schema';
 import { SCHEMA, SEED_DATA } from './schema';
 
 const FLOOR_MIGRATION = `
@@ -422,6 +428,7 @@ function runMigrations(): void {
   migrateBarrelAging();
   migrateQuality();
   migrateMultiLocation();
+  migrateMaintenance();
   persistDb();
 }
 
@@ -541,6 +548,28 @@ function migrateMultiLocation(): void {
     db.run(MULTI_LOCATION_V1I_MIGRATION);
   }
   for (const col of MULTI_LOCATION_V1I_NEW_COLUMNS) {
+    if (!recipeColumnExists(col.table, col.column)) {
+      db.run(col.ddl);
+    }
+  }
+}
+
+function migrateMaintenance(): void {
+  if (!db) return;
+  for (const col of MAINTENANCE_FLOOR_EQUIPMENT_COLUMNS) {
+    if (!floorColumnExists(col.column)) {
+      db.run(col.ddl);
+    }
+  }
+  const hasMaintenance = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='maint_work_orders'",
+  );
+  if (!hasMaintenance) {
+    db.run(MAINTENANCE_SCHEMA);
+  } else {
+    db.run(MAINTENANCE_V1L_MIGRATION);
+  }
+  for (const col of MAINTENANCE_V1L_NEW_COLUMNS) {
     if (!recipeColumnExists(col.table, col.column)) {
       db.run(col.ddl);
     }
@@ -760,6 +789,7 @@ export async function initDatabase(): Promise<Database> {
     migrateBarrelAging();
     migrateQuality();
     migrateMultiLocation();
+    migrateMaintenance();
     persistDb();
   }
 

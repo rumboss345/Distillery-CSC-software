@@ -27,4 +27,5 @@ export { CostingRepository } from './costing-repository';
 export { finishedGoodsRepository } from './finished-goods-repository';
 export { barrelAgingRepository } from './barrel-aging-repository';
 export { multiLocationRepository } from './multi-location-repository';
+export { maintenanceRepository } from './maintenance-repository';
 export type { InventoryRepository } from './types';

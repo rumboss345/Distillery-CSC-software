@@ -80,6 +80,13 @@ import { LocationHierarchyPage } from './pages/warehouse/LocationHierarchyPage';
 import { TransferDocumentsPage } from './pages/warehouse/TransferDocumentsPage';
 import { CycleCountsPage } from './pages/warehouse/CycleCountsPage';
 import { BarcodesLabelsPage } from './pages/warehouse/BarcodesLabelsPage';
+import { MaintenanceLayout } from './pages/maintenance/MaintenanceLayout';
+import { MaintenanceDashboardPage } from './pages/maintenance/MaintenanceDashboardPage';
+import { EquipmentPage } from './pages/maintenance/EquipmentPage';
+import { WorkOrdersPage } from './pages/maintenance/WorkOrdersPage';
+import { PmSchedulesPage } from './pages/maintenance/PmSchedulesPage';
+import { DowntimePage } from './pages/maintenance/DowntimePage';
+import { CalibrationPage } from './pages/maintenance/CalibrationPage';
 import { useDatabaseReady } from './db/queries';
 
 function AppContent() {
@@ -169,6 +176,14 @@ function AppContent() {
               <Route path="holds" element={<HoldsPage />} />
               <Route path="coa" element={<CoaPage />} />
               <Route path="recall" element={<RecallTracePage />} />
+            </Route>
+            <Route path="/maintenance" element={<MaintenanceLayout />}>
+              <Route index element={<MaintenanceDashboardPage />} />
+              <Route path="equipment" element={<EquipmentPage />} />
+              <Route path="work-orders" element={<WorkOrdersPage />} />
+              <Route path="pm-schedules" element={<PmSchedulesPage />} />
+              <Route path="downtime" element={<DowntimePage />} />
+              <Route path="calibration" element={<CalibrationPage />} />
             </Route>
             <Route path="/costing" element={<CostingLayout />}>
               <Route index element={<CostingDashboardPage />} />
