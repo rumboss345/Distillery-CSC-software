@@ -5,6 +5,8 @@ import { MASTER_DATA_SCHEMA, SUPPLIER_CLASSIFICATIONS_MIGRATION } from './master
 import { migrateSupplierClassificationsFromLegacy, seedMasterDataIfEmpty } from './master-data-queries';
 import { RECIPES_SCHEMA, RECIPES_V1C_MIGRATION, RECIPES_V1C_NEW_COLUMNS } from './recipes-schema';
 import { seedRecipeLookupsIfEmpty } from './recipes-queries';
+import { FLOOR_TRACKING_MODE_MIGRATION, LIQUID_LEDGER_SCHEMA } from './liquid-ledger-schema';
+import { seedLiquidLedgerLookupsIfEmpty } from './liquid-ledger-queries';
 import { SCHEMA, SEED_DATA } from './schema';
 
 const FLOOR_MIGRATION = `
@@ -370,7 +372,31 @@ function runMigrations(): void {
   migrateFloorPlanPages();
   migrateMasterData();
   migrateRecipes();
+  migrateLiquidLedger();
   persistDb();
+}
+
+function floorColumnExists(column: string): boolean {
+  if (!db) return false;
+  const row = queryOne<{ name: string }>(
+    `SELECT name FROM pragma_table_info('floor_equipment') WHERE name = ?`,
+    [column],
+  );
+  return row != null;
+}
+
+function migrateLiquidLedger(): void {
+  if (!db) return;
+  const hasLedger = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='liq_lots'",
+  );
+  if (!hasLedger) {
+    db.run(LIQUID_LEDGER_SCHEMA);
+    seedLiquidLedgerLookupsIfEmpty();
+  }
+  if (!floorColumnExists('tracking_mode')) {
+    db.run(FLOOR_TRACKING_MODE_MIGRATION);
+  }
 }
 
 function recipeColumnExists(table: string, column: string): boolean {
@@ -513,10 +539,13 @@ export async function initDatabase(): Promise<Database> {
     db.run(SCHEMA);
     db.run(MASTER_DATA_SCHEMA);
     db.run(RECIPES_SCHEMA);
+    db.run(LIQUID_LEDGER_SCHEMA);
     db.run(SEED_DATA);
     seedMasterDataIfEmpty();
     seedRecipeLookupsIfEmpty();
+    seedLiquidLedgerLookupsIfEmpty();
     seedCscFloorEquipment({ assignSequentialIds: true, demoStatusForFirstTwo: true });
+    migrateLiquidLedger();
     persistDb();
   }
 
