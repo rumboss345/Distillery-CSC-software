@@ -1,5 +1,4 @@
 import initSqlJs, { Database, SqlValue } from 'sql.js/dist/sql-wasm.js';
-import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 import { buildCscFloorEquipmentRows, CSC_FLOOR_PLAN_SIZE } from '../lib/csc-floor-equipment';
 import { MASTER_DATA_SCHEMA, SUPPLIER_CLASSIFICATIONS_MIGRATION } from './master-data-schema';
 import { migrateSupplierClassificationsFromLegacy, seedMasterDataIfEmpty } from './master-data-queries';
@@ -542,10 +541,25 @@ function scheduleSave(): void {
   saveTimer = setTimeout(persistDb, 300);
 }
 
+async function resolveWasmLocateFile(): Promise<(file: string) => string> {
+  if (typeof window === 'undefined') {
+    const { dirname, join } = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const wasmPath = join(
+      dirname(fileURLToPath(import.meta.url)),
+      '../../node_modules/sql.js/dist/sql-wasm.wasm',
+    );
+    return () => wasmPath;
+  }
+  const { default: wasmUrl } = await import('sql.js/dist/sql-wasm.wasm?url');
+  return () => wasmUrl;
+}
+
 export async function initDatabase(): Promise<Database> {
   if (db) return db;
 
-  const SQL = await initSqlJs({ locateFile: () => wasmUrl });
+  const locateFile = await resolveWasmLocateFile();
+  const SQL = await initSqlJs({ locateFile });
 
   let stored = localStorage.getItem(DB_STORAGE_KEY);
   if (!stored) {
@@ -576,6 +590,14 @@ export async function initDatabase(): Promise<Database> {
 export function getDb(): Database {
   if (!db) throw new Error('Database not initialized');
   return db;
+}
+
+/** Test-only: inject an initialized sql.js instance for integration tests. */
+export function __injectDatabaseForTests(instance: Database | null): void {
+  if (db && db !== instance) {
+    db.close();
+  }
+  db = instance;
 }
 
 function assertLocalWriteAllowed(): void {
