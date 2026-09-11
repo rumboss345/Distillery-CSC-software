@@ -64,11 +64,11 @@ The server never auto-imports or merges multiple browser databases silently.
 
 ## Data storage
 
-**Authoritative production data** lives in **PostgreSQL** on the server (batches, inventory, tanks, etc.).
+Until an administrator completes cutover, **browser localStorage (sql.js) is the authoritative production database**. PostgreSQL holds an imported copy for validation; import alone does not switch authority.
 
-Browser **localStorage** may still hold a legacy sql.js copy until migrated via **Admin → Data migration**. After import, the server database is the source of truth.
+After **Activate Central Database** (requires Step 1A API), PostgreSQL becomes authoritative and browser production writes are disabled.
 
-Liquid volumes are stored internally in **litres (L)**. ABV is stored as a percentage (0–100).
+Liquid volumes are stored in **litres (L)** on the server. ABV is stored as a percentage (0–100).
 
 ## License
 
