@@ -1,4 +1,10 @@
 export const SCHEMA = `
+CREATE TABLE IF NOT EXISTS inventory_categories (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS inventory_items (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
@@ -175,6 +181,14 @@ CREATE INDEX IF NOT EXISTS idx_mash_fermenter_equipment ON mash_fermenter_assign
 `;
 
 export const SEED_DATA = `
+INSERT OR IGNORE INTO inventory_categories (name) VALUES
+  ('sugar'),
+  ('yeast'),
+  ('barrels'),
+  ('bottles'),
+  ('labels'),
+  ('other');
+
 INSERT OR IGNORE INTO inventory_items (id, name, category, unit, quantity, reorder_level, notes) VALUES
   (1, 'Blackstrap Molasses', 'sugar', 'lbs', 1000, 200, 'Primary fermentable for rum wash'),
   (2, 'Cane Syrup', 'sugar', 'lbs', 650, 150, 'High-test molasses / cane syrup'),

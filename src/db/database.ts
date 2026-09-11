@@ -80,6 +80,24 @@ const YEAST_LBS_MIGRATION = `
 ALTER TABLE mash_batches ADD COLUMN yeast_lbs REAL NOT NULL DEFAULT 0;
 `;
 
+const INVENTORY_CATEGORIES_MIGRATION = `
+CREATE TABLE IF NOT EXISTS inventory_categories (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+INSERT OR IGNORE INTO inventory_categories (name) VALUES
+  ('sugar'),
+  ('yeast'),
+  ('barrels'),
+  ('bottles'),
+  ('labels'),
+  ('other');
+INSERT OR IGNORE INTO inventory_categories (name)
+  SELECT DISTINCT category FROM inventory_items
+  WHERE category IS NOT NULL AND trim(category) != '';
+`;
+
 const BLENDING_MIGRATION = `
 CREATE TABLE IF NOT EXISTS blend_products (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -204,6 +222,14 @@ function runMigrations(): void {
   );
   if (!hasYeastLbs) {
     db.run(YEAST_LBS_MIGRATION);
+    persistDb();
+  }
+
+  const hasInventoryCategories = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='inventory_categories'",
+  );
+  if (!hasInventoryCategories) {
+    db.run(INVENTORY_CATEGORIES_MIGRATION);
     persistDb();
   }
 

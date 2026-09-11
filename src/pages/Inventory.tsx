@@ -1,15 +1,15 @@
 import { useState } from 'react';
 import {
   getInventoryItems,
+  getInventoryCategories,
   saveInventoryItem,
   deleteInventoryItem,
   adjustInventory,
+  addInventoryCategory,
   useRefreshKey,
 } from '../db/queries';
 import { Modal } from '../components/Modal';
 import type { InventoryCategory, InventoryItem } from '../types';
-
-const CATEGORIES: InventoryCategory[] = ['sugar', 'yeast', 'barrels', 'bottles', 'labels', 'other'];
 
 const emptyItem = (): Omit<InventoryItem, 'id' | 'created_at' | 'updated_at'> => ({
   name: '',
@@ -23,10 +23,14 @@ const emptyItem = (): Omit<InventoryItem, 'id' | 'created_at' | 'updated_at'> =>
 export function Inventory() {
   const { key, refresh } = useRefreshKey();
   const items = getInventoryItems();
+  const categories = getInventoryCategories();
   const [showForm, setShowForm] = useState(false);
+  const [showCategoryForm, setShowCategoryForm] = useState(false);
   const [showAdjust, setShowAdjust] = useState<number | null>(null);
   const [editId, setEditId] = useState<number | undefined>();
   const [form, setForm] = useState(emptyItem());
+  const [categoryName, setCategoryName] = useState('');
+  const [categoryError, setCategoryError] = useState('');
   const [adjustAmount, setAdjustAmount] = useState('');
   const [filter, setFilter] = useState<InventoryCategory | 'all'>('all');
 
@@ -46,10 +50,29 @@ export function Inventory() {
     setShowForm(true);
   };
 
+  const openNewCategory = () => {
+    setCategoryName('');
+    setCategoryError('');
+    setShowCategoryForm(true);
+  };
+
   const handleSave = () => {
     saveInventoryItem(form, editId);
     setShowForm(false);
     refresh();
+  };
+
+  const handleSaveCategory = () => {
+    try {
+      const created = addInventoryCategory(categoryName);
+      setShowCategoryForm(false);
+      setCategoryName('');
+      setCategoryError('');
+      setForm((prev) => ({ ...prev, category: created }));
+      refresh();
+    } catch (err) {
+      setCategoryError(err instanceof Error ? err.message : 'Could not add category.');
+    }
   };
 
   const handleDelete = (id: number) => {
@@ -77,6 +100,7 @@ export function Inventory() {
         <p>Raw materials and supplies on hand</p>
         <div className="page-actions">
           <button className="btn btn-primary" onClick={openNew}>+ Add Item</button>
+          <button className="btn btn-secondary" onClick={openNewCategory}>+ Add Category</button>
         </div>
       </div>
 
@@ -87,7 +111,7 @@ export function Inventory() {
         >
           All
         </button>
-        {CATEGORIES.map((c) => (
+        {categories.map((c) => (
           <button
             key={c}
             className={`btn btn-sm${filter === c ? ' btn-primary' : ' btn-secondary'}`}
@@ -149,8 +173,8 @@ export function Inventory() {
             </div>
             <div className="form-group">
               <label>Category</label>
-              <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value as InventoryCategory })}>
-                {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+                {categories.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div className="form-group">
@@ -173,6 +197,29 @@ export function Inventory() {
           <div className="form-actions">
             <button className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
             <button className="btn btn-primary" onClick={handleSave}>Save</button>
+          </div>
+        </Modal>
+      )}
+
+      {showCategoryForm && (
+        <Modal title="Add Category" onClose={() => setShowCategoryForm(false)}>
+          <div className="form-group">
+            <label>Category Name</label>
+            <input
+              value={categoryName}
+              onChange={(e) => {
+                setCategoryName(e.target.value);
+                setCategoryError('');
+              }}
+              placeholder="e.g. spices, corks, packaging"
+              autoFocus
+            />
+          </div>
+          {categoryError && <div className="auth-error">{categoryError}</div>}
+          <p className="form-hint">Categories are saved in lowercase and appear in the filter bar and item dropdown.</p>
+          <div className="form-actions">
+            <button className="btn btn-secondary" onClick={() => setShowCategoryForm(false)}>Cancel</button>
+            <button className="btn btn-primary" onClick={handleSaveCategory}>Add Category</button>
           </div>
         </Modal>
       )}

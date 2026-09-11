@@ -1,10 +1,4 @@
-export type InventoryCategory =
-  | 'sugar'
-  | 'yeast'
-  | 'barrels'
-  | 'bottles'
-  | 'labels'
-  | 'other';
+export type InventoryCategory = string;
 
 export type MashStatus =
   | 'planned'

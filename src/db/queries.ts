@@ -112,6 +112,40 @@ export function deleteInventoryItem(id: number): void {
   runQuery('DELETE FROM inventory_items WHERE id = ?', [id]);
 }
 
+export function getInventoryCategories(): string[] {
+  const fromTable = queryAll<{ name: string }>(
+    'SELECT name FROM inventory_categories ORDER BY name COLLATE NOCASE',
+  ).map((row) => row.name);
+
+  if (fromTable.length > 0) {
+    return fromTable;
+  }
+
+  const fromItems = queryAll<{ category: string }>(
+    'SELECT DISTINCT category FROM inventory_items WHERE category IS NOT NULL AND trim(category) != "" ORDER BY category COLLATE NOCASE',
+  ).map((row) => row.category);
+
+  return fromItems.length > 0 ? fromItems : ['other'];
+}
+
+export function addInventoryCategory(name: string): string {
+  const normalized = name.trim().toLowerCase();
+  if (!normalized) {
+    throw new Error('Category name is required.');
+  }
+
+  const existing = queryOne<{ name: string }>(
+    'SELECT name FROM inventory_categories WHERE name = ? COLLATE NOCASE',
+    [normalized],
+  );
+  if (existing) {
+    throw new Error(`Category "${existing.name}" already exists.`);
+  }
+
+  insertRow('INSERT INTO inventory_categories (name) VALUES (?)', [normalized]);
+  return normalized;
+}
+
 // ── Wash & Fermentation ────────────────────────────────────
 
 export function getMashBatches(): MashBatch[] {
