@@ -1,3 +1,4 @@
+import type { DatabaseMode } from '../../shared/database-mode';
 import type { ProductionMigrationState } from '../../shared/production-state';
 import { fetchProductionStatus, type ProductionStatus } from '../lib/production-api';
 
@@ -41,12 +42,26 @@ export function isServerAuthoritative(): boolean {
   return getCachedProductionStatus()?.serverAuthoritative ?? false;
 }
 
+export function getDatabaseModeFromCache(): DatabaseMode {
+  return getCachedProductionStatus()?.databaseMode ?? 'browser_local';
+}
+
+export function isPostgresAuthoritativeMode(): boolean {
+  return getDatabaseModeFromCache() === 'postgres_authoritative';
+}
+
+export function usesServerApi(): boolean {
+  const status = getCachedProductionStatus();
+  if (!status) return false;
+  return status.databaseMode === 'postgres_authoritative' || status.serverAuthoritative;
+}
+
 export function canWriteToLocalDatabase(): boolean {
-  return !isServerAuthoritative();
+  return !isServerAuthoritative() && !isPostgresAuthoritativeMode();
 }
 
 export function getProductionWriteBlockedMessage(): string {
-  if (isServerAuthoritative()) {
+  if (isServerAuthoritative() || isPostgresAuthoritativeMode()) {
     return 'Central production database unavailable. Changes cannot be recorded.';
   }
   return 'Production write blocked.';

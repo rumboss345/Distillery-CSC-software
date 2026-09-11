@@ -1,3 +1,4 @@
+import type { DatabaseMode } from '../../shared/database-mode';
 import type { ProductionMigrationState } from '../../shared/production-state';
 import { getStoredToken } from './auth-api';
 import { exportDatabase } from '../db/database';
@@ -5,6 +6,7 @@ import { exportDatabase } from '../db/database';
 export interface ProductionStatus {
   databaseConfigured: boolean;
   databaseConnected: boolean;
+  databaseMode: DatabaseMode;
   migrationState: ProductionMigrationState;
   statusMessage: string;
   browserAuthoritative: boolean;

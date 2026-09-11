@@ -119,20 +119,22 @@ import { AdministrationDashboardPage } from './pages/administration/Administrati
 import { UsersRolesPage } from './pages/administration/UsersRolesPage';
 import { AuditLogPage } from './pages/administration/AuditLogPage';
 import { DocumentsPage } from './pages/administration/DocumentsPage';
+import { ErpDataProvider, useErpData } from './data/erp-data-provider';
 import { useDatabaseReady } from './db/queries';
 
 function AppContent() {
   const { ready, error } = useDatabaseReady();
+  const { ready: erpReady, error: erpError } = useErpData();
 
-  if (error) {
+  if (error || erpError) {
     return (
       <div className="loading-screen">
-        <p>Failed to load database: {error}</p>
+        <p>Failed to load database: {error ?? erpError}</p>
       </div>
     );
   }
 
-  if (!ready) {
+  if (!ready || !erpReady) {
     return (
       <div className="loading-screen">
         <div className="loading-spinner" />
@@ -293,7 +295,9 @@ function AppContent() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      <ErpDataProvider>
+        <AppContent />
+      </ErpDataProvider>
     </AuthProvider>
   );
 }

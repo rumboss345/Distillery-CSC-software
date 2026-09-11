@@ -4,7 +4,8 @@ import {
   isBrowserAuthoritative,
   isServerAuthoritative,
 } from '../../shared/production-state.js';
-import { isDatabaseConfigured } from '../config.js';
+import { getDatabaseMode, isDatabaseConfigured } from '../config.js';
+import type { DatabaseMode } from '../../shared/database-mode.js';
 import { pingDatabase, queryOne } from '../db/pool.js';
 import {
   getMigrationStateRecord,
@@ -28,6 +29,7 @@ const COUNT_TABLES = [
 export interface ProductionStatus {
   databaseConfigured: boolean;
   databaseConnected: boolean;
+  databaseMode: DatabaseMode;
   migrationState: ProductionMigrationState;
   statusMessage: string;
   browserAuthoritative: boolean;
@@ -110,6 +112,7 @@ export async function getProductionStatus(): Promise<ProductionStatus> {
   return {
     databaseConfigured,
     databaseConnected,
+    databaseMode: getDatabaseMode(),
     migrationState,
     statusMessage: PRODUCTION_STATE_MESSAGES[migrationState],
     browserAuthoritative,

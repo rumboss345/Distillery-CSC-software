@@ -949,8 +949,16 @@ function assertLocalWriteAllowed(): void {
   try {
     const raw = sessionStorage.getItem('csc-production-mode-cache');
     if (!raw) return;
-    const status = JSON.parse(raw) as { serverAuthoritative?: boolean; migrationState?: string };
-    if (status.serverAuthoritative || status.migrationState === 'SERVER_AUTHORITATIVE') {
+    const status = JSON.parse(raw) as {
+      serverAuthoritative?: boolean;
+      migrationState?: string;
+      databaseMode?: string;
+    };
+    if (
+      status.serverAuthoritative
+      || status.migrationState === 'SERVER_AUTHORITATIVE'
+      || status.databaseMode === 'postgres_authoritative'
+    ) {
       throw new Error('Central production database unavailable. Changes cannot be recorded.');
     }
   } catch (err) {
