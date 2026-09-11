@@ -66,6 +66,12 @@ import {
   SALES_DEPLETION_V1N_NEW_COLUMNS,
 } from './sales-schema';
 import { REPORTING_SCHEMA, REPORTING_V1O_MIGRATION } from './reporting-schema';
+import {
+  ACCOUNTING_SCHEMA,
+  ACCOUNTING_V1Q_MIGRATION,
+  ACCOUNTING_V1Q_NEW_COLUMNS,
+} from './accounting-schema';
+import { seedAccountingMappingsIfEmpty } from './accounting-queries';
 import { SCHEMA, SEED_DATA } from './schema';
 
 const FLOOR_MIGRATION = `
@@ -443,6 +449,7 @@ function runMigrations(): void {
   migratePlanning();
   migrateSalesDepletion();
   migrateReporting();
+  migrateAccounting();
   persistDb();
 }
 
@@ -633,6 +640,24 @@ function migrateReporting(): void {
     db.run(REPORTING_SCHEMA);
   } else {
     db.run(REPORTING_V1O_MIGRATION);
+  }
+}
+
+function migrateAccounting(): void {
+  if (!db) return;
+  const hasAccounting = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='acct_events'",
+  );
+  if (!hasAccounting) {
+    db.run(ACCOUNTING_SCHEMA);
+    seedAccountingMappingsIfEmpty();
+  } else {
+    db.run(ACCOUNTING_V1Q_MIGRATION);
+  }
+  for (const col of ACCOUNTING_V1Q_NEW_COLUMNS) {
+    if (!recipeColumnExists(col.table, col.column)) {
+      db.run(col.ddl);
+    }
   }
 }
 
@@ -853,6 +878,7 @@ export async function initDatabase(): Promise<Database> {
     migratePlanning();
     migrateSalesDepletion();
     migrateReporting();
+    migrateAccounting();
     persistDb();
   }
 

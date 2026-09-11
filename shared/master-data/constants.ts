@@ -92,6 +92,8 @@ export const CODE_PREFIXES = {
   salesOrder: 'SO',
   salesShipment: 'SHP',
   salesReturn: 'SRT',
+  accountingEvent: 'ACE',
+  exportBatch: 'AEX',
 } as const;
 
 export const DEFAULT_UNITS = [

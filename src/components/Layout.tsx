@@ -17,6 +17,7 @@ const navItems = [
   { to: '/liquid-inventory', label: 'Liquid Inventory', icon: '◐' },
   { to: '/purchasing', label: 'Purchasing', icon: '◧' },
   { to: '/costing', label: 'Costing', icon: '◈' },
+  { to: '/accounting', label: 'Accounting', icon: '◫' },
   { to: '/finished-goods', label: 'Finished Goods', icon: '◫' },
   { to: '/sales', label: 'Sales & Depletions', icon: '◈' },
   { to: '/warehouse', label: 'Warehouses', icon: '▦' },

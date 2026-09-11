@@ -109,6 +109,11 @@ import { SalesOrdersPage } from './pages/sales/SalesOrdersPage';
 import { ShipmentsPage } from './pages/sales/ShipmentsPage';
 import { ReturnsPage } from './pages/sales/ReturnsPage';
 import { DepletionAnalyticsPage } from './pages/sales/DepletionAnalyticsPage';
+import { AccountingLayout } from './pages/accounting/AccountingLayout';
+import { AccountingDashboardPage } from './pages/accounting/AccountingDashboardPage';
+import { AccountMappingsPage } from './pages/accounting/AccountMappingsPage';
+import { AccountingEventsPage } from './pages/accounting/AccountingEventsPage';
+import { ExportBatchesPage } from './pages/accounting/ExportBatchesPage';
 import { useDatabaseReady } from './db/queries';
 
 function AppContent() {
@@ -223,6 +228,12 @@ function AppContent() {
               <Route path="shipments" element={<ShipmentsPage />} />
               <Route path="returns" element={<ReturnsPage />} />
               <Route path="analytics" element={<DepletionAnalyticsPage />} />
+            </Route>
+            <Route path="/accounting" element={<AccountingLayout />}>
+              <Route index element={<AccountingDashboardPage />} />
+              <Route path="mappings" element={<AccountMappingsPage />} />
+              <Route path="events" element={<AccountingEventsPage />} />
+              <Route path="exports" element={<ExportBatchesPage />} />
             </Route>
             <Route path="/costing" element={<CostingLayout />}>
               <Route index element={<CostingDashboardPage />} />

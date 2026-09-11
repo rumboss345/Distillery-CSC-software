@@ -31,4 +31,5 @@ export { maintenanceRepository } from './maintenance-repository';
 export { planningRepository } from './planning-repository';
 export { salesRepository } from './sales-repository';
 export { reportingRepository } from './reporting-repository';
+export { accountingRepository } from './accounting-repository';
 export type { InventoryRepository } from './types';
