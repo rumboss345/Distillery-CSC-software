@@ -11,10 +11,12 @@ import {
   getMashFermenterAssignments,
   getAllMashFermenterAssignments,
   getInventoryByCategory,
+  getLatestFermentationBrix,
   useRefreshKey,
 } from '../db/queries';
 import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
+import { estimateAbvFromBrix, formatAbvEstimate } from '../lib/fermentation';
 import type { MashBatch, MashStatus } from '../types';
 
 const STATUSES: MashStatus[] = ['planned', 'mashing', 'fermenting', 'complete', 'discarded'];
@@ -33,6 +35,7 @@ function FermenterLogPanel({
   equipmentId,
   equipmentName,
   volumeGal,
+  startBrix,
   refreshKey,
   onAdded,
 }: {
@@ -40,12 +43,17 @@ function FermenterLogPanel({
   equipmentId: number | null;
   equipmentName?: string;
   volumeGal?: number;
+  startBrix: number | null;
   refreshKey: number;
   onAdded: () => void;
 }) {
   void refreshKey;
   const [logForm, setLogForm] = useState(emptyLogForm());
   const logs = getFermentationLogs(mashBatchId, equipmentId);
+  const currentBrix = logs.find((l) => l.brix != null)?.brix ?? null;
+  const currentAbv = startBrix != null && currentBrix != null
+    ? estimateAbvFromBrix(startBrix, currentBrix)
+    : null;
 
   const handleAddLog = () => {
     addFermentationLog({
@@ -67,8 +75,13 @@ function FermenterLogPanel({
         <h5 className="fermenter-log-title">
           {equipmentName}
           {volumeGal ? ` · ${volumeGal} gal` : ''}
+          {currentBrix != null ? ` · current ${currentBrix}° Brix` : ''}
+          {currentAbv != null ? ` · est. ${formatAbvEstimate(currentAbv)} ABV` : ''}
         </h5>
       )}
+      <p className="form-hint">
+        Estimated ABV uses starting Brix ({startBrix ?? 'set actual start Brix on the mash'}) vs each log’s Brix.
+      </p>
       <div className="form-grid" style={{ marginBottom: '1rem' }}>
         <div className="form-group">
           <label>Temp (°F)</label>
@@ -93,7 +106,7 @@ function FermenterLogPanel({
         <div className="table-wrap" style={{ marginTop: '1rem' }}>
           <table>
             <thead>
-              <tr><th>Time</th><th>Temp (°F)</th><th>Brix</th><th>pH</th><th>Notes</th></tr>
+              <tr><th>Time</th><th>Temp (°F)</th><th>Brix</th><th>Est. ABV</th><th>pH</th><th>Notes</th></tr>
             </thead>
             <tbody>
               {logs.map((l) => (
@@ -101,6 +114,11 @@ function FermenterLogPanel({
                   <td>{format(new Date(l.logged_at), 'MMM d HH:mm')}</td>
                   <td>{l.temperature_f ?? '—'}°F</td>
                   <td>{l.brix ?? '—'}°</td>
+                  <td>
+                    {startBrix != null && l.brix != null
+                      ? formatAbvEstimate(estimateAbvFromBrix(startBrix, l.brix))
+                      : '—'}
+                  </td>
                   <td>{l.ph ?? '—'}</td>
                   <td>{l.notes}</td>
                 </tr>
@@ -275,6 +293,9 @@ export function MashFermentation() {
 
   const selectedAssignments = selectedId ? getMashFermenterAssignments(selectedId) : [];
   const selectedBatch = batches.find((b) => b.id === selectedId);
+  const selectedStartBrix = selectedBatch
+    ? selectedBatch.actual_brix ?? selectedBatch.target_brix
+    : null;
 
   return (
     <div>
@@ -303,7 +324,8 @@ export function MashFermentation() {
                 <th>Sugar (lbs)</th>
                 <th>Water (gal)</th>
                 <th>Fermenter(s)</th>
-                <th>Start → Final Brix</th>
+                <th>Start → Current Brix</th>
+                <th>Est. ABV</th>
                 <th>Started</th>
                 <th>Status</th>
                 <th></th>
@@ -312,6 +334,11 @@ export function MashFermentation() {
             <tbody>
               {batches.map((b) => {
                 const fermenters = getBatchFermenters(b.id);
+                const startBrix = b.actual_brix ?? b.target_brix;
+                const currentBrix = getLatestFermentationBrix(b.id) ?? b.actual_final_brix;
+                const estAbv = startBrix != null && currentBrix != null
+                  ? estimateAbvFromBrix(startBrix, currentBrix)
+                  : null;
                 return (
                   <tr key={b.id}>
                     <td><strong>{b.batch_number}</strong></td>
@@ -330,8 +357,9 @@ export function MashFermentation() {
                       )}
                     </td>
                     <td>
-                      {b.actual_brix ?? b.target_brix ?? '—'} → {b.actual_final_brix ?? b.target_final_brix ?? '—'}
+                      {startBrix ?? '—'} → {currentBrix ?? b.target_final_brix ?? '—'}
                     </td>
+                    <td>{formatAbvEstimate(estAbv)}</td>
                     <td>{format(new Date(b.start_date), 'MMM d, yyyy')}</td>
                     <td><StatusBadge status={b.status} /></td>
                     <td className="td-actions">
@@ -361,6 +389,7 @@ export function MashFermentation() {
                   equipmentId={a.floor_equipment_id}
                   equipmentName={a.equipment_name}
                   volumeGal={a.volume_gal}
+                  startBrix={selectedStartBrix}
                   refreshKey={key}
                   onAdded={refresh}
                 />
@@ -372,6 +401,7 @@ export function MashFermentation() {
               equipmentId={selectedAssignments[0]?.floor_equipment_id ?? null}
               equipmentName={selectedAssignments[0]?.equipment_name}
               volumeGal={selectedAssignments[0]?.volume_gal}
+              startBrix={selectedStartBrix}
               refreshKey={key}
               onAdded={refresh}
             />
@@ -530,10 +560,6 @@ export function MashFermentation() {
             <div className="form-group">
               <label>Target Final Brix</label>
               <input type="number" step="0.1" value={form.target_final_brix ?? ''} onChange={(e) => setForm({ ...form, target_final_brix: e.target.value ? parseFloat(e.target.value) : null })} />
-            </div>
-            <div className="form-group">
-              <label>Actual Final Brix</label>
-              <input type="number" step="0.1" value={form.actual_final_brix ?? ''} onChange={(e) => setForm({ ...form, actual_final_brix: e.target.value ? parseFloat(e.target.value) : null })} />
             </div>
             <div className="form-group full-width">
               <label>Notes</label>

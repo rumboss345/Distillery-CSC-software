@@ -127,8 +127,8 @@ export function getMashBatch(id: number): MashBatch | undefined {
 export function saveMashBatch(batch: Omit<MashBatch, 'id' | 'created_at'>, id?: number): number {
   if (id) {
     runQuery(
-      `UPDATE mash_batches SET batch_number=?, recipe_name=?, grain_type=?, grain_lbs=?, water_gal=?, yeast_strain=?, yeast_lbs=?, start_date=?, target_brix=?, actual_brix=?, target_final_brix=?, actual_final_brix=?, status=?, notes=? WHERE id=?`,
-      [batch.batch_number, batch.recipe_name, batch.grain_type, batch.grain_lbs, batch.water_gal, batch.yeast_strain, batch.yeast_lbs, batch.start_date, batch.target_brix, batch.actual_brix, batch.target_final_brix, batch.actual_final_brix, batch.status, batch.notes, id],
+      `UPDATE mash_batches SET batch_number=?, recipe_name=?, grain_type=?, grain_lbs=?, water_gal=?, yeast_strain=?, yeast_lbs=?, start_date=?, target_brix=?, actual_brix=?, target_final_brix=?, status=?, notes=? WHERE id=?`,
+      [batch.batch_number, batch.recipe_name, batch.grain_type, batch.grain_lbs, batch.water_gal, batch.yeast_strain, batch.yeast_lbs, batch.start_date, batch.target_brix, batch.actual_brix, batch.target_final_brix, batch.status, batch.notes, id],
     );
     return id;
   }
@@ -499,6 +499,30 @@ export function addFermentationLog(log: Omit<FermentationLog, 'id'>): void {
       log.notes,
     ],
   );
+  syncMashFinalBrixFromLogs(log.mash_batch_id);
+}
+
+export function getLatestFermentationBrix(mashBatchId: number, floorEquipmentId?: number | null): number | null {
+  const row = floorEquipmentId
+    ? queryOne<{ brix: number }>(
+        `SELECT brix FROM fermentation_logs
+         WHERE mash_batch_id = ? AND floor_equipment_id = ? AND brix IS NOT NULL
+         ORDER BY logged_at DESC LIMIT 1`,
+        [mashBatchId, floorEquipmentId],
+      )
+    : queryOne<{ brix: number }>(
+        `SELECT brix FROM fermentation_logs
+         WHERE mash_batch_id = ? AND brix IS NOT NULL
+         ORDER BY logged_at DESC LIMIT 1`,
+        [mashBatchId],
+      );
+  return row?.brix ?? null;
+}
+
+function syncMashFinalBrixFromLogs(mashBatchId: number): void {
+  const latest = getLatestFermentationBrix(mashBatchId);
+  if (latest == null) return;
+  runQuery('UPDATE mash_batches SET actual_final_brix = ? WHERE id = ?', [latest, mashBatchId]);
 }
 
 // ── Distillation ───────────────────────────────────────────
