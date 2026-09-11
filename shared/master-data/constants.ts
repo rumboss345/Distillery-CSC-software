@@ -59,6 +59,8 @@ export const CODE_PREFIXES = {
   tank: 'TNK',
   liquidTransaction: 'LTX',
   operationGroup: 'LGO',
+  productionOrder: 'PO',
+  productionBatch: 'PB',
 } as const;
 
 export const DEFAULT_UNITS = [

@@ -11,6 +11,12 @@ import {
   LIQUID_LEDGER_V1D_NEW_COLUMNS,
 } from './liquid-ledger-schema';
 import { seedLiquidLedgerLookupsIfEmpty } from './liquid-ledger-queries';
+import {
+  PRODUCTION_ORDERS_SCHEMA,
+  PRODUCTION_ORDERS_V1E_MIGRATION,
+  PRODUCTION_ORDERS_V1E_NEW_COLUMNS,
+} from './production-orders-schema';
+import { seedProductionLookupsIfEmpty } from './production-orders-queries';
 import { SCHEMA, SEED_DATA } from './schema';
 
 const FLOOR_MIGRATION = `
@@ -377,6 +383,7 @@ function runMigrations(): void {
   migrateMasterData();
   migrateRecipes();
   migrateLiquidLedger();
+  migrateProductionOrders();
   persistDb();
 }
 
@@ -396,6 +403,24 @@ function ledgerColumnExists(table: string, column: string): boolean {
     [column],
   );
   return row != null;
+}
+
+function migrateProductionOrders(): void {
+  if (!db) return;
+  const hasProduction = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='prod_orders'",
+  );
+  if (!hasProduction) {
+    db.run(PRODUCTION_ORDERS_SCHEMA);
+    seedProductionLookupsIfEmpty();
+  } else {
+    db.run(PRODUCTION_ORDERS_V1E_MIGRATION);
+    for (const col of PRODUCTION_ORDERS_V1E_NEW_COLUMNS) {
+      if (!recipeColumnExists(col.table, col.column)) {
+        db.run(col.ddl);
+      }
+    }
+  }
 }
 
 function migrateLiquidLedger(): void {
@@ -575,12 +600,15 @@ export async function initDatabase(): Promise<Database> {
     db.run(MASTER_DATA_SCHEMA);
     db.run(RECIPES_SCHEMA);
     db.run(LIQUID_LEDGER_SCHEMA);
+    db.run(PRODUCTION_ORDERS_SCHEMA);
     db.run(SEED_DATA);
     seedMasterDataIfEmpty();
     seedRecipeLookupsIfEmpty();
     seedLiquidLedgerLookupsIfEmpty();
+    seedProductionLookupsIfEmpty();
     seedCscFloorEquipment({ assignSequentialIds: true, demoStatusForFirstTwo: true });
     migrateLiquidLedger();
+    migrateProductionOrders();
     persistDb();
   }
 
@@ -598,6 +626,27 @@ export function __injectDatabaseForTests(instance: Database | null): void {
     db.close();
   }
   db = instance;
+}
+
+let transactionDepth = 0;
+
+/** Reentrant transaction wrapper shared by ledger and production execution. */
+export function withDatabaseTransaction<T>(fn: () => T): T {
+  if (transactionDepth > 0) return fn();
+  transactionDepth += 1;
+  const database = getDb();
+  database.run('BEGIN');
+  try {
+    const result = fn();
+    database.run('COMMIT');
+    scheduleSave();
+    return result;
+  } catch (err) {
+    database.run('ROLLBACK');
+    throw err;
+  } finally {
+    transactionDepth -= 1;
+  }
 }
 
 function assertLocalWriteAllowed(): void {

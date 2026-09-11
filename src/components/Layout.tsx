@@ -14,6 +14,7 @@ const navItems = [
   { to: '/floor-plan', label: 'Floor Plan', icon: '▦' },
   { to: '/inventory', label: 'Inventory', icon: '☰' },
   { to: '/liquid-inventory', label: 'Liquid Inventory', icon: '◐' },
+  { to: '/production', label: 'Production', icon: '◷' },
   { to: '/recipes', label: 'Recipes', icon: '◎' },
   { to: '/master-data', label: 'Master Data', icon: '◫' },
   { to: '/reports', label: 'Reports', icon: '▤' },

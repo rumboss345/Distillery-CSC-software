@@ -33,6 +33,10 @@ import { LiquidLotsPage } from './pages/liquid-inventory/LiquidLotsPage';
 import { LiquidLotDetailPage } from './pages/liquid-inventory/LiquidLotDetailPage';
 import { TransactionsPage } from './pages/liquid-inventory/TransactionsPage';
 import { ReconciliationPage } from './pages/liquid-inventory/ReconciliationPage';
+import { ProductionLayout } from './pages/production/ProductionLayout';
+import { ProductionOrdersPage } from './pages/production/ProductionOrdersPage';
+import { ProductionOrderDetailPage } from './pages/production/ProductionOrderDetailPage';
+import { BatchExecutionPage } from './pages/production/BatchExecutionPage';
 import { useDatabaseReady } from './db/queries';
 
 function AppContent() {
@@ -74,6 +78,11 @@ function AppContent() {
             <Route path="/recipes" element={<RecipesLayout />}>
               <Route index element={<RecipesPage />} />
               <Route path=":id" element={<RecipeDetailPage />} />
+            </Route>
+            <Route path="/production" element={<ProductionLayout />}>
+              <Route index element={<ProductionOrdersPage />} />
+              <Route path=":id" element={<ProductionOrderDetailPage />} />
+              <Route path=":id/batch/:batchId" element={<BatchExecutionPage />} />
             </Route>
             <Route path="/liquid-inventory" element={<LiquidInventoryLayout />}>
               <Route index element={<TankBoardPage />} />

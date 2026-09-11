@@ -175,8 +175,12 @@ export interface BlendInput {
   outputLotType: string;
   outputDescription: string;
   productId?: number | null;
+  recipeVersionId?: number | null;
   notes?: string;
   createdBy?: string | null;
+  sourceDocumentType?: string | null;
+  sourceDocumentId?: number | null;
+  transactionGroupId?: string | null;
 }
 
 export interface ProofDownInput {
@@ -187,9 +191,15 @@ export interface ProofDownInput {
   waterVolumeLitres: number;
   targetAbv: number;
   actualOutputVolumeLitres?: number | null;
+  actualOutputAbv?: number | null;
   destinationTankId: number;
+  productId?: number | null;
+  recipeVersionId?: number | null;
   notes?: string;
   createdBy?: string | null;
+  sourceDocumentType?: string | null;
+  sourceDocumentId?: number | null;
+  transactionGroupId?: string | null;
 }
 
 export interface OpeningBalanceInput {
