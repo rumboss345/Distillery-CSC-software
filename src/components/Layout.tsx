@@ -1,20 +1,45 @@
+import { useEffect, useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
+import { ProductionDatabaseBanner } from './ProductionDatabaseBanner';
 import { useAuth } from '../context/AuthContext';
+import { fetchProductionStatus } from '../lib/production-api';
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: '◈' },
   { to: '/wash', label: 'Wash & Ferment', icon: '◉' },
   { to: '/distillation', label: 'Distillation', icon: '△' },
   { to: '/blending', label: 'Blending', icon: '◆' },
-  { to: '/barrels', label: 'Barrel Aging', icon: '▣' },
+  { to: '/barrels-inventory', label: 'Barrel Aging', icon: '▣' },
   { to: '/bottling', label: 'Bottling', icon: '◇' },
   { to: '/floor-plan', label: 'Floor Plan', icon: '▦' },
   { to: '/inventory', label: 'Inventory', icon: '☰' },
+  { to: '/material-inventory', label: 'Material Inventory', icon: '▤' },
+  { to: '/liquid-inventory', label: 'Liquid Inventory', icon: '◐' },
+  { to: '/purchasing', label: 'Purchasing', icon: '◧' },
+  { to: '/costing', label: 'Costing', icon: '◈' },
+  { to: '/accounting', label: 'Accounting', icon: '◫' },
+  { to: '/finished-goods', label: 'Finished Goods', icon: '◫' },
+  { to: '/sales', label: 'Sales & Depletions', icon: '◈' },
+  { to: '/warehouse', label: 'Warehouses', icon: '▦' },
+  { to: '/quality', label: 'Quality (QA/QC)', icon: '◉' },
+  { to: '/maintenance', label: 'Maintenance', icon: '⚙' },
+  { to: '/planning', label: 'Planning & MRP', icon: '◰' },
+  { to: '/production', label: 'Production', icon: '◷' },
+  { to: '/recipes', label: 'Recipes', icon: '◎' },
+  { to: '/master-data', label: 'Master Data', icon: '◫' },
   { to: '/reports', label: 'Reports', icon: '▤' },
+  { to: '/administration', label: 'Administration', icon: '⚙' },
 ];
 
 export function Layout() {
   const { user, logout } = useAuth();
+  const [postgresConfigured, setPostgresConfigured] = useState(false);
+
+  useEffect(() => {
+    fetchProductionStatus()
+      .then((status) => setPostgresConfigured(status.databaseConfigured))
+      .catch(() => setPostgresConfigured(false));
+  }, []);
 
   return (
     <div className="app-layout">
@@ -38,15 +63,28 @@ export function Layout() {
             </NavLink>
           ))}
           {user?.role === 'admin' && (
-            <NavLink
-              to="/admin/users"
-              className={({ isActive }) =>
-                `nav-link${isActive ? ' active' : ''}`
-              }
-            >
-              <span className="nav-icon">✉</span>
-              User approvals
-            </NavLink>
+            <>
+              <NavLink
+                to="/admin/users"
+                className={({ isActive }) =>
+                  `nav-link${isActive ? ' active' : ''}`
+                }
+              >
+                <span className="nav-icon">✉</span>
+                User approvals
+              </NavLink>
+              {postgresConfigured && (
+                <NavLink
+                  to="/admin/data-migration"
+                  className={({ isActive }) =>
+                    `nav-link${isActive ? ' active' : ''}`
+                  }
+                >
+                  <span className="nav-icon">⇄</span>
+                  Data migration
+                </NavLink>
+              )}
+            </>
           )}
         </nav>
         <div className="sidebar-footer">
@@ -60,6 +98,7 @@ export function Layout() {
         </div>
       </aside>
       <main className="main-content">
+        <ProductionDatabaseBanner />
         <Outlet />
       </main>
     </div>

@@ -1,3 +1,4 @@
+/** @deprecated Auth now uses PostgreSQL via server/db/auth.ts. This file remains for legacy reference only. */
 import Database from 'better-sqlite3';
 import bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
@@ -119,6 +120,11 @@ export function rejectUserById(id: number): User | null {
     .prepare(`UPDATE users SET status = 'rejected', approval_token = NULL WHERE id = ?`)
     .run(id);
   return getUserById(id)!;
+}
+
+export function getUserCount(): number {
+  const row = ensureDb().prepare('SELECT COUNT(*) AS c FROM users').get() as { c: number };
+  return Number(row.c);
 }
 
 export function listPendingUsers(): Omit<User, 'password_hash' | 'approval_token'>[] {

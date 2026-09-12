@@ -1,7 +1,8 @@
 import { existsSync, readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import { resetAdminAccount } from './db.js';
+import { resetAdminAccount } from './db/auth.js';
+import { initializeServerDatastores } from './startup.js';
 
 function loadEnvFile() {
   const envPath = join(dirname(fileURLToPath(import.meta.url)), '..', '.env');
@@ -26,7 +27,6 @@ function loadEnvFile() {
 
 loadEnvFile();
 
-// Also load env in production (Render sets vars directly; .env is local-only)
 const email = process.env.ADMIN_EMAIL;
 const password = process.env.ADMIN_PASSWORD;
 
@@ -35,5 +35,6 @@ if (!email || !password) {
   process.exit(1);
 }
 
-resetAdminAccount(email, password);
+await initializeServerDatastores();
+await resetAdminAccount(email, password);
 console.log(`Admin account reset for ${email.toLowerCase()}`);

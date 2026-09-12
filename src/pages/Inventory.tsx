@@ -97,7 +97,7 @@ export function Inventory() {
     <div>
       <div className="page-header">
         <h2>Inventory</h2>
-        <p>Raw materials and supplies on hand</p>
+        <p>Raw materials and supplies on hand (legacy on-hand tracking). Structured master data is managed under Master Data.</p>
         <div className="page-actions">
           <button className="btn btn-primary" onClick={openNew}>+ Add Item</button>
           <button className="btn btn-secondary" onClick={openNewCategory}>+ Add Category</button>

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
+import { setSqlJsLegacyOnly, shouldUseServerApi } from '../data/data-adapter';
 import { initDatabase, clearAllData } from './database';
+import { refreshProductionMode } from './production-mode';
 import type {
   Barrel,
   BlendIngredient,
@@ -42,6 +44,12 @@ export function useDatabaseReady() {
 
   useEffect(() => {
     initDatabase()
+      .then(() => refreshProductionMode().catch(() => null))
+      .then(() => {
+        if (shouldUseServerApi()) {
+          setSqlJsLegacyOnly(true);
+        }
+      })
       .then(() => setReady(true))
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load database'));
   }, []);
