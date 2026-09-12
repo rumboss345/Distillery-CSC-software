@@ -1262,8 +1262,8 @@ export function getEquipmentVolumeReport(): EquipmentVolumeReport[] {
     }
 
     if (eq.equipment_type === 'pot_still' || eq.equipment_type === 'column_still') {
-      const run = queryOne<{ batch_number: string; charge_volume_gal: number; status: string; run_type: string; source_holding_tank_equipment_id: number | null }>(
-        `SELECT batch_number, charge_volume_gal, status, run_type, source_holding_tank_equipment_id FROM distillation_runs
+      const run = queryOne<{ batch_number: string; charge_volume_gal: number; charge_abv: number | null; status: string; run_type: string; source_holding_tank_equipment_id: number | null }>(
+        `SELECT batch_number, charge_volume_gal, charge_abv, status, run_type, source_holding_tank_equipment_id FROM distillation_runs
          WHERE still_name = ? AND status IN ('planned', 'running')
          ORDER BY run_date DESC LIMIT 1`,
         [eq.name],
@@ -1283,7 +1283,7 @@ export function getEquipmentVolumeReport(): EquipmentVolumeReport[] {
         status: eq.status,
         capacity_gal: eq.capacity_gal,
         volume_gal: run?.charge_volume_gal ?? 0,
-        abv: null,
+        abv: run?.charge_abv ?? null,
         detail,
       };
     }

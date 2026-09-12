@@ -151,6 +151,14 @@
   color: #e8b84a;
 }
 
+.process-equipment-abv {
+  padding: 0.1rem 0.5rem 0.35rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #cbd5e1;
+  font-variant-numeric: tabular-nums;
+}
+
 .equipment-visual--process,
 .tank-visual--process {
   padding: 0.25rem 0.35rem 0;
