@@ -172,6 +172,8 @@ CREATE TABLE IF NOT EXISTS floor_equipment (
   equipment_type TEXT NOT NULL DEFAULT 'fermenter',
   pos_x_ft REAL NOT NULL DEFAULT 4,
   pos_y_ft REAL NOT NULL DEFAULT 4,
+  process_pos_x REAL,
+  process_pos_y REAL,
   width_ft REAL NOT NULL DEFAULT 8,
   depth_ft REAL NOT NULL DEFAULT 8,
   capacity_gal REAL NOT NULL DEFAULT 0,

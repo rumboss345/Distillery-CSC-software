@@ -35,6 +35,8 @@ const emptyEquipment = (planId: number, type: EquipmentType = 'fermenter'): Omit
     equipment_type: type,
     pos_x_ft: 4,
     pos_y_ft: 4,
+    process_pos_x: null,
+    process_pos_y: null,
     width_ft: defaults.width_ft,
     depth_ft: defaults.depth_ft,
     capacity_gal: defaults.capacity_gal,
@@ -255,6 +257,7 @@ export function FloorPlanPage() {
             selectedId={selectedId}
             onSelect={selectEquipment}
             refreshKey={key}
+            onLayoutChange={refresh}
           />
           {selected && (
             <div className="card process-detail-sidebar" style={{ marginTop: '1rem' }}>

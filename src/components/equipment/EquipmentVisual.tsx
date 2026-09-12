@@ -17,6 +17,7 @@ export function EquipmentVisual(props: EquipmentVisualProps) {
           tank={tankVisualDataFromVisualData(data)}
           selected={props.selected}
           size={props.size}
+          labelStyle={props.labelStyle}
           onClick={props.onClick}
           className={props.className}
         />

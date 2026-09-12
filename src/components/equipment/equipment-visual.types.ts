@@ -23,6 +23,7 @@ export interface EquipmentVisualProps {
   data: EquipmentVisualData;
   selected?: boolean;
   size?: 'sm' | 'md' | 'lg';
+  labelStyle?: 'default' | 'process';
   onClick?: () => void;
   className?: string;
 }

@@ -8,10 +8,10 @@ export interface ProcessStage {
 }
 
 export const PROCESS_STAGES: ProcessStage[] = [
-  { key: 'preparation', label: 'Preparation', types: ['mash_tun'] },
+  { key: 'preparation', label: 'Mash / Cook', types: ['mash_tun'] },
   { key: 'fermentation', label: 'Fermentation', types: ['fermenter'] },
   { key: 'distillation', label: 'Distillation', types: ['pot_still', 'column_still', 'boiler'] },
-  { key: 'storage', label: 'Liquid Storage', types: ['holding_tank'] },
+  { key: 'storage', label: 'Post-Ferm Holding', types: ['holding_tank'] },
   { key: 'other', label: 'Other Equipment', types: ['other'] },
 ];
 

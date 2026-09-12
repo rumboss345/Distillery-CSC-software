@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS floor_equipment (
   equipment_type TEXT NOT NULL DEFAULT 'fermenter',
   pos_x_ft REAL NOT NULL DEFAULT 4,
   pos_y_ft REAL NOT NULL DEFAULT 4,
+  process_pos_x REAL,
+  process_pos_y REAL,
   width_ft REAL NOT NULL DEFAULT 8,
   depth_ft REAL NOT NULL DEFAULT 8,
   capacity_gal REAL NOT NULL DEFAULT 0,
@@ -363,6 +365,15 @@ function runMigrations(): void {
   `);
   seedCscFloorEquipment({ onlyMissing: true });
   db.run(`UPDATE floor_equipment SET capacity_gal = 1000 WHERE equipment_type = 'fermenter'`);
+  const hasProcessPos = queryOne<{ name: string }>(
+    "SELECT name FROM pragma_table_info('floor_equipment') WHERE name='process_pos_x'",
+  );
+  if (!hasProcessPos) {
+    db.run('ALTER TABLE floor_equipment ADD COLUMN process_pos_x REAL');
+    db.run('ALTER TABLE floor_equipment ADD COLUMN process_pos_y REAL');
+    persistDb();
+  }
+
   migrateFloorPlanPages();
   persistDb();
 }

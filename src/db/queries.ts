@@ -1356,6 +1356,13 @@ export function updateEquipmentPosition(id: number, pos_x_ft: number, pos_y_ft: 
   runQuery('UPDATE floor_equipment SET pos_x_ft=?, pos_y_ft=? WHERE id=?', [pos_x_ft, pos_y_ft, id]);
 }
 
+export function updateEquipmentProcessPosition(id: number, process_pos_x: number, process_pos_y: number): void {
+  runQuery(
+    'UPDATE floor_equipment SET process_pos_x=?, process_pos_y=? WHERE id=?',
+    [process_pos_x, process_pos_y, id],
+  );
+}
+
 export function moveEquipmentToPlan(
   equipmentId: number,
   planId: number,

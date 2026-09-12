@@ -43,6 +43,8 @@ export interface FloorEquipment {
   equipment_type: EquipmentType;
   pos_x_ft: number;
   pos_y_ft: number;
+  process_pos_x: number | null;
+  process_pos_y: number | null;
   width_ft: number;
   depth_ft: number;
   capacity_gal: number;

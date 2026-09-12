@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import type { EquipmentVisualData, EquipmentVisualProps } from './equipment-visual.types';
 import { STATUS_LABELS, formatGal } from './equipment-visual-shared';
+import { ProcessEquipmentLabels } from './ProcessEquipmentLabels';
 
 const SIZE_MAP = { sm: 0.72, md: 0.88, lg: 1 } as const;
 
@@ -15,6 +16,7 @@ export function EquipmentVisualFrame({
   data,
   selected = false,
   size = 'md',
+  labelStyle = 'default',
   onClick,
   className = '',
   children,
@@ -24,38 +26,45 @@ export function EquipmentVisualFrame({
 }: FrameProps) {
   const scale = SIZE_MAP[size];
   const tooltip = buildTooltip(data);
+  const isProcess = labelStyle === 'process';
 
   return (
     <button
       type="button"
-      className={`equipment-visual${selected ? ' equipment-visual--selected' : ''}${onClick ? ' equipment-visual--interactive' : ''} ${className}`.trim()}
+      className={`equipment-visual${selected ? ' equipment-visual--selected' : ''}${onClick ? ' equipment-visual--interactive' : ''}${isProcess ? ' equipment-visual--process' : ''} ${className}`.trim()}
       style={{ '--eq-scale': scale } as React.CSSProperties}
       onClick={onClick}
       title={tooltip}
       aria-label={`${data.name}, ${Math.round(data.fillPercent)} percent full`}
       aria-pressed={selected}
     >
-      <div className="equipment-visual-tooltip" role="tooltip">
-        <TooltipContent data={data} />
-      </div>
+      {!isProcess && (
+        <div className="equipment-visual-tooltip" role="tooltip">
+          <TooltipContent data={data} />
+        </div>
+      )}
       <div className="equipment-visual-svg-wrap" style={{ width: svgWidth * scale, height: svgHeight * scale }}>
         {children}
       </div>
-      <div className="equipment-visual-labels">
-        <span className="equipment-visual-code">{data.code}</span>
-        <span className="equipment-visual-name">{data.name}</span>
-        {showVolume && data.capacityGal > 0 && (
-          <span className="equipment-visual-volume">
-            {formatGal(data.currentVolumeGal)} / {formatGal(data.capacityGal)} gal
-          </span>
-        )}
-        {showVolume && data.capacityGal > 0 && (
-          <span className="equipment-visual-percent">{Math.round(data.fillPercent)}%</span>
-        )}
-        {data.liquidName && !showVolume && (
-          <span className="equipment-visual-detail">{data.liquidName}</span>
-        )}
-      </div>
+      {isProcess ? (
+        <ProcessEquipmentLabels data={data} />
+      ) : (
+        <div className="equipment-visual-labels">
+          <span className="equipment-visual-code">{data.code}</span>
+          <span className="equipment-visual-name">{data.name}</span>
+          {showVolume && data.capacityGal > 0 && (
+            <span className="equipment-visual-volume">
+              {formatGal(data.currentVolumeGal)} / {formatGal(data.capacityGal)} gal
+            </span>
+          )}
+          {showVolume && data.capacityGal > 0 && (
+            <span className="equipment-visual-percent">{Math.round(data.fillPercent)}%</span>
+          )}
+          {data.liquidName && !showVolume && (
+            <span className="equipment-visual-detail">{data.liquidName}</span>
+          )}
+        </div>
+      )}
     </button>
   );
 }

@@ -1,5 +1,6 @@
 import { useId, useMemo } from 'react';
 import type { TankVisualProps, TankVisualStatus } from './tank-visual.types';
+import { ProcessEquipmentLabels } from './ProcessEquipmentLabels';
 import './tank-visual.css';
 
 const LIQUID_COLORS: Record<TankVisualStatus, { base: string; highlight: string; edge: string }> = {
@@ -30,12 +31,14 @@ export function TankVisual({
   tank,
   selected = false,
   size = 'md',
+  labelStyle = 'default',
   onClick,
   className = '',
 }: TankVisualProps) {
   const uid = useId().replace(/:/g, '');
   const scale = SIZE_MAP[size];
   const liquid = LIQUID_COLORS[tank.status];
+  const isProcess = labelStyle === 'process';
 
   const fillHeight = useMemo(() => {
     const innerH = 118;
@@ -54,13 +57,14 @@ export function TankVisual({
   return (
     <button
       type="button"
-      className={`tank-visual${selected ? ' tank-visual--selected' : ''}${onClick ? ' tank-visual--interactive' : ''} ${className}`.trim()}
+      className={`tank-visual${selected ? ' tank-visual--selected' : ''}${onClick ? ' tank-visual--interactive' : ''}${isProcess ? ' tank-visual--process' : ''} ${className}`.trim()}
       style={{ '--tank-scale': scale } as React.CSSProperties}
       onClick={onClick}
       title={tooltip}
       aria-label={`${tank.name}, ${Math.round(tank.fillPercent)} percent full`}
       aria-pressed={selected}
     >
+      {!isProcess && (
       <div className="tank-visual-tooltip" role="tooltip">
         <strong>{tank.code} — {tank.name}</strong>
         {tank.liquidName && <span>{tank.liquidName}</span>}
@@ -70,6 +74,7 @@ export function TankVisual({
         <span>{Math.round(tank.fillPercent)}%{tank.abv != null ? ` · ${tank.abv.toFixed(1)}% ABV` : ''}</span>
         <span className="tank-visual-tooltip-status">{STATUS_LABELS[tank.status]}</span>
       </div>
+      )}
 
       <svg
         className="tank-visual-svg"
@@ -178,14 +183,18 @@ export function TankVisual({
         />
       </svg>
 
-      <div className="tank-visual-labels">
-        <span className="tank-visual-code">{tank.code}</span>
-        <span className="tank-visual-name">{tank.name}</span>
-        <span className="tank-visual-volume">
-          {formatGal(tank.currentVolumeGal)} / {formatGal(tank.capacityGal)} gal
-        </span>
-        <span className="tank-visual-percent">{Math.round(tank.fillPercent)}%</span>
-      </div>
+      {isProcess ? (
+        <ProcessEquipmentLabels data={tank} />
+      ) : (
+        <div className="tank-visual-labels">
+          <span className="tank-visual-code">{tank.code}</span>
+          <span className="tank-visual-name">{tank.name}</span>
+          <span className="tank-visual-volume">
+            {formatGal(tank.currentVolumeGal)} / {formatGal(tank.capacityGal)} gal
+          </span>
+          <span className="tank-visual-percent">{Math.round(tank.fillPercent)}%</span>
+        </div>
+      )}
     </button>
   );
 }
