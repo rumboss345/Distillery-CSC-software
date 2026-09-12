@@ -1,4 +1,4 @@
-import type { ActionAssignmentKey, PermissionKey, ProcessStageKey } from './permissions';
+import type { PermissionKey, ProcessStageKey } from './permissions';
 
 const TOKEN_KEY = 'distillery-tracker-auth-token';
 
@@ -10,7 +10,6 @@ export interface AuthUser {
   status: 'pending' | 'approved' | 'rejected';
   created_at: string;
   permissions: PermissionKey[];
-  actionAssignments: ActionAssignmentKey[];
   processAssignments: ProcessStageKey[];
 }
 
@@ -77,45 +76,16 @@ export async function fetchAllUsers() {
   return apiFetch<{ users: AuthUser[] }>('/api/admin/users');
 }
 
-export interface AssignmentEntry {
+export interface ProcessAssignmentEntry {
   id: number;
   email: string;
   name: string | null;
 }
 
-export type ProcessAssignmentEntry = AssignmentEntry;
-
 export async function fetchProcessAssignments() {
-  return apiFetch<{ assignments: Record<string, AssignmentEntry[]> }>(
+  return apiFetch<{ assignments: Record<string, ProcessAssignmentEntry[]> }>(
     '/api/process/assignments',
   );
-}
-
-export async function fetchActionAssignments() {
-  return apiFetch<{ assignments: Record<string, AssignmentEntry[]> }>(
-    '/api/action-assignments',
-  );
-}
-
-export interface ActivityEntry {
-  id: number;
-  user_id: number;
-  user_name: string | null;
-  user_email: string;
-  action_key: string;
-  description: string;
-  created_at: string;
-}
-
-export async function fetchRecentActivity(limit = 30) {
-  return apiFetch<{ activity: ActivityEntry[] }>(`/api/activity/recent?limit=${limit}`);
-}
-
-export async function postActivity(actionKey: ActionAssignmentKey, description: string) {
-  return apiFetch<{ ok: true }>('/api/activity', {
-    method: 'POST',
-    body: JSON.stringify({ action_key: actionKey, description }),
-  });
 }
 
 export async function createAdminUser(payload: {
@@ -123,7 +93,7 @@ export async function createAdminUser(payload: {
   password: string;
   name?: string;
   permissions: PermissionKey[];
-  actionAssignments: ActionAssignmentKey[];
+  processAssignments: ProcessStageKey[];
 }) {
   return apiFetch<{ message: string; user: AuthUser }>('/api/admin/users', {
     method: 'POST',
@@ -136,7 +106,7 @@ export async function updateAdminUser(
   payload: {
     name?: string | null;
     permissions?: PermissionKey[];
-    actionAssignments?: ActionAssignmentKey[];
+    processAssignments?: ProcessStageKey[];
   },
 ) {
   return apiFetch<{ message: string; user: AuthUser }>(`/api/admin/users/${id}`, {

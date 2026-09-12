@@ -17,9 +17,7 @@ import { FloorCanvas, FloorLegend } from '../components/FloorCanvas';
 import { ProcessEquipmentCanvas } from '../components/equipment/ProcessEquipmentCanvas';
 import { HoldingTankIntakeHistory } from '../components/HoldingTankIntakeHistory';
 import { Modal } from '../components/Modal';
-import { AssignedUsersBar } from '../components/AssignedUsersBar';
 import { StatusBadge } from '../components/StatusBadge';
-import { logUserAction } from '../lib/activity-log';
 import { holdingTankIntakeKey } from '../db/queries';
 import {
   EQUIPMENT_TYPES,
@@ -121,7 +119,6 @@ export function FloorPlanPage() {
 
   const handleSave = () => {
     saveFloorEquipment(form, editId);
-    void logUserAction('equipment', `${editId ? 'Updated' : 'Added'} equipment ${form.name || form.equipment_type}`);
     setShowForm(false);
     refresh();
   };
@@ -130,7 +127,6 @@ export function FloorPlanPage() {
     const trimmed = pageName.trim();
     if (!trimmed) return;
     const newId = addFloorPlan(trimmed, plan.width_ft, plan.height_ft);
-    void logUserAction('equipment', `Created floor plan page ${trimmed}`);
     setPageName('');
     setShowPageForm(false);
     setActivePlanId(newId);
@@ -196,7 +192,6 @@ export function FloorPlanPage() {
       return;
     }
     const result = emptyAllHoldingTanks();
-    void logUserAction('equipment', `Emptied all holding tanks (${tanksWithSpirit.length} tanks)`);
     selectEquipment(null);
     refresh();
     alert(
@@ -238,8 +233,6 @@ export function FloorPlanPage() {
           )}
         </div>
       </div>
-
-      <AssignedUsersBar actionKey="equipment" refreshKey={key} />
 
       <div className="floor-view-toggle">
         <button

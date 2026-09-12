@@ -9,8 +9,6 @@ import {
   useRefreshKey,
 } from '../db/queries';
 import { Modal } from '../components/Modal';
-import { AssignedUsersBar } from '../components/AssignedUsersBar';
-import { logUserAction } from '../lib/activity-log';
 import type { InventoryCategory, InventoryItem } from '../types';
 
 const emptyItem = (): Omit<InventoryItem, 'id' | 'created_at' | 'updated_at'> => ({
@@ -60,7 +58,6 @@ export function Inventory() {
 
   const handleSave = () => {
     saveInventoryItem(form, editId);
-    void logUserAction('inventory', `${editId ? 'Updated' : 'Created'} inventory item ${form.name}`);
     setShowForm(false);
     refresh();
   };
@@ -68,7 +65,6 @@ export function Inventory() {
   const handleSaveCategory = () => {
     try {
       const created = addInventoryCategory(categoryName);
-      void logUserAction('inventory', `Added category ${created}`);
       setShowCategoryForm(false);
       setCategoryName('');
       setCategoryError('');
@@ -90,9 +86,7 @@ export function Inventory() {
     if (!showAdjust) return;
     const delta = parseFloat(adjustAmount);
     if (!isNaN(delta)) {
-      const item = items.find((i) => i.id === showAdjust);
       adjustInventory(showAdjust, delta);
-      void logUserAction('inventory', `Adjusted ${item?.name ?? 'item'} by ${delta > 0 ? '+' : ''}${delta}`);
       setShowAdjust(null);
       setAdjustAmount('');
       refresh();
@@ -109,8 +103,6 @@ export function Inventory() {
           <button className="btn btn-secondary" onClick={openNewCategory}>+ Add Category</button>
         </div>
       </div>
-
-      <AssignedUsersBar actionKey="inventory" refreshKey={key} />
 
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
         <button

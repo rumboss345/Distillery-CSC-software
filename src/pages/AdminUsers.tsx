@@ -12,14 +12,13 @@ import {
 } from '../lib/auth-api';
 import { useAuth } from '../context/AuthContext';
 import {
-  ACTION_ASSIGNMENT_KEYS,
-  ACTION_ASSIGNMENT_LABELS,
   PERMISSION_KEYS,
   PERMISSION_LABELS,
-  type ActionAssignmentKey,
+  PROCESS_STAGE_KEYS,
+  PROCESS_STAGE_LABELS,
   type PermissionKey,
+  type ProcessStageKey,
 } from '../lib/permissions';
-import { invalidateActionAssignmentsCache } from '../hooks/useActionAssignments';
 import { Modal } from '../components/Modal';
 import './admin.css';
 
@@ -28,7 +27,7 @@ const emptyForm = () => ({
   password: '',
   name: '',
   permissions: [...PERMISSION_KEYS] as PermissionKey[],
-  actionAssignments: [] as ActionAssignmentKey[],
+  processAssignments: [...PROCESS_STAGE_KEYS] as ProcessStageKey[],
 });
 
 export function AdminUsers() {
@@ -41,7 +40,7 @@ export function AdminUsers() {
   const [form, setForm] = useState(emptyForm);
   const [editUser, setEditUser] = useState<AuthUser | null>(null);
   const [editPermissions, setEditPermissions] = useState<PermissionKey[]>([]);
-  const [editActionAssignments, setEditActionAssignments] = useState<ActionAssignmentKey[]>([]);
+  const [editProcessAssignments, setEditProcessAssignments] = useState<ProcessStageKey[]>([]);
   const [editName, setEditName] = useState('');
 
   const load = useCallback(async () => {
@@ -70,7 +69,7 @@ export function AdminUsers() {
     return checked ? [...list, key] : list.filter((k) => k !== key);
   }
 
-  function toggleAction(list: ActionAssignmentKey[], key: ActionAssignmentKey, checked: boolean) {
+  function toggleProcess(list: ProcessStageKey[], key: ProcessStageKey, checked: boolean) {
     return checked ? [...list, key] : list.filter((k) => k !== key);
   }
 
@@ -84,11 +83,10 @@ export function AdminUsers() {
         password: form.password,
         name: form.name || undefined,
         permissions: form.permissions,
-        actionAssignments: form.actionAssignments,
+        processAssignments: form.processAssignments,
       });
       setMessage(result.message);
       setForm(emptyForm());
-      invalidateActionAssignmentsCache();
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not create user');
@@ -99,7 +97,7 @@ export function AdminUsers() {
     setEditUser(u);
     setEditName(u.name ?? '');
     setEditPermissions([...u.permissions]);
-    setEditActionAssignments([...(u.actionAssignments ?? u.processAssignments ?? [])]);
+    setEditProcessAssignments([...u.processAssignments]);
   }
 
   async function handleSaveEdit() {
@@ -110,11 +108,10 @@ export function AdminUsers() {
       const result = await updateAdminUser(editUser.id, {
         name: editName || null,
         permissions: editPermissions,
-        actionAssignments: editActionAssignments,
+        processAssignments: editProcessAssignments,
       });
       setMessage(result.message);
       setEditUser(null);
-      invalidateActionAssignmentsCache();
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Update failed');
@@ -176,20 +173,20 @@ export function AdminUsers() {
     );
   }
 
-  function renderActionChecks(
-    selected: ActionAssignmentKey[],
-    onChange: (next: ActionAssignmentKey[]) => void,
+  function renderProcessChecks(
+    selected: ProcessStageKey[],
+    onChange: (next: ProcessStageKey[]) => void,
   ) {
     return (
       <div className="admin-check-grid">
-        {ACTION_ASSIGNMENT_KEYS.map((key) => (
+        {PROCESS_STAGE_KEYS.map((key) => (
           <label key={key} className="admin-check-label">
             <input
               type="checkbox"
               checked={selected.includes(key)}
-              onChange={(e) => onChange(toggleAction(selected, key, e.target.checked))}
+              onChange={(e) => onChange(toggleProcess(selected, key, e.target.checked))}
             />
-            {ACTION_ASSIGNMENT_LABELS[key]}
+            {PROCESS_STAGE_LABELS[key]}
           </label>
         ))}
       </div>
@@ -197,10 +194,9 @@ export function AdminUsers() {
   }
 
   function formatAssignments(u: AuthUser) {
-    if (u.role === 'admin') return 'All actions';
-    const assignments = u.actionAssignments ?? u.processAssignments ?? [];
-    if (assignments.length === 0) return 'None assigned';
-    return `${assignments.length} action${assignments.length === 1 ? '' : 's'}`;
+    if (u.role === 'admin') return 'All processes';
+    if (u.processAssignments.length === 0) return 'None assigned';
+    return u.processAssignments.map((k) => PROCESS_STAGE_LABELS[k]).join(', ');
   }
 
   function formatPermissions(u: AuthUser) {
@@ -214,7 +210,7 @@ export function AdminUsers() {
       <header className="page-header">
         <div>
           <h1>Administration</h1>
-          <p className="page-subtitle">Manage users, permissions, and action assignments</p>
+          <p className="page-subtitle">Manage users, permissions, and process assignments</p>
         </div>
       </header>
 
@@ -290,10 +286,10 @@ export function AdminUsers() {
           <h3 className="admin-subtitle">Page access</h3>
           {renderPermissionChecks(form.permissions, (next) => setForm({ ...form, permissions: next }))}
 
-          <h3 className="admin-subtitle">Action assignments</h3>
-          <p className="admin-hint">Assign which pages and process areas this user is responsible for.</p>
-          {renderActionChecks(form.actionAssignments, (next) =>
-            setForm({ ...form, actionAssignments: next }),
+          <h3 className="admin-subtitle">Process assignments</h3>
+          <p className="admin-hint">Assign which production stages this user is responsible for.</p>
+          {renderProcessChecks(form.processAssignments, (next) =>
+            setForm({ ...form, processAssignments: next }),
           )}
 
           <button type="submit" className="btn btn-primary">Create user</button>
@@ -313,7 +309,7 @@ export function AdminUsers() {
                 <th>Role</th>
                 <th>Status</th>
                 <th>Access</th>
-                <th>Actions</th>
+                <th>Processes</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -362,8 +358,8 @@ export function AdminUsers() {
             <h3 className="admin-subtitle">Page access</h3>
             {renderPermissionChecks(editPermissions, setEditPermissions)}
 
-            <h3 className="admin-subtitle">Action assignments</h3>
-            {renderActionChecks(editActionAssignments, setEditActionAssignments)}
+            <h3 className="admin-subtitle">Process assignments</h3>
+            {renderProcessChecks(editProcessAssignments, setEditProcessAssignments)}
 
             <div className="modal-actions">
               <button type="button" className="btn btn-secondary" onClick={() => setEditUser(null)}>
