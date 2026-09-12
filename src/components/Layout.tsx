@@ -8,7 +8,7 @@ const navItems = [
   { to: '/blending', label: 'Blending', icon: '◆' },
   { to: '/barrels', label: 'Barrel Aging', icon: '▣' },
   { to: '/bottling', label: 'Bottling', icon: '◇' },
-  { to: '/floor-plan', label: 'Floor Plan', icon: '▦' },
+  { to: '/floor-plan', label: 'Equipment', icon: '▦' },
   { to: '/inventory', label: 'Inventory', icon: '☰' },
   { to: '/reports', label: 'Reports', icon: '▤' },
 ];

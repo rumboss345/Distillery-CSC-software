@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   getFloorPlans,
   getFloorPlan,
+  getAllFloorEquipmentWithContext,
   getFloorEquipmentWithContext,
   getHoldingTanksWithContents,
   addFloorPlan,
@@ -13,7 +14,7 @@ import {
   useRefreshKey,
 } from '../db/queries';
 import { FloorCanvas, FloorLegend } from '../components/FloorCanvas';
-import { TankVisualPreview } from '../components/equipment/TankVisualPreview';
+import { ProcessEquipmentCanvas } from '../components/equipment/ProcessEquipmentCanvas';
 import { HoldingTankIntakeHistory } from '../components/HoldingTankIntakeHistory';
 import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
@@ -24,7 +25,7 @@ import {
   TYPE_DEFAULTS,
   equipmentTypeLabel,
 } from '../lib/equipment';
-import type { EquipmentStatus, EquipmentType, FloorEquipment, FloorEquipmentView } from '../types';
+import type { EquipmentStatus, EquipmentType, FloorEquipment } from '../types';
 
 const emptyEquipment = (planId: number, type: EquipmentType = 'fermenter'): Omit<FloorEquipment, 'id' | 'created_at'> => {
   const defaults = TYPE_DEFAULTS[type];
@@ -59,8 +60,11 @@ export function FloorPlanPage() {
   const [draggingEquipmentId, setDraggingEquipmentId] = useState<number | null>(null);
   const [dropTargetPlanId, setDropTargetPlanId] = useState<number | null>(null);
   const [selectedIntakeKey, setSelectedIntakeKey] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'process' | 'classic'>('process');
 
   void key;
+
+  const allEquipment = useMemo(() => getAllFloorEquipmentWithContext(), [key]);
 
   const selectEquipment = (id: number | null) => {
     setSelectedId(id);
@@ -81,26 +85,12 @@ export function FloorPlanPage() {
     return () => window.removeEventListener('pointermove', onMove);
   }, [draggingEquipmentId]);
 
-  const selected = equipment.find((e) => e.id === selectedId) ?? null;
-
-  const previewTank = useMemo((): FloorEquipmentView | null => {
-    const onPlan = equipment.filter((e) => e.equipment_type === 'holding_tank');
-    const withVolume = onPlan.find((t) => (t.active_volume_gal ?? 0) > 0);
-    if (withVolume) return withVolume;
-    if (onPlan[0]) return onPlan[0];
-
-    const allTanks = getHoldingTanksWithContents();
-    const fallback = allTanks.find((t) => t.volume_gal > 0) ?? allTanks[0];
-    if (!fallback) return null;
-
-    return {
-      ...fallback,
-      active_volume_gal: fallback.volume_gal,
-      active_abv: fallback.abv,
-      active_run_count: fallback.run_count,
-      status: fallback.volume_gal > 0 ? 'in_use' : fallback.status,
-    };
-  }, [equipment, key]);
+  const selected = allEquipment.find((e) => e.id === selectedId)
+    ?? equipment.find((e) => e.id === selectedId)
+    ?? null;
+  const selectedPlan = selected
+    ? plans.find((p) => p.id === selected.floor_plan_id) ?? plan
+    : plan;
 
   const openNew = () => {
     setEditId(undefined);
@@ -225,25 +215,114 @@ export function FloorPlanPage() {
   return (
     <div>
       <div className="page-header">
-        <h2>Floor Plan</h2>
-        <p>{plan.name} — {plan.width_ft} × {plan.height_ft} ft · Drag equipment to reposition or drop on another page tab</p>
+        <h2>Distillery Equipment</h2>
+        <p>
+          {viewMode === 'process'
+            ? 'Process flow view — all equipment with live levels from the production ledger'
+            : `${plan.name} — ${plan.width_ft} × ${plan.height_ft} ft · Drag equipment to reposition`}
+        </p>
         <div className="page-actions">
           <button className="btn btn-primary" onClick={openNew}>+ Add Equipment</button>
-          <button className="btn btn-secondary" onClick={() => { setPageName(''); setShowPageForm(true); }}>+ Add Page</button>
+          {viewMode === 'classic' && (
+            <button className="btn btn-secondary" onClick={() => { setPageName(''); setShowPageForm(true); }}>+ Add Page</button>
+          )}
           {tanksWithSpirit.length > 0 && (
             <button className="btn btn-secondary" onClick={handleEmptyAllTanks}>Empty All Tanks</button>
           )}
         </div>
       </div>
 
-      {previewTank && (
-        <TankVisualPreview
-          tank={previewTank}
-          selected={selectedId === previewTank.id}
-          onSelect={selectEquipment}
-        />
+      <div className="floor-view-toggle">
+        <button
+          type="button"
+          className={`btn btn-sm btn-secondary${viewMode === 'process' ? ' active' : ''}`}
+          onClick={() => setViewMode('process')}
+        >
+          Process View
+        </button>
+        <button
+          type="button"
+          className={`btn btn-sm btn-secondary${viewMode === 'classic' ? ' active' : ''}`}
+          onClick={() => setViewMode('classic')}
+        >
+          Classic Layout
+        </button>
+      </div>
+
+      {viewMode === 'process' && (
+        <>
+          <ProcessEquipmentCanvas
+            selectedId={selectedId}
+            onSelect={selectEquipment}
+            refreshKey={key}
+          />
+          {selected && (
+            <div className="card process-detail-sidebar" style={{ marginTop: '1rem' }}>
+              <h3 className="floor-sidebar-title">{selected.name}</h3>
+              <dl className="floor-detail-list">
+                <dt>Page</dt>
+                <dd>{selectedPlan.name}</dd>
+                <dt>Type</dt>
+                <dd>{equipmentTypeLabel(selected.equipment_type)}</dd>
+                <dt>Status</dt>
+                <dd><StatusBadge status={selected.status.replace('_', ' ')} /></dd>
+                {selected.capacity_gal > 0 && (
+                  <>
+                    <dt>Capacity</dt>
+                    <dd>{selected.capacity_gal} gal</dd>
+                  </>
+                )}
+                {selected.active_batch_number && (
+                  <>
+                    <dt>Active Batch</dt>
+                    <dd>
+                      {selected.active_batch_number}
+                      {selected.active_volume_gal ? ` · ${selected.active_volume_gal} gal` : ''}
+                    </dd>
+                  </>
+                )}
+                {selected.equipment_type === 'holding_tank' && selected.active_volume_gal != null && selected.active_volume_gal > 0 && (
+                  <>
+                    <dt>Contents</dt>
+                    <dd>
+                      {selected.active_volume_gal.toFixed(1)} gal
+                      {selected.active_abv != null ? ` @ ${selected.active_abv.toFixed(1)}% ABV` : ''}
+                    </dd>
+                  </>
+                )}
+                {selected.notes && (
+                  <>
+                    <dt>Notes</dt>
+                    <dd>{selected.notes}</dd>
+                  </>
+                )}
+              </dl>
+              {selected.equipment_type === 'holding_tank' && (
+                <HoldingTankIntakeHistory
+                  tankId={selected.id}
+                  selectedKey={selectedIntakeKey}
+                  title="Where it came from"
+                  emptyMessage="No cuts or transfers into this tank yet."
+                  onSelect={(entry) => {
+                    setSelectedIntakeKey(
+                      selectedIntakeKey === holdingTankIntakeKey(entry)
+                        ? null
+                        : holdingTankIntakeKey(entry),
+                    );
+                  }}
+                />
+              )}
+              <div className="floor-sidebar-actions">
+                <button className="btn btn-sm btn-secondary" onClick={() => openEdit(selected)}>Edit</button>
+                <button className="btn btn-sm btn-danger" onClick={() => handleDelete(selected.id)}>Remove</button>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
+      {viewMode === 'classic' && (
+      <>
       <div className="floor-plan-tabs">
         {plans.map((p) => (
           <button
@@ -284,7 +363,7 @@ export function FloorPlanPage() {
               <h3 className="floor-sidebar-title">{selected.name}</h3>
               <dl className="floor-detail-list">
                 <dt>Page</dt>
-                <dd>{plan.name}</dd>
+                <dd>{selectedPlan.name}</dd>
                 <dt>Type</dt>
                 <dd>{equipmentTypeLabel(selected.equipment_type)}</dd>
                 <dt>Status</dt>
@@ -376,6 +455,8 @@ export function FloorPlanPage() {
           </div>
         </aside>
       </div>
+      </>
+      )}
 
       {showForm && (
         <Modal title={editId ? 'Edit Equipment' : 'Add Equipment'} onClose={() => setShowForm(false)}>

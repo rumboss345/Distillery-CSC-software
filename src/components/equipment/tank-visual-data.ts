@@ -1,4 +1,5 @@
 import type { FloorEquipmentView } from '../../types';
+import type { EquipmentVisualData } from './equipment-visual.types';
 import type { TankVisualData, TankVisualStatus } from './tank-visual.types';
 
 function mapEquipmentStatus(
@@ -30,6 +31,22 @@ function inferLiquidName(item: FloorEquipmentView): string | undefined {
  * Build TankVisualData from floor equipment view.
  * Volume/ABV come from getFloorEquipmentWithContext → getHoldingTankContents (ledger).
  */
+export function tankVisualDataFromVisualData(data: EquipmentVisualData): TankVisualData {
+  return {
+    id: data.id,
+    code: data.code,
+    name: data.name,
+    tankType: data.typeLabel,
+    capacityGal: data.capacityGal,
+    currentVolumeGal: data.currentVolumeGal,
+    fillPercent: data.fillPercent,
+    liquidName: data.liquidName,
+    abv: data.abv,
+    status: data.status,
+    equipmentStatus: data.status === 'active' ? 'in_use' : data.status === 'empty' ? 'empty' : 'offline',
+  };
+}
+
 export function tankVisualDataFromEquipment(item: FloorEquipmentView): TankVisualData {
   const capacityGal = item.capacity_gal > 0 ? item.capacity_gal : 0;
   const currentVolumeGal = Math.max(0, item.active_volume_gal ?? 0);

@@ -1169,8 +1169,12 @@ export function getYieldReports(reportMonth?: string): YieldReport[] {
   `, params);
 }
 
+export function getAllFloorEquipmentWithContext(): FloorEquipmentView[] {
+  return getFloorPlans().flatMap((plan) => getFloorEquipmentWithContext(plan.id));
+}
+
 export function getEquipmentVolumeReport(): EquipmentVolumeReport[] {
-  const equipment = getFloorEquipmentWithContext();
+  const equipment = getAllFloorEquipmentWithContext();
   return equipment.map((eq) => {
     if (eq.equipment_type === 'holding_tank') {
       const contents = getHoldingTankContents(eq.id);
