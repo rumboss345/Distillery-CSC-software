@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { initDatabase, clearAllData } from './database';
+import { refreshProductionMode } from './production-mode';
 import type {
   Barrel,
   BlendIngredient,
@@ -42,6 +43,7 @@ export function useDatabaseReady() {
 
   useEffect(() => {
     initDatabase()
+      .then(() => refreshProductionMode().catch(() => null))
       .then(() => setReady(true))
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load database'));
   }, []);

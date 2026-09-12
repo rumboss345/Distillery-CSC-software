@@ -1,6 +1,83 @@
 import initSqlJs, { Database, SqlValue } from 'sql.js/dist/sql-wasm.js';
-import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 import { buildCscFloorEquipmentRows, CSC_FLOOR_PLAN_SIZE } from '../lib/csc-floor-equipment';
+import { MASTER_DATA_SCHEMA, SUPPLIER_CLASSIFICATIONS_MIGRATION } from './master-data-schema';
+import { migrateSupplierClassificationsFromLegacy, seedMasterDataIfEmpty } from './master-data-queries';
+import { RECIPES_SCHEMA, RECIPES_V1C_MIGRATION, RECIPES_V1C_NEW_COLUMNS } from './recipes-schema';
+import { seedRecipeLookupsIfEmpty } from './recipes-queries';
+import {
+  FLOOR_TRACKING_MODE_MIGRATION,
+  LIQUID_LEDGER_SCHEMA,
+  LIQUID_LEDGER_V1D_INTEGRITY_MIGRATION,
+  LIQUID_LEDGER_V1D_NEW_COLUMNS,
+} from './liquid-ledger-schema';
+import { seedLiquidLedgerLookupsIfEmpty } from './liquid-ledger-queries';
+import {
+  PRODUCTION_ORDERS_SCHEMA,
+  PRODUCTION_ORDERS_V1E_MIGRATION,
+  PRODUCTION_ORDERS_V1E_NEW_COLUMNS,
+} from './production-orders-schema';
+import { seedProductionLookupsIfEmpty } from './production-orders-queries';
+import {
+  MATERIAL_INVENTORY_SCHEMA,
+  MATERIAL_INVENTORY_V1F_MIGRATION,
+  MATERIAL_INVENTORY_V1F_NEW_COLUMNS,
+} from './material-inventory-schema';
+import { seedMaterialLookupsIfEmpty } from './material-inventory-queries';
+import {
+  COSTING_SCHEMA,
+  COSTING_V1G_MIGRATION,
+  COSTING_V1G_NEW_COLUMNS,
+  COSTING_V1G_TRANSFER_MIGRATION,
+} from './costing-schema';
+import {
+  FINISHED_GOODS_SCHEMA,
+  FINISHED_GOODS_V1H_MIGRATION,
+  FINISHED_GOODS_V1H_NEW_COLUMNS,
+} from './finished-goods-schema';
+import {
+  BARREL_AGING_SCHEMA,
+  BARREL_AGING_V1J_MIGRATION,
+  BARREL_AGING_V1J_NEW_COLUMNS,
+} from './barrel-aging-schema';
+import {
+  QUALITY_SCHEMA,
+  QUALITY_V1K_MIGRATION,
+  QUALITY_V1K_NEW_COLUMNS,
+} from './quality-schema';
+import {
+  MULTI_LOCATION_SCHEMA,
+  MULTI_LOCATION_V1I_MIGRATION,
+  MULTI_LOCATION_V1I_NEW_COLUMNS,
+} from './multi-location-schema';
+import {
+  MAINTENANCE_FLOOR_EQUIPMENT_COLUMNS,
+  MAINTENANCE_SCHEMA,
+  MAINTENANCE_V1L_MIGRATION,
+  MAINTENANCE_V1L_NEW_COLUMNS,
+} from './maintenance-schema';
+import {
+  PLANNING_SCHEMA,
+  PLANNING_V1M_MIGRATION,
+  PLANNING_V1M_NEW_COLUMNS,
+} from './planning-schema';
+import {
+  SALES_DEPLETION_SCHEMA,
+  SALES_DEPLETION_V1N_MIGRATION,
+  SALES_DEPLETION_V1N_NEW_COLUMNS,
+} from './sales-schema';
+import { REPORTING_SCHEMA, REPORTING_V1O_MIGRATION } from './reporting-schema';
+import {
+  ACCOUNTING_SCHEMA,
+  ACCOUNTING_V1Q_MIGRATION,
+  ACCOUNTING_V1Q_NEW_COLUMNS,
+} from './accounting-schema';
+import { seedAccountingMappingsIfEmpty } from './accounting-queries';
+import {
+  ADMINISTRATION_SCHEMA,
+  ADMINISTRATION_V1P_MIGRATION,
+  ADMINISTRATION_V1P_NEW_COLUMNS,
+} from './administration-schema';
+import { seedAdministrationIfEmpty } from './administration-queries';
 import { SCHEMA, SEED_DATA } from './schema';
 
 const FLOOR_MIGRATION = `
@@ -364,7 +441,334 @@ function runMigrations(): void {
   seedCscFloorEquipment({ onlyMissing: true });
   db.run(`UPDATE floor_equipment SET capacity_gal = 1000 WHERE equipment_type = 'fermenter'`);
   migrateFloorPlanPages();
+  migrateMasterData();
+  migrateRecipes();
+  migrateLiquidLedger();
+  migrateProductionOrders();
+  migrateMaterialInventory();
+  migrateCosting();
+  migrateFinishedGoods();
+  migrateBarrelAging();
+  migrateQuality();
+  migrateMultiLocation();
+  migrateMaintenance();
+  migratePlanning();
+  migrateSalesDepletion();
+  migrateReporting();
+  migrateAdministration();
+  migrateAccounting();
   persistDb();
+}
+
+function floorColumnExists(column: string): boolean {
+  if (!db) return false;
+  const row = queryOne<{ name: string }>(
+    `SELECT name FROM pragma_table_info('floor_equipment') WHERE name = ?`,
+    [column],
+  );
+  return row != null;
+}
+
+function ledgerColumnExists(table: string, column: string): boolean {
+  if (!db) return false;
+  const row = queryOne<{ name: string }>(
+    `SELECT name FROM pragma_table_info('${table}') WHERE name = ?`,
+    [column],
+  );
+  return row != null;
+}
+
+function migrateProductionOrders(): void {
+  if (!db) return;
+  const hasProduction = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='prod_orders'",
+  );
+  if (!hasProduction) {
+    db.run(PRODUCTION_ORDERS_SCHEMA);
+    seedProductionLookupsIfEmpty();
+  } else {
+    db.run(PRODUCTION_ORDERS_V1E_MIGRATION);
+    for (const col of PRODUCTION_ORDERS_V1E_NEW_COLUMNS) {
+      if (!recipeColumnExists(col.table, col.column)) {
+        db.run(col.ddl);
+      }
+    }
+  }
+}
+
+function migrateMaterialInventory(): void {
+  if (!db) return;
+  const hasMaterial = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='mat_lots'",
+  );
+  if (!hasMaterial) {
+    db.run(MATERIAL_INVENTORY_SCHEMA);
+    seedMaterialLookupsIfEmpty();
+  } else {
+    db.run(MATERIAL_INVENTORY_V1F_MIGRATION);
+  }
+  for (const col of MATERIAL_INVENTORY_V1F_NEW_COLUMNS) {
+    if (!recipeColumnExists(col.table, col.column)) {
+      db.run(col.ddl);
+    }
+  }
+}
+
+function migrateFinishedGoods(): void {
+  if (!db) return;
+  const hasFg = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='fg_lots'",
+  );
+  if (!hasFg) {
+    db.run(FINISHED_GOODS_SCHEMA);
+  } else {
+    db.run(FINISHED_GOODS_V1H_MIGRATION);
+  }
+  for (const col of FINISHED_GOODS_V1H_NEW_COLUMNS) {
+    if (!recipeColumnExists(col.table, col.column)) {
+      db.run(col.ddl);
+    }
+  }
+}
+
+function migrateBarrelAging(): void {
+  if (!db) return;
+  const hasBarrelAging = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='brl_barrels'",
+  );
+  if (!hasBarrelAging) {
+    db.run(BARREL_AGING_SCHEMA);
+  } else {
+    db.run(BARREL_AGING_V1J_MIGRATION);
+  }
+  for (const col of BARREL_AGING_V1J_NEW_COLUMNS) {
+    if (!recipeColumnExists(col.table, col.column)) {
+      db.run(col.ddl);
+    }
+  }
+}
+
+function migrateQuality(): void {
+  if (!db) return;
+  const hasQuality = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='qc_specifications'",
+  );
+  if (!hasQuality) {
+    db.run(QUALITY_SCHEMA);
+  } else {
+    db.run(QUALITY_V1K_MIGRATION);
+  }
+  for (const col of QUALITY_V1K_NEW_COLUMNS) {
+    if (!recipeColumnExists(col.table, col.column)) {
+      db.run(col.ddl);
+    }
+  }
+}
+
+function migrateMultiLocation(): void {
+  if (!db) return;
+  const hasMultiLocation = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='inv_transfer_documents'",
+  );
+  if (!hasMultiLocation) {
+    db.run(MULTI_LOCATION_SCHEMA);
+  } else {
+    db.run(MULTI_LOCATION_V1I_MIGRATION);
+  }
+  for (const col of MULTI_LOCATION_V1I_NEW_COLUMNS) {
+    if (!recipeColumnExists(col.table, col.column)) {
+      db.run(col.ddl);
+    }
+  }
+}
+
+function migrateMaintenance(): void {
+  if (!db) return;
+  for (const col of MAINTENANCE_FLOOR_EQUIPMENT_COLUMNS) {
+    if (!floorColumnExists(col.column)) {
+      db.run(col.ddl);
+    }
+  }
+  const hasMaintenance = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='maint_work_orders'",
+  );
+  if (!hasMaintenance) {
+    db.run(MAINTENANCE_SCHEMA);
+  } else {
+    db.run(MAINTENANCE_V1L_MIGRATION);
+  }
+  for (const col of MAINTENANCE_V1L_NEW_COLUMNS) {
+    if (!recipeColumnExists(col.table, col.column)) {
+      db.run(col.ddl);
+    }
+  }
+}
+
+function migratePlanning(): void {
+  if (!db) return;
+  const hasPlanning = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='plan_demand_forecasts'",
+  );
+  if (!hasPlanning) {
+    db.run(PLANNING_SCHEMA);
+  } else {
+    db.run(PLANNING_V1M_MIGRATION);
+  }
+  for (const col of PLANNING_V1M_NEW_COLUMNS) {
+    if (!recipeColumnExists(col.table, col.column)) {
+      db.run(col.ddl);
+    }
+  }
+}
+
+function migrateSalesDepletion(): void {
+  if (!db) return;
+  const hasSales = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='sal_customers'",
+  );
+  if (!hasSales) {
+    db.run(SALES_DEPLETION_SCHEMA);
+  } else {
+    db.run(SALES_DEPLETION_V1N_MIGRATION);
+  }
+  for (const col of SALES_DEPLETION_V1N_NEW_COLUMNS) {
+    if (!recipeColumnExists(col.table, col.column)) {
+      db.run(col.ddl);
+    }
+  }
+}
+
+function migrateReporting(): void {
+  if (!db) return;
+  const hasReporting = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='view' AND name='rpt_v_mat_ledger_tx'",
+  );
+  if (!hasReporting) {
+    db.run(REPORTING_SCHEMA);
+  } else {
+    db.run(REPORTING_V1O_MIGRATION);
+  }
+}
+
+function migrateAdministration(): void {
+  if (!db) return;
+  const hasAdmin = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='adm_audit_log'",
+  );
+  if (!hasAdmin) {
+    db.run(ADMINISTRATION_SCHEMA);
+    seedAdministrationIfEmpty();
+  } else {
+    db.run(ADMINISTRATION_V1P_MIGRATION);
+  }
+  for (const col of ADMINISTRATION_V1P_NEW_COLUMNS) {
+    if (!recipeColumnExists(col.table, col.column)) {
+      db.run(col.ddl);
+    }
+  }
+}
+
+function migrateAccounting(): void {
+  if (!db) return;
+  const hasAccounting = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='acct_events'",
+  );
+  if (!hasAccounting) {
+    db.run(ACCOUNTING_SCHEMA);
+    seedAccountingMappingsIfEmpty();
+  } else {
+    db.run(ACCOUNTING_V1Q_MIGRATION);
+  }
+  for (const col of ACCOUNTING_V1Q_NEW_COLUMNS) {
+    if (!recipeColumnExists(col.table, col.column)) {
+      db.run(col.ddl);
+    }
+  }
+}
+
+function migrateCosting(): void {
+  if (!db) return;
+  const hasCosting = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='cost_landed_cost_documents'",
+  );
+  if (!hasCosting) {
+    db.run(COSTING_SCHEMA);
+  } else {
+    db.run(COSTING_V1G_MIGRATION);
+    db.run(COSTING_V1G_TRANSFER_MIGRATION);
+  }
+  for (const col of COSTING_V1G_NEW_COLUMNS) {
+    if (!recipeColumnExists(col.table, col.column)) {
+      db.run(col.ddl);
+    }
+  }
+}
+
+function migrateLiquidLedger(): void {
+  if (!db) return;
+  const hasLedger = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='liq_lots'",
+  );
+  if (!hasLedger) {
+    db.run(LIQUID_LEDGER_SCHEMA);
+    seedLiquidLedgerLookupsIfEmpty();
+  } else {
+    db.run(LIQUID_LEDGER_V1D_INTEGRITY_MIGRATION);
+    for (const col of LIQUID_LEDGER_V1D_NEW_COLUMNS) {
+      if (!ledgerColumnExists(col.table, col.column)) {
+        db.run(col.ddl);
+      }
+    }
+  }
+  if (!floorColumnExists('tracking_mode')) {
+    db.run(FLOOR_TRACKING_MODE_MIGRATION);
+  }
+}
+
+function recipeColumnExists(table: string, column: string): boolean {
+  if (!db) return false;
+  const stmt = db.prepare(`PRAGMA table_info(${table})`);
+  const columns = stmt.getColumnNames();
+  let found = false;
+  while (stmt.step()) {
+    const values = stmt.get();
+    const nameIdx = columns.indexOf('name');
+    if (nameIdx >= 0 && values[nameIdx] === column) found = true;
+  }
+  stmt.free();
+  return found;
+}
+
+function migrateRecipes(): void {
+  if (!db) return;
+  const hasRecipes = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='rc_recipes'",
+  );
+  if (!hasRecipes) {
+    db.run(RECIPES_SCHEMA);
+    seedRecipeLookupsIfEmpty();
+  } else {
+    db.run(RECIPES_V1C_MIGRATION);
+    for (const col of RECIPES_V1C_NEW_COLUMNS) {
+      if (!recipeColumnExists(col.table, col.column)) {
+        db.run(col.ddl);
+      }
+    }
+  }
+}
+
+function migrateMasterData(): void {
+  if (!db) return;
+  const hasMasterData = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='md_products'",
+  );
+  if (!hasMasterData) {
+    db.run(MASTER_DATA_SCHEMA);
+    seedMasterDataIfEmpty();
+  } else {
+    db.run(SUPPLIER_CLASSIFICATIONS_MIGRATION);
+    migrateSupplierClassificationsFromLegacy();
+  }
 }
 
 function migrateFloorPlanPages(): void {
@@ -443,10 +847,25 @@ function scheduleSave(): void {
   saveTimer = setTimeout(persistDb, 300);
 }
 
+async function resolveWasmLocateFile(): Promise<(file: string) => string> {
+  if (typeof window === 'undefined') {
+    const { dirname, join } = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const wasmPath = join(
+      dirname(fileURLToPath(import.meta.url)),
+      '../../node_modules/sql.js/dist/sql-wasm.wasm',
+    );
+    return () => wasmPath;
+  }
+  const { default: wasmUrl } = await import('sql.js/dist/sql-wasm.wasm?url');
+  return () => wasmUrl;
+}
+
 export async function initDatabase(): Promise<Database> {
   if (db) return db;
 
-  const SQL = await initSqlJs({ locateFile: () => wasmUrl });
+  const locateFile = await resolveWasmLocateFile();
+  const SQL = await initSqlJs({ locateFile });
 
   let stored = localStorage.getItem(DB_STORAGE_KEY);
   if (!stored) {
@@ -459,8 +878,33 @@ export async function initDatabase(): Promise<Database> {
   } else {
     db = new SQL.Database();
     db.run(SCHEMA);
+    db.run(MASTER_DATA_SCHEMA);
+    db.run(RECIPES_SCHEMA);
+    db.run(LIQUID_LEDGER_SCHEMA);
+    db.run(PRODUCTION_ORDERS_SCHEMA);
+    db.run(MATERIAL_INVENTORY_SCHEMA);
+    db.run(COSTING_SCHEMA);
     db.run(SEED_DATA);
+    seedMasterDataIfEmpty();
+    seedRecipeLookupsIfEmpty();
+    seedLiquidLedgerLookupsIfEmpty();
+    seedProductionLookupsIfEmpty();
+    seedMaterialLookupsIfEmpty();
     seedCscFloorEquipment({ assignSequentialIds: true, demoStatusForFirstTwo: true });
+    migrateLiquidLedger();
+    migrateProductionOrders();
+    migrateMaterialInventory();
+    migrateCosting();
+    migrateFinishedGoods();
+    migrateBarrelAging();
+    migrateQuality();
+    migrateMultiLocation();
+    migrateMaintenance();
+    migratePlanning();
+    migrateSalesDepletion();
+    migrateReporting();
+    migrateAdministration();
+    migrateAccounting();
     persistDb();
   }
 
@@ -472,7 +916,50 @@ export function getDb(): Database {
   return db;
 }
 
+/** Test-only: inject an initialized sql.js instance for integration tests. */
+export function __injectDatabaseForTests(instance: Database | null): void {
+  if (db && db !== instance) {
+    db.close();
+  }
+  db = instance;
+}
+
+let transactionDepth = 0;
+
+/** Reentrant transaction wrapper shared by ledger and production execution. */
+export function withDatabaseTransaction<T>(fn: () => T): T {
+  if (transactionDepth > 0) return fn();
+  transactionDepth += 1;
+  const database = getDb();
+  database.run('BEGIN');
+  try {
+    const result = fn();
+    database.run('COMMIT');
+    scheduleSave();
+    return result;
+  } catch (err) {
+    database.run('ROLLBACK');
+    throw err;
+  } finally {
+    transactionDepth -= 1;
+  }
+}
+
+function assertLocalWriteAllowed(): void {
+  try {
+    const raw = sessionStorage.getItem('csc-production-mode-cache');
+    if (!raw) return;
+    const status = JSON.parse(raw) as { serverAuthoritative?: boolean; migrationState?: string };
+    if (status.serverAuthoritative || status.migrationState === 'SERVER_AUTHORITATIVE') {
+      throw new Error('Central production database unavailable. Changes cannot be recorded.');
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message.includes('Changes cannot be recorded')) throw err;
+  }
+}
+
 export function runQuery(sql: string, params: SqlValue[] = []): void {
+  assertLocalWriteAllowed();
   getDb().run(sql, params);
   scheduleSave();
 }
@@ -481,7 +968,9 @@ export function insertRow(
   sql: string,
   params: SqlValue[] = [],
 ): number {
-  runQuery(sql, params);
+  assertLocalWriteAllowed();
+  getDb().run(sql, params);
+  scheduleSave();
   const result = queryOne<{ id: number }>('SELECT last_insert_rowid() as id');
   return result?.id ?? 0;
 }
