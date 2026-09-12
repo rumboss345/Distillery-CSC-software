@@ -3,11 +3,13 @@ import {
   getFloorPlans,
   getFloorPlan,
   getFloorEquipmentWithContext,
+  getHoldingTanksWithContents,
   addFloorPlan,
   saveFloorEquipment,
   updateEquipmentPosition,
   moveEquipmentToPlan,
   deleteFloorEquipment,
+  emptyAllHoldingTanks,
   useRefreshKey,
 } from '../db/queries';
 import { FloorCanvas, FloorLegend } from '../components/FloorCanvas';
@@ -160,6 +162,35 @@ export function FloorPlanPage() {
     setDropTargetPlanId(null);
   };
 
+  const tanksWithSpirit = getHoldingTanksWithContents().filter((t) => t.volume_gal > 0);
+
+  const handleEmptyAllTanks = () => {
+    if (tanksWithSpirit.length === 0) {
+      alert('All holding tanks are already empty.');
+      return;
+    }
+    const tankList = tanksWithSpirit
+      .map((t) => `${t.name} (${t.volume_gal.toFixed(1)} gal)`)
+      .join('\n');
+    if (!confirm(
+      `Empty all holding tanks?\n\nThis clears tank spirit from:\n${tankList}\n\n`
+      + 'Distillation cut records stay, but tank volumes, transfers, and blend draws are zeroed. '
+      + 'This cannot be undone.',
+    )) {
+      return;
+    }
+    const result = emptyAllHoldingTanks();
+    selectEquipment(null);
+    refresh();
+    alert(
+      `All holding tanks emptied.\n\n`
+      + `${result.transfersRemoved} transfer(s) removed\n`
+      + `${result.cutsCleared} cut(s) cleared from tanks\n`
+      + `${result.runsCleared} low-wines charge(s) cleared\n`
+      + `${result.blendsCleared} blend draw(s) cleared`,
+    );
+  };
+
   const handleTabDrop = (e: React.DragEvent, targetPlanId: number) => {
     e.preventDefault();
     const raw = e.dataTransfer.getData('text/equipment-id');
@@ -179,6 +210,9 @@ export function FloorPlanPage() {
         <div className="page-actions">
           <button className="btn btn-primary" onClick={openNew}>+ Add Equipment</button>
           <button className="btn btn-secondary" onClick={() => { setPageName(''); setShowPageForm(true); }}>+ Add Page</button>
+          {tanksWithSpirit.length > 0 && (
+            <button className="btn btn-secondary" onClick={handleEmptyAllTanks}>Empty All Tanks</button>
+          )}
         </div>
       </div>
 

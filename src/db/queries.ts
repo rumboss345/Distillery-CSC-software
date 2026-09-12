@@ -586,6 +586,57 @@ export function deleteHoldingTankTransfer(id: number): void {
   syncHoldingTankStatuses();
 }
 
+/** Clear spirit from every holding tank (cuts, transfers, charges, blend draws). */
+export function emptyAllHoldingTanks(): {
+  transfersRemoved: number;
+  cutsCleared: number;
+  runsCleared: number;
+  blendsCleared: number;
+} {
+  const transfersRemoved = queryOne<{ count: number }>(
+    'SELECT COUNT(*) as count FROM holding_tank_transfers',
+  )?.count ?? 0;
+  runQuery('DELETE FROM holding_tank_transfers');
+
+  const cutsCleared = queryOne<{ count: number }>(`
+    SELECT COUNT(*) as count FROM distillation_cuts
+    WHERE holding_tank_equipment_id IS NOT NULL AND volume_gal > 0
+  `)?.count ?? 0;
+  runQuery(`
+    UPDATE distillation_cuts
+    SET volume_gal = 0, holding_tank_equipment_id = NULL
+    WHERE holding_tank_equipment_id IS NOT NULL AND volume_gal > 0
+  `);
+
+  const runsCleared = queryOne<{ count: number }>(`
+    SELECT COUNT(*) as count FROM distillation_runs
+    WHERE source_holding_tank_equipment_id IS NOT NULL AND charge_volume_gal > 0
+  `)?.count ?? 0;
+  runQuery(`
+    UPDATE distillation_runs
+    SET charge_volume_gal = 0, charge_abv = NULL
+    WHERE source_holding_tank_equipment_id IS NOT NULL AND charge_volume_gal > 0
+  `);
+
+  const blendsCleared = queryOne<{ count: number }>(`
+    SELECT COUNT(*) as count FROM blend_products
+    WHERE source_holding_tank_equipment_id IS NOT NULL
+      AND base_spirit_volume_gal > 0
+      AND status IN ('draft', 'blended')
+  `)?.count ?? 0;
+  runQuery(`
+    UPDATE blend_products
+    SET base_spirit_volume_gal = 0, base_spirit_abv = 0
+    WHERE source_holding_tank_equipment_id IS NOT NULL
+      AND base_spirit_volume_gal > 0
+      AND status IN ('draft', 'blended')
+  `);
+
+  syncHoldingTankStatuses();
+
+  return { transfersRemoved, cutsCleared, runsCleared, blendsCleared };
+}
+
 export function syncHoldingTankStatuses(): void {
   const tanks = queryAll<FloorEquipment>(
     "SELECT * FROM floor_equipment WHERE equipment_type = 'holding_tank'",
