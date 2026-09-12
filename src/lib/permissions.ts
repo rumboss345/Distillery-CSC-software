@@ -26,6 +26,7 @@ export const PERMISSION_LABELS: Record<PermissionKey, string> = {
 
 export const ROUTE_PERMISSIONS: Record<string, PermissionKey> = {
   '/': 'dashboard',
+  '/calendar': 'dashboard',
   '/wash': 'wash',
   '/mash': 'wash',
   '/recipes': 'wash',
