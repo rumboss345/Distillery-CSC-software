@@ -374,6 +374,35 @@ function runMigrations(): void {
     persistDb();
   }
 
+  const hasRecipes = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='recipes'",
+  );
+  if (!hasRecipes) {
+    db.run(`
+      CREATE TABLE recipes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        spirit_type TEXT NOT NULL DEFAULT '',
+        grain_type TEXT NOT NULL DEFAULT '',
+        grain_lbs REAL NOT NULL DEFAULT 0,
+        water_gal REAL NOT NULL DEFAULT 0,
+        yeast_strain TEXT NOT NULL DEFAULT '',
+        yeast_lbs REAL NOT NULL DEFAULT 0,
+        target_brix REAL,
+        target_final_brix REAL,
+        notes TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
+    db.run(`
+      INSERT OR IGNORE INTO recipes (id, name, spirit_type, grain_type, grain_lbs, water_gal, yeast_strain, yeast_lbs, target_brix, target_final_brix, notes) VALUES
+        (1, 'Molasses Wash', 'Rum', 'Blackstrap Molasses', 400, 150, 'Distillers Yeast DADY', 2, 16.0, 2.5, 'Standard molasses wash for rum production'),
+        (2, 'Cane Sugar Wash', 'Rum', 'Raw Cane Sugar', 750, 225, 'Distillers Yeast DADY', 3, 17.1, 2.0, 'High-test cane sugar wash')
+    `);
+    persistDb();
+  }
+
   migrateFloorPlanPages();
   persistDb();
 }

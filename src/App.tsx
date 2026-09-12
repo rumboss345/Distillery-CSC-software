@@ -4,6 +4,7 @@ import { Layout } from './components/Layout';
 import { RequirePermission } from './components/RequirePermission';
 import { Dashboard } from './pages/Dashboard';
 import { MashFermentation } from './pages/MashFermentation';
+import { Recipes } from './pages/Recipes';
 import { Distillation } from './pages/Distillation';
 import { Barrels } from './pages/Barrels';
 import { Bottling } from './pages/Bottling';
@@ -48,6 +49,7 @@ function AppContent() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/wash" element={<MashFermentation />} />
             <Route path="/mash" element={<Navigate to="/wash" replace />} />
+            <Route path="/recipes" element={<Recipes />} />
             <Route path="/distillation" element={<Distillation />} />
             <Route path="/blending" element={<Blending />} />
             <Route path="/barrels" element={<Barrels />} />

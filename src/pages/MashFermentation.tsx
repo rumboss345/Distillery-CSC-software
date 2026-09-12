@@ -12,6 +12,7 @@ import {
   getAllMashFermenterAssignments,
   getInventoryByCategory,
   getLatestFermentationBrix,
+  getRecipes,
   useRefreshKey,
 } from '../db/queries';
 import { Modal } from '../components/Modal';
@@ -178,6 +179,7 @@ export function MashFermentation() {
 
   const sugarItems = getInventoryByCategory('sugar');
   const yeastItems = getInventoryByCategory('yeast');
+  const recipes = getRecipes();
   const availableFermenters = getAvailableFermenters(editId);
   const availableFermenters2 = getAvailableFermenters(editId).filter(
     (f) => f.id !== fermenterForm.fermenter1Id,
@@ -437,6 +439,35 @@ export function MashFermentation() {
             <div className="form-group">
               <label>Batch Number</label>
               <input value={form.batch_number} onChange={(e) => setForm({ ...form, batch_number: e.target.value })} />
+            </div>
+            <div className="form-group full-width">
+              <label>Load from Recipe</label>
+              <select
+                value=""
+                onChange={(e) => {
+                  const recipeId = Number(e.target.value);
+                  if (!recipeId) return;
+                  const recipe = recipes.find((r) => r.id === recipeId);
+                  if (!recipe) return;
+                  setForm({
+                    ...form,
+                    recipe_name: recipe.name,
+                    grain_type: recipe.grain_type,
+                    grain_lbs: recipe.grain_lbs,
+                    water_gal: recipe.water_gal,
+                    yeast_strain: recipe.yeast_strain,
+                    yeast_lbs: recipe.yeast_lbs,
+                    target_brix: recipe.target_brix,
+                    target_final_brix: recipe.target_final_brix,
+                    notes: recipe.notes || form.notes,
+                  });
+                }}
+              >
+                <option value="">— Select a saved recipe —</option>
+                {recipes.map((r) => (
+                  <option key={r.id} value={r.id}>{r.name}{r.spirit_type ? ` (${r.spirit_type})` : ''}</option>
+                ))}
+              </select>
             </div>
             <div className="form-group">
               <label>Recipe Name</label>

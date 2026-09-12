@@ -24,6 +24,7 @@ import type {
   FloorPlan,
   InventoryItem,
   MashBatch,
+  Recipe,
   ProductionSummary,
   EquipmentVolumeReport,
   YieldReport,
@@ -148,6 +149,60 @@ export function addInventoryCategory(name: string): string {
 
   insertRow('INSERT INTO inventory_categories (name) VALUES (?)', [normalized]);
   return normalized;
+}
+
+// ── Recipes ────────────────────────────────────────────────
+
+export function getRecipes(): Recipe[] {
+  return queryAll<Recipe>('SELECT * FROM recipes ORDER BY name');
+}
+
+export function getRecipe(id: number): Recipe | undefined {
+  return queryOne<Recipe>('SELECT * FROM recipes WHERE id = ?', [id]) ?? undefined;
+}
+
+export function saveRecipe(
+  recipe: Omit<Recipe, 'id' | 'created_at' | 'updated_at'>,
+  id?: number,
+): void {
+  if (id) {
+    runQuery(
+      `UPDATE recipes SET name=?, spirit_type=?, grain_type=?, grain_lbs=?, water_gal=?, yeast_strain=?, yeast_lbs=?, target_brix=?, target_final_brix=?, notes=?, updated_at=datetime('now') WHERE id=?`,
+      [
+        recipe.name,
+        recipe.spirit_type,
+        recipe.grain_type,
+        recipe.grain_lbs,
+        recipe.water_gal,
+        recipe.yeast_strain,
+        recipe.yeast_lbs,
+        recipe.target_brix,
+        recipe.target_final_brix,
+        recipe.notes,
+        id,
+      ],
+    );
+  } else {
+    insertRow(
+      `INSERT INTO recipes (name, spirit_type, grain_type, grain_lbs, water_gal, yeast_strain, yeast_lbs, target_brix, target_final_brix, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        recipe.name,
+        recipe.spirit_type,
+        recipe.grain_type,
+        recipe.grain_lbs,
+        recipe.water_gal,
+        recipe.yeast_strain,
+        recipe.yeast_lbs,
+        recipe.target_brix,
+        recipe.target_final_brix,
+        recipe.notes,
+      ],
+    );
+  }
+}
+
+export function deleteRecipe(id: number): void {
+  runQuery('DELETE FROM recipes WHERE id = ?', [id]);
 }
 
 // ── Wash & Fermentation ────────────────────────────────────

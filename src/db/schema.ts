@@ -17,6 +17,22 @@ CREATE TABLE IF NOT EXISTS inventory_items (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS recipes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  spirit_type TEXT NOT NULL DEFAULT '',
+  grain_type TEXT NOT NULL DEFAULT '',
+  grain_lbs REAL NOT NULL DEFAULT 0,
+  water_gal REAL NOT NULL DEFAULT 0,
+  yeast_strain TEXT NOT NULL DEFAULT '',
+  yeast_lbs REAL NOT NULL DEFAULT 0,
+  target_brix REAL,
+  target_final_brix REAL,
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS mash_batches (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   batch_number TEXT NOT NULL UNIQUE,
@@ -214,6 +230,10 @@ INSERT OR IGNORE INTO inventory_items (id, name, category, unit, quantity, reord
   (5, 'New American Oak Barrels', 'barrels', 'each', 12, 4, '53 gallon standard'),
   (6, '750ml Bottles', 'bottles', 'each', 2000, 500, 'Standard spirit bottles'),
   (7, 'Front Labels', 'labels', 'each', 1500, 300, 'Primary product labels');
+
+INSERT OR IGNORE INTO recipes (id, name, spirit_type, grain_type, grain_lbs, water_gal, yeast_strain, yeast_lbs, target_brix, target_final_brix, notes) VALUES
+  (1, 'Molasses Wash', 'Rum', 'Blackstrap Molasses', 400, 150, 'Distillers Yeast DADY', 2, 16.0, 2.5, 'Standard molasses wash for rum production'),
+  (2, 'Cane Sugar Wash', 'Rum', 'Raw Cane Sugar', 750, 225, 'Distillers Yeast DADY', 3, 17.1, 2.0, 'High-test cane sugar wash');
 
 INSERT OR IGNORE INTO mash_batches (id, batch_number, recipe_name, grain_type, grain_lbs, water_gal, yeast_strain, start_date, target_brix, actual_brix, target_final_brix, actual_final_brix, status, notes) VALUES
   (1, 'M-2025-001', 'Molasses Wash', 'Blackstrap Molasses', 400, 150, 'Distillers Yeast DADY', '2025-06-01', 16.0, 15.5, 2.5, 3.0, 'complete', 'Clean fermentation, ready for still'),

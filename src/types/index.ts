@@ -80,6 +80,22 @@ export interface InventoryItem {
   updated_at: string;
 }
 
+export interface Recipe {
+  id: number;
+  name: string;
+  spirit_type: string;
+  grain_type: string;
+  grain_lbs: number;
+  water_gal: number;
+  yeast_strain: string;
+  yeast_lbs: number;
+  target_brix: number | null;
+  target_final_brix: number | null;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface MashBatch {
   id: number;
   batch_number: string;
