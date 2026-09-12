@@ -1,20 +1,23 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import type { PermissionKey } from '../lib/permissions';
 
-const navItems = [
-  { to: '/', label: 'Dashboard', icon: '◈' },
-  { to: '/wash', label: 'Wash & Ferment', icon: '◉' },
-  { to: '/distillation', label: 'Distillation', icon: '△' },
-  { to: '/blending', label: 'Blending', icon: '◆' },
-  { to: '/barrels', label: 'Barrel Aging', icon: '▣' },
-  { to: '/bottling', label: 'Bottling', icon: '◇' },
-  { to: '/floor-plan', label: 'Equipment', icon: '▦' },
-  { to: '/inventory', label: 'Inventory', icon: '☰' },
-  { to: '/reports', label: 'Reports', icon: '▤' },
+const navItems: { to: string; label: string; icon: string; permission: PermissionKey }[] = [
+  { to: '/', label: 'Dashboard', icon: '◈', permission: 'dashboard' },
+  { to: '/wash', label: 'Wash & Ferment', icon: '◉', permission: 'wash' },
+  { to: '/distillation', label: 'Distillation', icon: '△', permission: 'distillation' },
+  { to: '/blending', label: 'Blending', icon: '◆', permission: 'blending' },
+  { to: '/barrels', label: 'Barrel Aging', icon: '▣', permission: 'barrels' },
+  { to: '/bottling', label: 'Bottling', icon: '◇', permission: 'bottling' },
+  { to: '/floor-plan', label: 'Equipment', icon: '▦', permission: 'equipment' },
+  { to: '/inventory', label: 'Inventory', icon: '☰', permission: 'inventory' },
+  { to: '/reports', label: 'Reports', icon: '▤', permission: 'reports' },
 ];
 
 export function Layout() {
-  const { user, logout } = useAuth();
+  const { user, logout, hasPermission } = useAuth();
+
+  const visibleNav = navItems.filter((item) => hasPermission(item.permission));
 
   return (
     <div className="app-layout">
@@ -24,7 +27,7 @@ export function Layout() {
           <p>Production management</p>
         </div>
         <nav className="sidebar-nav">
-          {navItems.map((item) => (
+          {visibleNav.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
@@ -44,8 +47,8 @@ export function Layout() {
                 `nav-link${isActive ? ' active' : ''}`
               }
             >
-              <span className="nav-icon">✉</span>
-              User approvals
+              <span className="nav-icon">⚙</span>
+              Administration
             </NavLink>
           )}
         </nav>

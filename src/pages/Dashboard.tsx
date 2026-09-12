@@ -1,8 +1,14 @@
+import { useEffect, useState } from 'react';
 import { getProductionSummary, getMashBatches, getDistillationRuns, getBarrels, getInventoryItems, resetAllData } from '../db/queries';
 import { StatusBadge } from '../components/StatusBadge';
 import { format } from 'date-fns';
+import { useAuth } from '../context/AuthContext';
+import { PROCESS_STAGE_LABELS } from '../lib/permissions';
 
 export function Dashboard() {
+  const { user } = useAuth();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const summary = getProductionSummary();
   const recentMashes = getMashBatches().slice(0, 3);
   const recentRuns = getDistillationRuns().slice(0, 3);
@@ -25,6 +31,17 @@ export function Dashboard() {
         <h2>Production Dashboard</h2>
         <p>Overview of your distillery operations</p>
       </div>
+
+      {mounted && user && user.role !== 'admin' && user.processAssignments.length > 0 && (
+        <div className="card" style={{ marginBottom: '1rem' }}>
+          <h3 className="section-title" style={{ marginTop: 0 }}>My process assignments</h3>
+          <ul style={{ margin: 0, paddingLeft: '1.25rem' }}>
+            {user.processAssignments.map((key) => (
+              <li key={key}>{PROCESS_STAGE_LABELS[key]}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="card-grid">
         <div className="stat-card">

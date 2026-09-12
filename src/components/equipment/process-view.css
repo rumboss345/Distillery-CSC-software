@@ -83,6 +83,15 @@
   color: #475569;
 }
 
+.process-stage-assignees {
+  margin-left: 0.75rem;
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: #64748b;
+}
+
 .process-equipment-node {
   position: absolute;
   z-index: 2;

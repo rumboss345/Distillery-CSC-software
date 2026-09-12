@@ -32,15 +32,21 @@ import {
   approveUserById,
   approveUserByToken,
   createUser,
+  createUserByAdmin,
+  deleteUserById,
   getUserByEmail,
   getUserById,
   initializeAuthDatabase,
+  listAllUsers,
   listPendingUsers,
+  listProcessAssignmentsByStage,
   publicUser,
   rejectUserById,
   syncAdminFromEnv,
+  updateUserByAdmin,
   type User,
 } from './db.js';
+import { sanitizePermissions, sanitizeProcessStages } from './permissions.js';
 import { sendAdminApprovalEmail } from './email.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -254,6 +260,88 @@ app.post('/api/admin/users/:id/reject', authMiddleware, adminMiddleware, (req, r
     return;
   }
   res.json({ message: `${user.email} rejected`, user: publicUser(user) });
+});
+
+app.get('/api/process/assignments', authMiddleware, (_req, res) => {
+  res.json({ assignments: listProcessAssignmentsByStage() });
+});
+
+app.get('/api/admin/users', authMiddleware, adminMiddleware, (_req, res) => {
+  res.json({ users: listAllUsers() });
+});
+
+app.post('/api/admin/users', authMiddleware, adminMiddleware, (req, res) => {
+  const email = String(req.body.email ?? '').trim().toLowerCase();
+  const password = String(req.body.password ?? '');
+  const name = req.body.name ? String(req.body.name).trim() : null;
+  const permissions = sanitizePermissions(
+    Array.isArray(req.body.permissions) ? req.body.permissions.map(String) : [],
+  );
+  const processAssignments = sanitizeProcessStages(
+    Array.isArray(req.body.processAssignments)
+      ? req.body.processAssignments.map(String)
+      : [],
+  );
+
+  if (!email || !password) {
+    res.status(400).json({ error: 'Email and password are required' });
+    return;
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    res.status(400).json({ error: 'Enter a valid email address' });
+    return;
+  }
+  if (password.length < 8) {
+    res.status(400).json({ error: 'Password must be at least 8 characters' });
+    return;
+  }
+
+  try {
+    const user = createUserByAdmin(email, password, name, permissions, processAssignments);
+    res.status(201).json({ message: `${user.email} created`, user: publicUser(user) });
+  } catch (err) {
+    res.status(409).json({
+      error: err instanceof Error ? err.message : 'Could not create user',
+    });
+  }
+});
+
+app.patch('/api/admin/users/:id', authMiddleware, adminMiddleware, (req, res) => {
+  const id = Number(req.params.id);
+  const name = req.body.name !== undefined ? String(req.body.name).trim() || null : undefined;
+  const permissions =
+    req.body.permissions !== undefined
+      ? sanitizePermissions(Array.isArray(req.body.permissions) ? req.body.permissions.map(String) : [])
+      : undefined;
+  const processAssignments =
+    req.body.processAssignments !== undefined
+      ? sanitizeProcessStages(
+          Array.isArray(req.body.processAssignments)
+            ? req.body.processAssignments.map(String)
+            : [],
+        )
+      : undefined;
+
+  const user = updateUserByAdmin(id, { name, permissions, processAssignments });
+  if (!user) {
+    res.status(404).json({ error: 'User not found or cannot be modified' });
+    return;
+  }
+  res.json({ message: 'User updated', user: publicUser(user) });
+});
+
+app.delete('/api/admin/users/:id', authMiddleware, adminMiddleware, (req, res) => {
+  const id = Number(req.params.id);
+  if (id === req.user!.id) {
+    res.status(400).json({ error: 'You cannot remove your own account' });
+    return;
+  }
+  const result = deleteUserById(id);
+  if (!result.ok) {
+    res.status(400).json({ error: result.reason });
+    return;
+  }
+  res.json({ message: 'User removed' });
 });
 
 initializeAuthDatabase();

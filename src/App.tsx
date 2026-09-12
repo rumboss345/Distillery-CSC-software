@@ -1,7 +1,7 @@
 import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { Layout } from './components/Layout';
-import { ProtectedRoute } from './components/ProtectedRoute';
+import { RequirePermission } from './components/RequirePermission';
 import { Dashboard } from './pages/Dashboard';
 import { MashFermentation } from './pages/MashFermentation';
 import { Distillation } from './pages/Distillation';
@@ -43,7 +43,7 @@ function AppContent() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/approve" element={<ApproveUser />} />
-        <Route element={<ProtectedRoute />}>
+        <Route element={<RequirePermission />}>
           <Route element={<Layout />}>
             <Route path="/" element={<Dashboard />} />
             <Route path="/wash" element={<MashFermentation />} />

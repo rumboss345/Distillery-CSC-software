@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { fetchProcessAssignments, type ProcessAssignmentEntry } from '../../lib/auth-api';
 import {
   getAllFloorEquipmentWithContext,
   getEquipmentVolumeReport,
@@ -47,6 +48,15 @@ export function ProcessEquipmentCanvas({
   const livePosRef = useRef<{ x: number; y: number } | null>(null);
   const dragMovedRef = useRef(false);
   const dragStartRef = useRef({ x: 0, y: 0 });
+  const [assignmentsByStage, setAssignmentsByStage] = useState<
+    Record<string, ProcessAssignmentEntry[]>
+  >({});
+
+  useEffect(() => {
+    fetchProcessAssignments()
+      .then(({ assignments }) => setAssignmentsByStage(assignments))
+      .catch(() => setAssignmentsByStage({}));
+  }, [refreshKey]);
 
   const plans = getFloorPlans();
   const volumeById = useMemo(() => {
@@ -231,6 +241,13 @@ export function ProcessEquipmentCanvas({
               >
                 <div className="process-stage-header">
                   <span className="process-stage-label">{stage.label}</span>
+                  {assignmentsByStage[stage.key]?.length ? (
+                    <span className="process-stage-assignees">
+                      — {assignmentsByStage[stage.key]
+                        .map((a) => a.name || a.email)
+                        .join(', ')}
+                    </span>
+                  ) : null}
                 </div>
               </div>
             ))}

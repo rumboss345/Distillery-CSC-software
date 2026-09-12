@@ -1,3 +1,5 @@
+import type { PermissionKey, ProcessStageKey } from './permissions';
+
 const TOKEN_KEY = 'distillery-tracker-auth-token';
 
 export interface AuthUser {
@@ -7,6 +9,8 @@ export interface AuthUser {
   role: 'admin' | 'user';
   status: 'pending' | 'approved' | 'rejected';
   created_at: string;
+  permissions: PermissionKey[];
+  processAssignments: ProcessStageKey[];
 }
 
 export function getStoredToken(): string | null {
@@ -30,7 +34,7 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
   if (!res.ok) {
     if (res.status === 502 || res.status === 503) {
       throw new Error(
-        'Cannot reach the server. If running locally, use npm run dev. On Render, check deploy logs and env vars (JWT_SECRET, ADMIN_EMAIL, ADMIN_PASSWORD).'
+        'Cannot reach the server. If running locally, use npm run dev. On Render, check deploy logs and env vars (JWT_SECRET, ADMIN_EMAIL, ADMIN_PASSWORD).',
       );
     }
     throw new Error(data.error ?? `Request failed (${res.status})`);
@@ -66,6 +70,55 @@ export async function approveByToken(token: string) {
 
 export async function fetchPendingUsers() {
   return apiFetch<{ users: AuthUser[] }>('/api/admin/pending-users');
+}
+
+export async function fetchAllUsers() {
+  return apiFetch<{ users: AuthUser[] }>('/api/admin/users');
+}
+
+export interface ProcessAssignmentEntry {
+  id: number;
+  email: string;
+  name: string | null;
+}
+
+export async function fetchProcessAssignments() {
+  return apiFetch<{ assignments: Record<string, ProcessAssignmentEntry[]> }>(
+    '/api/process/assignments',
+  );
+}
+
+export async function createAdminUser(payload: {
+  email: string;
+  password: string;
+  name?: string;
+  permissions: PermissionKey[];
+  processAssignments: ProcessStageKey[];
+}) {
+  return apiFetch<{ message: string; user: AuthUser }>('/api/admin/users', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateAdminUser(
+  id: number,
+  payload: {
+    name?: string | null;
+    permissions?: PermissionKey[];
+    processAssignments?: ProcessStageKey[];
+  },
+) {
+  return apiFetch<{ message: string; user: AuthUser }>(`/api/admin/users/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteAdminUser(id: number) {
+  return apiFetch<{ message: string }>(`/api/admin/users/${id}`, {
+    method: 'DELETE',
+  });
 }
 
 export async function approveUser(id: number) {
