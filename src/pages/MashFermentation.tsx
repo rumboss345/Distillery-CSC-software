@@ -17,8 +17,6 @@ import {
 } from '../db/queries';
 import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
-import { AssignedUsersBar } from '../components/AssignedUsersBar';
-import { logUserAction } from '../lib/activity-log';
 import { estimateAbvFromBrix, estimateSugarWash, formatAbvEstimate } from '../lib/fermentation';
 import type { MashBatch, MashStatus } from '../types';
 
@@ -288,7 +286,6 @@ export function MashFermentation() {
     }
 
     saveMashBatchWithFermenters(form, buildAssignments(), editId);
-    void logUserAction('wash', `${editId ? 'Updated' : 'Created'} wash batch ${form.batch_number}`);
     setShowForm(false);
     refresh();
   };
@@ -328,8 +325,6 @@ export function MashFermentation() {
           <button className="btn btn-primary" onClick={openNew}>+ New Wash Batch</button>
         </div>
       </div>
-
-      <AssignedUsersBar actionKey="wash" refreshKey={key} />
 
       {batches.length === 0 ? (
         <div className="empty-state">

@@ -39,17 +39,14 @@ import {
   initializeAuthDatabase,
   listAllUsers,
   listPendingUsers,
-  listActionAssignmentsByKey,
   listProcessAssignmentsByStage,
-  listRecentActivity,
-  logActivity,
   publicUser,
   rejectUserById,
   syncAdminFromEnv,
   updateUserByAdmin,
   type User,
 } from './db.js';
-import { sanitizeActionAssignments, sanitizePermissions, sanitizeProcessStages } from './permissions.js';
+import { sanitizePermissions, sanitizeProcessStages } from './permissions.js';
 import { sendAdminApprovalEmail } from './email.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -269,26 +266,6 @@ app.get('/api/process/assignments', authMiddleware, (_req, res) => {
   res.json({ assignments: listProcessAssignmentsByStage() });
 });
 
-app.get('/api/action-assignments', authMiddleware, (_req, res) => {
-  res.json({ assignments: listActionAssignmentsByKey() });
-});
-
-app.get('/api/activity/recent', authMiddleware, (req, res) => {
-  const limit = Number(req.query.limit ?? 30);
-  res.json({ activity: listRecentActivity(limit) });
-});
-
-app.post('/api/activity', authMiddleware, (req, res) => {
-  const actionKey = String(req.body.action_key ?? '').trim();
-  const description = String(req.body.description ?? '').trim();
-  if (!actionKey || !description) {
-    res.status(400).json({ error: 'action_key and description are required' });
-    return;
-  }
-  logActivity(req.user!.id, actionKey, description);
-  res.status(201).json({ ok: true });
-});
-
 app.get('/api/admin/users', authMiddleware, adminMiddleware, (_req, res) => {
   res.json({ users: listAllUsers() });
 });
@@ -300,12 +277,10 @@ app.post('/api/admin/users', authMiddleware, adminMiddleware, (req, res) => {
   const permissions = sanitizePermissions(
     Array.isArray(req.body.permissions) ? req.body.permissions.map(String) : [],
   );
-  const actionAssignments = sanitizeActionAssignments(
-    Array.isArray(req.body.actionAssignments)
-      ? req.body.actionAssignments.map(String)
-      : Array.isArray(req.body.processAssignments)
-        ? req.body.processAssignments.map(String)
-        : [],
+  const processAssignments = sanitizeProcessStages(
+    Array.isArray(req.body.processAssignments)
+      ? req.body.processAssignments.map(String)
+      : [],
   );
 
   if (!email || !password) {
@@ -322,7 +297,7 @@ app.post('/api/admin/users', authMiddleware, adminMiddleware, (req, res) => {
   }
 
   try {
-    const user = createUserByAdmin(email, password, name, permissions, actionAssignments);
+    const user = createUserByAdmin(email, password, name, permissions, processAssignments);
     res.status(201).json({ message: `${user.email} created`, user: publicUser(user) });
   } catch (err) {
     res.status(409).json({
@@ -338,22 +313,16 @@ app.patch('/api/admin/users/:id', authMiddleware, adminMiddleware, (req, res) =>
     req.body.permissions !== undefined
       ? sanitizePermissions(Array.isArray(req.body.permissions) ? req.body.permissions.map(String) : [])
       : undefined;
-  const actionAssignments =
-    req.body.actionAssignments !== undefined
-      ? sanitizeActionAssignments(
-          Array.isArray(req.body.actionAssignments)
-            ? req.body.actionAssignments.map(String)
+  const processAssignments =
+    req.body.processAssignments !== undefined
+      ? sanitizeProcessStages(
+          Array.isArray(req.body.processAssignments)
+            ? req.body.processAssignments.map(String)
             : [],
         )
-      : req.body.processAssignments !== undefined
-        ? sanitizeActionAssignments(
-            Array.isArray(req.body.processAssignments)
-              ? req.body.processAssignments.map(String)
-              : [],
-          )
-        : undefined;
+      : undefined;
 
-  const user = updateUserByAdmin(id, { name, permissions, actionAssignments });
+  const user = updateUserByAdmin(id, { name, permissions, processAssignments });
   if (!user) {
     res.status(404).json({ error: 'User not found or cannot be modified' });
     return;

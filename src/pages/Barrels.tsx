@@ -9,8 +9,6 @@ import {
 } from '../db/queries';
 import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
-import { AssignedUsersBar } from '../components/AssignedUsersBar';
-import { logUserAction } from '../lib/activity-log';
 import type { Barrel, BarrelStatus } from '../types';
 
 const STATUSES: BarrelStatus[] = ['aging', 'empty', 'dumped'];
@@ -54,7 +52,6 @@ export function Barrels() {
 
   const handleSave = () => {
     saveBarrel(form, editId);
-    void logUserAction('barrels', `${editId ? 'Updated' : 'Created'} barrel ${form.barrel_number}`);
     setShowForm(false);
     refresh();
   };
@@ -78,8 +75,6 @@ export function Barrels() {
           <button className="btn btn-primary" onClick={openNew}>+ New Barrel</button>
         </div>
       </div>
-
-      <AssignedUsersBar actionKey="barrels" refreshKey={key} />
 
       <div className="card-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
         <div className="stat-card">

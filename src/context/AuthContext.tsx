@@ -15,7 +15,6 @@ import {
   type AuthUser,
 } from '../lib/auth-api';
 import {
-  type ActionAssignmentKey,
   type PermissionKey,
   type ProcessStageKey,
   userHasPermission,
@@ -29,7 +28,6 @@ interface AuthContextValue {
   refreshUser: () => Promise<void>;
   hasPermission: (key: PermissionKey) => boolean;
   hasProcessAssignment: (key: ProcessStageKey) => boolean;
-  hasActionAssignment: (key: ActionAssignmentKey) => boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -80,33 +78,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     (key: ProcessStageKey) => {
       if (!user) return false;
       if (user.role === 'admin') return true;
-      const assignments = user.actionAssignments ?? user.processAssignments ?? [];
-      return assignments.includes(key);
-    },
-    [user],
-  );
-
-  const hasActionAssignment = useCallback(
-    (key: ActionAssignmentKey) => {
-      if (!user) return false;
-      if (user.role === 'admin') return true;
-      return user.actionAssignments?.includes(key) ?? false;
+      return user.processAssignments?.includes(key) ?? false;
     },
     [user],
   );
 
   const value = useMemo(
-    () => ({
-      user,
-      loading,
-      login,
-      logout,
-      refreshUser,
-      hasPermission,
-      hasProcessAssignment,
-      hasActionAssignment,
-    }),
-    [user, loading, login, logout, refreshUser, hasPermission, hasProcessAssignment, hasActionAssignment],
+    () => ({ user, loading, login, logout, refreshUser, hasPermission, hasProcessAssignment }),
+    [user, loading, login, logout, refreshUser, hasPermission, hasProcessAssignment],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
