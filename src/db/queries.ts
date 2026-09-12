@@ -1053,13 +1053,13 @@ export function getBottlingRuns(): BottlingRun[] {
 export function saveBottlingRun(run: Omit<BottlingRun, 'id' | 'created_at'>, id?: number): void {
   if (id) {
     runQuery(
-      `UPDATE bottling_runs SET batch_number=?, source_barrel_id=?, source_run_id=?, bottling_date=?, bottle_size_ml=?, bottle_count=?, final_abv=?, product_name=?, lot_number=?, notes=? WHERE id=?`,
-      [run.batch_number, run.source_barrel_id, run.source_run_id, run.bottling_date, run.bottle_size_ml, run.bottle_count, run.final_abv, run.product_name, run.lot_number, run.notes, id],
+      `UPDATE bottling_runs SET batch_number=?, source_barrel_id=?, source_run_id=?, bottling_date=?, packaging_bottle=?, bottle_size_ml=?, bottle_count=?, final_abv=?, product_name=?, lot_number=?, notes=? WHERE id=?`,
+      [run.batch_number, run.source_barrel_id, run.source_run_id, run.bottling_date, run.packaging_bottle, run.bottle_size_ml, run.bottle_count, run.final_abv, run.product_name, run.lot_number, run.notes, id],
     );
   } else {
     insertRow(
-      `INSERT INTO bottling_runs (batch_number, source_barrel_id, source_run_id, bottling_date, bottle_size_ml, bottle_count, final_abv, product_name, lot_number, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [run.batch_number, run.source_barrel_id, run.source_run_id, run.bottling_date, run.bottle_size_ml, run.bottle_count, run.final_abv, run.product_name, run.lot_number, run.notes],
+      `INSERT INTO bottling_runs (batch_number, source_barrel_id, source_run_id, bottling_date, packaging_bottle, bottle_size_ml, bottle_count, final_abv, product_name, lot_number, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [run.batch_number, run.source_barrel_id, run.source_run_id, run.bottling_date, run.packaging_bottle, run.bottle_size_ml, run.bottle_count, run.final_abv, run.product_name, run.lot_number, run.notes],
     );
   }
 }

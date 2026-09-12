@@ -227,6 +227,7 @@ export interface BottlingRun {
   source_barrel_id: number | null;
   source_run_id: number | null;
   bottling_date: string;
+  packaging_bottle: string;
   bottle_size_ml: number;
   bottle_count: number;
   final_abv: number;

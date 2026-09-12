@@ -114,6 +114,7 @@ CREATE TABLE IF NOT EXISTS bottling_runs (
   source_barrel_id INTEGER REFERENCES barrels(id),
   source_run_id INTEGER REFERENCES distillation_runs(id),
   bottling_date TEXT NOT NULL,
+  packaging_bottle TEXT NOT NULL DEFAULT '',
   bottle_size_ml INTEGER NOT NULL DEFAULT 750,
   bottle_count INTEGER NOT NULL DEFAULT 0,
   final_abv REAL NOT NULL DEFAULT 0,
@@ -219,6 +220,7 @@ INSERT OR IGNORE INTO inventory_categories (name) VALUES
   ('yeast'),
   ('barrels'),
   ('bottles'),
+  ('packaging'),
   ('labels'),
   ('other');
 
@@ -229,7 +231,17 @@ INSERT OR IGNORE INTO inventory_items (id, name, category, unit, quantity, reord
   (4, 'Distillers Yeast DADY', 'yeast', 'lbs', 25, 5, 'High attenuation yeast'),
   (5, 'New American Oak Barrels', 'barrels', 'each', 12, 4, '53 gallon standard'),
   (6, '750ml Bottles', 'bottles', 'each', 2000, 500, 'Standard spirit bottles'),
-  (7, 'Front Labels', 'labels', 'each', 1500, 300, 'Primary product labels');
+  (7, 'Front Labels', 'labels', 'each', 1500, 300, 'Primary product labels'),
+  (8, '1L Hutchings', 'packaging', 'each', 0, 100, '1000 ml bottle'),
+  (9, '1L Governors', 'packaging', 'each', 0, 100, '1000 ml bottle'),
+  (10, '1L Bobos', 'packaging', 'each', 0, 100, '1000 ml bottle'),
+  (11, '750mL 7F', 'packaging', 'each', 0, 200, '750 ml bottle'),
+  (12, '750mL Pirate', 'packaging', 'each', 0, 200, '750 ml bottle'),
+  (13, '750mL Gin', 'packaging', 'each', 0, 200, '750 ml bottle'),
+  (14, '750mL Muse', 'packaging', 'each', 0, 200, '750 ml bottle'),
+  (15, '375mL Oslo', 'packaging', 'each', 0, 100, '375 ml bottle'),
+  (16, '200mL Flask', 'packaging', 'each', 0, 100, '200 ml bottle'),
+  (17, '50mL Airplane', 'packaging', 'each', 0, 200, '50 ml bottle');
 
 INSERT OR IGNORE INTO recipes (id, name, spirit_type, grain_type, grain_lbs, water_gal, yeast_strain, yeast_lbs, target_brix, target_final_brix, notes) VALUES
   (1, 'Molasses Wash', 'Rum', 'Blackstrap Molasses', 400, 150, 'Distillers Yeast DADY', 2, 16.0, 2.5, 'Standard molasses wash for rum production'),

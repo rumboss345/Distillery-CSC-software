@@ -5,17 +5,20 @@ import {
   saveBottlingRun,
   deleteBottlingRun,
   getBarrels,
+  getInventoryByCategory,
   generateBatchNumber,
   useRefreshKey,
 } from '../db/queries';
 import { Modal } from '../components/Modal';
 import { mlToGallons } from '../types';
+import { PACKAGING_BOTTLES, packagingBottleByName } from '../lib/packaging-bottles';
 
 const emptyRun = () => ({
   batch_number: generateBatchNumber('BT'),
   source_barrel_id: null as number | null,
   source_run_id: null as number | null,
   bottling_date: new Date().toISOString().slice(0, 10),
+  packaging_bottle: '',
   bottle_size_ml: 750,
   bottle_count: 0,
   final_abv: 0,
@@ -28,6 +31,7 @@ export function Bottling() {
   const { key, refresh } = useRefreshKey();
   const runs = getBottlingRuns();
   const barrels = getBarrels().filter((b) => b.status === 'aging' || b.status === 'empty');
+  const packagingInventory = getInventoryByCategory('packaging');
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<number | undefined>();
   const [form, setForm] = useState(emptyRun());
@@ -45,8 +49,20 @@ export function Bottling() {
 
   const openEdit = (run: ReturnType<typeof getBottlingRuns>[0]) => {
     setEditId(run.id);
-    setForm({ ...run });
+    setForm({
+      ...run,
+      packaging_bottle: run.packaging_bottle ?? '',
+    });
     setShowForm(true);
+  };
+
+  const handlePackagingSelect = (name: string) => {
+    const bottle = packagingBottleByName(name);
+    setForm({
+      ...form,
+      packaging_bottle: name,
+      bottle_size_ml: bottle?.sizeMl ?? form.bottle_size_ml,
+    });
   };
 
   const handleSave = () => {
@@ -68,7 +84,41 @@ export function Bottling() {
         <h2>Bottling</h2>
         <p>Record finished goods and bottling runs</p>
         <div className="page-actions">
-          <button className="btn btn-primary" onClick={openNew}>+ New Bottling Run</button>
+          <button type="button" className="btn btn-primary" onClick={openNew}>+ New Bottling Run</button>
+        </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: '1.25rem' }}>
+        <h3 className="section-title" style={{ marginTop: 0 }}>Packaging Bottles</h3>
+        <p className="text-muted" style={{ marginBottom: '0.75rem' }}>
+          Standard bottle SKUs tracked in inventory under Packaging.
+        </p>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Bottle</th>
+                <th>Size</th>
+                <th>On Hand</th>
+                <th>Reorder At</th>
+              </tr>
+            </thead>
+            <tbody>
+              {PACKAGING_BOTTLES.map((bottle) => {
+                const inv = packagingInventory.find(
+                  (i) => i.name.toLowerCase() === bottle.name.toLowerCase(),
+                );
+                return (
+                  <tr key={bottle.name}>
+                    <td><strong>{bottle.name}</strong></td>
+                    <td>{bottle.sizeMl} ml</td>
+                    <td>{inv ? `${inv.quantity.toLocaleString()} ${inv.unit}` : '—'}</td>
+                    <td>{inv ? inv.reorder_level.toLocaleString() : '—'}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -90,7 +140,7 @@ export function Bottling() {
       {runs.length === 0 ? (
         <div className="empty-state">
           <p>No bottling runs recorded yet.</p>
-          <button className="btn btn-primary" onClick={openNew} style={{ marginTop: '1rem' }}>Record first bottling</button>
+          <button type="button" className="btn btn-primary" onClick={openNew} style={{ marginTop: '1rem' }}>Record first bottling</button>
         </div>
       ) : (
         <div className="table-wrap">
@@ -99,6 +149,7 @@ export function Bottling() {
               <tr>
                 <th>Batch #</th>
                 <th>Product</th>
+                <th>Packaging</th>
                 <th>Lot</th>
                 <th>Date</th>
                 <th>Bottle Size</th>
@@ -115,6 +166,7 @@ export function Bottling() {
                   <tr key={r.id}>
                     <td><strong>{r.batch_number}</strong></td>
                     <td>{r.product_name}</td>
+                    <td>{r.packaging_bottle || '—'}</td>
                     <td>{r.lot_number}</td>
                     <td>{format(new Date(r.bottling_date), 'MMM d, yyyy')}</td>
                     <td>{r.bottle_size_ml} ml</td>
@@ -122,8 +174,8 @@ export function Bottling() {
                     <td>{r.final_abv}%</td>
                     <td>{barrel?.barrel_number ?? '—'}</td>
                     <td className="td-actions">
-                      <button className="btn btn-sm btn-ghost" onClick={() => openEdit(r)}>Edit</button>
-                      <button className="btn btn-sm btn-ghost" onClick={() => handleDelete(r.id)}>Delete</button>
+                      <button type="button" className="btn btn-sm btn-ghost" onClick={() => openEdit(r)}>Edit</button>
+                      <button type="button" className="btn btn-sm btn-ghost" onClick={() => handleDelete(r.id)}>Delete</button>
                     </td>
                   </tr>
                 );
@@ -143,6 +195,18 @@ export function Bottling() {
             <div className="form-group">
               <label>Product Name</label>
               <input value={form.product_name} onChange={(e) => setForm({ ...form, product_name: e.target.value })} />
+            </div>
+            <div className="form-group">
+              <label>Packaging Bottle</label>
+              <select
+                value={form.packaging_bottle}
+                onChange={(e) => handlePackagingSelect(e.target.value)}
+              >
+                <option value="">— Select packaging bottle —</option>
+                {PACKAGING_BOTTLES.map((b) => (
+                  <option key={b.name} value={b.name}>{b.name} ({b.sizeMl} ml)</option>
+                ))}
+              </select>
             </div>
             <div className="form-group">
               <label>Lot Number</label>
@@ -180,8 +244,8 @@ export function Bottling() {
             </div>
           </div>
           <div className="form-actions">
-            <button className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
-            <button className="btn btn-primary" onClick={handleSave}>Save</button>
+            <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+            <button type="button" className="btn btn-primary" onClick={handleSave}>Save</button>
           </div>
         </Modal>
       )}

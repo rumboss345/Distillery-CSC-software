@@ -1,6 +1,7 @@
 import initSqlJs, { Database, SqlValue } from 'sql.js/dist/sql-wasm.js';
 import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 import { buildCscFloorEquipmentRows, CSC_FLOOR_PLAN_SIZE } from '../lib/csc-floor-equipment';
+import { PACKAGING_BOTTLES } from '../lib/packaging-bottles';
 import { SCHEMA, SEED_DATA } from './schema';
 
 const FLOOR_MIGRATION = `
@@ -403,8 +404,37 @@ function runMigrations(): void {
     persistDb();
   }
 
+  seedPackagingBottles();
+  migratePackagingBottleColumn();
   migrateFloorPlanPages();
   persistDb();
+}
+
+function seedPackagingBottles(): void {
+  if (!db) return;
+  db.run(`INSERT OR IGNORE INTO inventory_categories (name) VALUES ('packaging')`);
+  for (const bottle of PACKAGING_BOTTLES) {
+    const exists = queryOne<{ id: number }>(
+      'SELECT id FROM inventory_items WHERE name = ? COLLATE NOCASE AND category = ?',
+      [bottle.name, 'packaging'],
+    );
+    if (exists) continue;
+    db.run(
+      `INSERT INTO inventory_items (name, category, unit, quantity, reorder_level, notes) VALUES (?, 'packaging', 'each', 0, 100, ?)`,
+      [bottle.name, `${bottle.sizeMl} ml bottle`],
+    );
+  }
+}
+
+function migratePackagingBottleColumn(): void {
+  if (!db) return;
+  const hasColumn = queryOne<{ name: string }>(
+    "SELECT name FROM pragma_table_info('bottling_runs') WHERE name='packaging_bottle'",
+  );
+  if (!hasColumn) {
+    db.run(`ALTER TABLE bottling_runs ADD COLUMN packaging_bottle TEXT NOT NULL DEFAULT ''`);
+    persistDb();
+  }
 }
 
 function migrateFloorPlanPages(): void {
