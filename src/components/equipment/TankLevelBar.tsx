@@ -17,7 +17,6 @@ export function TankLevelBar({ tank, selected, onClick }: TankLevelBarProps) {
       onClick={onClick}
     >
       <div className="tank-level-bar-header">
-        <span className="tank-level-bar-code">{tank.code}</span>
         <span className="tank-level-bar-name">{tank.name}</span>
         <span className="tank-level-bar-pct">{pct}%</span>
       </div>

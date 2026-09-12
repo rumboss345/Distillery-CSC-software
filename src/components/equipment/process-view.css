@@ -119,11 +119,12 @@
 
 .process-equipment-id {
   padding: 0.3rem 0.5rem 0.15rem;
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   font-weight: 800;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.02em;
   color: #ffffff;
-  text-transform: uppercase;
+  line-height: 1.25;
+  word-break: break-word;
 }
 
 .process-equipment-status {

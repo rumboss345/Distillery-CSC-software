@@ -4,7 +4,7 @@ import type { TankVisualData } from './tank-visual.types';
 
 type LabelData = Pick<
   EquipmentVisualData,
-  'code' | 'name' | 'capacityGal' | 'fillPercent' | 'liquidName'
+  'name' | 'capacityGal' | 'fillPercent' | 'liquidName'
 >;
 
 export function ProcessEquipmentLabels({ data }: { data: LabelData | TankVisualData }) {
@@ -15,7 +15,7 @@ export function ProcessEquipmentLabels({ data }: { data: LabelData | TankVisualD
 
   return (
     <div className="process-equipment-labels">
-      <div className="process-equipment-id">{data.code}</div>
+      <div className="process-equipment-id">{data.name}</div>
       <div className={`process-equipment-status${isEmpty ? ' process-equipment-status--empty' : ''}`}>
         {statusText}
       </div>
