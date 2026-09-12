@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   getFloorPlans,
   getFloorPlan,
@@ -13,6 +13,7 @@ import {
   useRefreshKey,
 } from '../db/queries';
 import { FloorCanvas, FloorLegend } from '../components/FloorCanvas';
+import { TankVisualPreview } from '../components/equipment/TankVisualPreview';
 import { HoldingTankIntakeHistory } from '../components/HoldingTankIntakeHistory';
 import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
@@ -23,7 +24,7 @@ import {
   TYPE_DEFAULTS,
   equipmentTypeLabel,
 } from '../lib/equipment';
-import type { EquipmentStatus, EquipmentType, FloorEquipment } from '../types';
+import type { EquipmentStatus, EquipmentType, FloorEquipment, FloorEquipmentView } from '../types';
 
 const emptyEquipment = (planId: number, type: EquipmentType = 'fermenter'): Omit<FloorEquipment, 'id' | 'created_at'> => {
   const defaults = TYPE_DEFAULTS[type];
@@ -81,6 +82,25 @@ export function FloorPlanPage() {
   }, [draggingEquipmentId]);
 
   const selected = equipment.find((e) => e.id === selectedId) ?? null;
+
+  const previewTank = useMemo((): FloorEquipmentView | null => {
+    const onPlan = equipment.filter((e) => e.equipment_type === 'holding_tank');
+    const withVolume = onPlan.find((t) => (t.active_volume_gal ?? 0) > 0);
+    if (withVolume) return withVolume;
+    if (onPlan[0]) return onPlan[0];
+
+    const allTanks = getHoldingTanksWithContents();
+    const fallback = allTanks.find((t) => t.volume_gal > 0) ?? allTanks[0];
+    if (!fallback) return null;
+
+    return {
+      ...fallback,
+      active_volume_gal: fallback.volume_gal,
+      active_abv: fallback.abv,
+      active_run_count: fallback.run_count,
+      status: fallback.volume_gal > 0 ? 'in_use' : fallback.status,
+    };
+  }, [equipment, key]);
 
   const openNew = () => {
     setEditId(undefined);
@@ -215,6 +235,14 @@ export function FloorPlanPage() {
           )}
         </div>
       </div>
+
+      {previewTank && (
+        <TankVisualPreview
+          tank={previewTank}
+          selected={selectedId === previewTank.id}
+          onSelect={selectEquipment}
+        />
+      )}
 
       <div className="floor-plan-tabs">
         {plans.map((p) => (
