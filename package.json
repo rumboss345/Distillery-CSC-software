@@ -14,7 +14,8 @@
     "postinstall": "npm rebuild better-sqlite3",
     "start": "tsx server/index.ts",
     "reset-admin": "tsx server/reset-admin.ts",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -42,6 +43,7 @@
     "@vitejs/plugin-react": "^4.3.3",
     "concurrently": "^9.1.0",
     "typescript": "^5.6.3",
-    "vite": "^5.4.11"
+    "vite": "^5.4.11",
+    "vitest": "^3.0.5"
   }
 }
