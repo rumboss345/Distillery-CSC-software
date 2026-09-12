@@ -5,9 +5,12 @@ import { mkdirSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import {
+  ACTION_ASSIGNMENT_KEYS,
   DEFAULT_USER_PERMISSIONS,
+  sanitizeActionAssignments,
   sanitizePermissions,
   sanitizeProcessStages,
+  type ActionAssignmentKey,
   type PermissionKey,
   type ProcessStageKey,
 } from './permissions.js';
@@ -37,6 +40,8 @@ export interface PublicUser {
   status: UserStatus;
   created_at: string;
   permissions: PermissionKey[];
+  actionAssignments: ActionAssignmentKey[];
+  /** @deprecated use actionAssignments */
   processAssignments: ProcessStageKey[];
 }
 
@@ -70,9 +75,33 @@ function ensureDb() {
       stage_key TEXT NOT NULL,
       PRIMARY KEY (user_id, stage_key)
     );
+
+    CREATE TABLE IF NOT EXISTS user_action_assignments (
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      action_key TEXT NOT NULL,
+      PRIMARY KEY (user_id, action_key)
+    );
+
+    CREATE TABLE IF NOT EXISTS activity_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      action_key TEXT NOT NULL,
+      description TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_activity_log_created ON activity_log(created_at DESC);
   `);
   migrateExistingUserPermissions();
+  migrateProcessAssignmentsToActions();
   return db;
+}
+
+function migrateProcessAssignmentsToActions() {
+  if (!db) return;
+  db.run(`
+    INSERT OR IGNORE INTO user_action_assignments (user_id, action_key)
+    SELECT user_id, stage_key FROM user_process_assignments
+  `);
 }
 
 function migrateExistingUserPermissions() {
@@ -137,10 +166,14 @@ export function getUserPermissions(userId: number): PermissionKey[] {
 }
 
 export function getUserProcessAssignments(userId: number): ProcessStageKey[] {
+  return sanitizeProcessStages(getUserActionAssignments(userId));
+}
+
+export function getUserActionAssignments(userId: number): ActionAssignmentKey[] {
   const rows = ensureDb()
-    .prepare('SELECT stage_key FROM user_process_assignments WHERE user_id = ? ORDER BY stage_key')
-    .all(userId) as { stage_key: string }[];
-  return sanitizeProcessStages(rows.map((r) => r.stage_key));
+    .prepare('SELECT action_key FROM user_action_assignments WHERE user_id = ? ORDER BY action_key')
+    .all(userId) as { action_key: string }[];
+  return sanitizeActionAssignments(rows.map((r) => r.action_key));
 }
 
 export function setUserPermissions(userId: number, permissions: PermissionKey[]) {
@@ -156,30 +189,36 @@ export function setUserPermissions(userId: number, permissions: PermissionKey[])
 }
 
 export function setUserProcessAssignments(userId: number, stages: ProcessStageKey[]) {
+  setUserActionAssignments(userId, sanitizeActionAssignments(stages));
+}
+
+export function setUserActionAssignments(userId: number, actions: ActionAssignmentKey[]) {
   const database = ensureDb();
-  const keys = sanitizeProcessStages(stages);
+  const keys = sanitizeActionAssignments(actions);
+  database.prepare('DELETE FROM user_action_assignments WHERE user_id = ?').run(userId);
   database.prepare('DELETE FROM user_process_assignments WHERE user_id = ?').run(userId);
-  const insert = database.prepare(
+  const insertAction = database.prepare(
+    'INSERT INTO user_action_assignments (user_id, action_key) VALUES (?, ?)',
+  );
+  const insertProcess = database.prepare(
     'INSERT INTO user_process_assignments (user_id, stage_key) VALUES (?, ?)',
   );
   for (const key of keys) {
-    insert.run(userId, key);
+    insertAction.run(userId, key);
+    if (sanitizeProcessStages([key]).length === 1) {
+      insertProcess.run(userId, key);
+    }
   }
 }
 
 export function publicUser(user: User): PublicUser {
   const permissions =
     user.role === 'admin' ? [...DEFAULT_USER_PERMISSIONS] : getUserPermissions(user.id);
-  const processAssignments =
+  const actionAssignments =
     user.role === 'admin'
-      ? sanitizeProcessStages([
-          'preparation',
-          'fermentation',
-          'distillation',
-          'storage',
-          'other',
-        ])
-      : getUserProcessAssignments(user.id);
+      ? [...ACTION_ASSIGNMENT_KEYS]
+      : getUserActionAssignments(user.id);
+  const processAssignments = sanitizeProcessStages(actionAssignments);
 
   return {
     id: user.id,
@@ -189,6 +228,7 @@ export function publicUser(user: User): PublicUser {
     status: user.status,
     created_at: user.created_at,
     permissions,
+    actionAssignments,
     processAssignments,
   };
 }
@@ -211,7 +251,7 @@ export function createUserByAdmin(
   password: string,
   name: string | null,
   permissions: PermissionKey[],
-  processAssignments: ProcessStageKey[],
+  actionAssignments: ActionAssignmentKey[],
 ): User {
   const normalized = email.toLowerCase();
   if (getUserByEmail(normalized)) {
@@ -226,7 +266,7 @@ export function createUserByAdmin(
     .run(normalized, passwordHash, name);
   const user = getUserById(Number(result.lastInsertRowid))!;
   setUserPermissions(user.id, permissions);
-  setUserProcessAssignments(user.id, processAssignments);
+  setUserActionAssignments(user.id, actionAssignments);
   return user;
 }
 
@@ -235,6 +275,7 @@ export function updateUserByAdmin(
   updates: {
     name?: string | null;
     permissions?: PermissionKey[];
+    actionAssignments?: ActionAssignmentKey[];
     processAssignments?: ProcessStageKey[];
   },
 ): User | null {
@@ -247,7 +288,9 @@ export function updateUserByAdmin(
   if (updates.permissions) {
     setUserPermissions(id, updates.permissions);
   }
-  if (updates.processAssignments) {
+  if (updates.actionAssignments) {
+    setUserActionAssignments(id, updates.actionAssignments);
+  } else if (updates.processAssignments) {
     setUserProcessAssignments(id, updates.processAssignments);
   }
   return getUserById(id)!;
@@ -328,23 +371,78 @@ export interface ProcessAssignmentEntry {
   name: string | null;
 }
 
-export function listProcessAssignmentsByStage(): Record<string, ProcessAssignmentEntry[]> {
+export function listActionAssignmentsByKey(): Record<string, ProcessAssignmentEntry[]> {
   const rows = ensureDb()
     .prepare(
-      `SELECT u.id, u.email, u.name, a.stage_key
-       FROM user_process_assignments a
+      `SELECT u.id, u.email, u.name, a.action_key
+       FROM user_action_assignments a
        JOIN users u ON u.id = a.user_id
        WHERE u.status = 'approved'
-       ORDER BY a.stage_key, u.email`,
+       ORDER BY a.action_key, u.email`,
     )
-    .all() as { id: number; email: string; name: string | null; stage_key: string }[];
+    .all() as { id: number; email: string; name: string | null; action_key: string }[];
 
   const map: Record<string, ProcessAssignmentEntry[]> = {};
   for (const row of rows) {
-    if (!map[row.stage_key]) map[row.stage_key] = [];
-    map[row.stage_key].push({ id: row.id, email: row.email, name: row.name });
+    if (!map[row.action_key]) map[row.action_key] = [];
+    map[row.action_key].push({ id: row.id, email: row.email, name: row.name });
   }
   return map;
+}
+
+const STAGE_ACTION_ALIASES: Record<string, string[]> = {
+  preparation: ['preparation', 'wash'],
+  fermentation: ['fermentation', 'wash'],
+  distillation: ['distillation'],
+  storage: ['storage', 'equipment'],
+  other: ['other', 'equipment'],
+};
+
+export function listProcessAssignmentsByStage(): Record<string, ProcessAssignmentEntry[]> {
+  const all = listActionAssignmentsByKey();
+  const map: Record<string, ProcessAssignmentEntry[]> = {};
+  for (const [stage, aliases] of Object.entries(STAGE_ACTION_ALIASES)) {
+    const merged: ProcessAssignmentEntry[] = [];
+    for (const alias of aliases) {
+      for (const u of all[alias] ?? []) {
+        if (!merged.some((m) => m.id === u.id)) merged.push(u);
+      }
+    }
+    if (merged.length > 0) map[stage] = merged;
+  }
+  return map;
+}
+
+export interface ActivityEntry {
+  id: number;
+  user_id: number;
+  user_name: string | null;
+  user_email: string;
+  action_key: string;
+  description: string;
+  created_at: string;
+}
+
+export function logActivity(userId: number, actionKey: string, description: string): void {
+  const key = sanitizeActionAssignments([actionKey])[0];
+  if (!key) return;
+  ensureDb()
+    .prepare('INSERT INTO activity_log (user_id, action_key, description) VALUES (?, ?, ?)')
+    .run(userId, key, description.slice(0, 500));
+}
+
+export function listRecentActivity(limit = 30): ActivityEntry[] {
+  const cap = Math.min(Math.max(limit, 1), 100);
+  return ensureDb()
+    .prepare(
+      `SELECT l.id, l.user_id, u.name as user_name, u.email as user_email,
+              l.action_key, l.description, l.created_at
+       FROM activity_log l
+       JOIN users u ON u.id = l.user_id
+       ORDER BY l.created_at DESC
+       LIMIT ?`,
+    )
+    .all(cap) as ActivityEntry[];
 }
 
 export function resetAdminAccount(email: string, password: string, name = 'Admin') {

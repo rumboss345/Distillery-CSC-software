@@ -38,6 +38,38 @@ export const ROUTE_PERMISSIONS: Record<string, PermissionKey> = {
   '/reports': 'reports',
 };
 
+export const ACTION_ASSIGNMENT_KEYS = [
+  'wash',
+  'recipes',
+  'distillation',
+  'blending',
+  'barrels',
+  'bottling',
+  'inventory',
+  'equipment',
+  'preparation',
+  'fermentation',
+  'storage',
+  'other',
+] as const;
+
+export type ActionAssignmentKey = (typeof ACTION_ASSIGNMENT_KEYS)[number];
+
+export const ACTION_ASSIGNMENT_LABELS: Record<ActionAssignmentKey, string> = {
+  wash: 'Wash & Fermentation',
+  recipes: 'Recipes',
+  distillation: 'Distillation',
+  blending: 'Blending',
+  barrels: 'Barrel Aging',
+  bottling: 'Bottling',
+  inventory: 'Inventory',
+  equipment: 'Equipment / Floor Plan',
+  preparation: 'Process — Mash / Cook',
+  fermentation: 'Process — Fermenter',
+  storage: 'Process — Holding Tanks',
+  other: 'Process — Other Equipment',
+};
+
 export const PROCESS_STAGE_KEYS = [
   'preparation',
   'fermentation',
@@ -54,6 +86,19 @@ export const PROCESS_STAGE_LABELS: Record<ProcessStageKey, string> = {
   distillation: 'Distillation',
   storage: 'Holding Tanks',
   other: 'Other Equipment',
+};
+
+/** Map app routes to the action key used for assignments and activity logging. */
+export const ROUTE_ACTION_KEYS: Record<string, ActionAssignmentKey> = {
+  '/wash': 'wash',
+  '/mash': 'wash',
+  '/recipes': 'recipes',
+  '/distillation': 'distillation',
+  '/blending': 'blending',
+  '/barrels': 'barrels',
+  '/bottling': 'bottling',
+  '/inventory': 'inventory',
+  '/floor-plan': 'equipment',
 };
 
 export function userHasPermission(

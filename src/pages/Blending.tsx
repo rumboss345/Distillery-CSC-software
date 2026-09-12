@@ -13,6 +13,8 @@ import {
 } from '../db/queries';
 import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
+import { AssignedUsersBar } from '../components/AssignedUsersBar';
+import { logUserAction } from '../lib/activity-log';
 import {
   BLEND_INGREDIENT_TYPES,
   INGREDIENT_UNITS,
@@ -169,6 +171,7 @@ export function Blending() {
       return;
     }
     saveBlendProduct(form, ingredients.filter((i) => i.amount > 0 || i.name.trim()), editId);
+    void logUserAction('blending', `${editId ? 'Updated' : 'Created'} blend ${form.product_name}`);
     setShowForm(false);
     refresh();
   };
@@ -190,6 +193,8 @@ export function Blending() {
           <button className="btn btn-primary" onClick={openNew}>+ New Blend Product</button>
         </div>
       </div>
+
+      <AssignedUsersBar actionKey="blending" refreshKey={key} />
 
       {blends.length === 0 ? (
         <div className="empty-state">

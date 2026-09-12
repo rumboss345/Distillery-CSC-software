@@ -7,6 +7,8 @@ import {
   useRefreshKey,
 } from '../db/queries';
 import { Modal } from '../components/Modal';
+import { AssignedUsersBar } from '../components/AssignedUsersBar';
+import { logUserAction } from '../lib/activity-log';
 import type { Recipe } from '../types';
 
 const emptyRecipe = (): Omit<Recipe, 'id' | 'created_at' | 'updated_at'> => ({
@@ -62,6 +64,7 @@ export function Recipes() {
   const handleSave = () => {
     if (!form.name.trim()) return;
     saveRecipe(form, editId);
+    void logUserAction('recipes', `${editId ? 'Updated' : 'Created'} recipe ${form.name}`);
     setShowForm(false);
     refresh();
   };
@@ -85,6 +88,8 @@ export function Recipes() {
           </button>
         </div>
       </div>
+
+      <AssignedUsersBar actionKey="recipes" refreshKey={key} />
 
       {recipes.length === 0 ? (
         <div className="empty-state card">
