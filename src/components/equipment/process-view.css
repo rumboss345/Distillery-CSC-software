@@ -51,8 +51,6 @@
 .process-canvas {
   transform-origin: center top;
   padding: 1.5rem 2rem 2rem;
-  transition: transform 0.05s linear;
-  will-change: transform;
 }
 
 .process-stage {

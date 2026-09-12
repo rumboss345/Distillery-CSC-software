@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   getAllFloorEquipmentWithContext,
@@ -64,11 +64,6 @@ export function ProcessEquipmentCanvas({
   const summary = getProductionSummary();
   const offlineCount = allEquipment.filter((e) => e.status === 'offline').length;
 
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault();
-    setScale((s) => Math.min(1.8, Math.max(0.45, s * (e.deltaY > 0 ? 0.92 : 1.08))));
-  }, []);
-
   const onPointerDown = (e: React.PointerEvent) => {
     if ((e.target as HTMLElement).closest('.equipment-visual, .tank-visual')) return;
     setPanning(true);
@@ -105,7 +100,6 @@ export function ProcessEquipmentCanvas({
         <div
           ref={viewportRef}
           className={`process-viewport${panning ? ' process-viewport--panning' : ''}`}
-          onWheel={handleWheel}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}

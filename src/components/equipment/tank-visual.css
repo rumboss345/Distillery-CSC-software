@@ -14,7 +14,7 @@
   font-family: inherit;
   transform: scale(var(--tank-scale));
   transform-origin: center top;
-  transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .tank-visual--interactive {
