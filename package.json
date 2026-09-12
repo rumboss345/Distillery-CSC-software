@@ -4,13 +4,14 @@
   "version": "1.0.0",
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": "20.x"
   },
   "scripts": {
     "dev": "concurrently \"vite\" \"tsx server/index.ts\"",
     "dev:web": "vite",
     "dev:server": "tsx server/index.ts",
     "build": "tsc -b && vite build",
+    "postinstall": "npm rebuild better-sqlite3",
     "start": "tsx server/index.ts",
     "reset-admin": "tsx server/reset-admin.ts",
     "preview": "vite preview"

@@ -40,7 +40,7 @@ Set in the Render dashboard (not GitHub):
 
 The admin account is created or updated automatically on each server start from `ADMIN_EMAIL` and `ADMIN_PASSWORD`.
 
-Render sets `PORT` and `NODE_ENV=production` automatically. The Node server serves the built frontend from `dist/` and handles `/api` auth routes.
+Render sets `PORT` and `NODE_ENV=production` automatically. Pin Node **20** (`NODE_VERSION=20` in `render.yaml`) so native `better-sqlite3` auth DB modules match the runtime. The Node server serves the built frontend from `dist/` and handles `/api` auth routes.
 
 Optional: run `npm run reset-admin` locally to update the admin password without restarting.
 
