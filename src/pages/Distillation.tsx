@@ -25,6 +25,8 @@ import {
   useRefreshKey,
 } from '../db/queries';
 import { Modal } from '../components/Modal';
+import { AssignedUsersBar } from '../components/AssignedUsersBar';
+import { logUserAction } from '../lib/activity-log';
 import { StatusBadge } from '../components/StatusBadge';
 import type {
   DistillationRun,
@@ -239,11 +241,13 @@ export function Distillation() {
       }
       const chargeAbv = runForm.charge_abv ?? available.abv;
       saveDistillationRun({ ...runForm, charge_abv: chargeAbv }, editRunId);
+      void logUserAction('distillation', `${editRunId ? 'Updated' : 'Created'} run ${runForm.batch_number}`);
       setShowRunForm(false);
       refresh();
       return;
     }
     saveDistillationRun(runForm, editRunId);
+    void logUserAction('distillation', `${editRunId ? 'Updated' : 'Created'} run ${runForm.batch_number}`);
     setShowRunForm(false);
     refresh();
   };
@@ -433,6 +437,7 @@ export function Distillation() {
     }
     try {
       saveHoldingTankTransfer(transferForm);
+      void logUserAction('distillation', `Recorded tank transfer (${transferForm.volume_gal} gal)`);
       setShowTransferForm(false);
       setTransferForm(emptyTransferForm());
       refresh();
@@ -459,6 +464,8 @@ export function Distillation() {
           <button className="btn btn-secondary" onClick={openTransferForm}>+ Tank Transfer</button>
         </div>
       </div>
+
+      <AssignedUsersBar actionKey="distillation" refreshKey={key} />
 
       {runs.length === 0 ? (
         <div className="empty-state">

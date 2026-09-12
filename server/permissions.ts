@@ -13,6 +13,25 @@ export const PERMISSION_KEYS = [
 
 export type PermissionKey = (typeof PERMISSION_KEYS)[number];
 
+/** Assignable production actions (pages + process stages). */
+export const ACTION_ASSIGNMENT_KEYS = [
+  'wash',
+  'recipes',
+  'distillation',
+  'blending',
+  'barrels',
+  'bottling',
+  'inventory',
+  'equipment',
+  'preparation',
+  'fermentation',
+  'storage',
+  'other',
+] as const;
+
+export type ActionAssignmentKey = (typeof ACTION_ASSIGNMENT_KEYS)[number];
+
+/** @deprecated Use ACTION_ASSIGNMENT_KEYS process subset */
 export const PROCESS_STAGE_KEYS = [
   'preparation',
   'fermentation',
@@ -29,12 +48,20 @@ export function isValidPermission(key: string): key is PermissionKey {
   return (PERMISSION_KEYS as readonly string[]).includes(key);
 }
 
+export function isValidActionAssignment(key: string): key is ActionAssignmentKey {
+  return (ACTION_ASSIGNMENT_KEYS as readonly string[]).includes(key);
+}
+
 export function isValidProcessStage(key: string): key is ProcessStageKey {
   return (PROCESS_STAGE_KEYS as readonly string[]).includes(key);
 }
 
 export function sanitizePermissions(keys: string[]): PermissionKey[] {
   return keys.filter(isValidPermission);
+}
+
+export function sanitizeActionAssignments(keys: string[]): ActionAssignmentKey[] {
+  return keys.filter(isValidActionAssignment);
 }
 
 export function sanitizeProcessStages(keys: string[]): ProcessStageKey[] {

@@ -10,8 +10,10 @@ import {
   useRefreshKey,
 } from '../db/queries';
 import { Modal } from '../components/Modal';
+import { AssignedUsersBar } from '../components/AssignedUsersBar';
 import { mlToGallons } from '../types';
 import { PACKAGING_BOTTLES, packagingBottleByName } from '../lib/packaging-bottles';
+import { logUserAction } from '../lib/activity-log';
 
 const emptyRun = () => ({
   batch_number: generateBatchNumber('BT'),
@@ -67,6 +69,7 @@ export function Bottling() {
 
   const handleSave = () => {
     saveBottlingRun(form, editId);
+    void logUserAction('bottling', `${editId ? 'Updated' : 'Created'} bottling run ${form.batch_number}`);
     setShowForm(false);
     refresh();
   };
@@ -87,6 +90,8 @@ export function Bottling() {
           <button type="button" className="btn btn-primary" onClick={openNew}>+ New Bottling Run</button>
         </div>
       </div>
+
+      <AssignedUsersBar actionKey="bottling" refreshKey={key} />
 
       <div className="card" style={{ marginBottom: '1.25rem' }}>
         <h3 className="section-title" style={{ marginTop: 0 }}>Packaging Bottles</h3>
