@@ -11,6 +11,7 @@ import {
   getHoldingTanks,
   getInventoryItems,
   saveBlendFormula,
+  saveBlendVerification,
   deleteBlendProduct,
   generateBatchNumber,
   useRefreshKey,
@@ -66,7 +67,7 @@ const STEP_HINTS: Record<number, string> = {
   6: 'Enter what the lab actually measured. If it is off, use Correct This Batch below.',
   7: 'Once you are satisfied with the lab results, approve the recipe for production.',
   8: 'Choose where the finished batch goes, then produce. Spirit is pulled from source tanks and ingredients are deducted. Cannot be undone.',
-  9: 'Record final measurements after production. Correct the batch if needed.',
+  9: 'Weigh or measure the finished batch, then save. Use weight on a scale if that is how you verify yield.',
 };
 
 const emptyIngredient = (type: BlendIngredientInput['ingredient_type'] = 'water'): BlendIngredientInput => ({
@@ -130,6 +131,7 @@ const emptyProduct = (): FormulaForm => ({
   theoretical_density: null,
   theoretical_brix: null,
   actual_volume_gal: null,
+  actual_weight_lbs: null,
   actual_abv: null,
   actual_density: null,
   actual_brix: null,
@@ -248,11 +250,13 @@ export function Blending() {
   const [ingredients, setIngredients] = useState<BlendIngredientInput[]>([]);
   const [showInventoryDetails, setShowInventoryDetails] = useState(false);
   const [correctionProof, setCorrectionProof] = useState(80);
-  const [measuredForCorrection, setMeasuredForCorrection] = useState<{ abv: string; volume: string; brix: string }>({
+  const [measuredForCorrection, setMeasuredForCorrection] = useState<{ abv: string; volume: string; brix: string; weight: string }>({
     abv: '',
     volume: '',
     brix: '',
+    weight: '',
   });
+  const [verifyMeasureMode, setVerifyMeasureMode] = useState<MeasureMode>('volume');
 
   void key;
 
@@ -270,12 +274,21 @@ export function Blending() {
     [activeSources, ingredients, form.actual_volume_gal, form.actual_abv, form.actual_density, form.actual_brix],
   );
 
-  const correctionVolume = measuredForCorrection.volume
-    ? parseFloat(measuredForCorrection.volume)
-    : (form.actual_volume_gal ?? formulation.theoretical.volumeGal);
+  const verifyAbv = form.actual_abv ?? form.final_abv ?? formulation.theoretical.abv ?? 0;
   const correctionAbv = measuredForCorrection.abv
     ? parseFloat(measuredForCorrection.abv)
     : form.actual_abv;
+  const correctionVolume = (() => {
+    const abvForWeight = verifyAbv || correctionAbv || 40;
+    if (wizardStep === 9 && verifyMeasureMode === 'weight' && measuredForCorrection.weight) {
+      return spiritVolumeGalFromAmount(parseFloat(measuredForCorrection.weight), 'lbs', abvForWeight);
+    }
+    if (measuredForCorrection.volume) return parseFloat(measuredForCorrection.volume);
+    if (wizardStep === 9 && verifyMeasureMode === 'weight' && form.actual_weight_lbs != null) {
+      return spiritVolumeGalFromAmount(form.actual_weight_lbs, 'lbs', abvForWeight);
+    }
+    return form.actual_volume_gal ?? formulation.theoretical.volumeGal;
+  })();
   const batchCorrection = useMemo(() => {
     if (form.target_abv == null || correctionAbv == null || correctionVolume <= 0) return null;
     return computeBatchCorrection(correctionVolume, correctionAbv, form.target_abv, {
@@ -283,7 +296,7 @@ export function Blending() {
       targetBrix: form.target_brix,
       spiritProofAbv: correctionProof,
     });
-  }, [correctionVolume, correctionAbv, form.target_abv, form.target_brix, form.actual_brix, measuredForCorrection.brix, correctionProof]);
+  }, [correctionVolume, correctionAbv, form.target_abv, form.target_brix, form.actual_brix, measuredForCorrection.brix, correctionProof, verifyMeasureMode, wizardStep, measuredForCorrection.weight, form.actual_weight_lbs, verifyAbv]);
 
   const openNew = () => {
     setEditId(undefined);
@@ -291,7 +304,8 @@ export function Blending() {
     setSpiritSources([emptySpiritSource()]);
     setIngredients([]);
     setWizardStep(1);
-    setMeasuredForCorrection({ abv: '', volume: '', brix: '' });
+    setMeasuredForCorrection({ abv: '', volume: '', brix: '', weight: '' });
+    setVerifyMeasureMode('volume');
     setShowWizard(true);
   };
 
@@ -316,6 +330,7 @@ export function Blending() {
       theoretical_density: blend.theoretical_density,
       theoretical_brix: blend.theoretical_brix,
       actual_volume_gal: blend.actual_volume_gal,
+      actual_weight_lbs: blend.actual_weight_lbs,
       actual_abv: blend.actual_abv,
       actual_density: blend.actual_density,
       actual_brix: blend.actual_brix,
@@ -358,7 +373,9 @@ export function Blending() {
       abv: blend.actual_abv?.toString() ?? '',
       volume: blend.actual_volume_gal?.toString() ?? '',
       brix: blend.actual_brix?.toString() ?? '',
+      weight: blend.actual_weight_lbs?.toString() ?? '',
     });
+    setVerifyMeasureMode(blend.actual_weight_lbs != null ? 'weight' : 'volume');
     setWizardStep(resumeStep(blend));
     setShowWizard(true);
   };
@@ -597,7 +614,7 @@ export function Blending() {
       status: 'trial',
       notes: `${f.notes}\n[Correction applied] ${batchCorrection.headline}`.trim(),
     }));
-    setMeasuredForCorrection({ abv: '', volume: '', brix: '' });
+    setMeasuredForCorrection({ abv: '', volume: '', brix: '', weight: '' });
     alert('Correction added to your recipe. Mix, re-test, and continue when ready.');
     setWizardStep(5);
   };
@@ -612,12 +629,52 @@ export function Blending() {
     }
   };
 
-  const renderCorrectBatchPanel = () => (
+  const handleSaveVerification = () => {
+    if (!editId) {
+      alert('No batch to save.');
+      return;
+    }
+    try {
+      saveBlendVerification(editId, {
+        actual_abv: form.actual_abv,
+        actual_volume_gal: form.actual_volume_gal,
+        actual_weight_lbs: form.actual_weight_lbs,
+        actual_brix: form.actual_brix,
+      });
+      refresh();
+      alert('Final measurements saved.');
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Could not save measurements.');
+    }
+  };
+
+  const renderCorrectBatchPanel = (options?: { allowWeight?: boolean }) => (
     <div className="correct-batch-panel">
       <h4>Correct This Batch</h4>
       <p className="field-hint">
         Measured off target? Enter what you actually got and we will tell you exactly what to add.
       </p>
+      {options?.allowWeight && (
+        <div className="measure-mode-toggle">
+          <span className="measure-mode-label">Batch size measured by</span>
+          <div className="measure-mode-buttons">
+            <button
+              type="button"
+              className={`btn btn-sm ${verifyMeasureMode === 'volume' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setVerifyMeasureMode('volume')}
+            >
+              Volume
+            </button>
+            <button
+              type="button"
+              className={`btn btn-sm ${verifyMeasureMode === 'weight' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setVerifyMeasureMode('weight')}
+            >
+              Weight on scale
+            </button>
+          </div>
+        </div>
+      )}
       <div className="correct-batch-inputs">
         <label>
           Measured proof (ABV %)
@@ -629,16 +686,29 @@ export function Blending() {
             onChange={(e) => setMeasuredForCorrection({ ...measuredForCorrection, abv: e.target.value })}
           />
         </label>
-        <label>
-          Batch size (gallons)
-          <input
-            type="number"
-            step="0.1"
-            placeholder={(form.actual_volume_gal ?? formulation.theoretical.volumeGal).toFixed(1)}
-            value={measuredForCorrection.volume}
-            onChange={(e) => setMeasuredForCorrection({ ...measuredForCorrection, volume: e.target.value })}
-          />
-        </label>
+        {options?.allowWeight && verifyMeasureMode === 'weight' ? (
+          <label>
+            Batch weight (lbs on scale)
+            <input
+              type="number"
+              step="0.01"
+              placeholder={form.actual_weight_lbs?.toFixed(2) ?? 'e.g. 680'}
+              value={measuredForCorrection.weight}
+              onChange={(e) => setMeasuredForCorrection({ ...measuredForCorrection, weight: e.target.value })}
+            />
+          </label>
+        ) : (
+          <label>
+            Batch size (gallons)
+            <input
+              type="number"
+              step="0.1"
+              placeholder={(form.actual_volume_gal ?? formulation.theoretical.volumeGal).toFixed(1)}
+              value={measuredForCorrection.volume}
+              onChange={(e) => setMeasuredForCorrection({ ...measuredForCorrection, volume: e.target.value })}
+            />
+          </label>
+        )}
         {form.target_brix != null && (
           <label>
             Measured Brix
@@ -1114,7 +1184,13 @@ export function Blending() {
         );
       }
 
-      case 9:
+      case 9: {
+        const finalWeightAlt = form.actual_weight_lbs != null && verifyAbv > 0
+          ? spiritMeasureAlternate(form.actual_weight_lbs, 'lbs', verifyAbv)
+          : null;
+        const finalVolumeAlt = form.actual_volume_gal != null && verifyAbv > 0
+          ? spiritMeasureAlternate(form.actual_volume_gal, 'gal', verifyAbv)
+          : null;
         return (
           <>
             <div className="wizard-verify-card">
@@ -1125,6 +1201,25 @@ export function Blending() {
                   {getHoldingTanks().find((t) => t.id === form.output_holding_tank_equipment_id)?.name ?? 'holding tank'}.
                 </p>
               ) : null}
+              <div className="measure-mode-toggle">
+                <span className="measure-mode-label">How are you verifying yield?</span>
+                <div className="measure-mode-buttons">
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${verifyMeasureMode === 'volume' ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={() => setVerifyMeasureMode('volume')}
+                  >
+                    Volume
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${verifyMeasureMode === 'weight' ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={() => setVerifyMeasureMode('weight')}
+                  >
+                    Weight on scale
+                  </button>
+                </div>
+              </div>
               <div className="wizard-lab-inputs">
                 <label>
                   Final proof (ABV %)
@@ -1134,29 +1229,67 @@ export function Blending() {
                     value={form.actual_abv ?? ''}
                     onChange={(e) => {
                       const v = e.target.value ? parseFloat(e.target.value) : null;
-                      setForm({ ...form, actual_abv: v });
+                      const abv = v ?? verifyAbv;
+                      let nextVolume = form.actual_volume_gal;
+                      let nextWeight = form.actual_weight_lbs;
+                      if (v != null && verifyMeasureMode === 'weight' && form.actual_weight_lbs != null) {
+                        nextVolume = spiritVolumeGalFromAmount(form.actual_weight_lbs, 'lbs', abv);
+                      } else if (v != null && verifyMeasureMode === 'volume' && form.actual_volume_gal != null) {
+                        nextWeight = spiritWeightLbsFromVolumeGal(form.actual_volume_gal, abv);
+                      }
+                      setForm({ ...form, actual_abv: v, actual_volume_gal: nextVolume, actual_weight_lbs: nextWeight });
                       setMeasuredForCorrection({ ...measuredForCorrection, abv: e.target.value });
                     }}
                   />
                 </label>
-                <label>
-                  Final volume (gallons)
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={form.actual_volume_gal ?? ''}
-                    onChange={(e) => {
-                      const v = e.target.value ? parseFloat(e.target.value) : null;
-                      setForm({ ...form, actual_volume_gal: v });
-                      setMeasuredForCorrection({ ...measuredForCorrection, volume: e.target.value });
-                    }}
-                  />
-                </label>
+                {verifyMeasureMode === 'volume' ? (
+                  <label>
+                    Final volume (gallons)
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={form.actual_volume_gal ?? ''}
+                      onChange={(e) => {
+                        const v = e.target.value ? parseFloat(e.target.value) : null;
+                        const weight = v != null && verifyAbv > 0 ? spiritWeightLbsFromVolumeGal(v, verifyAbv) : null;
+                        setForm({ ...form, actual_volume_gal: v, actual_weight_lbs: weight });
+                        setMeasuredForCorrection({ ...measuredForCorrection, volume: e.target.value });
+                      }}
+                    />
+                    {finalVolumeAlt && (
+                      <span className="field-hint">{finalVolumeAlt.label}</span>
+                    )}
+                  </label>
+                ) : (
+                  <label>
+                    Final weight (lbs on scale)
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={form.actual_weight_lbs ?? ''}
+                      onChange={(e) => {
+                        const w = e.target.value ? parseFloat(e.target.value) : null;
+                        const volume = w != null && verifyAbv > 0
+                          ? spiritVolumeGalFromAmount(w, 'lbs', verifyAbv)
+                          : null;
+                        setForm({ ...form, actual_weight_lbs: w, actual_volume_gal: volume });
+                        setMeasuredForCorrection({ ...measuredForCorrection, weight: e.target.value });
+                      }}
+                    />
+                    {finalWeightAlt && (
+                      <span className="field-hint">{finalWeightAlt.label}</span>
+                    )}
+                  </label>
+                )}
               </div>
+              <button type="button" className="btn btn-primary" onClick={handleSaveVerification}>
+                Save final measurements
+              </button>
             </div>
-            {renderCorrectBatchPanel()}
+            {renderCorrectBatchPanel({ allowWeight: true })}
           </>
         );
+      }
 
       default:
         return null;

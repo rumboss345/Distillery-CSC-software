@@ -181,6 +181,7 @@ describe('buildCalendarEventsFromData', () => {
         theoretical_density: null,
         theoretical_brix: null,
         actual_volume_gal: null,
+        actual_weight_lbs: null,
         actual_abv: null,
         actual_density: null,
         actual_brix: null,

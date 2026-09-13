@@ -1455,6 +1455,7 @@ export function saveBlendFormula(
     theoretical_density: formulation.theoretical.density,
     theoretical_brix: formulation.theoretical.brix,
     actual_volume_gal: product.actual_volume_gal,
+    actual_weight_lbs: product.actual_weight_lbs ?? null,
     actual_abv: product.actual_abv,
     actual_density: product.actual_density,
     actual_brix: product.actual_brix,
@@ -1473,7 +1474,7 @@ export function saveBlendFormula(
         batch_number=?, product_name=?, source_holding_tank_equipment_id=?, base_spirit_volume_gal=?, base_spirit_abv=?,
         blend_date=?, target_abv=?, target_brix=?, scale_factor=?, formula_version=?, formulation_phase=?,
         final_volume_gal=?, final_abv=?, theoretical_volume_gal=?, theoretical_abv=?, theoretical_density=?, theoretical_brix=?,
-        actual_volume_gal=?, actual_abv=?, actual_density=?, actual_brix=?, status=?, output_holding_tank_equipment_id=?, notes=?
+        actual_volume_gal=?, actual_weight_lbs=?, actual_abv=?, actual_density=?, actual_brix=?, status=?, output_holding_tank_equipment_id=?, notes=?
        WHERE id=?`,
       [
         row.batch_number, row.product_name, row.source_holding_tank_equipment_id,
@@ -1481,7 +1482,7 @@ export function saveBlendFormula(
         row.target_abv, row.target_brix, row.scale_factor, row.formula_version, row.formulation_phase,
         row.final_volume_gal, row.final_abv,
         row.theoretical_volume_gal, row.theoretical_abv, row.theoretical_density, row.theoretical_brix,
-        row.actual_volume_gal, row.actual_abv, row.actual_density, row.actual_brix,
+        row.actual_volume_gal, row.actual_weight_lbs, row.actual_abv, row.actual_density, row.actual_brix,
         row.status, row.output_holding_tank_equipment_id, row.notes, id,
       ],
     );
@@ -1491,15 +1492,15 @@ export function saveBlendFormula(
         batch_number, product_name, source_holding_tank_equipment_id, base_spirit_volume_gal, base_spirit_abv,
         blend_date, target_abv, target_brix, scale_factor, formula_version, formulation_phase,
         final_volume_gal, final_abv, theoretical_volume_gal, theoretical_abv, theoretical_density, theoretical_brix,
-        actual_volume_gal, actual_abv, actual_density, actual_brix, status, output_holding_tank_equipment_id, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        actual_volume_gal, actual_weight_lbs, actual_abv, actual_density, actual_brix, status, output_holding_tank_equipment_id, notes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         row.batch_number, row.product_name, row.source_holding_tank_equipment_id,
         row.base_spirit_volume_gal, row.base_spirit_abv, row.blend_date,
         row.target_abv, row.target_brix, row.scale_factor, row.formula_version, row.formulation_phase,
         row.final_volume_gal, row.final_abv,
         row.theoretical_volume_gal, row.theoretical_abv, row.theoretical_density, row.theoretical_brix,
-        row.actual_volume_gal, row.actual_abv, row.actual_density, row.actual_brix,
+        row.actual_volume_gal, row.actual_weight_lbs, row.actual_abv, row.actual_density, row.actual_brix,
         row.status, row.output_holding_tank_equipment_id, row.notes,
       ],
     );
@@ -1662,6 +1663,22 @@ export function executeBlendProduct(id: number, outputTankId: number): void {
   );
 
   syncHoldingTankStatuses();
+}
+
+/** Save post-production lab measurements on an executed batch. */
+export function saveBlendVerification(
+  id: number,
+  data: Pick<BlendProduct, 'actual_abv' | 'actual_volume_gal' | 'actual_weight_lbs' | 'actual_brix'>,
+): void {
+  const product = queryOne<{ status: string }>('SELECT status FROM blend_products WHERE id = ?', [id]);
+  if (!product) throw new Error('Blend not found.');
+  if (product.status !== 'executed' && product.status !== 'bottled' && product.status !== 'blended') {
+    throw new Error('Final measurements can only be saved after production.');
+  }
+  runQuery(
+    `UPDATE blend_products SET actual_abv = ?, actual_volume_gal = ?, actual_weight_lbs = ?, actual_brix = ? WHERE id = ?`,
+    [data.actual_abv, data.actual_volume_gal, data.actual_weight_lbs, data.actual_brix, id],
+  );
 }
 
 export function deleteBlendProduct(id: number): void {
