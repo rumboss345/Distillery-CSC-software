@@ -201,6 +201,7 @@ CREATE TABLE IF NOT EXISTS blend_products (
   status TEXT NOT NULL DEFAULT 'draft',
   executed_at TEXT,
   output_holding_tank_equipment_id INTEGER REFERENCES floor_equipment(id),
+  blend_recipe_id INTEGER REFERENCES blend_recipes(id),
   notes TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );

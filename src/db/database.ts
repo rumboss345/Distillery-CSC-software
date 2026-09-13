@@ -561,6 +561,7 @@ function migrateAdvancedBlending(): void {
     ['executed_at', 'TEXT'],
     ['output_holding_tank_equipment_id', 'INTEGER REFERENCES floor_equipment(id)'],
     ['actual_weight_lbs', 'REAL'],
+    ['blend_recipe_id', 'INTEGER REFERENCES blend_recipes(id)'],
   ];
   for (const [name, def] of blendColumns) {
     const has = queryOne<{ name: string }>(

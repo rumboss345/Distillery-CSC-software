@@ -1547,10 +1547,11 @@ export type BlendFormulaSaveInput = Omit<
 
 export function getBlendProducts(): BlendProductView[] {
   return queryAll(
-    `SELECT b.*, fe.name as source_tank_name, out_fe.name as output_tank_name
+    `SELECT b.*, fe.name as source_tank_name, out_fe.name as output_tank_name, br.name as blend_recipe_name
      FROM blend_products b
      JOIN floor_equipment fe ON fe.id = b.source_holding_tank_equipment_id
      LEFT JOIN floor_equipment out_fe ON out_fe.id = b.output_holding_tank_equipment_id
+     LEFT JOIN blend_recipes br ON br.id = b.blend_recipe_id
      ORDER BY b.blend_date DESC`,
   );
 }
@@ -1714,6 +1715,7 @@ export function saveBlendFormula(
     actual_brix: product.actual_brix,
     status: product.status,
     output_holding_tank_equipment_id: product.output_holding_tank_equipment_id ?? null,
+    blend_recipe_id: product.blend_recipe_id ?? null,
     notes: product.notes,
   };
 
@@ -1727,7 +1729,7 @@ export function saveBlendFormula(
         batch_number=?, product_name=?, source_holding_tank_equipment_id=?, base_spirit_volume_gal=?, base_spirit_abv=?,
         blend_date=?, target_abv=?, target_brix=?, scale_factor=?, formula_version=?, formulation_phase=?,
         final_volume_gal=?, final_abv=?, theoretical_volume_gal=?, theoretical_abv=?, theoretical_density=?, theoretical_brix=?,
-        actual_volume_gal=?, actual_weight_lbs=?, actual_abv=?, actual_density=?, actual_brix=?, status=?, output_holding_tank_equipment_id=?, notes=?
+        actual_volume_gal=?, actual_weight_lbs=?, actual_abv=?, actual_density=?, actual_brix=?, status=?, output_holding_tank_equipment_id=?, blend_recipe_id=?, notes=?
        WHERE id=?`,
       [
         row.batch_number, row.product_name, row.source_holding_tank_equipment_id,
@@ -1736,7 +1738,7 @@ export function saveBlendFormula(
         row.final_volume_gal, row.final_abv,
         row.theoretical_volume_gal, row.theoretical_abv, row.theoretical_density, row.theoretical_brix,
         row.actual_volume_gal, row.actual_weight_lbs, row.actual_abv, row.actual_density, row.actual_brix,
-        row.status, row.output_holding_tank_equipment_id, row.notes, id,
+        row.status, row.output_holding_tank_equipment_id, row.blend_recipe_id, row.notes, id,
       ],
     );
   } else {
@@ -1745,8 +1747,8 @@ export function saveBlendFormula(
         batch_number, product_name, source_holding_tank_equipment_id, base_spirit_volume_gal, base_spirit_abv,
         blend_date, target_abv, target_brix, scale_factor, formula_version, formulation_phase,
         final_volume_gal, final_abv, theoretical_volume_gal, theoretical_abv, theoretical_density, theoretical_brix,
-        actual_volume_gal, actual_weight_lbs, actual_abv, actual_density, actual_brix, status, output_holding_tank_equipment_id, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        actual_volume_gal, actual_weight_lbs, actual_abv, actual_density, actual_brix, status, output_holding_tank_equipment_id, blend_recipe_id, notes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         row.batch_number, row.product_name, row.source_holding_tank_equipment_id,
         row.base_spirit_volume_gal, row.base_spirit_abv, row.blend_date,
@@ -1754,7 +1756,7 @@ export function saveBlendFormula(
         row.final_volume_gal, row.final_abv,
         row.theoretical_volume_gal, row.theoretical_abv, row.theoretical_density, row.theoretical_brix,
         row.actual_volume_gal, row.actual_weight_lbs, row.actual_abv, row.actual_density, row.actual_brix,
-        row.status, row.output_holding_tank_equipment_id, row.notes,
+        row.status, row.output_holding_tank_equipment_id, row.blend_recipe_id, row.notes,
       ],
     );
   }
