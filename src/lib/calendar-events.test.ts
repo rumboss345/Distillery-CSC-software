@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type {
   Barrel,
   BlendProduct,
-  BottlingRun,
+  BottlingRunView,
   DistillationRun,
   FermentationLog,
   HoldingTankTransferView,
@@ -160,7 +160,15 @@ describe('buildCalendarEventsFromData', () => {
         lot_number: 'L1',
         notes: '',
         created_at: '2026-05-01',
-      } satisfies BottlingRun],
+        lines: [{
+          id: 1,
+          bottling_run_id: 1,
+          packaging_bottle: '750mL',
+          bottle_size_ml: 750,
+          bottle_count: 100,
+          sort_order: 0,
+        }],
+      } satisfies BottlingRunView],
       blends: [{
         id: 1,
         batch_number: 'BL-1',

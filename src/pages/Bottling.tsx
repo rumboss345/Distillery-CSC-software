@@ -13,17 +13,32 @@ import {
   useRefreshKey,
 } from '../db/queries';
 import { Modal } from '../components/Modal';
-import { mlToGallons } from '../types';
+import {
+  formatLinesSummary,
+  lineVolumeGal,
+  maxBottlesFromGallons,
+  totalBottleCount,
+  totalVolumeGal,
+} from '../lib/bottling-lines';
 import { PACKAGING_BOTTLES, packagingBottleByName } from '../lib/packaging-bottles';
+import type { BottlingRunLineInput, BottlingRunView } from '../types';
 
 type BottlingSourceType = 'none' | 'barrel' | 'tank';
 
-const emptyRun = () => ({
+type RunHeaderForm = Omit<BottlingRunView, 'id' | 'created_at' | 'lines'>;
+
+const emptyLine = (): BottlingRunLineInput => ({
+  packaging_bottle: '',
+  bottle_size_ml: 750,
+  bottle_count: 0,
+});
+
+const emptyRun = (): RunHeaderForm => ({
   batch_number: generateBatchNumber('BT'),
-  source_barrel_id: null as number | null,
-  source_holding_tank_equipment_id: null as number | null,
-  source_volume_gal: null as number | null,
-  source_run_id: null as number | null,
+  source_barrel_id: null,
+  source_holding_tank_equipment_id: null,
+  source_volume_gal: null,
+  source_run_id: null,
   bottling_date: new Date().toISOString().slice(0, 10),
   packaging_bottle: '',
   bottle_size_ml: 750,
@@ -34,10 +49,21 @@ const emptyRun = () => ({
   notes: '',
 });
 
-function sourceTypeFromRun(run: ReturnType<typeof getBottlingRuns>[0]): BottlingSourceType {
+function sourceTypeFromRun(run: BottlingRunView): BottlingSourceType {
   if (run.source_holding_tank_equipment_id) return 'tank';
   if (run.source_barrel_id) return 'barrel';
   return 'none';
+}
+
+function linesFromRun(run: BottlingRunView): BottlingRunLineInput[] {
+  if (run.lines.length > 0) {
+    return run.lines.map((line) => ({
+      packaging_bottle: line.packaging_bottle,
+      bottle_size_ml: line.bottle_size_ml,
+      bottle_count: line.bottle_count,
+    }));
+  }
+  return [emptyLine()];
 }
 
 export function Bottling() {
@@ -48,7 +74,8 @@ export function Bottling() {
   const packagingInventory = getInventoryByCategory('packaging');
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<number | undefined>();
-  const [form, setForm] = useState(emptyRun());
+  const [form, setForm] = useState<RunHeaderForm>(emptyRun());
+  const [lines, setLines] = useState<BottlingRunLineInput[]>([emptyLine()]);
   const [sourceType, setSourceType] = useState<BottlingSourceType>('none');
 
   void key;
@@ -75,28 +102,50 @@ export function Bottling() {
     ? getHoldingTankContents(form.source_holding_tank_equipment_id, undefined, undefined, editId)
     : null;
 
-  const bottledGal = form.bottle_count > 0 && form.bottle_size_ml > 0
-    ? mlToGallons(form.bottle_count * form.bottle_size_ml)
-    : 0;
+  const plannedDrawGal = totalVolumeGal(lines);
+  const remainingGal = selectedTankAvailable != null
+    ? Math.max(0, selectedTankAvailable.volume_gal - plannedDrawGal)
+    : null;
 
-  const totalBottles = runs.reduce((s, r) => s + r.bottle_count, 0);
-  const totalVolume = runs.reduce((s, r) => s + mlToGallons(r.bottle_count * r.bottle_size_ml), 0);
+  const remainingBySku = useMemo(() => {
+    if (remainingGal == null || remainingGal <= 0) return [];
+    return PACKAGING_BOTTLES
+      .map((bottle) => ({
+        ...bottle,
+        maxCount: maxBottlesFromGallons(remainingGal, bottle.sizeMl),
+      }))
+      .filter((entry) => entry.maxCount > 0);
+  }, [remainingGal]);
+
+  const totalBottles = runs.reduce((sum, run) => sum + totalBottleCount(run.lines), 0);
+  const totalVolume = runs.reduce((sum, run) => sum + totalVolumeGal(run.lines), 0);
 
   const openNew = () => {
     setEditId(undefined);
     setForm(emptyRun());
+    setLines([emptyLine()]);
     setSourceType('none');
     setShowForm(true);
   };
 
-  const openEdit = (run: ReturnType<typeof getBottlingRuns>[0]) => {
+  const openEdit = (run: BottlingRunView) => {
     setEditId(run.id);
     setForm({
-      ...run,
-      packaging_bottle: run.packaging_bottle ?? '',
-      source_holding_tank_equipment_id: run.source_holding_tank_equipment_id ?? null,
-      source_volume_gal: run.source_volume_gal ?? null,
+      batch_number: run.batch_number,
+      source_barrel_id: run.source_barrel_id,
+      source_holding_tank_equipment_id: run.source_holding_tank_equipment_id,
+      source_volume_gal: run.source_volume_gal,
+      source_run_id: run.source_run_id,
+      bottling_date: run.bottling_date,
+      packaging_bottle: run.packaging_bottle,
+      bottle_size_ml: run.bottle_size_ml,
+      bottle_count: run.bottle_count,
+      final_abv: run.final_abv,
+      product_name: run.product_name,
+      lot_number: run.lot_number,
+      notes: run.notes,
     });
+    setLines(linesFromRun(run));
     setSourceType(sourceTypeFromRun(run));
     setShowForm(true);
   };
@@ -124,25 +173,35 @@ export function Bottling() {
     });
   };
 
-  const handlePackagingSelect = (name: string) => {
+  const updateLine = (index: number, patch: Partial<BottlingRunLineInput>) => {
+    setLines((prev) => prev.map((line, i) => (i === index ? { ...line, ...patch } : line)));
+  };
+
+  const handleLinePackagingSelect = (index: number, name: string) => {
     const bottle = packagingBottleByName(name);
-    setForm({
-      ...form,
+    updateLine(index, {
       packaging_bottle: name,
-      bottle_size_ml: bottle?.sizeMl ?? form.bottle_size_ml,
+      bottle_size_ml: bottle?.sizeMl ?? lines[index]?.bottle_size_ml ?? 750,
     });
   };
 
+  const addLine = () => setLines((prev) => [...prev, emptyLine()]);
+
+  const removeLine = (index: number) => {
+    setLines((prev) => (prev.length <= 1 ? [emptyLine()] : prev.filter((_, i) => i !== index)));
+  };
+
   const handleSave = () => {
+    const activeLines = lines.filter((line) => line.bottle_count > 0 && line.bottle_size_ml > 0);
+    if (activeLines.length === 0) {
+      alert('Add at least one packaging line with bottle count.');
+      return;
+    }
     if (sourceType === 'tank' && !form.source_holding_tank_equipment_id) {
       alert('Select the holding tank to bottle from.');
       return;
     }
-    if (sourceType === 'tank' && form.bottle_count <= 0) {
-      alert('Enter bottle count to calculate volume drawn from the tank.');
-      return;
-    }
-    if (sourceType === 'tank' && selectedTankAvailable && bottledGal > selectedTankAvailable.volume_gal + 0.01) {
+    if (sourceType === 'tank' && selectedTankAvailable && plannedDrawGal > selectedTankAvailable.volume_gal + 0.01) {
       alert(`Only ${selectedTankAvailable.volume_gal.toFixed(1)} gal available in that tank.`);
       return;
     }
@@ -151,7 +210,7 @@ export function Bottling() {
         ...form,
         source_barrel_id: sourceType === 'barrel' ? form.source_barrel_id : null,
         source_holding_tank_equipment_id: sourceType === 'tank' ? form.source_holding_tank_equipment_id : null,
-      }, editId);
+      }, activeLines, editId);
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Could not save bottling run.');
       return;
@@ -167,7 +226,7 @@ export function Bottling() {
     }
   };
 
-  const sourceLabel = (run: ReturnType<typeof getBottlingRuns>[0]) => {
+  const sourceLabel = (run: BottlingRunView) => {
     if (run.source_holding_tank_equipment_id) {
       const tank = holdingTanks.find((t) => t.id === run.source_holding_tank_equipment_id);
       const vol = run.source_volume_gal != null ? ` (${run.source_volume_gal.toFixed(1)} gal)` : '';
@@ -251,8 +310,8 @@ export function Bottling() {
                 <th>Packaging</th>
                 <th>Lot</th>
                 <th>Date</th>
-                <th>Bottle Size</th>
-                <th>Count</th>
+                <th>Bottles</th>
+                <th>Volume</th>
                 <th>ABV</th>
                 <th>Source</th>
                 <th></th>
@@ -263,11 +322,11 @@ export function Bottling() {
                 <tr key={r.id}>
                   <td><strong>{r.batch_number}</strong></td>
                   <td>{r.product_name}</td>
-                  <td>{r.packaging_bottle || '—'}</td>
+                  <td>{formatLinesSummary(r.lines)}</td>
                   <td>{r.lot_number}</td>
                   <td>{format(new Date(r.bottling_date), 'MMM d, yyyy')}</td>
-                  <td>{r.bottle_size_ml} ml</td>
-                  <td>{r.bottle_count.toLocaleString()}</td>
+                  <td>{totalBottleCount(r.lines).toLocaleString()}</td>
+                  <td>{totalVolumeGal(r.lines).toFixed(2)} gal</td>
                   <td>{r.final_abv}%</td>
                   <td>{sourceLabel(r)}</td>
                   <td className="td-actions">
@@ -291,18 +350,6 @@ export function Bottling() {
             <div className="form-group">
               <label>Product Name</label>
               <input value={form.product_name} onChange={(e) => setForm({ ...form, product_name: e.target.value })} />
-            </div>
-            <div className="form-group">
-              <label>Packaging Bottle</label>
-              <select
-                value={form.packaging_bottle}
-                onChange={(e) => handlePackagingSelect(e.target.value)}
-              >
-                <option value="">— Select packaging bottle —</option>
-                {PACKAGING_BOTTLES.map((b) => (
-                  <option key={b.name} value={b.name}>{b.name} ({b.sizeMl} ml)</option>
-                ))}
-              </select>
             </div>
             <div className="form-group">
               <label>Lot Number</label>
@@ -361,21 +408,89 @@ export function Bottling() {
                 {selectedTankAvailable && form.source_holding_tank_equipment_id && (
                   <p className="field-hint">
                     Available: {selectedTankAvailable.volume_gal.toFixed(1)} gal @ {selectedTankAvailable.abv.toFixed(1)}% ABV
-                    {bottledGal > 0 && (
-                      <> · This run will draw {bottledGal.toFixed(2)} gal</>
+                    {plannedDrawGal > 0 && (
+                      <> · This run will draw {plannedDrawGal.toFixed(2)} gal</>
+                    )}
+                    {remainingGal != null && plannedDrawGal > 0 && (
+                      <> · {remainingGal.toFixed(2)} gal left in tank</>
                     )}
                   </p>
                 )}
               </div>
             )}
-            <div className="form-group">
-              <label>Bottle Size (ml)</label>
-              <input type="number" value={form.bottle_size_ml || ''} onChange={(e) => setForm({ ...form, bottle_size_ml: parseInt(e.target.value) || 0 })} />
+
+            <div className="form-group full-width bottling-lines-section">
+              <div className="bottling-lines-header">
+                <label>Packaging lines</label>
+                <button type="button" className="btn btn-sm btn-secondary" onClick={addLine}>+ Add bottle size</button>
+              </div>
+              <p className="field-hint">Bottle different sizes from the same tank in one run.</p>
+              {lines.map((line, index) => {
+                const lineGal = lineVolumeGal(line);
+                return (
+                  <div key={index} className="bottling-line-row">
+                    <div className="form-group">
+                      <label>Packaging bottle</label>
+                      <select
+                        value={line.packaging_bottle}
+                        onChange={(e) => handleLinePackagingSelect(index, e.target.value)}
+                      >
+                        <option value="">— Select —</option>
+                        {PACKAGING_BOTTLES.map((b) => (
+                          <option key={b.name} value={b.name}>{b.name} ({b.sizeMl} ml)</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label>Size (ml)</label>
+                      <input
+                        type="number"
+                        value={line.bottle_size_ml || ''}
+                        onChange={(e) => updateLine(index, { bottle_size_ml: parseInt(e.target.value) || 0 })}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Count</label>
+                      <input
+                        type="number"
+                        value={line.bottle_count || ''}
+                        onChange={(e) => updateLine(index, { bottle_count: parseInt(e.target.value) || 0 })}
+                      />
+                    </div>
+                    <div className="form-group bottling-line-meta">
+                      {lineGal > 0 && (
+                        <span className="field-hint">{lineGal.toFixed(2)} gal</span>
+                      )}
+                      {lines.length > 1 && (
+                        <button type="button" className="btn btn-sm btn-ghost" onClick={() => removeLine(index)}>Remove</button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              {plannedDrawGal > 0 && (
+                <p className="field-hint">
+                  Total planned draw: {plannedDrawGal.toFixed(2)} gal ({totalBottleCount(lines).toLocaleString()} bottles)
+                </p>
+              )}
             </div>
-            <div className="form-group">
-              <label>Bottle Count</label>
-              <input type="number" value={form.bottle_count || ''} onChange={(e) => setForm({ ...form, bottle_count: parseInt(e.target.value) || 0 })} />
-            </div>
+
+            {sourceType === 'tank' && remainingGal != null && remainingGal > 0 && remainingBySku.length > 0 && (
+              <div className="form-group full-width bottling-remaining-panel">
+                <p className="bottling-remaining-title">
+                  Still available from tank ({remainingGal.toFixed(2)} gal remaining)
+                </p>
+                <ul className="bottling-remaining-list">
+                  {remainingBySku.map((entry) => (
+                    <li key={entry.name}>
+                      <strong>{entry.name}</strong> ({entry.sizeMl} ml): up to {entry.maxCount.toLocaleString()} bottles
+                    </li>
+                  ))}
+                </ul>
+                <p className="field-hint">Add another packaging line above to include a different bottle size.</p>
+              </div>
+            )}
+
             <div className="form-group">
               <label>Final ABV (%)</label>
               <input type="number" step="0.1" value={form.final_abv || ''} onChange={(e) => setForm({ ...form, final_abv: parseFloat(e.target.value) || 0 })} />

@@ -239,6 +239,25 @@ export interface BottlingRun {
   created_at: string;
 }
 
+export interface BottlingRunLine {
+  id: number;
+  bottling_run_id: number;
+  packaging_bottle: string;
+  bottle_size_ml: number;
+  bottle_count: number;
+  sort_order: number;
+}
+
+export interface BottlingRunLineInput {
+  packaging_bottle: string;
+  bottle_size_ml: number;
+  bottle_count: number;
+}
+
+export interface BottlingRunView extends BottlingRun {
+  lines: BottlingRunLine[];
+}
+
 export type BlendStatus = 'draft' | 'trial' | 'approved' | 'executed' | 'bottled';
 
 /** @deprecated Use executed — kept for legacy records */

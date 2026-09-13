@@ -11,6 +11,9 @@ import type {
   BlendSpiritSource,
   BlendSpiritSourceInput,
   BottlingRun,
+  BottlingRunLine,
+  BottlingRunLineInput,
+  BottlingRunView,
   CutType,
   DistillationCut,
   DistillationCutView,
@@ -1245,19 +1248,83 @@ export function deleteBarrel(id: number): void {
 
 // ── Bottling ───────────────────────────────────────────────
 
-export function getBottlingRuns(): BottlingRun[] {
-  return queryAll<BottlingRun>(
+function attachBottlingRunLines(runs: BottlingRun[]): BottlingRunView[] {
+  const allLines = queryAll<BottlingRunLine>(
+    'SELECT * FROM bottling_run_lines ORDER BY sort_order, id',
+  );
+  const linesByRun = new Map<number, BottlingRunLine[]>();
+  for (const line of allLines) {
+    const bucket = linesByRun.get(line.bottling_run_id) ?? [];
+    bucket.push(line);
+    linesByRun.set(line.bottling_run_id, bucket);
+  }
+  return runs.map((run) => {
+    const stored = linesByRun.get(run.id);
+    if (stored && stored.length > 0) {
+      return { ...run, lines: stored };
+    }
+    if (run.bottle_count > 0) {
+      return {
+        ...run,
+        lines: [{
+          id: 0,
+          bottling_run_id: run.id,
+          packaging_bottle: run.packaging_bottle,
+          bottle_size_ml: run.bottle_size_ml,
+          bottle_count: run.bottle_count,
+          sort_order: 0,
+        }],
+      };
+    }
+    return { ...run, lines: [] };
+  });
+}
+
+function persistBottlingRunLines(runId: number, lines: BottlingRunLineInput[]): void {
+  runQuery('DELETE FROM bottling_run_lines WHERE bottling_run_id = ?', [runId]);
+  lines.forEach((line, index) => {
+    if (line.bottle_count <= 0 || line.bottle_size_ml <= 0) return;
+    insertRow(
+      `INSERT INTO bottling_run_lines (bottling_run_id, packaging_bottle, bottle_size_ml, bottle_count, sort_order)
+       VALUES (?, ?, ?, ?, ?)`,
+      [runId, line.packaging_bottle, line.bottle_size_ml, line.bottle_count, index],
+    );
+  });
+}
+
+export function getBottlingRuns(): BottlingRunView[] {
+  const runs = queryAll<BottlingRun>(
     'SELECT * FROM bottling_runs ORDER BY bottling_date DESC',
+  );
+  return attachBottlingRunLines(runs);
+}
+
+export function getBottlingRunLines(bottlingRunId: number): BottlingRunLine[] {
+  return queryAll<BottlingRunLine>(
+    'SELECT * FROM bottling_run_lines WHERE bottling_run_id = ? ORDER BY sort_order, id',
+    [bottlingRunId],
   );
 }
 
-export function saveBottlingRun(run: Omit<BottlingRun, 'id' | 'created_at'>, id?: number): void {
+export function saveBottlingRun(
+  run: Omit<BottlingRun, 'id' | 'created_at'>,
+  lines: BottlingRunLineInput[],
+  id?: number,
+): void {
+  const activeLines = lines.filter((line) => line.bottle_count > 0 && line.bottle_size_ml > 0);
   const fromTank = run.source_holding_tank_equipment_id != null;
   const sourceBarrelId = fromTank ? null : run.source_barrel_id;
   const sourceTankId = fromTank ? run.source_holding_tank_equipment_id : null;
-  const sourceVolumeGal = fromTank && run.bottle_count > 0
-    ? mlToGallons(run.bottle_count * run.bottle_size_ml)
+  const totalCount = activeLines.reduce((sum, line) => sum + line.bottle_count, 0);
+  const sourceVolumeGal = fromTank && totalCount > 0
+    ? activeLines.reduce((sum, line) => sum + mlToGallons(line.bottle_count * line.bottle_size_ml), 0)
     : null;
+  const packagingSummary = activeLines.length === 1
+    ? activeLines[0].packaging_bottle
+    : activeLines.length > 1
+      ? 'Multiple'
+      : '';
+  const headerSizeMl = activeLines.length === 1 ? activeLines[0].bottle_size_ml : 0;
 
   if (fromTank && sourceTankId && sourceVolumeGal != null && sourceVolumeGal > 0) {
     const available = getHoldingTankContents(sourceTankId, undefined, undefined, id);
@@ -1266,16 +1333,26 @@ export function saveBottlingRun(run: Omit<BottlingRun, 'id' | 'created_at'>, id?
     }
   }
 
+  const header = {
+    ...run,
+    packaging_bottle: packagingSummary,
+    bottle_size_ml: headerSizeMl,
+    bottle_count: totalCount,
+    source_volume_gal: sourceVolumeGal,
+  };
+
   if (id) {
     runQuery(
       `UPDATE bottling_runs SET batch_number=?, source_barrel_id=?, source_holding_tank_equipment_id=?, source_volume_gal=?, source_run_id=?, bottling_date=?, packaging_bottle=?, bottle_size_ml=?, bottle_count=?, final_abv=?, product_name=?, lot_number=?, notes=? WHERE id=?`,
-      [run.batch_number, sourceBarrelId, sourceTankId, sourceVolumeGal, run.source_run_id, run.bottling_date, run.packaging_bottle, run.bottle_size_ml, run.bottle_count, run.final_abv, run.product_name, run.lot_number, run.notes, id],
+      [header.batch_number, sourceBarrelId, sourceTankId, header.source_volume_gal, header.source_run_id, header.bottling_date, header.packaging_bottle, header.bottle_size_ml, header.bottle_count, header.final_abv, header.product_name, header.lot_number, header.notes, id],
     );
+    persistBottlingRunLines(id, activeLines);
   } else {
-    insertRow(
+    id = insertRow(
       `INSERT INTO bottling_runs (batch_number, source_barrel_id, source_holding_tank_equipment_id, source_volume_gal, source_run_id, bottling_date, packaging_bottle, bottle_size_ml, bottle_count, final_abv, product_name, lot_number, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [run.batch_number, sourceBarrelId, sourceTankId, sourceVolumeGal, run.source_run_id, run.bottling_date, run.packaging_bottle, run.bottle_size_ml, run.bottle_count, run.final_abv, run.product_name, run.lot_number, run.notes],
+      [header.batch_number, sourceBarrelId, sourceTankId, header.source_volume_gal, header.source_run_id, header.bottling_date, header.packaging_bottle, header.bottle_size_ml, header.bottle_count, header.final_abv, header.product_name, header.lot_number, header.notes],
     );
+    persistBottlingRunLines(id, activeLines);
   }
   syncHoldingTankStatuses();
 }
@@ -1718,12 +1795,20 @@ export function getProductionSummary(reportMonth?: string): ProductionSummary {
 
   const bottlesThisMonth = reportMonth
     ? queryOne<{ total: number }>(
+      `SELECT COALESCE(SUM(l.bottle_count), 0) as total
+       FROM bottling_run_lines l
+       JOIN bottling_runs r ON r.id = l.bottling_run_id
+       WHERE strftime('%Y-%m', r.bottling_date) = ?`,
+      [reportMonth],
+    )?.total ?? queryOne<{ total: number }>(
       `SELECT COALESCE(SUM(bottle_count), 0) as total FROM bottling_runs
        WHERE strftime('%Y-%m', bottling_date) = ?`,
       [reportMonth],
     )?.total ?? 0
     : queryOne<{ total: number }>(
-      "SELECT COALESCE(SUM(bottle_count), 0) as total FROM bottling_runs",
+      'SELECT COALESCE(SUM(l.bottle_count), 0) as total FROM bottling_run_lines l',
+    )?.total ?? queryOne<{ total: number }>(
+      'SELECT COALESCE(SUM(bottle_count), 0) as total FROM bottling_runs',
     )?.total ?? 0;
 
   const lowStockItems = queryOne<{ count: number }>(

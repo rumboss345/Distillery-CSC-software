@@ -407,6 +407,7 @@ function runMigrations(): void {
   seedPackagingBottles();
   migratePackagingBottleColumn();
   migrateBottlingTankSourceColumns();
+  migrateBottlingRunLines();
   migrateFloorPlanPages();
   migrateAdvancedBlending();
   persistDb();
@@ -455,6 +456,30 @@ function migrateBottlingTankSourceColumns(): void {
     db.run(`ALTER TABLE bottling_runs ADD COLUMN source_volume_gal REAL`);
     persistDb();
   }
+}
+
+function migrateBottlingRunLines(): void {
+  if (!db) return;
+  db.run(`
+    CREATE TABLE IF NOT EXISTS bottling_run_lines (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      bottling_run_id INTEGER NOT NULL REFERENCES bottling_runs(id) ON DELETE CASCADE,
+      packaging_bottle TEXT NOT NULL DEFAULT '',
+      bottle_size_ml INTEGER NOT NULL DEFAULT 750,
+      bottle_count INTEGER NOT NULL DEFAULT 0,
+      sort_order INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+  db.run(`
+    CREATE INDEX IF NOT EXISTS idx_bottling_run_lines_run ON bottling_run_lines(bottling_run_id)
+  `);
+  db.run(`
+    INSERT INTO bottling_run_lines (bottling_run_id, packaging_bottle, bottle_size_ml, bottle_count, sort_order)
+    SELECT id, packaging_bottle, bottle_size_ml, bottle_count, 0
+    FROM bottling_runs
+    WHERE bottle_count > 0
+      AND id NOT IN (SELECT bottling_run_id FROM bottling_run_lines)
+  `);
 }
 
 function migrateFloorPlanPages(): void {
