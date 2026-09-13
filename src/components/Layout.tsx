@@ -5,14 +5,14 @@ import type { PermissionKey } from '../lib/permissions';
 const navItems: { to: string; label: string; icon: string; permission: PermissionKey }[] = [
   { to: '/', label: 'Dashboard', icon: '◈', permission: 'dashboard' },
   { to: '/calendar', label: 'Calendar', icon: '▧', permission: 'dashboard' },
+  { to: '/floor-plan', label: 'Equipment', icon: '▦', permission: 'equipment' },
   { to: '/wash', label: 'Wash & Ferment', icon: '◉', permission: 'wash' },
-  { to: '/recipes', label: 'Recipes', icon: '◎', permission: 'wash' },
   { to: '/distillation', label: 'Distillation', icon: '△', permission: 'distillation' },
   { to: '/blending', label: 'Blending', icon: '◆', permission: 'blending' },
   { to: '/barrels', label: 'Barrel Aging', icon: '▣', permission: 'barrels' },
   { to: '/bottling', label: 'Bottling', icon: '◇', permission: 'bottling' },
-  { to: '/floor-plan', label: 'Equipment', icon: '▦', permission: 'equipment' },
   { to: '/inventory', label: 'Inventory', icon: '☰', permission: 'inventory' },
+  { to: '/recipes', label: 'Recipes', icon: '◎', permission: 'wash' },
   { to: '/reports', label: 'Reports', icon: '▤', permission: 'reports' },
 ];
 
