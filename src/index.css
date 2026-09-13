@@ -1384,6 +1384,59 @@ tr:hover td {
   padding-left: 1.2rem;
 }
 
+.bottling-lines-section {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 1rem;
+  background: var(--bg-elevated);
+}
+
+.bottling-lines-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.35rem;
+}
+
+.bottling-line-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr auto;
+  gap: 0.75rem;
+  align-items: end;
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.bottling-line-row:first-of-type {
+  border-top: none;
+}
+
+.bottling-line-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+  min-width: 5rem;
+}
+
+.bottling-remaining-panel {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 0.85rem 1rem;
+  background: var(--bg-card);
+}
+
+.bottling-remaining-title {
+  margin: 0 0 0.5rem;
+  font-weight: 600;
+}
+
+.bottling-remaining-list {
+  margin: 0 0 0.5rem;
+  padding-left: 1.2rem;
+}
+
 .correct-batch-panel {
   margin-top: 1.5rem;
   padding: 1rem;

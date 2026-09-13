@@ -12,10 +12,11 @@ import {
   getHoldingTankTransfers,
   getAllFermentationLogs,
 } from '../db/queries';
+import { formatLinesSummary } from './bottling-lines';
 import type {
   Barrel,
   BlendProduct,
-  BottlingRun,
+  BottlingRunView,
   DistillationRun,
   FermentationLog,
   HoldingTankTransferView,
@@ -121,7 +122,7 @@ export interface CalendarProductionData {
   fermentationLogs: FermentationLog[];
   runs: DistillationRun[];
   barrels: Barrel[];
-  bottlings: BottlingRun[];
+  bottlings: BottlingRunView[];
   blends: BlendProduct[];
   transfers: HoldingTankTransferView[];
 }
@@ -306,7 +307,9 @@ export function buildCalendarEventsFromData(data: CalendarProductionData): Calen
       title: bottling.product_name || bottling.batch_number,
       status: 'complete',
       statusCategory: 'complete',
-      detail: `${bottling.bottle_count} bottles`,
+      detail: bottling.lines.length > 0
+        ? formatLinesSummary(bottling.lines)
+        : `${bottling.bottle_count} bottles`,
     });
   }
 
