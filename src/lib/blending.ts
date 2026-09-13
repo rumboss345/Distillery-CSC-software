@@ -1,6 +1,8 @@
 import type { BlendIngredientInput, BlendIngredientType } from '../types';
 import { ML_PER_GALLON } from '../types';
 
+export type MeasureMode = 'weight' | 'volume';
+
 export const BLEND_INGREDIENT_TYPES: { value: BlendIngredientType; label: string }[] = [
   { value: 'water', label: 'Proofing water' },
   { value: 'sugar', label: 'Sugar' },
@@ -10,13 +12,56 @@ export const BLEND_INGREDIENT_TYPES: { value: BlendIngredientType; label: string
   { value: 'other', label: 'Other additive' },
 ];
 
-export const INGREDIENT_UNITS: Record<BlendIngredientType, string[]> = {
-  water: ['gal', 'fl oz', 'ml'],
-  sugar: ['lbs', 'oz', 'ml'],
-  syrup: ['gal', 'fl oz', 'ml', 'lbs'],
-  flavoring: ['gal', 'fl oz', 'oz', 'ml'],
-  color: ['ml', 'fl oz', 'oz', 'gal'],
-  other: ['gal', 'lbs', 'oz', 'fl oz', 'ml', 'each'],
+export const WEIGHT_UNITS = ['lbs', 'oz', 'kg', 'g'] as const;
+export const VOLUME_UNITS = ['gal', 'fl oz', 'ml', 'l'] as const;
+
+/** Approximate bulk density for converting weight → liquid volume added. */
+const LBS_PER_GALLON: Record<BlendIngredientType, number> = {
+  water: 8.34,
+  sugar: 8.33,
+  syrup: 11.0,
+  flavoring: 8.34,
+  color: 8.34,
+  other: 8.34,
+};
+
+export interface MeasureRecommendation {
+  mode: MeasureMode;
+  label: string;
+  reason: string;
+}
+
+export const MEASURE_RECOMMENDATIONS: Record<BlendIngredientType, MeasureRecommendation> = {
+  water: {
+    mode: 'volume',
+    label: 'Measure by volume',
+    reason: 'Water is added with a flow meter, graduated tank, or measuring container.',
+  },
+  sugar: {
+    mode: 'weight',
+    label: 'Weigh on a scale',
+    reason: 'Dry sugar packs differently in cups — a scale gives consistent sweetness every batch.',
+  },
+  syrup: {
+    mode: 'weight',
+    label: 'Weigh on a scale',
+    reason: 'Thick syrup sticks to containers; weighing is more accurate than pouring to a line.',
+  },
+  flavoring: {
+    mode: 'volume',
+    label: 'Measure by volume',
+    reason: 'Liquid flavorings are usually dosed with beakers, pumps, or syringes.',
+  },
+  color: {
+    mode: 'volume',
+    label: 'Measure by volume',
+    reason: 'Colorants are added in small, precise liquid amounts.',
+  },
+  other: {
+    mode: 'volume',
+    label: 'Measure by volume',
+    reason: 'Use volume for liquids; switch to weight if you are adding a dry ingredient.',
+  },
 };
 
 export const BLEND_STATUSES = ['draft', 'trial', 'approved', 'executed', 'bottled'] as const;
@@ -27,8 +72,70 @@ export const BLEND_FORMULATION_PHASES = [
   { value: 'production', label: 'Production batch' },
 ] as const;
 
-export function ingredientVolumeGal(ingredient: Pick<BlendIngredientInput, 'amount' | 'unit'>): number {
-  const { amount, unit } = ingredient;
+/** @deprecated Prefer unitsForMeasureMode — kept for compatibility. */
+export const INGREDIENT_UNITS: Record<BlendIngredientType, string[]> = {
+  water: ['gal', 'fl oz', 'ml'],
+  sugar: ['lbs', 'oz', 'kg'],
+  syrup: ['lbs', 'oz', 'gal', 'ml'],
+  flavoring: ['gal', 'fl oz', 'ml', 'oz'],
+  color: ['ml', 'fl oz', 'oz'],
+  other: ['gal', 'lbs', 'oz', 'fl oz', 'ml', 'each'],
+};
+
+export function isWeightUnit(unit: string): boolean {
+  return WEIGHT_UNITS.includes(unit.toLowerCase() as typeof WEIGHT_UNITS[number]);
+}
+
+export function isVolumeUnit(unit: string): boolean {
+  const u = unit.toLowerCase();
+  return VOLUME_UNITS.includes(u as typeof VOLUME_UNITS[number]) || u === 'each';
+}
+
+export function inferMeasureMode(unit: string): MeasureMode {
+  if (isWeightUnit(unit)) return 'weight';
+  return 'volume';
+}
+
+export function recommendMeasureMode(type: BlendIngredientType): MeasureRecommendation {
+  return MEASURE_RECOMMENDATIONS[type];
+}
+
+export function unitsForMeasureMode(type: BlendIngredientType, mode: MeasureMode): string[] {
+  if (mode === 'weight') {
+    if (type === 'water') return ['lbs', 'oz', 'kg'];
+    if (type === 'color') return ['oz', 'g', 'lbs'];
+    return ['lbs', 'oz', 'kg', 'g'];
+  }
+  if (type === 'sugar') return ['gal', 'ml', 'fl oz'];
+  if (type === 'syrup') return ['gal', 'ml', 'fl oz'];
+  if (type === 'color') return ['ml', 'fl oz'];
+  return ['gal', 'fl oz', 'ml', 'l'];
+}
+
+export function defaultUnitForMode(type: BlendIngredientType, mode: MeasureMode): string {
+  const units = unitsForMeasureMode(type, mode);
+  const rec = recommendMeasureMode(type);
+  if (rec.mode === mode) return units[0];
+  return units[0];
+}
+
+export function toLbs(amount: number, unit: string): number {
+  if (amount <= 0) return 0;
+  switch (unit.toLowerCase()) {
+    case 'lbs':
+      return amount;
+    case 'oz':
+      return amount / 16;
+    case 'kg':
+      return amount * 2.20462;
+    case 'g':
+      return amount / 453.592;
+    default:
+      return 0;
+  }
+}
+
+export function toGallonsFromVolumeUnit(amount: number, unit: string): number {
   if (amount <= 0) return 0;
   switch (unit.toLowerCase()) {
     case 'gal':
@@ -43,6 +150,83 @@ export function ingredientVolumeGal(ingredient: Pick<BlendIngredientInput, 'amou
     default:
       return 0;
   }
+}
+
+export function ingredientWeightLbs(
+  ingredient: Pick<BlendIngredientInput, 'amount' | 'unit' | 'ingredient_type'>,
+): number {
+  if (isWeightUnit(ingredient.unit)) {
+    return toLbs(ingredient.amount, ingredient.unit);
+  }
+  const volGal = toGallonsFromVolumeUnit(ingredient.amount, ingredient.unit);
+  if (volGal <= 0) return 0;
+  return volGal * LBS_PER_GALLON[ingredient.ingredient_type];
+}
+
+export function ingredientVolumeGal(
+  ingredient: Pick<BlendIngredientInput, 'amount' | 'unit' | 'ingredient_type'>,
+): number {
+  const { amount, unit, ingredient_type } = ingredient;
+  if (amount <= 0) return 0;
+
+  if (isVolumeUnit(unit)) {
+    return toGallonsFromVolumeUnit(amount, unit);
+  }
+
+  if (isWeightUnit(unit)) {
+    const lbs = toLbs(amount, unit);
+    const lbsPerGal = LBS_PER_GALLON[ingredient_type] || 8.34;
+    return lbs / lbsPerGal;
+  }
+
+  return 0;
+}
+
+export interface MeasureAlternate {
+  amount: number;
+  unit: string;
+  label: string;
+}
+
+/** Show the equivalent in the other measure mode (e.g. lbs → gal). */
+export function measureAlternate(
+  ingredient: Pick<BlendIngredientInput, 'amount' | 'unit' | 'ingredient_type'>,
+): MeasureAlternate | null {
+  if (ingredient.amount <= 0) return null;
+
+  if (isWeightUnit(ingredient.unit)) {
+    const gal = ingredientVolumeGal(ingredient);
+    if (gal <= 0) return null;
+    const liters = gal * ML_PER_GALLON / 1000;
+    const galLabel = `≈ ${gal.toFixed(2)} gal added volume`;
+    const label = liters >= 1
+      ? `${galLabel} (${liters.toFixed(1)} L)`
+      : galLabel;
+    return { amount: Math.round(gal * 100) / 100, unit: 'gal', label };
+  }
+
+  if (isVolumeUnit(ingredient.unit)) {
+    const lbs = ingredientWeightLbs(ingredient);
+    if (lbs <= 0) return null;
+    if (lbs < 1) {
+      const oz = lbs * 16;
+      return { amount: Math.round(oz * 10) / 10, unit: 'oz', label: `≈ ${oz.toFixed(1)} oz by weight` };
+    }
+    return { amount: Math.round(lbs * 100) / 100, unit: 'lbs', label: `≈ ${lbs.toFixed(2)} lbs by weight` };
+  }
+
+  return null;
+}
+
+export function formatCorrectionWithAlternate(
+  amount: number,
+  unit: string,
+  ingredientType: BlendIngredientType,
+  baseInstruction: string,
+): string {
+  const alt = measureAlternate({ amount, unit, ingredient_type: ingredientType });
+  if (!alt) return baseInstruction;
+  return `${baseInstruction} (${alt.label})`;
 }
 
 export function computeBlendTotals(
@@ -64,5 +248,5 @@ export function computeBlendTotals(
 }
 
 export function defaultIngredientUnit(type: BlendIngredientType): string {
-  return INGREDIENT_UNITS[type][0];
+  return defaultUnitForMode(type, recommendMeasureMode(type).mode);
 }
