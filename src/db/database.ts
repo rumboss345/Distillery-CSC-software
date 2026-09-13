@@ -406,6 +406,7 @@ function runMigrations(): void {
 
   seedPackagingBottles();
   migratePackagingBottleColumn();
+  migrateBottlingTankSourceColumns();
   migrateFloorPlanPages();
   persistDb();
 }
@@ -433,6 +434,24 @@ function migratePackagingBottleColumn(): void {
   );
   if (!hasColumn) {
     db.run(`ALTER TABLE bottling_runs ADD COLUMN packaging_bottle TEXT NOT NULL DEFAULT ''`);
+    persistDb();
+  }
+}
+
+function migrateBottlingTankSourceColumns(): void {
+  if (!db) return;
+  const hasTank = queryOne<{ name: string }>(
+    "SELECT name FROM pragma_table_info('bottling_runs') WHERE name='source_holding_tank_equipment_id'",
+  );
+  if (!hasTank) {
+    db.run(`ALTER TABLE bottling_runs ADD COLUMN source_holding_tank_equipment_id INTEGER REFERENCES floor_equipment(id)`);
+    persistDb();
+  }
+  const hasVolume = queryOne<{ name: string }>(
+    "SELECT name FROM pragma_table_info('bottling_runs') WHERE name='source_volume_gal'",
+  );
+  if (!hasVolume) {
+    db.run(`ALTER TABLE bottling_runs ADD COLUMN source_volume_gal REAL`);
     persistDb();
   }
 }
