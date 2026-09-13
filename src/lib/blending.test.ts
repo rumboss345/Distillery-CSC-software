@@ -5,6 +5,11 @@ import {
   inferMeasureMode,
   measureAlternate,
   recommendMeasureMode,
+  spiritLbsPerGallon,
+  spiritMeasureAlternate,
+  spiritVolumeGalFromAmount,
+  spiritWeightLbsFromVolumeGal,
+  SPIRIT_MEASURE_RECOMMENDATION,
   toGallonsFromVolumeUnit,
   toLbs,
 } from './blending';
@@ -61,6 +66,29 @@ describe('inferMeasureMode', () => {
   it('infers from unit', () => {
     expect(inferMeasureMode('lbs')).toBe('weight');
     expect(inferMeasureMode('gal')).toBe('volume');
+  });
+});
+
+describe('spirit measurement', () => {
+  it('recommends volume for tank pulls', () => {
+    expect(SPIRIT_MEASURE_RECOMMENDATION.mode).toBe('volume');
+  });
+
+  it('converts spirit weight to volume using ABV-based density', () => {
+    const gal = spiritVolumeGalFromAmount(100, 'lbs', 40);
+    expect(gal).toBeGreaterThan(10);
+    expect(gal).toBeLessThan(20);
+  });
+
+  it('converts spirit volume to weight', () => {
+    const lbs = spiritWeightLbsFromVolumeGal(10, 40);
+    expect(lbs).toBeCloseTo(10 * spiritLbsPerGallon(40), 1);
+  });
+
+  it('shows alternate measure for spirit', () => {
+    const alt = spiritMeasureAlternate(10, 'gal', 40);
+    expect(alt).not.toBeNull();
+    expect(alt!.label).toContain('lbs');
   });
 });
 

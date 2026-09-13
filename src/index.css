@@ -1193,14 +1193,11 @@ tr:hover td {
   border-top: 1px solid var(--border-subtle);
 }
 
-.wizard-spirit-row {
+.wizard-spirit-amount-row {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr auto;
+  grid-template-columns: 1fr auto 1fr;
   gap: 0.75rem;
   align-items: end;
-  margin-bottom: 1rem;
-  padding-bottom: 1rem;
-  border-bottom: 1px dashed var(--border-subtle);
 }
 
 .wizard-row-remove {

@@ -18,10 +18,15 @@ import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
 import {
   BLEND_INGREDIENT_TYPES,
+  SPIRIT_MEASURE_RECOMMENDATION,
   defaultUnitForMode,
   inferMeasureMode,
   measureAlternate,
   recommendMeasureMode,
+  spiritMeasureAlternate,
+  spiritUnitsForMeasureMode,
+  spiritVolumeGalFromAmount,
+  spiritWeightLbsFromVolumeGal,
   unitsForMeasureMode,
   type MeasureMode,
 } from '../lib/blending';
@@ -53,7 +58,7 @@ const WIZARD_STEPS = [
 
 const STEP_HINTS: Record<number, string> = {
   1: 'Give your product a name and batch number so you can track it through production.',
-  2: 'Choose which holding tanks to pull spirit from and how many gallons to use from each.',
+  2: 'Choose holding tanks and how much spirit to pull — by the gallon (recommended) or by weight on a scale.',
   3: 'Enter the proof you want to bottle at. We can calculate how much water to add.',
   4: 'Add sweetener, flavorings, or color if this product needs them. Skip if not.',
   5: 'Check the expected yield before running a lab trial or going to production.',
@@ -74,11 +79,34 @@ const emptyIngredient = (type: BlendIngredientInput['ingredient_type'] = 'water'
   notes: '',
 });
 
-const emptySpiritSource = (): BlendSpiritSourceInput => ({
+interface SpiritSourceRow extends BlendSpiritSourceInput {
+  amount: number;
+  unit: string;
+}
+
+const emptySpiritSource = (): SpiritSourceRow => ({
   holding_tank_equipment_id: 0,
   volume_gal: 0,
   abv: 0,
+  amount: 0,
+  unit: 'gal',
 });
+
+function syncSpiritVolume(row: SpiritSourceRow): SpiritSourceRow {
+  return {
+    ...row,
+    volume_gal: spiritVolumeGalFromAmount(row.amount, row.unit, row.abv),
+  };
+}
+
+function toSpiritSourceInput(row: SpiritSourceRow): BlendSpiritSourceInput {
+  const synced = syncSpiritVolume(row);
+  return {
+    holding_tank_equipment_id: synced.holding_tank_equipment_id,
+    volume_gal: synced.volume_gal,
+    abv: synced.abv,
+  };
+}
 
 type FormulaForm = Omit<BlendProduct, 'id' | 'created_at' | 'executed_at'>;
 
@@ -108,8 +136,9 @@ const emptyProduct = (): FormulaForm => ({
   notes: '',
 });
 
-function toSpiritInputs(sources: BlendSpiritSourceInput[]): SpiritSourceInput[] {
+function toSpiritInputs(sources: SpiritSourceRow[]): SpiritSourceInput[] {
   return sources
+    .map(toSpiritSourceInput)
     .filter((s) => s.holding_tank_equipment_id > 0 && s.volume_gal > 0)
     .map((s) => ({ volumeGal: s.volume_gal, abv: s.abv }));
 }
@@ -185,7 +214,7 @@ function roundAmount(n: number) {
 function buildSavePayload(
   form: FormulaForm,
   formulation: ReturnType<typeof computeBlendFormulation>,
-  activeSources: BlendSpiritSourceInput[],
+  activeSources: SpiritSourceRow[],
   statusOverride?: FormulaForm['status'],
 ) {
   const primary = activeSources[0];
@@ -213,7 +242,7 @@ export function Blending() {
   const [wizardStep, setWizardStep] = useState(1);
   const [editId, setEditId] = useState<number | undefined>();
   const [form, setForm] = useState<FormulaForm>(emptyProduct());
-  const [spiritSources, setSpiritSources] = useState<BlendSpiritSourceInput[]>([emptySpiritSource()]);
+  const [spiritSources, setSpiritSources] = useState<SpiritSourceRow[]>([emptySpiritSource()]);
   const [ingredients, setIngredients] = useState<BlendIngredientInput[]>([]);
   const [showInventoryDetails, setShowInventoryDetails] = useState(false);
   const [correctionProof, setCorrectionProof] = useState(80);
@@ -226,9 +255,11 @@ export function Blending() {
   void key;
 
   const chargeableTanks = getChargeableHoldingTanksForBlend(editId);
-  const activeSources = spiritSources.filter((s) => s.holding_tank_equipment_id > 0 && s.volume_gal > 0);
+  const activeSources = spiritSources
+    .map(syncSpiritVolume)
+    .filter((s) => s.holding_tank_equipment_id > 0 && s.volume_gal > 0);
   const formulation = useMemo(
-    () => computeBlendFormulation(activeSources, ingredients, {
+    () => computeBlendFormulation(activeSources.map(toSpiritSourceInput), ingredients, {
       volume_gal: form.actual_volume_gal,
       abv: form.actual_abv,
       density: form.actual_density,
@@ -296,11 +327,15 @@ export function Blending() {
           holding_tank_equipment_id: s.holding_tank_equipment_id,
           volume_gal: s.volume_gal,
           abv: s.abv,
+          amount: s.volume_gal,
+          unit: 'gal',
         }))
         : [{
           holding_tank_equipment_id: blend.source_holding_tank_equipment_id,
           volume_gal: blend.base_spirit_volume_gal,
           abv: blend.base_spirit_abv,
+          amount: blend.base_spirit_volume_gal,
+          unit: 'gal',
         }],
     );
     const ings = getBlendIngredients(blend.id);
@@ -334,10 +369,10 @@ export function Blending() {
     return [...chargeableTanks, { ...saved, available_gal: contents.volume_gal, available_abv: contents.abv }];
   };
 
-  const updateSpiritSource = (index: number, patch: Partial<BlendSpiritSourceInput>) => {
+  const updateSpiritSource = (index: number, patch: Partial<SpiritSourceRow>) => {
     setSpiritSources((prev) => prev.map((src, i) => {
       if (i !== index) return src;
-      const next = { ...src, ...patch };
+      let next = { ...src, ...patch };
       if (patch.holding_tank_equipment_id) {
         const chargeable = chargeableTanks.find((t) => t.id === patch.holding_tank_equipment_id);
         if (chargeable) {
@@ -346,7 +381,23 @@ export function Blending() {
           next.abv = getHoldingTankContents(patch.holding_tank_equipment_id, undefined, editId).abv;
         }
       }
-      return next;
+      if (patch.abv != null && patch.abv !== src.abv && !patch.amount) {
+        // Re-sync volume when ABV changes and user is weighing spirit
+        next = syncSpiritVolume(next);
+      }
+      return syncSpiritVolume(next);
+    }));
+  };
+
+  const setSpiritMeasureMode = (index: number, mode: MeasureMode) => {
+    setSpiritSources((prev) => prev.map((src, i) => {
+      if (i !== index) return src;
+      const synced = syncSpiritVolume(src);
+      if (mode === 'volume') {
+        return { ...synced, unit: 'gal', amount: synced.volume_gal };
+      }
+      const lbs = spiritWeightLbsFromVolumeGal(synced.volume_gal, synced.abv);
+      return syncSpiritVolume({ ...synced, unit: 'lbs', amount: lbs });
     }));
   };
 
@@ -420,7 +471,7 @@ export function Blending() {
     const payload = buildSavePayload(form, formulation, activeSources, statusOverride);
     return saveBlendFormula(
       payload,
-      activeSources,
+      activeSources.map(toSpiritSourceInput),
       ingredients.filter((i) => i.amount > 0 || i.name.trim()),
       editId,
     );
@@ -628,45 +679,95 @@ export function Blending() {
       case 2:
         return (
           <>
-            {spiritSources.map((src, index) => (
-              <div key={index} className="wizard-spirit-row">
-                <div className="form-group">
-                  <label>Holding tank</label>
-                  <select
-                    value={src.holding_tank_equipment_id || ''}
-                    onChange={(e) => updateSpiritSource(index, { holding_tank_equipment_id: parseInt(e.target.value) })}
-                  >
-                    <option value="">— Choose a tank —</option>
-                    {tankOptionsFor(src.holding_tank_equipment_id).map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name} — {t.available_gal.toFixed(1)} gal available @ {t.available_abv.toFixed(1)}%
-                      </option>
-                    ))}
-                  </select>
+            {spiritSources.map((src, index) => {
+              const synced = syncSpiritVolume(src);
+              const measureMode = inferMeasureMode(src.unit);
+              const alternate = src.amount > 0 && src.abv > 0
+                ? spiritMeasureAlternate(src.amount, src.unit, src.abv)
+                : null;
+              const unitOptions = spiritUnitsForMeasureMode(measureMode);
+              return (
+                <div key={index} className="wizard-additive-card">
+                  <div className="form-group">
+                    <label>Holding tank</label>
+                    <select
+                      value={src.holding_tank_equipment_id || ''}
+                      onChange={(e) => updateSpiritSource(index, { holding_tank_equipment_id: parseInt(e.target.value) })}
+                    >
+                      <option value="">— Choose a tank —</option>
+                      {tankOptionsFor(src.holding_tank_equipment_id).map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name} — {t.available_gal.toFixed(1)} gal available @ {t.available_abv.toFixed(1)}%
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="measure-mode-toggle">
+                    <span className="measure-mode-label">How will you measure the pull?</span>
+                    <div className="measure-mode-buttons">
+                      <button
+                        type="button"
+                        className={`btn btn-sm ${measureMode === 'weight' ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => setSpiritMeasureMode(index, 'weight')}
+                      >
+                        Weight (scale)
+                      </button>
+                      <button
+                        type="button"
+                        className={`btn btn-sm ${measureMode === 'volume' ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => setSpiritMeasureMode(index, 'volume')}
+                      >
+                        Volume (gallons)
+                        {SPIRIT_MEASURE_RECOMMENDATION.mode === 'volume' && (
+                          <span className="measure-best-tag">Best</span>
+                        )}
+                      </button>
+                    </div>
+                    <p className="measure-tip">{SPIRIT_MEASURE_RECOMMENDATION.reason}</p>
+                  </div>
+                  <div className="wizard-spirit-amount-row">
+                    <div className="form-group">
+                      <label>Amount to pull</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={src.amount || ''}
+                        onChange={(e) => updateSpiritSource(index, { amount: parseFloat(e.target.value) || 0 })}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Unit</label>
+                      <select
+                        value={src.unit}
+                        onChange={(e) => updateSpiritSource(index, { unit: e.target.value })}
+                      >
+                        {unitOptions.map((u) => (
+                          <option key={u} value={u}>{u}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label>Proof (ABV %)</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={src.abv || ''}
+                        onChange={(e) => updateSpiritSource(index, { abv: parseFloat(e.target.value) || 0 })}
+                      />
+                    </div>
+                  </div>
+                  {synced.volume_gal > 0 && (
+                    <p className="measure-alt">
+                      Tank ledger will record <strong>{synced.volume_gal.toFixed(2)} gal</strong>
+                      {alternate ? ` (${alternate.label})` : ''}
+                    </p>
+                  )}
+                  {spiritSources.length > 1 && (
+                    <button type="button" className="btn btn-sm btn-ghost" onClick={() => removeSpiritSource(index)}>Remove this tank</button>
+                  )}
                 </div>
-                <div className="form-group">
-                  <label>Gallons to use</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={src.volume_gal || ''}
-                    onChange={(e) => updateSpiritSource(index, { volume_gal: parseFloat(e.target.value) || 0 })}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Proof (ABV %)</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={src.abv || ''}
-                    onChange={(e) => updateSpiritSource(index, { abv: parseFloat(e.target.value) || 0 })}
-                  />
-                </div>
-                {spiritSources.length > 1 && (
-                  <button type="button" className="btn btn-sm btn-ghost wizard-row-remove" onClick={() => removeSpiritSource(index)}>Remove</button>
-                )}
-              </div>
-            ))}
+              );
+            })}
             <button type="button" className="btn btn-sm btn-secondary" onClick={addSpiritSource}>+ Pull from another tank</button>
           </>
         );
@@ -827,8 +928,12 @@ export function Blending() {
               <ul>
                 {activeSources.map((s, i) => {
                   const tank = getHoldingTanks().find((t) => t.id === s.holding_tank_equipment_id);
+                  const alt = s.amount > 0 ? spiritMeasureAlternate(s.amount, s.unit, s.abv) : null;
                   return (
-                    <li key={i}>{s.volume_gal.toFixed(1)} gal from {tank?.name ?? 'tank'} @ {s.abv.toFixed(1)}%</li>
+                    <li key={i}>
+                      {s.amount > 0 ? `${s.amount} ${s.unit}` : `${s.volume_gal.toFixed(1)} gal`} from {tank?.name ?? 'tank'} @ {s.abv.toFixed(1)}%
+                      {alt ? ` — ${alt.label}` : ''}
+                    </li>
                   );
                 })}
               </ul>
@@ -920,7 +1025,8 @@ export function Blending() {
               <li>{formulation.theoretical.volumeGal.toFixed(1)} gal expected yield @ {formulation.theoretical.abv.toFixed(1)}% ABV</li>
               {activeSources.map((s, i) => {
                 const tank = getHoldingTanks().find((t) => t.id === s.holding_tank_equipment_id);
-                return <li key={i}>Pull {s.volume_gal.toFixed(1)} gal from {tank?.name}</li>;
+                const entered = s.amount > 0 ? `${s.amount} ${s.unit}` : `${s.volume_gal.toFixed(1)} gal`;
+                return <li key={i}>Pull {entered} ({s.volume_gal.toFixed(2)} gal) from {tank?.name}</li>;
               })}
             </ul>
             <button type="button" className="btn btn-accent btn-lg" onClick={handleProduce}>

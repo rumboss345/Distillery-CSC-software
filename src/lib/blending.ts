@@ -31,6 +31,12 @@ export interface MeasureRecommendation {
   reason: string;
 }
 
+export const SPIRIT_MEASURE_RECOMMENDATION: MeasureRecommendation = {
+  mode: 'volume',
+  label: 'Measure by volume',
+  reason: 'Spirit in holding tanks is tracked by the gallon — use tank gauges, sight glasses, or a flow meter.',
+};
+
 export const MEASURE_RECOMMENDATIONS: Record<BlendIngredientType, MeasureRecommendation> = {
   water: {
     mode: 'volume',
@@ -110,6 +116,79 @@ export function unitsForMeasureMode(type: BlendIngredientType, mode: MeasureMode
   if (type === 'syrup') return ['gal', 'ml', 'fl oz'];
   if (type === 'color') return ['ml', 'fl oz'];
   return ['gal', 'fl oz', 'ml', 'l'];
+}
+
+export function spiritUnitsForMeasureMode(mode: MeasureMode): string[] {
+  return mode === 'weight' ? ['lbs', 'oz', 'kg'] : ['gal', 'fl oz', 'ml', 'l'];
+}
+
+export function spiritDefaultUnit(mode: MeasureMode): string {
+  return spiritUnitsForMeasureMode(mode)[0];
+}
+
+/** Approximate spirit density (g/ml) from ABV — valid for unsugared spirits. */
+export function spiritDensityGPerMl(abv: number): number {
+  return 0.79 + abv * 0.0011;
+}
+
+export function spiritLbsPerGallon(abv: number): number {
+  if (abv <= 0) return 8.34;
+  return spiritDensityGPerMl(abv) * ML_PER_GALLON / 453.592;
+}
+
+export function spiritVolumeGalFromAmount(amount: number, unit: string, abv: number): number {
+  if (amount <= 0) return 0;
+  if (isVolumeUnit(unit)) return toGallonsFromVolumeUnit(amount, unit);
+  if (isWeightUnit(unit)) {
+    const lbs = toLbs(amount, unit);
+    const lbsPerGal = spiritLbsPerGallon(abv);
+    return lbsPerGal > 0 ? lbs / lbsPerGal : 0;
+  }
+  return 0;
+}
+
+export function spiritWeightLbsFromVolumeGal(volumeGal: number, abv: number): number {
+  if (volumeGal <= 0) return 0;
+  return volumeGal * spiritLbsPerGallon(abv);
+}
+
+export function spiritMeasureAlternate(amount: number, unit: string, abv: number): MeasureAlternate | null {
+  if (amount <= 0 || abv <= 0) return null;
+
+  if (isWeightUnit(unit)) {
+    const gal = spiritVolumeGalFromAmount(amount, unit, abv);
+    if (gal <= 0) return null;
+    const liters = gal * ML_PER_GALLON / 1000;
+    const galLabel = `≈ ${gal.toFixed(2)} gal at ${abv.toFixed(1)}% ABV`;
+    const label = liters >= 1 ? `${galLabel} (${liters.toFixed(1)} L)` : galLabel;
+    return { amount: Math.round(gal * 100) / 100, unit: 'gal', label };
+  }
+
+  if (isVolumeUnit(unit)) {
+    const gal = toGallonsFromVolumeUnit(amount, unit);
+    const lbs = spiritWeightLbsFromVolumeGal(gal, abv);
+    if (lbs <= 0) return null;
+    if (lbs < 1) {
+      const oz = lbs * 16;
+      return { amount: Math.round(oz * 10) / 10, unit: 'oz', label: `≈ ${oz.toFixed(1)} oz on a scale` };
+    }
+    return { amount: Math.round(lbs * 100) / 100, unit: 'lbs', label: `≈ ${lbs.toFixed(2)} lbs on a scale` };
+  }
+
+  return null;
+}
+
+export function formatSpiritCorrectionWithAlternate(
+  amountGal: number,
+  abv: number,
+  baseInstruction: string,
+): string {
+  const lbs = spiritWeightLbsFromVolumeGal(amountGal, abv);
+  if (lbs <= 0) return baseInstruction;
+  const weightNote = lbs >= 1
+    ? `≈ ${lbs.toFixed(2)} lbs on a scale`
+    : `≈ ${(lbs * 16).toFixed(1)} oz on a scale`;
+  return `${baseInstruction} (${weightNote})`;
 }
 
 export function defaultUnitForMode(type: BlendIngredientType, mode: MeasureMode): string {
