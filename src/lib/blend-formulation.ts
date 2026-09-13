@@ -1,4 +1,9 @@
-import { formatCorrectionWithAlternate, ingredientVolumeGal, toLbs } from './blending';
+import {
+  formatCorrectionWithAlternate,
+  formatSpiritCorrectionWithAlternate,
+  ingredientVolumeGal,
+  toLbs,
+} from './blending';
 import type { BlendIngredientType } from '../types';
 
 export interface SpiritSourceInput {
@@ -306,7 +311,11 @@ export function computeBatchCorrection(
         amount: spiritGal,
         unit: 'gal',
         label: `High-proof spirit (${spiritProof}% ABV)`,
-        instruction: `Add ${spiritGal.toFixed(2)} gallons of ${spiritProof}% spirit to raise ABV from ${measuredAbv.toFixed(1)}% up to about ${workingAbv.toFixed(1)}%.`,
+        instruction: formatSpiritCorrectionWithAlternate(
+          spiritGal,
+          spiritProof,
+          `Add ${spiritGal.toFixed(2)} gallons of ${spiritProof}% spirit to raise ABV from ${measuredAbv.toFixed(1)}% up to about ${workingAbv.toFixed(1)}%.`,
+        ),
         projectedAbv: workingAbv,
         projectedBrix: workingBrix,
       });
