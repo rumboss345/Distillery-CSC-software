@@ -305,8 +305,20 @@ export function Distillation() {
     }
   };
 
+  const cutFormHasVolumeAndAbv =
+    cutForm.volume_gal > 0 && Number.isFinite(cutForm.volume_gal)
+    && cutForm.abv > 0 && Number.isFinite(cutForm.abv);
+
   const handleAddCut = () => {
     if (!selectedRunId) return;
+    if (cutForm.volume_gal <= 0 || !Number.isFinite(cutForm.volume_gal)) {
+      alert('Enter the cut volume (gal) before adding a cut.');
+      return;
+    }
+    if (cutForm.abv <= 0 || !Number.isFinite(cutForm.abv)) {
+      alert('Enter the cut ABV (%) before adding a cut.');
+      return;
+    }
     if (cutForm.cut_type === 'heads' && hasHeadsCut) {
       alert('Heads can only be recorded once per run.');
       return;
@@ -979,12 +991,26 @@ export function Distillation() {
               <input type="datetime-local" value={cutForm.end_time} onChange={(e) => setCutForm({ ...cutForm, end_time: e.target.value })} />
             </div>
             <div className="form-group">
-              <label>Volume (gal)</label>
-              <input type="number" step="0.1" value={cutForm.volume_gal || ''} onChange={(e) => setCutForm({ ...cutForm, volume_gal: parseFloat(e.target.value) || 0 })} />
+              <label>Volume (gal) *</label>
+              <input
+                type="number"
+                step="0.1"
+                min="0.1"
+                required
+                value={cutForm.volume_gal || ''}
+                onChange={(e) => setCutForm({ ...cutForm, volume_gal: parseFloat(e.target.value) || 0 })}
+              />
             </div>
             <div className="form-group">
-              <label>ABV (%)</label>
-              <input type="number" step="0.1" value={cutForm.abv || ''} onChange={(e) => setCutForm({ ...cutForm, abv: parseFloat(e.target.value) || 0 })} />
+              <label>ABV (%) *</label>
+              <input
+                type="number"
+                step="0.1"
+                min="0.1"
+                required
+                value={cutForm.abv || ''}
+                onChange={(e) => setCutForm({ ...cutForm, abv: parseFloat(e.target.value) || 0 })}
+              />
             </div>
             <div className="form-group full-width">
               <label>Notes</label>
@@ -997,7 +1023,13 @@ export function Distillation() {
           </p>
           <div className="form-actions">
             <button className="btn btn-secondary" onClick={() => setShowCutForm(false)}>Cancel</button>
-            <button className="btn btn-primary" onClick={handleAddCut}>Add Cut</button>
+            <button
+              className="btn btn-primary"
+              onClick={handleAddCut}
+              disabled={!cutFormHasVolumeAndAbv}
+            >
+              Add Cut
+            </button>
           </div>
         </Modal>
       )}
