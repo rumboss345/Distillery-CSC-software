@@ -4,6 +4,7 @@ import type { PermissionKey } from '../lib/permissions';
 
 const navItems: { to: string; label: string; icon: string; permission: PermissionKey }[] = [
   { to: '/', label: 'Dashboard', icon: '◈', permission: 'dashboard' },
+  { to: '/calendar', label: 'Calendar', icon: '▧', permission: 'dashboard' },
   { to: '/wash', label: 'Wash & Ferment', icon: '◉', permission: 'wash' },
   { to: '/recipes', label: 'Recipes', icon: '◎', permission: 'wash' },
   { to: '/distillation', label: 'Distillation', icon: '△', permission: 'distillation' },

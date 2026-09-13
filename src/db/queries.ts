@@ -818,6 +818,12 @@ export function deleteMashBatch(id: number): void {
   runQuery('DELETE FROM mash_batches WHERE id = ?', [id]);
 }
 
+export function getAllFermentationLogs(): FermentationLog[] {
+  return queryAll<FermentationLog>(
+    'SELECT * FROM fermentation_logs ORDER BY logged_at ASC',
+  );
+}
+
 export function getFermentationLogs(
   mashBatchId: number,
   floorEquipmentId?: number | null,

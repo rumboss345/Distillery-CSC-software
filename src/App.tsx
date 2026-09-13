@@ -11,6 +11,7 @@ import { Bottling } from './pages/Bottling';
 import { Blending } from './pages/Blending';
 import { Inventory } from './pages/Inventory';
 import { Reports } from './pages/Reports';
+import { Calendar } from './pages/Calendar';
 import { FloorPlanPage } from './pages/FloorPlan';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
@@ -47,6 +48,7 @@ function AppContent() {
         <Route element={<RequirePermission />}>
           <Route element={<Layout />}>
             <Route path="/" element={<Dashboard />} />
+            <Route path="/calendar" element={<Calendar />} />
             <Route path="/wash" element={<MashFermentation />} />
             <Route path="/mash" element={<Navigate to="/wash" replace />} />
             <Route path="/recipes" element={<Recipes />} />
