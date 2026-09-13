@@ -239,9 +239,14 @@ export interface BottlingRun {
   created_at: string;
 }
 
-export type BlendStatus = 'draft' | 'blended' | 'bottled';
+export type BlendStatus = 'draft' | 'trial' | 'approved' | 'executed' | 'bottled';
 
-export type BlendIngredientType = 'water' | 'sugar' | 'flavoring' | 'other';
+/** @deprecated Use executed — kept for legacy records */
+export type LegacyBlendStatus = 'blended';
+
+export type BlendFormulationPhase = 'theoretical' | 'trial' | 'production';
+
+export type BlendIngredientType = 'water' | 'sugar' | 'syrup' | 'flavoring' | 'color' | 'other';
 
 export interface BlendProduct {
   id: number;
@@ -252,11 +257,34 @@ export interface BlendProduct {
   base_spirit_abv: number;
   blend_date: string;
   target_abv: number | null;
+  target_brix: number | null;
+  scale_factor: number;
+  formula_version: number;
+  formulation_phase: BlendFormulationPhase;
   final_volume_gal: number;
   final_abv: number;
-  status: BlendStatus;
+  theoretical_volume_gal: number | null;
+  theoretical_abv: number | null;
+  theoretical_density: number | null;
+  theoretical_brix: number | null;
+  actual_volume_gal: number | null;
+  actual_abv: number | null;
+  actual_density: number | null;
+  actual_brix: number | null;
+  status: BlendStatus | LegacyBlendStatus;
+  executed_at: string | null;
   notes: string;
   created_at: string;
+}
+
+export interface BlendSpiritSource {
+  id: number;
+  blend_product_id: number;
+  holding_tank_equipment_id: number;
+  volume_gal: number;
+  abv: number;
+  sort_order: number;
+  tank_name?: string;
 }
 
 export interface BlendIngredient {
@@ -266,6 +294,9 @@ export interface BlendIngredient {
   name: string;
   amount: number;
   unit: string;
+  cost_per_unit: number | null;
+  lot_number: string;
+  inventory_item_id: number | null;
   notes: string;
 }
 
@@ -278,7 +309,25 @@ export interface BlendIngredientInput {
   name: string;
   amount: number;
   unit: string;
+  cost_per_unit?: number | null;
+  lot_number?: string;
+  inventory_item_id?: number | null;
   notes: string;
+}
+
+export interface BlendSpiritSourceInput {
+  holding_tank_equipment_id: number;
+  volume_gal: number;
+  abv: number;
+}
+
+export interface BlendFormulaVersion {
+  id: number;
+  blend_product_id: number;
+  version_number: number;
+  snapshot_json: string;
+  notes: string;
+  created_at: string;
 }
 
 export interface ProductionSummary {

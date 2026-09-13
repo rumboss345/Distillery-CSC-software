@@ -135,11 +135,33 @@ CREATE TABLE IF NOT EXISTS blend_products (
   base_spirit_abv REAL NOT NULL DEFAULT 0,
   blend_date TEXT NOT NULL,
   target_abv REAL,
+  target_brix REAL,
+  scale_factor REAL NOT NULL DEFAULT 1,
+  formula_version INTEGER NOT NULL DEFAULT 1,
+  formulation_phase TEXT NOT NULL DEFAULT 'theoretical',
   final_volume_gal REAL NOT NULL DEFAULT 0,
   final_abv REAL NOT NULL DEFAULT 0,
+  theoretical_volume_gal REAL,
+  theoretical_abv REAL,
+  theoretical_density REAL,
+  theoretical_brix REAL,
+  actual_volume_gal REAL,
+  actual_abv REAL,
+  actual_density REAL,
+  actual_brix REAL,
   status TEXT NOT NULL DEFAULT 'draft',
+  executed_at TEXT,
   notes TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS blend_spirit_sources (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  blend_product_id INTEGER NOT NULL REFERENCES blend_products(id) ON DELETE CASCADE,
+  holding_tank_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
+  volume_gal REAL NOT NULL DEFAULT 0,
+  abv REAL NOT NULL DEFAULT 0,
+  sort_order INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS blend_ingredients (
@@ -149,11 +171,26 @@ CREATE TABLE IF NOT EXISTS blend_ingredients (
   name TEXT NOT NULL DEFAULT '',
   amount REAL NOT NULL DEFAULT 0,
   unit TEXT NOT NULL DEFAULT 'gal',
+  cost_per_unit REAL,
+  lot_number TEXT NOT NULL DEFAULT '',
+  inventory_item_id INTEGER REFERENCES inventory_items(id),
   notes TEXT NOT NULL DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS blend_formula_versions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  blend_product_id INTEGER NOT NULL REFERENCES blend_products(id) ON DELETE CASCADE,
+  version_number INTEGER NOT NULL,
+  snapshot_json TEXT NOT NULL,
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_blend_products_tank ON blend_products(source_holding_tank_equipment_id);
+CREATE INDEX IF NOT EXISTS idx_blend_spirit_sources_product ON blend_spirit_sources(blend_product_id);
+CREATE INDEX IF NOT EXISTS idx_blend_spirit_sources_tank ON blend_spirit_sources(holding_tank_equipment_id);
 CREATE INDEX IF NOT EXISTS idx_blend_ingredients_product ON blend_ingredients(blend_product_id);
+CREATE INDEX IF NOT EXISTS idx_blend_formula_versions_product ON blend_formula_versions(blend_product_id);
 
 CREATE TABLE IF NOT EXISTS holding_tank_transfers (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

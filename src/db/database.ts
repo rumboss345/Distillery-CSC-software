@@ -408,6 +408,7 @@ function runMigrations(): void {
   migratePackagingBottleColumn();
   migrateBottlingTankSourceColumns();
   migrateFloorPlanPages();
+  migrateAdvancedBlending();
   persistDb();
 }
 
@@ -466,6 +467,93 @@ function migrateFloorPlanPages(): void {
         (2, 'Outside', 160, 120, 'Outdoor equipment area')
     `);
   }
+}
+
+function migrateAdvancedBlending(): void {
+  if (!db) return;
+
+  const blendColumns: [string, string][] = [
+    ['target_brix', 'REAL'],
+    ['scale_factor', 'REAL NOT NULL DEFAULT 1'],
+    ['formula_version', 'INTEGER NOT NULL DEFAULT 1'],
+    ['formulation_phase', "TEXT NOT NULL DEFAULT 'theoretical'"],
+    ['theoretical_volume_gal', 'REAL'],
+    ['theoretical_abv', 'REAL'],
+    ['theoretical_density', 'REAL'],
+    ['theoretical_brix', 'REAL'],
+    ['actual_volume_gal', 'REAL'],
+    ['actual_abv', 'REAL'],
+    ['actual_density', 'REAL'],
+    ['actual_brix', 'REAL'],
+    ['executed_at', 'TEXT'],
+  ];
+  for (const [name, def] of blendColumns) {
+    const has = queryOne<{ name: string }>(
+      `SELECT name FROM pragma_table_info('blend_products') WHERE name=?`,
+      [name],
+    );
+    if (!has) {
+      db.run(`ALTER TABLE blend_products ADD COLUMN ${name} ${def}`);
+    }
+  }
+
+  const ingredientColumns: [string, string][] = [
+    ['cost_per_unit', 'REAL'],
+    ['lot_number', "TEXT NOT NULL DEFAULT ''"],
+    ['inventory_item_id', 'INTEGER REFERENCES inventory_items(id)'],
+  ];
+  for (const [name, def] of ingredientColumns) {
+    const has = queryOne<{ name: string }>(
+      `SELECT name FROM pragma_table_info('blend_ingredients') WHERE name=?`,
+      [name],
+    );
+    if (!has) {
+      db.run(`ALTER TABLE blend_ingredients ADD COLUMN ${name} ${def}`);
+    }
+  }
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS blend_spirit_sources (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      blend_product_id INTEGER NOT NULL REFERENCES blend_products(id) ON DELETE CASCADE,
+      holding_tank_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
+      volume_gal REAL NOT NULL DEFAULT 0,
+      abv REAL NOT NULL DEFAULT 0,
+      sort_order INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+  db.run(`
+    CREATE INDEX IF NOT EXISTS idx_blend_spirit_sources_product ON blend_spirit_sources(blend_product_id)
+  `);
+  db.run(`
+    CREATE INDEX IF NOT EXISTS idx_blend_spirit_sources_tank ON blend_spirit_sources(holding_tank_equipment_id)
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS blend_formula_versions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      blend_product_id INTEGER NOT NULL REFERENCES blend_products(id) ON DELETE CASCADE,
+      version_number INTEGER NOT NULL,
+      snapshot_json TEXT NOT NULL,
+      notes TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  db.run(`
+    CREATE INDEX IF NOT EXISTS idx_blend_formula_versions_product ON blend_formula_versions(blend_product_id)
+  `);
+
+  db.run(`
+    INSERT INTO blend_spirit_sources (blend_product_id, holding_tank_equipment_id, volume_gal, abv, sort_order)
+    SELECT id, source_holding_tank_equipment_id, base_spirit_volume_gal, base_spirit_abv, 0
+    FROM blend_products
+    WHERE base_spirit_volume_gal > 0
+      AND id NOT IN (SELECT blend_product_id FROM blend_spirit_sources)
+  `);
+
+  db.run(`
+    UPDATE blend_products SET status = 'executed' WHERE status = 'blended'
+  `);
 }
 
 const DB_STORAGE_KEY = 'distillery-tracker-db-v5';
