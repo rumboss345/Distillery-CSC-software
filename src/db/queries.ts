@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { isFermenterSourcedRun, isTankSourcedRun } from '../lib/distillation-run-types';
 import { initDatabase, clearAllData } from './database';
 import type {
   Barrel,
@@ -15,6 +16,7 @@ import type {
   HoldingTankTransfer,
   HoldingTankTransferView,
   DistillationRun,
+  DistillationRunType,
   DistillationRunView,
   FermentationLog,
   FermentationLogView,
@@ -444,6 +446,21 @@ export function defaultHighWinesTankId(excludeTankId?: number | null): number | 
   return preferred?.id ?? tanks[0]?.id ?? null;
 }
 
+export function defaultHeavyRumTankId(excludeTankId?: number | null): number | null {
+  const tanks = getHighWinesDestinationTanks(excludeTankId);
+  const preferred = tanks.find((t) => t.name.toLowerCase().includes('heavy rum'));
+  return preferred?.id ?? findTankByKeywords(['heavy rum', 'heavy'], excludeTankId) ?? tanks[0]?.id ?? null;
+}
+
+export function defaultDestTankIdForRunType(
+  runType: string,
+  excludeTankId?: number | null,
+): number | null {
+  if (runType === 'low_wines') return defaultHighWinesTankId(excludeTankId);
+  if (runType === 'heavy_rum') return defaultHeavyRumTankId(excludeTankId);
+  return null;
+}
+
 function findTankByKeywords(keywords: string[], excludeTankId?: number | null): number | null {
   const tanks = getHoldingTanks().filter((t) => t.id !== excludeTankId);
   const match = tanks.find((t) => {
@@ -474,7 +491,10 @@ export function defaultTankForCutType(
     case 'heads':
       return findTankByKeywords(['stillage', 'dunder', 'heads'], excludeTankId);
     case 'hearts':
-      if (run?.run_type === 'low_wines' && run.dest_holding_tank_equipment_id) {
+      if (
+        (run?.run_type === 'low_wines' || run?.run_type === 'heavy_rum')
+        && run.dest_holding_tank_equipment_id
+      ) {
         return run.dest_holding_tank_equipment_id;
       }
       return findTankByKeywords(
@@ -546,8 +566,9 @@ export function getHoldingTankIntakeHistory(
   `, [tankId]);
 
   const runTypeLabels: Record<string, string> = {
-    wash: 'wash run',
-    low_wines: 'low wines run',
+    wash: 'low wine rum run',
+    low_wines: 'spirit run',
+    heavy_rum: 'heavy rum run',
   };
 
   const spiritLabels: Record<string, string> = {
@@ -907,21 +928,21 @@ export function getDistillationRuns(): DistillationRunView[] {
 }
 
 export function saveDistillationRun(run: Omit<DistillationRun, 'id' | 'created_at'>, id?: number): void {
-  const runType = run.run_type ?? 'wash';
+  const runType = (run.run_type ?? 'wash') as DistillationRunType;
   if (id) {
     runQuery(
       `UPDATE distillation_runs SET batch_number=?, run_type=?, source_mash_batch_id=?, source_fermenter_equipment_id=?, source_holding_tank_equipment_id=?, dest_holding_tank_equipment_id=?, still_name=?, run_date=?, charge_volume_gal=?, charge_abv=?, status=?, notes=? WHERE id=?`,
       [
         run.batch_number,
         runType,
-        runType === 'wash' ? run.source_mash_batch_id : null,
-        runType === 'wash' ? run.source_fermenter_equipment_id : null,
-        runType === 'low_wines' ? run.source_holding_tank_equipment_id : null,
-        runType === 'low_wines' ? run.dest_holding_tank_equipment_id : null,
+        isFermenterSourcedRun(runType) ? run.source_mash_batch_id : null,
+        isFermenterSourcedRun(runType) ? run.source_fermenter_equipment_id : null,
+        isTankSourcedRun(runType) ? run.source_holding_tank_equipment_id : null,
+        isTankSourcedRun(runType) ? run.dest_holding_tank_equipment_id : null,
         run.still_name,
         run.run_date,
         run.charge_volume_gal,
-        runType === 'low_wines' ? run.charge_abv : null,
+        isTankSourcedRun(runType) ? run.charge_abv : null,
         run.status,
         run.notes,
         id,
@@ -933,23 +954,23 @@ export function saveDistillationRun(run: Omit<DistillationRun, 'id' | 'created_a
       [
         run.batch_number,
         runType,
-        runType === 'wash' ? run.source_mash_batch_id : null,
-        runType === 'wash' ? run.source_fermenter_equipment_id : null,
-        runType === 'low_wines' ? run.source_holding_tank_equipment_id : null,
-        runType === 'low_wines' ? run.dest_holding_tank_equipment_id : null,
+        isFermenterSourcedRun(runType) ? run.source_mash_batch_id : null,
+        isFermenterSourcedRun(runType) ? run.source_fermenter_equipment_id : null,
+        isTankSourcedRun(runType) ? run.source_holding_tank_equipment_id : null,
+        isTankSourcedRun(runType) ? run.dest_holding_tank_equipment_id : null,
         run.still_name,
         run.run_date,
         run.charge_volume_gal,
-        runType === 'low_wines' ? run.charge_abv : null,
+        isTankSourcedRun(runType) ? run.charge_abv : null,
         run.status,
         run.notes,
       ],
     );
   }
 
-  if (runType === 'wash' && run.source_mash_batch_id && run.source_fermenter_equipment_id) {
+  if (isFermenterSourcedRun(runType) && run.source_mash_batch_id && run.source_fermenter_equipment_id) {
     chargeFermenterForDistillation(run.source_mash_batch_id, run.source_fermenter_equipment_id);
-  } else if (runType === 'wash' && run.source_mash_batch_id && (run.status === 'running' || run.status === 'complete')) {
+  } else if (isFermenterSourcedRun(runType) && run.source_mash_batch_id && (run.status === 'running' || run.status === 'complete')) {
     releaseFermentersForMash(run.source_mash_batch_id);
     maybeCompleteMashAfterCharge(run.source_mash_batch_id);
   }
@@ -1275,12 +1296,19 @@ export function getEquipmentVolumeReport(): EquipmentVolumeReport[] {
         [eq.name],
       );
       let detail = run ? `Run ${run.batch_number} (${run.status})` : '';
-      if (run?.run_type === 'low_wines' && run.source_holding_tank_equipment_id) {
+      if (
+        run
+        && isTankSourcedRun(run.run_type as DistillationRunType)
+        && run.source_holding_tank_equipment_id
+      ) {
         const tankName = queryOne<{ name: string }>(
           'SELECT name FROM floor_equipment WHERE id = ?',
           [run.source_holding_tank_equipment_id],
         )?.name;
-        if (tankName) detail = `Low wines from ${tankName} · ${detail}`;
+        if (tankName) {
+          const prefix = run.run_type === 'heavy_rum' ? 'Heavy rum from' : 'Spirit from';
+          detail = `${prefix} ${tankName} · ${detail}`;
+        }
       }
       return {
         id: eq.id,

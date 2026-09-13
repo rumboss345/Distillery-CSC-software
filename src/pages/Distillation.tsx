@@ -13,7 +13,7 @@ import {
   getChargeableFermentersForMash,
   getChargeableHoldingTanks,
   getHighWinesDestinationTanks,
-  defaultHighWinesTankId,
+  defaultDestTankIdForRunType,
   defaultTankForCutType,
   getHoldingTanks,
   getHoldingTankContents,
@@ -26,6 +26,14 @@ import {
 } from '../db/queries';
 import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
+import {
+  ALL_RUN_TYPES,
+  isFermenterSourcedRun,
+  isTankSourcedRun,
+  RUN_TYPE_BUTTON_LABELS,
+  RUN_TYPE_LABELS,
+  runTypeLabel,
+} from '../lib/distillation-run-types';
 import type {
   DistillationRun,
   DistillationRunType,
@@ -36,11 +44,6 @@ import type {
 
 const RUN_STATUSES: RunStatus[] = ['planned', 'running', 'complete'];
 const CUT_TYPES: CutType[] = ['heads', 'hearts', 'tails'];
-
-const RUN_TYPE_LABELS: Record<DistillationRunType, string> = {
-  wash: 'Wash (stripping)',
-  low_wines: 'Low wines → High wines',
-};
 
 const SPIRIT_TYPE_LABELS: Record<SpiritTransferType, string> = {
   low_wines: 'Low wines',
@@ -63,7 +66,7 @@ const emptyRun = (runType: DistillationRunType = 'wash'): Omit<DistillationRun, 
   source_mash_batch_id: null,
   source_fermenter_equipment_id: null,
   source_holding_tank_equipment_id: null,
-  dest_holding_tank_equipment_id: runType === 'low_wines' ? defaultHighWinesTankId() : null,
+  dest_holding_tank_equipment_id: defaultDestTankIdForRunType(runType),
   still_name: '',
   run_date: new Date().toISOString().slice(0, 10),
   charge_volume_gal: 0,
@@ -100,19 +103,19 @@ export function Distillation() {
 
   void key;
 
-  const chargeableFermenters = runForm.run_type === 'wash' && runForm.source_mash_batch_id
+  const chargeableFermenters = isFermenterSourcedRun(runForm.run_type) && runForm.source_mash_batch_id
     ? getChargeableFermentersForMash(runForm.source_mash_batch_id, editRunId)
     : [];
 
-  const highWinesDestTanks = runForm.run_type === 'low_wines'
+  const destTanks = isTankSourcedRun(runForm.run_type)
     ? getHighWinesDestinationTanks(runForm.source_holding_tank_equipment_id)
     : [];
 
-  const chargeableLowWineTanks = runForm.run_type === 'low_wines'
+  const chargeableSourceTanks = isTankSourcedRun(runForm.run_type)
     ? getChargeableHoldingTanks(editRunId)
     : [];
 
-  const selectedLowWineTank = chargeableLowWineTanks.find(
+  const selectedSourceTank = chargeableSourceTanks.find(
     (t) => t.id === runForm.source_holding_tank_equipment_id,
   );
   const savedLowWineTankName = runForm.source_holding_tank_equipment_id
@@ -160,8 +163,8 @@ export function Distillation() {
     });
   };
 
-  const handleLowWineTankChange = (tankId: number | null) => {
-    const tank = chargeableLowWineTanks.find((t) => t.id === tankId);
+  const handleRunSourceTankChange = (tankId: number | null) => {
+    const tank = chargeableSourceTanks.find((t) => t.id === tankId);
     const destId = runForm.dest_holding_tank_equipment_id;
     const destStillValid = destId != null && destId !== tankId;
     setRunForm({
@@ -171,7 +174,7 @@ export function Distillation() {
       charge_abv: tank ? tank.available_abv : null,
       dest_holding_tank_equipment_id: destStillValid
         ? destId
-        : defaultHighWinesTankId(tankId),
+        : defaultDestTankIdForRunType(runForm.run_type, tankId),
     });
   };
 
@@ -203,7 +206,7 @@ export function Distillation() {
   };
 
   const handleSaveRun = () => {
-    if (runForm.run_type === 'wash') {
+    if (isFermenterSourcedRun(runForm.run_type)) {
       if (
         runForm.source_mash_batch_id
         && chargeableFermenters.length > 0
@@ -252,7 +255,7 @@ export function Distillation() {
     source_holding_tank_name?: string;
     dest_holding_tank_name?: string;
   }) => {
-    if ((run.run_type ?? 'wash') === 'low_wines') {
+    if (isTankSourcedRun(run.run_type ?? 'wash')) {
       const from = run.source_holding_tank_name ?? fermenterLabel(run.source_holding_tank_equipment_id);
       const to = run.dest_holding_tank_name ?? fermenterLabel(run.dest_holding_tank_equipment_id);
       return to ? `${from} → ${to}` : from;
@@ -464,18 +467,27 @@ export function Distillation() {
     <div>
       <div className="page-header">
         <h2>Distillation</h2>
-        <p>Wash runs from fermenters · Spirit runs from low wines to high wines</p>
+        <p>Low wine rum from fermenters · Spirit and heavy rum runs from holding tanks</p>
         <div className="page-actions">
-          <button className="btn btn-primary" onClick={() => openNewRun('wash')}>+ Wash Run</button>
-          <button className="btn btn-secondary" onClick={() => openNewRun('low_wines')}>+ Low Wines Run</button>
-          <button className="btn btn-secondary" onClick={openTransferForm}>+ Tank Transfer</button>
+          <button type="button" className="btn btn-primary" onClick={() => openNewRun('wash')}>
+            {RUN_TYPE_BUTTON_LABELS.wash}
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={() => openNewRun('low_wines')}>
+            {RUN_TYPE_BUTTON_LABELS.low_wines}
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={() => openNewRun('heavy_rum')}>
+            {RUN_TYPE_BUTTON_LABELS.heavy_rum}
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={openTransferForm}>+ Tank Transfer</button>
         </div>
       </div>
 
       {runs.length === 0 ? (
         <div className="empty-state">
           <p>No distillation runs recorded yet.</p>
-          <button className="btn btn-primary" onClick={() => openNewRun('wash')} style={{ marginTop: '1rem' }}>Create first run</button>
+          <button type="button" className="btn btn-primary" onClick={() => openNewRun('wash')} style={{ marginTop: '1rem' }}>
+            Create first run
+          </button>
         </div>
       ) : (
         <div className="table-wrap">
@@ -498,13 +510,13 @@ export function Distillation() {
                 return (
                   <tr key={r.id}>
                     <td><strong>{r.batch_number}</strong></td>
-                    <td>{RUN_TYPE_LABELS[runType]}</td>
+                    <td>{runTypeLabel(runType)}</td>
                     <td>{runSourceSummary(r)}</td>
                     <td>{r.still_name}</td>
                     <td>{format(new Date(r.run_date), 'MMM d, yyyy')}</td>
                     <td>
                       {r.charge_volume_gal} gal
-                      {runType === 'low_wines' && r.charge_abv != null ? ` @ ${r.charge_abv.toFixed(1)}%` : ''}
+                      {isTankSourcedRun(runType) && r.charge_abv != null ? ` @ ${r.charge_abv.toFixed(1)}%` : ''}
                     </td>
                     <td><StatusBadge status={r.status} /></td>
                     <td className="td-actions">
@@ -565,7 +577,7 @@ export function Distillation() {
 
       {showRunForm && (
         <Modal
-          title={editRunId ? 'Edit Run' : runForm.run_type === 'low_wines' ? 'Low Wines → High Wines Run' : 'Wash Distillation Run'}
+          title={editRunId ? 'Edit Run' : `${RUN_TYPE_LABELS[runForm.run_type]} Run`}
           onClose={() => setShowRunForm(false)}
         >
           <div className="form-grid">
@@ -580,13 +592,13 @@ export function Distillation() {
                 onChange={(e) => handleRunTypeChange(e.target.value as DistillationRunType)}
                 disabled={!!editRunId}
               >
-                {(Object.keys(RUN_TYPE_LABELS) as DistillationRunType[]).map((t) => (
+                {ALL_RUN_TYPES.map((t) => (
                   <option key={t} value={t}>{RUN_TYPE_LABELS[t]}</option>
                 ))}
               </select>
             </div>
 
-            {runForm.run_type === 'wash' ? (
+            {isFermenterSourcedRun(runForm.run_type) ? (
               <div className="form-group full-width">
                 <label>Source Wash Batch</label>
                 <select
@@ -628,23 +640,27 @@ export function Distillation() {
               </div>
             ) : (
               <div className="form-group full-width">
-                <label>Source Low Wines Tank</label>
+                <label>
+                  {runForm.run_type === 'heavy_rum' ? 'Source Tank' : 'Source Low Wines Tank'}
+                </label>
                 <select
                   value={runForm.source_holding_tank_equipment_id ?? ''}
-                  onChange={(e) => handleLowWineTankChange(e.target.value ? parseInt(e.target.value) : null)}
+                  onChange={(e) => handleRunSourceTankChange(e.target.value ? parseInt(e.target.value) : null)}
                 >
                   <option value="">— Select tank —</option>
-                  {chargeableLowWineTanks.map((t) => (
+                  {chargeableSourceTanks.map((t) => (
                     <option key={t.id} value={t.id}>
                       {t.name} ({t.available_gal.toFixed(1)} gal @ {t.available_abv.toFixed(1)}%)
                     </option>
                   ))}
                 </select>
-                {runForm.source_holding_tank_equipment_id && !selectedLowWineTank && savedLowWineTankName && (
+                {runForm.source_holding_tank_equipment_id && !selectedSourceTank && savedLowWineTankName && (
                   <p className="field-hint">Previously charged from {savedLowWineTankName}</p>
                 )}
-                {chargeableLowWineTanks.length === 0 && !savedLowWineTankName && (
-                  <p className="field-hint">No low wines in holding tanks yet — add tails/low wines cuts from a wash run first.</p>
+                {chargeableSourceTanks.length === 0 && !savedLowWineTankName && (
+                  <p className="field-hint">
+                    No spirit in holding tanks yet — add cuts from a low wine rum run first.
+                  </p>
                 )}
                 {selectedLowWineAvailable && runForm.source_holding_tank_equipment_id && (
                   <p className="field-hint">
@@ -652,13 +668,15 @@ export function Distillation() {
                   </p>
                 )}
                 <div className="form-group" style={{ marginTop: '0.75rem' }}>
-                  <label>High Wines Storage Tank</label>
+                  <label>
+                    {runForm.run_type === 'heavy_rum' ? 'Heavy Rum Storage Tank' : 'High Wines Storage Tank'}
+                  </label>
                   <select
                     value={runForm.dest_holding_tank_equipment_id ?? ''}
                     onChange={(e) => handleDestTankChange(e.target.value ? parseInt(e.target.value) : null)}
                   >
                     <option value="">— Select tank —</option>
-                    {highWinesDestTanks.map((t) => (
+                    {destTanks.map((t) => (
                       <option key={t.id} value={t.id}>
                         {holdingTankLabel(t)}
                       </option>
@@ -693,7 +711,7 @@ export function Distillation() {
               <label>Charge Volume (gal)</label>
               <input type="number" step="0.1" value={runForm.charge_volume_gal || ''} onChange={(e) => setRunForm({ ...runForm, charge_volume_gal: parseFloat(e.target.value) || 0 })} />
             </div>
-            {runForm.run_type === 'low_wines' && (
+            {isTankSourcedRun(runForm.run_type) && (
               <div className="form-group">
                 <label>Charge ABV (%)</label>
                 <input
@@ -716,15 +734,15 @@ export function Distillation() {
             </div>
           </div>
           <p className="form-hint">
-            {runForm.run_type === 'wash' ? (
+            {isFermenterSourcedRun(runForm.run_type) ? (
               <>
                 Saving with a source fermenter selected marks that tank <strong>empty</strong> on the floor plan
                 {chargeableFermenters.length > 1 ? ' (other fermenters stay in use until charged in a separate run)' : ''}.
               </>
             ) : (
               <>
-                Charging draws low wines from the source tank. Hearts/high wines cuts go into the
-                {' '}<strong>High Wines Storage Tank</strong> you select below.
+                Charging draws spirit from the source tank. Hearts cuts go into the
+                {' '}<strong>{runForm.run_type === 'heavy_rum' ? 'Heavy Rum Storage Tank' : 'High Wines Storage Tank'}</strong> you select.
               </>
             )}
             {' '}Setting status to <strong>planned</strong> or <strong>running</strong> marks the still as in use.
@@ -960,7 +978,7 @@ export function Distillation() {
                   <option key={t.id} value={t.id}>{holdingTankLabel(t)}</option>
                 ))}
               </select>
-              {selectedRun?.run_type === 'low_wines'
+              {selectedRun && isTankSourcedRun(selectedRun.run_type ?? 'wash')
                 && cutForm.cut_type === 'hearts'
                 && selectedRun.dest_holding_tank_equipment_id
                 && cutForm.holding_tank_equipment_id === selectedRun.dest_holding_tank_equipment_id && (
