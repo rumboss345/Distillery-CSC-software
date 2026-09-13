@@ -6,6 +6,22 @@ export const PROCESS_ITEM_GAP = 28;
 export const PROCESS_STAGE_HEADER = 44;
 export const PROCESS_STAGE_HEIGHT = 260;
 export const PROCESS_CANVAS_PAD = 32;
+/** Snap increment when dragging equipment in process view (matches layout gap). */
+export const PROCESS_GRID_SIZE = PROCESS_ITEM_GAP;
+
+export function snapToProcessGrid(value: number, gridSize = PROCESS_GRID_SIZE): number {
+  return Math.round(value / gridSize) * gridSize;
+}
+
+export function snapProcessPosition(
+  pos: { x: number; y: number },
+  gridSize = PROCESS_GRID_SIZE,
+): { x: number; y: number } {
+  return {
+    x: snapToProcessGrid(pos.x, gridSize),
+    y: snapToProcessGrid(pos.y, gridSize),
+  };
+}
 
 export function computeDefaultProcessPositions(
   items: (FloorEquipmentView & { plan_name?: string })[],
