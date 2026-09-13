@@ -556,11 +556,24 @@ export function defaultHeavyRumTankId(excludeTankId?: number | null): number | n
   return preferred?.id ?? findTankByKeywords(['heavy rum', 'heavy'], excludeTankId) ?? tanks[0]?.id ?? null;
 }
 
+export function defaultLowWinesTankId(excludeTankId?: number | null): number | null {
+  const tanks = getHighWinesDestinationTanks(excludeTankId);
+  const preferred = tanks.find((t) => {
+    const name = t.name.toLowerCase();
+    return name.includes('vendome') && name.includes('low wine');
+  });
+  return preferred?.id
+    ?? findTankByKeywords(['low wines collection', 'vendome'], excludeTankId)
+    ?? findTankByKeywords(['low wine', 'low wines'], excludeTankId)
+    ?? tanks[0]?.id
+    ?? null;
+}
+
 export function defaultDestTankIdForRunType(
   runType: string,
   excludeTankId?: number | null,
 ): number | null {
-  if (runType === 'low_wines') return defaultHighWinesTankId(excludeTankId);
+  if (runType === 'low_wines') return defaultLowWinesTankId(excludeTankId);
   if (runType === 'heavy_rum') return defaultHeavyRumTankId(excludeTankId);
   return null;
 }
