@@ -593,7 +593,7 @@ export function defaultTankForCutType(
 
   switch (cutType) {
     case 'heads':
-      return findTankByKeywords(['stillage', 'dunder', 'heads'], excludeTankId);
+      return null;
     case 'hearts':
       if (
         (run?.run_type === 'low_wines' || run?.run_type === 'heavy_rum')
