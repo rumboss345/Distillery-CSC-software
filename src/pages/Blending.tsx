@@ -5,7 +5,10 @@ import {
   executeBlendProduct,
   getBlendIngredients,
   getBlendProducts,
+  getBlendRecipe,
+  getBlendRecipes,
   getBlendSpiritSources,
+  saveBlendRecipeFromWizard,
   getChargeableHoldingTanksForBlend,
   getHoldingTankContents,
   getHoldingTanks,
@@ -59,7 +62,7 @@ const WIZARD_STEPS = [
 ] as const;
 
 const STEP_HINTS: Record<number, string> = {
-  1: 'Give your product a name and batch number so you can track it through production.',
+  1: 'Give your product a name and batch number, or load a saved blend recipe. You will pick tanks when you get to the spirits step.',
   2: 'Choose holding tanks and how much spirit to pull — by the gallon (recommended) or by weight on a scale.',
   3: 'Enter the proof you want to bottle at. We can calculate how much water to add.',
   4: 'Add sweetener, flavorings, or color if this product needs them. Skip if not.',
@@ -241,6 +244,7 @@ function buildSavePayload(
 export function Blending() {
   const { key, refresh } = useRefreshKey();
   const blends = getBlendProducts();
+  const blendRecipes = getBlendRecipes();
   const inventoryItems = getInventoryItems();
   const [showWizard, setShowWizard] = useState(false);
   const [wizardStep, setWizardStep] = useState(1);
@@ -298,6 +302,46 @@ export function Blending() {
     });
   }, [correctionVolume, correctionAbv, form.target_abv, form.target_brix, form.actual_brix, measuredForCorrection.brix, correctionProof, verifyMeasureMode, wizardStep, measuredForCorrection.weight, form.actual_weight_lbs, verifyAbv]);
 
+  const applyBlendRecipe = (recipeId: number) => {
+    const recipe = getBlendRecipe(recipeId);
+    if (!recipe) return;
+    setEditId(undefined);
+    setForm({
+      ...emptyProduct(),
+      product_name: recipe.product_name,
+      target_abv: recipe.target_abv,
+      target_brix: recipe.target_brix,
+      scale_factor: recipe.scale_factor ?? 1,
+      notes: recipe.notes,
+    });
+    setSpiritSources(
+      recipe.spirit_sources.length > 0
+        ? recipe.spirit_sources.map((source) => ({
+          holding_tank_equipment_id: 0,
+          volume_gal: source.volume_gal,
+          abv: source.abv,
+          amount: source.volume_gal,
+          unit: 'gal',
+        }))
+        : [emptySpiritSource()],
+    );
+    setIngredients(
+      recipe.ingredients.map((ingredient) => ({
+        ingredient_type: ingredient.ingredient_type,
+        name: ingredient.name,
+        amount: ingredient.amount,
+        unit: ingredient.unit,
+        cost_per_unit: ingredient.cost_per_unit,
+        lot_number: ingredient.lot_number,
+        inventory_item_id: ingredient.inventory_item_id,
+        notes: ingredient.notes,
+      })),
+    );
+    setMeasuredForCorrection({ abv: '', volume: '', brix: '', weight: '' });
+    setVerifyMeasureMode('volume');
+    setWizardStep(1);
+  };
+
   const openNew = () => {
     setEditId(undefined);
     setForm(emptyProduct());
@@ -307,6 +351,23 @@ export function Blending() {
     setMeasuredForCorrection({ abv: '', volume: '', brix: '', weight: '' });
     setVerifyMeasureMode('volume');
     setShowWizard(true);
+  };
+
+  const handleSaveAsRecipe = () => {
+    const defaultName = form.product_name.trim() || 'Blend recipe';
+    const name = prompt('Save this formula as a blend recipe:', defaultName);
+    if (!name?.trim()) return;
+    try {
+      saveBlendRecipeFromWizard(
+        name.trim(),
+        form,
+        activeSources.map(toSpiritSourceInput),
+        ingredients.filter((ingredient) => ingredient.amount > 0 || ingredient.name.trim()),
+      );
+      alert('Blend recipe saved. Find it on the Recipes page under Blending.');
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Could not save blend recipe.');
+    }
   };
 
   const openContinue = (blend: BlendProduct) => {
@@ -758,6 +819,26 @@ export function Blending() {
       case 1:
         return (
           <>
+            {blendRecipes.length > 0 && (
+              <div className="form-group">
+                <label>Start from saved blend recipe</label>
+                <select
+                  defaultValue=""
+                  onChange={(e) => {
+                    const recipeId = e.target.value ? parseInt(e.target.value, 10) : 0;
+                    if (recipeId) applyBlendRecipe(recipeId);
+                  }}
+                >
+                  <option value="">— Start from scratch —</option>
+                  {blendRecipes.map((recipe) => (
+                    <option key={recipe.id} value={recipe.id}>
+                      {recipe.name}{recipe.product_name ? ` — ${recipe.product_name}` : ''}
+                    </option>
+                  ))}
+                </select>
+                <p className="field-hint">Loads spirit amounts, target proof, and additives. You still choose tanks in the next step.</p>
+              </div>
+            )}
             <div className="form-group">
               <label>Product name</label>
               <input
@@ -1049,6 +1130,11 @@ export function Blending() {
                   </ul>
                 </>
               )}
+            </div>
+            <div className="wizard-review-actions">
+              <button type="button" className="btn btn-secondary" onClick={handleSaveAsRecipe}>
+                Save as blend recipe
+              </button>
             </div>
             <p className="field-hint">Next: run a lab test on a trial batch, or approve if you are confident in the numbers.</p>
           </div>

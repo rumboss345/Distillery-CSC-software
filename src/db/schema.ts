@@ -137,6 +137,43 @@ CREATE TABLE IF NOT EXISTS bottling_run_lines (
 
 CREATE INDEX IF NOT EXISTS idx_bottling_run_lines_run ON bottling_run_lines(bottling_run_id);
 
+CREATE TABLE IF NOT EXISTS blend_recipes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  product_name TEXT NOT NULL DEFAULT '',
+  target_abv REAL,
+  target_brix REAL,
+  scale_factor REAL NOT NULL DEFAULT 1,
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS blend_recipe_spirit_sources (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  blend_recipe_id INTEGER NOT NULL REFERENCES blend_recipes(id) ON DELETE CASCADE,
+  spirit_label TEXT NOT NULL DEFAULT '',
+  volume_gal REAL NOT NULL DEFAULT 0,
+  abv REAL NOT NULL DEFAULT 0,
+  sort_order INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS blend_recipe_ingredients (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  blend_recipe_id INTEGER NOT NULL REFERENCES blend_recipes(id) ON DELETE CASCADE,
+  ingredient_type TEXT NOT NULL DEFAULT 'other',
+  name TEXT NOT NULL DEFAULT '',
+  amount REAL NOT NULL DEFAULT 0,
+  unit TEXT NOT NULL DEFAULT 'gal',
+  cost_per_unit REAL,
+  lot_number TEXT NOT NULL DEFAULT '',
+  inventory_item_id INTEGER REFERENCES inventory_items(id),
+  notes TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_blend_recipe_spirit_sources_recipe ON blend_recipe_spirit_sources(blend_recipe_id);
+CREATE INDEX IF NOT EXISTS idx_blend_recipe_ingredients_recipe ON blend_recipe_ingredients(blend_recipe_id);
+
 CREATE TABLE IF NOT EXISTS blend_products (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   batch_number TEXT NOT NULL UNIQUE,
