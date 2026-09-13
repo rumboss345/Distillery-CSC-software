@@ -541,8 +541,11 @@ tr:hover td {
 .badge-cleaning { background: var(--warning-bg); color: var(--warning); }
 .badge-offline { background: var(--bg-hover); color: var(--text-muted); }
 .badge-draft { background: var(--info-bg); color: var(--info); }
-.badge-blended { background: var(--accent-muted); color: var(--accent); }
+.badge-trial { background: var(--warning-bg); color: var(--warning); }
+.badge-approved { background: var(--accent-muted); color: var(--accent); }
+.badge-executed, .badge-blended { background: var(--accent-muted); color: var(--accent); }
 .badge-bottled { background: var(--success-bg); color: var(--success); }
+.badge-syrup, .badge-color { background: var(--info-bg); color: var(--info); }
 .badge-low-wines, .badge-high-wines { background: var(--info-bg); color: var(--info); }
 
 /* Floor Plan */
@@ -996,8 +999,139 @@ tr:hover td {
   font-size: 0.9rem;
 }
 
+.formulation-section {
+  margin-top: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.blend-spirit-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr auto;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  align-items: center;
+}
+
+.blend-spirit-row input,
+.blend-spirit-row select {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.85rem;
+}
+
+.formulation-ingredient-row {
+  grid-template-columns: 1fr 1.2fr 0.7fr 0.6fr 0.8fr 0.7fr 1.2fr auto;
+}
+
+.formulation-measure-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.formulation-measure-card {
+  padding: 0.75rem 1rem;
+  background: var(--bg-hover);
+  border-radius: var(--radius);
+  border: 1px solid var(--border-subtle);
+}
+
+.formulation-measure-card h5 {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.formulation-measure-card ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.9rem;
+}
+
+.lab-input-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.lab-input-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.lab-input-grid input {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  color: var(--text);
+}
+
+.inline-field-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.inline-field-row input {
+  flex: 1;
+}
+
+.formulation-corrections {
+  padding: 0.75rem 1rem;
+  background: var(--warning-bg);
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+}
+
+.formulation-corrections ul {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+}
+
+.formulation-detail-panel h5 {
+  margin: 1rem 0 0.5rem;
+  font-size: 0.9rem;
+}
+
+.formula-version-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.btn-accent {
+  background: var(--success);
+  color: #fff;
+  border: none;
+}
+
+.btn-accent:hover {
+  filter: brightness(1.05);
+}
+
 @media (max-width: 900px) {
-  .blend-ingredient-row {
+  .blend-ingredient-row,
+  .formulation-ingredient-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .formulation-measure-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .blend-spirit-row {
     grid-template-columns: 1fr 1fr;
   }
 }

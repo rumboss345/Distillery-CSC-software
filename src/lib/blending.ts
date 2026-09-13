@@ -2,18 +2,30 @@ import type { BlendIngredientInput, BlendIngredientType } from '../types';
 import { ML_PER_GALLON } from '../types';
 
 export const BLEND_INGREDIENT_TYPES: { value: BlendIngredientType; label: string }[] = [
-  { value: 'water', label: 'Water (dilution)' },
+  { value: 'water', label: 'Proofing water' },
   { value: 'sugar', label: 'Sugar' },
+  { value: 'syrup', label: 'Syrup' },
   { value: 'flavoring', label: 'Flavoring' },
-  { value: 'other', label: 'Other' },
+  { value: 'color', label: 'Color' },
+  { value: 'other', label: 'Other additive' },
 ];
 
 export const INGREDIENT_UNITS: Record<BlendIngredientType, string[]> = {
   water: ['gal', 'fl oz', 'ml'],
   sugar: ['lbs', 'oz', 'ml'],
+  syrup: ['gal', 'fl oz', 'ml', 'lbs'],
   flavoring: ['gal', 'fl oz', 'oz', 'ml'],
+  color: ['ml', 'fl oz', 'oz', 'gal'],
   other: ['gal', 'lbs', 'oz', 'fl oz', 'ml', 'each'],
 };
+
+export const BLEND_STATUSES = ['draft', 'trial', 'approved', 'executed', 'bottled'] as const;
+
+export const BLEND_FORMULATION_PHASES = [
+  { value: 'theoretical', label: 'Theoretical' },
+  { value: 'trial', label: 'Lab trial' },
+  { value: 'production', label: 'Production batch' },
+] as const;
 
 export function ingredientVolumeGal(ingredient: Pick<BlendIngredientInput, 'amount' | 'unit'>): number {
   const { amount, unit } = ingredient;

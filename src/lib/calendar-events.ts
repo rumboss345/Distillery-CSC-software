@@ -191,7 +191,11 @@ export function mapBarrelStatus(status: Barrel['status']): CalendarStatusCategor
 export function mapBlendStatus(status: BlendProduct['status']): CalendarStatusCategory {
   switch (status) {
     case 'draft':
+    case 'trial':
       return 'planned';
+    case 'approved':
+      return 'in_progress';
+    case 'executed':
     case 'blended':
     case 'bottled':
       return 'complete';
