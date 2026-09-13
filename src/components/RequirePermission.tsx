@@ -1,6 +1,6 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { permissionForPath } from '../lib/permissions';
+import { canAccessPath } from '../lib/permissions';
 
 export function RequirePermission() {
   const { user, loading, hasPermission } = useAuth();
@@ -26,8 +26,7 @@ export function RequirePermission() {
     return <Outlet />;
   }
 
-  const required = permissionForPath(location.pathname);
-  if (required && !hasPermission(required)) {
+  if (!canAccessPath(location.pathname, hasPermission)) {
     return <Navigate to="/" replace />;
   }
 

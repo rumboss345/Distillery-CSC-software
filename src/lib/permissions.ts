@@ -73,3 +73,15 @@ export function permissionForPath(pathname: string): PermissionKey | null {
   const full = `/${base}`;
   return ROUTE_PERMISSIONS[full] ?? null;
 }
+
+export function canAccessPath(
+  pathname: string,
+  hasPermission: (key: PermissionKey) => boolean,
+): boolean {
+  if (pathname.startsWith('/recipes')) {
+    return hasPermission('wash') || hasPermission('blending');
+  }
+  const required = permissionForPath(pathname);
+  if (!required) return true;
+  return hasPermission(required);
+}

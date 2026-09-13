@@ -7,6 +7,8 @@ import {
   useRefreshKey,
 } from '../db/queries';
 import { Modal } from '../components/Modal';
+import { BlendRecipesTab } from '../components/BlendRecipesTab';
+import { useAuth } from '../context/AuthContext';
 import type { Recipe } from '../types';
 
 const emptyRecipe = (): Omit<Recipe, 'id' | 'created_at' | 'updated_at'> => ({
@@ -22,11 +24,18 @@ const emptyRecipe = (): Omit<Recipe, 'id' | 'created_at' | 'updated_at'> => ({
   notes: '',
 });
 
+type RecipeTab = 'wash' | 'blend';
+
 export function Recipes() {
+  const { hasPermission } = useAuth();
+  const canWash = hasPermission('wash');
+  const canBlend = hasPermission('blending');
+  const defaultTab: RecipeTab = canWash ? 'wash' : 'blend';
   const { key, refresh } = useRefreshKey();
   const recipes = getRecipes();
   const sugarItems = getInventoryByCategory('sugar');
   const yeastItems = getInventoryByCategory('yeast');
+  const [tab, setTab] = useState<RecipeTab>(defaultTab);
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<number | undefined>();
   const [form, setForm] = useState(emptyRecipe());
@@ -78,83 +87,114 @@ export function Recipes() {
     <div>
       <div className="page-header">
         <h2>Recipes</h2>
-        <p>Saved wash and fermentation formulas for repeat batches</p>
-        <div className="page-actions">
-          <button type="button" className="btn btn-primary" onClick={openNew}>
-            + Add Recipe
-          </button>
-        </div>
+        <p>Saved wash and blend formulas for repeat batches</p>
+        {tab === 'wash' && canWash && (
+          <div className="page-actions">
+            <button type="button" className="btn btn-primary" onClick={openNew}>
+              + Add Wash Recipe
+            </button>
+          </div>
+        )}
       </div>
 
-      {recipes.length === 0 ? (
-        <div className="empty-state card">
-          <p>No recipes yet. Create a formula to reuse when starting new wash batches.</p>
-        </div>
-      ) : (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Recipe</th>
-                <th>Spirit Type</th>
-                <th>Sugar</th>
-                <th>Sugar (lbs)</th>
-                <th>Batch Size (gal)</th>
-                <th>Yeast</th>
-                <th>Target Brix</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recipes.map((r) => (
-                <tr
-                  key={r.id}
-                  className={selectedId === r.id ? 'selected-row' : ''}
-                  onClick={() => setSelectedId(r.id)}
-                  style={{ cursor: 'pointer' }}
-                >
-                  <td><strong>{r.name}</strong></td>
-                  <td>{r.spirit_type || '—'}</td>
-                  <td>{r.grain_type || '—'}</td>
-                  <td>{r.grain_lbs || '—'}</td>
-                  <td>{r.water_gal || '—'}</td>
-                  <td>{r.yeast_strain || '—'}</td>
-                  <td>{r.target_brix ?? '—'}</td>
-                  <td className="table-actions" onClick={(e) => e.stopPropagation()}>
-                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => openEdit(r)}>
-                      Edit
-                    </button>
-                    <button type="button" className="btn btn-danger btn-sm" onClick={() => handleDelete(r.id)}>
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {canWash && canBlend && (
+        <div className="recipe-tabs" role="tablist" aria-label="Recipe type">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'wash'}
+            className={`recipe-tab${tab === 'wash' ? ' active' : ''}`}
+            onClick={() => setTab('wash')}
+          >
+            Wash &amp; Fermentation
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'blend'}
+            className={`recipe-tab${tab === 'blend' ? ' active' : ''}`}
+            onClick={() => setTab('blend')}
+          >
+            Blending
+          </button>
         </div>
       )}
 
-      {selected && (
-        <div className="detail-panel card" style={{ marginTop: '1rem' }}>
-          <h3>{selected.name}</h3>
-          <dl className="detail-grid">
-            <dt>Spirit type</dt><dd>{selected.spirit_type || '—'}</dd>
-            <dt>Sugar type</dt><dd>{selected.grain_type || '—'}</dd>
-            <dt>Sugar (lbs)</dt><dd>{selected.grain_lbs}</dd>
-            <dt>Batch size (gal)</dt><dd>{selected.water_gal}</dd>
-            <dt>Yeast strain</dt><dd>{selected.yeast_strain || '—'}</dd>
-            <dt>Yeast (lbs)</dt><dd>{selected.yeast_lbs}</dd>
-            <dt>Target start brix</dt><dd>{selected.target_brix ?? '—'}</dd>
-            <dt>Target final brix</dt><dd>{selected.target_final_brix ?? '—'}</dd>
-            {selected.notes && (
-              <>
-                <dt>Notes</dt><dd>{selected.notes}</dd>
-              </>
-            )}
-          </dl>
-        </div>
+      {tab === 'wash' && canWash && (
+        <>
+          {recipes.length === 0 ? (
+            <div className="empty-state card">
+              <p>No wash recipes yet. Create a formula to reuse when starting new wash batches.</p>
+            </div>
+          ) : (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Recipe</th>
+                    <th>Spirit Type</th>
+                    <th>Sugar</th>
+                    <th>Sugar (lbs)</th>
+                    <th>Batch Size (gal)</th>
+                    <th>Yeast</th>
+                    <th>Target Brix</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recipes.map((r) => (
+                    <tr
+                      key={r.id}
+                      className={selectedId === r.id ? 'selected-row' : ''}
+                      onClick={() => setSelectedId(r.id)}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <td><strong>{r.name}</strong></td>
+                      <td>{r.spirit_type || '—'}</td>
+                      <td>{r.grain_type || '—'}</td>
+                      <td>{r.grain_lbs || '—'}</td>
+                      <td>{r.water_gal || '—'}</td>
+                      <td>{r.yeast_strain || '—'}</td>
+                      <td>{r.target_brix ?? '—'}</td>
+                      <td className="table-actions" onClick={(e) => e.stopPropagation()}>
+                        <button type="button" className="btn btn-secondary btn-sm" onClick={() => openEdit(r)}>
+                          Edit
+                        </button>
+                        <button type="button" className="btn btn-danger btn-sm" onClick={() => handleDelete(r.id)}>
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {selected && (
+            <div className="detail-panel card" style={{ marginTop: '1rem' }}>
+              <h3>{selected.name}</h3>
+              <dl className="detail-grid">
+                <dt>Spirit type</dt><dd>{selected.spirit_type || '—'}</dd>
+                <dt>Sugar type</dt><dd>{selected.grain_type || '—'}</dd>
+                <dt>Sugar (lbs)</dt><dd>{selected.grain_lbs}</dd>
+                <dt>Batch size (gal)</dt><dd>{selected.water_gal}</dd>
+                <dt>Yeast strain</dt><dd>{selected.yeast_strain || '—'}</dd>
+                <dt>Yeast (lbs)</dt><dd>{selected.yeast_lbs}</dd>
+                <dt>Target start brix</dt><dd>{selected.target_brix ?? '—'}</dd>
+                <dt>Target final brix</dt><dd>{selected.target_final_brix ?? '—'}</dd>
+                {selected.notes && (
+                  <>
+                    <dt>Notes</dt><dd>{selected.notes}</dd>
+                  </>
+                )}
+              </dl>
+            </div>
+          )}
+        </>
       )}
+
+      {tab === 'blend' && canBlend && <BlendRecipesTab />}
 
       {showForm && (
         <Modal title={editId ? 'Edit Recipe' : 'New Recipe'} onClose={() => setShowForm(false)}>

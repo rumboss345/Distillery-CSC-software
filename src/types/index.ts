@@ -343,6 +343,51 @@ export interface BlendSpiritSourceInput {
   abv: number;
 }
 
+export interface BlendRecipe {
+  id: number;
+  name: string;
+  product_name: string;
+  target_abv: number | null;
+  target_brix: number | null;
+  scale_factor: number;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BlendRecipeSpiritSource {
+  id: number;
+  blend_recipe_id: number;
+  spirit_label: string;
+  volume_gal: number;
+  abv: number;
+  sort_order: number;
+}
+
+export interface BlendRecipeIngredient {
+  id: number;
+  blend_recipe_id: number;
+  ingredient_type: BlendIngredientType;
+  name: string;
+  amount: number;
+  unit: string;
+  cost_per_unit: number | null;
+  lot_number: string;
+  inventory_item_id: number | null;
+  notes: string;
+}
+
+export interface BlendRecipeSpiritSourceInput {
+  spirit_label: string;
+  volume_gal: number;
+  abv: number;
+}
+
+export interface BlendRecipeView extends BlendRecipe {
+  spirit_sources: BlendRecipeSpiritSource[];
+  ingredients: BlendRecipeIngredient[];
+}
+
 export interface BlendFormulaVersion {
   id: number;
   blend_product_id: number;

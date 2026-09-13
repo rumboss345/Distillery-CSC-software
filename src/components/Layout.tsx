@@ -19,7 +19,12 @@ const navItems: { to: string; label: string; icon: string; permission: Permissio
 export function Layout() {
   const { user, logout, hasPermission } = useAuth();
 
-  const visibleNav = navItems.filter((item) => hasPermission(item.permission));
+  const visibleNav = navItems.filter((item) => {
+    if (item.to === '/recipes') {
+      return hasPermission('wash') || hasPermission('blending');
+    }
+    return hasPermission(item.permission);
+  });
 
   return (
     <div className="app-layout">

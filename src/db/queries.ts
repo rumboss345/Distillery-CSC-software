@@ -8,6 +8,11 @@ import type {
   BlendIngredientInput,
   BlendProduct,
   BlendProductView,
+  BlendRecipe,
+  BlendRecipeIngredient,
+  BlendRecipeSpiritSource,
+  BlendRecipeSpiritSourceInput,
+  BlendRecipeView,
   BlendSpiritSource,
   BlendSpiritSourceInput,
   BottlingRun,
@@ -1360,6 +1365,177 @@ export function saveBottlingRun(
 export function deleteBottlingRun(id: number): void {
   runQuery('DELETE FROM bottling_runs WHERE id = ?', [id]);
   syncHoldingTankStatuses();
+}
+
+// ── Blend Recipes ──────────────────────────────────────────
+
+function attachBlendRecipeDetails(recipes: BlendRecipe[]): BlendRecipeView[] {
+  const spiritSources = queryAll<BlendRecipeSpiritSource>(
+    'SELECT * FROM blend_recipe_spirit_sources ORDER BY sort_order, id',
+  );
+  const ingredients = queryAll<BlendRecipeIngredient>(
+    'SELECT * FROM blend_recipe_ingredients ORDER BY id',
+  );
+  const spiritsByRecipe = new Map<number, BlendRecipeSpiritSource[]>();
+  const ingredientsByRecipe = new Map<number, BlendRecipeIngredient[]>();
+  for (const source of spiritSources) {
+    const bucket = spiritsByRecipe.get(source.blend_recipe_id) ?? [];
+    bucket.push(source);
+    spiritsByRecipe.set(source.blend_recipe_id, bucket);
+  }
+  for (const ingredient of ingredients) {
+    const bucket = ingredientsByRecipe.get(ingredient.blend_recipe_id) ?? [];
+    bucket.push(ingredient);
+    ingredientsByRecipe.set(ingredient.blend_recipe_id, bucket);
+  }
+  return recipes.map((recipe) => ({
+    ...recipe,
+    spirit_sources: spiritsByRecipe.get(recipe.id) ?? [],
+    ingredients: ingredientsByRecipe.get(recipe.id) ?? [],
+  }));
+}
+
+function persistBlendRecipeSpiritSources(
+  recipeId: number,
+  sources: BlendRecipeSpiritSourceInput[],
+): void {
+  runQuery('DELETE FROM blend_recipe_spirit_sources WHERE blend_recipe_id = ?', [recipeId]);
+  sources
+    .filter((source) => source.volume_gal > 0)
+    .forEach((source, index) => {
+      insertRow(
+        `INSERT INTO blend_recipe_spirit_sources (blend_recipe_id, spirit_label, volume_gal, abv, sort_order)
+         VALUES (?, ?, ?, ?, ?)`,
+        [recipeId, source.spirit_label, source.volume_gal, source.abv, index],
+      );
+    });
+}
+
+function persistBlendRecipeIngredients(
+  recipeId: number,
+  ingredients: BlendIngredientInput[],
+): void {
+  runQuery('DELETE FROM blend_recipe_ingredients WHERE blend_recipe_id = ?', [recipeId]);
+  ingredients
+    .filter((ingredient) => ingredient.amount > 0 || ingredient.name.trim())
+    .forEach((ingredient) => {
+      insertRow(
+        `INSERT INTO blend_recipe_ingredients (
+          blend_recipe_id, ingredient_type, name, amount, unit, cost_per_unit, lot_number, inventory_item_id, notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          recipeId,
+          ingredient.ingredient_type,
+          ingredient.name,
+          ingredient.amount,
+          ingredient.unit,
+          ingredient.cost_per_unit ?? null,
+          ingredient.lot_number ?? '',
+          ingredient.inventory_item_id ?? null,
+          ingredient.notes,
+        ],
+      );
+    });
+}
+
+export function getBlendRecipes(): BlendRecipeView[] {
+  const recipes = queryAll<BlendRecipe>('SELECT * FROM blend_recipes ORDER BY name');
+  return attachBlendRecipeDetails(recipes);
+}
+
+export function getBlendRecipe(id: number): BlendRecipeView | undefined {
+  const recipe = queryOne<BlendRecipe>('SELECT * FROM blend_recipes WHERE id = ?', [id]);
+  if (!recipe) return undefined;
+  return attachBlendRecipeDetails([recipe])[0];
+}
+
+export function saveBlendRecipe(
+  recipe: Omit<BlendRecipe, 'id' | 'created_at' | 'updated_at'>,
+  spiritSources: BlendRecipeSpiritSourceInput[],
+  ingredients: BlendIngredientInput[],
+  id?: number,
+): number {
+  if (!recipe.name.trim()) throw new Error('Recipe name is required.');
+
+  if (id) {
+    runQuery(
+      `UPDATE blend_recipes SET
+        name = ?, product_name = ?, target_abv = ?, target_brix = ?, scale_factor = ?, notes = ?, updated_at = datetime('now')
+       WHERE id = ?`,
+      [
+        recipe.name.trim(),
+        recipe.product_name,
+        recipe.target_abv,
+        recipe.target_brix,
+        recipe.scale_factor ?? 1,
+        recipe.notes,
+        id,
+      ],
+    );
+  } else {
+    id = insertRow(
+      `INSERT INTO blend_recipes (name, product_name, target_abv, target_brix, scale_factor, notes)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        recipe.name.trim(),
+        recipe.product_name,
+        recipe.target_abv,
+        recipe.target_brix,
+        recipe.scale_factor ?? 1,
+        recipe.notes,
+      ],
+    );
+  }
+
+  persistBlendRecipeSpiritSources(id, spiritSources);
+  persistBlendRecipeIngredients(id, ingredients);
+  return id;
+}
+
+export function deleteBlendRecipe(id: number): void {
+  runQuery('DELETE FROM blend_recipes WHERE id = ?', [id]);
+}
+
+export function blendRecipeSpiritSourcesFromWizard(
+  sources: BlendSpiritSourceInput[],
+): BlendRecipeSpiritSourceInput[] {
+  return sources
+    .filter((source) => source.volume_gal > 0)
+    .map((source, index) => {
+      const tank = source.holding_tank_equipment_id
+        ? queryOne<{ name: string }>(
+          'SELECT name FROM floor_equipment WHERE id = ?',
+          [source.holding_tank_equipment_id],
+        )
+        : null;
+      return {
+        spirit_label: tank?.name ?? `Spirit ${index + 1}`,
+        volume_gal: source.volume_gal,
+        abv: source.abv,
+      };
+    });
+}
+
+export function saveBlendRecipeFromWizard(
+  name: string,
+  product: Pick<BlendProduct, 'product_name' | 'target_abv' | 'target_brix' | 'scale_factor' | 'notes'>,
+  spiritSources: BlendSpiritSourceInput[],
+  ingredients: BlendIngredientInput[],
+  id?: number,
+): number {
+  return saveBlendRecipe(
+    {
+      name,
+      product_name: product.product_name,
+      target_abv: product.target_abv,
+      target_brix: product.target_brix,
+      scale_factor: product.scale_factor ?? 1,
+      notes: product.notes,
+    },
+    blendRecipeSpiritSourcesFromWizard(spiritSources),
+    ingredients.filter((ingredient) => ingredient.amount > 0 || ingredient.name.trim()),
+    id,
+  );
 }
 
 // ── Blending ───────────────────────────────────────────────

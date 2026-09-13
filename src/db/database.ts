@@ -408,6 +408,7 @@ function runMigrations(): void {
   migratePackagingBottleColumn();
   migrateBottlingTankSourceColumns();
   migrateBottlingRunLines();
+  migrateBlendRecipes();
   migrateFloorPlanPages();
   migrateAdvancedBlending();
   persistDb();
@@ -479,6 +480,53 @@ function migrateBottlingRunLines(): void {
     FROM bottling_runs
     WHERE bottle_count > 0
       AND id NOT IN (SELECT bottling_run_id FROM bottling_run_lines)
+  `);
+}
+
+function migrateBlendRecipes(): void {
+  if (!db) return;
+  db.run(`
+    CREATE TABLE IF NOT EXISTS blend_recipes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+      product_name TEXT NOT NULL DEFAULT '',
+      target_abv REAL,
+      target_brix REAL,
+      scale_factor REAL NOT NULL DEFAULT 1,
+      notes TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS blend_recipe_spirit_sources (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      blend_recipe_id INTEGER NOT NULL REFERENCES blend_recipes(id) ON DELETE CASCADE,
+      spirit_label TEXT NOT NULL DEFAULT '',
+      volume_gal REAL NOT NULL DEFAULT 0,
+      abv REAL NOT NULL DEFAULT 0,
+      sort_order INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS blend_recipe_ingredients (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      blend_recipe_id INTEGER NOT NULL REFERENCES blend_recipes(id) ON DELETE CASCADE,
+      ingredient_type TEXT NOT NULL DEFAULT 'other',
+      name TEXT NOT NULL DEFAULT '',
+      amount REAL NOT NULL DEFAULT 0,
+      unit TEXT NOT NULL DEFAULT 'gal',
+      cost_per_unit REAL,
+      lot_number TEXT NOT NULL DEFAULT '',
+      inventory_item_id INTEGER REFERENCES inventory_items(id),
+      notes TEXT NOT NULL DEFAULT ''
+    )
+  `);
+  db.run(`
+    CREATE INDEX IF NOT EXISTS idx_blend_recipe_spirit_sources_recipe ON blend_recipe_spirit_sources(blend_recipe_id)
+  `);
+  db.run(`
+    CREATE INDEX IF NOT EXISTS idx_blend_recipe_ingredients_recipe ON blend_recipe_ingredients(blend_recipe_id)
   `);
 }
 
