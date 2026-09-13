@@ -175,9 +175,9 @@ export interface HoldingTankContents {
   cut_count: number;
 }
 
-export type HoldingTankIntakeKind = 'cut' | 'transfer';
+export type HoldingTankIntakeKind = 'cut' | 'transfer' | 'blend';
 
-/** A single distillation cut or transfer that added spirit to a holding tank. */
+/** A single distillation cut, transfer, or blend that added spirit to a holding tank. */
 export interface HoldingTankIntakeEntry {
   kind: HoldingTankIntakeKind;
   id: number;
@@ -273,6 +273,7 @@ export interface BlendProduct {
   actual_brix: number | null;
   status: BlendStatus | LegacyBlendStatus;
   executed_at: string | null;
+  output_holding_tank_equipment_id: number | null;
   notes: string;
   created_at: string;
 }
@@ -302,6 +303,7 @@ export interface BlendIngredient {
 
 export interface BlendProductView extends BlendProduct {
   source_tank_name?: string;
+  output_tank_name?: string;
 }
 
 export interface BlendIngredientInput {

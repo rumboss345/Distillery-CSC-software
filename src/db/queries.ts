@@ -472,10 +472,20 @@ export function getHoldingTankContents(
     WHERE source_tank_equipment_id = ?
   `, [tankId]);
 
-  const volumeIn = (ins?.volume_gal ?? 0) + (transferIns?.volume_gal ?? 0);
+  const blendIns = queryOne<{ volume_gal: number; gpa: number }>(`
+    SELECT
+      COALESCE(SUM(final_volume_gal), 0) as volume_gal,
+      COALESCE(SUM(final_volume_gal * final_abv / 100), 0) as gpa
+    FROM blend_products
+    WHERE output_holding_tank_equipment_id = ?
+      AND status IN ${BLEND_LEDGER_STATUSES_SQL}
+      AND final_volume_gal > 0
+  `, [tankId]);
+
+  const volumeIn = (ins?.volume_gal ?? 0) + (transferIns?.volume_gal ?? 0) + (blendIns?.volume_gal ?? 0);
   const volumeOut = (runOuts?.volume_gal ?? 0) + (blendOuts?.volume_gal ?? 0)
     + (bottlingOuts?.volume_gal ?? 0) + (transferOuts?.volume_gal ?? 0);
-  const gpaIn = (ins?.gpa ?? 0) + (transferIns?.gpa ?? 0);
+  const gpaIn = (ins?.gpa ?? 0) + (transferIns?.gpa ?? 0) + (blendIns?.gpa ?? 0);
   const gpaOut = (runOuts?.gpa ?? 0) + (blendOuts?.gpa ?? 0)
     + (bottlingOuts?.gpa ?? 0) + (transferOuts?.gpa ?? 0);
   const volume_gal = Math.max(0, volumeIn - volumeOut);
@@ -540,6 +550,15 @@ export function getChargeableHoldingTanksForBottling(excludeBottlingRunId?: numb
       };
     })
     .filter((tank) => tank.available_gal > 0);
+}
+
+export function defaultBlendingOutputTankId(excludeTankIds: number[] = []): number | null {
+  const exclude = new Set(excludeTankIds.filter((id) => id > 0));
+  const tanks = getHoldingTanks().filter((t) => !exclude.has(t.id));
+  const preferred = tanks.find(
+    (t) => t.name.toLowerCase().includes('blending') || t.name.toLowerCase().includes('canning'),
+  );
+  return preferred?.id ?? tanks[0]?.id ?? null;
 }
 
 export function defaultHighWinesTankId(excludeTankId?: number | null): number | null {
@@ -682,6 +701,27 @@ export function getHoldingTankIntakeHistory(
     WHERE t.dest_tank_equipment_id = ?
   `, [tankId]);
 
+  const blends = queryAll<{
+    id: number;
+    occurred_at: string;
+    volume_gal: number;
+    abv: number;
+    batch_number: string;
+    product_name: string;
+  }>(`
+    SELECT
+      id,
+      COALESCE(executed_at, created_at) as occurred_at,
+      final_volume_gal as volume_gal,
+      final_abv as abv,
+      batch_number,
+      product_name
+    FROM blend_products
+    WHERE output_holding_tank_equipment_id = ?
+      AND status IN ${BLEND_LEDGER_STATUSES_SQL}
+      AND final_volume_gal > 0
+  `, [tankId]);
+
   const runTypeLabels: Record<string, string> = {
     wash: 'low wine rum run',
     low_wines: 'spirit run',
@@ -716,6 +756,15 @@ export function getHoldingTankIntakeHistory(
       abv: t.abv,
       summary: `Transfer from ${t.source_tank_name}`,
       detail: spiritLabels[t.spirit_type] ?? t.spirit_type.replace('_', ' '),
+    })),
+    ...blends.map((b) => ({
+      kind: 'blend' as const,
+      id: b.id,
+      occurred_at: b.occurred_at,
+      volume_gal: b.volume_gal,
+      abv: b.abv,
+      summary: `Blend ${b.batch_number} — ${b.product_name}`,
+      detail: 'Finished batch',
     })),
   ];
 
@@ -1245,9 +1294,10 @@ export type BlendFormulaSaveInput = Omit<
 
 export function getBlendProducts(): BlendProductView[] {
   return queryAll(
-    `SELECT b.*, fe.name as source_tank_name
+    `SELECT b.*, fe.name as source_tank_name, out_fe.name as output_tank_name
      FROM blend_products b
      JOIN floor_equipment fe ON fe.id = b.source_holding_tank_equipment_id
+     LEFT JOIN floor_equipment out_fe ON out_fe.id = b.output_holding_tank_equipment_id
      ORDER BY b.blend_date DESC`,
   );
 }
@@ -1409,6 +1459,7 @@ export function saveBlendFormula(
     actual_density: product.actual_density,
     actual_brix: product.actual_brix,
     status: product.status,
+    output_holding_tank_equipment_id: product.output_holding_tank_equipment_id ?? null,
     notes: product.notes,
   };
 
@@ -1422,7 +1473,7 @@ export function saveBlendFormula(
         batch_number=?, product_name=?, source_holding_tank_equipment_id=?, base_spirit_volume_gal=?, base_spirit_abv=?,
         blend_date=?, target_abv=?, target_brix=?, scale_factor=?, formula_version=?, formulation_phase=?,
         final_volume_gal=?, final_abv=?, theoretical_volume_gal=?, theoretical_abv=?, theoretical_density=?, theoretical_brix=?,
-        actual_volume_gal=?, actual_abv=?, actual_density=?, actual_brix=?, status=?, notes=?
+        actual_volume_gal=?, actual_abv=?, actual_density=?, actual_brix=?, status=?, output_holding_tank_equipment_id=?, notes=?
        WHERE id=?`,
       [
         row.batch_number, row.product_name, row.source_holding_tank_equipment_id,
@@ -1431,7 +1482,7 @@ export function saveBlendFormula(
         row.final_volume_gal, row.final_abv,
         row.theoretical_volume_gal, row.theoretical_abv, row.theoretical_density, row.theoretical_brix,
         row.actual_volume_gal, row.actual_abv, row.actual_density, row.actual_brix,
-        row.status, row.notes, id,
+        row.status, row.output_holding_tank_equipment_id, row.notes, id,
       ],
     );
   } else {
@@ -1440,8 +1491,8 @@ export function saveBlendFormula(
         batch_number, product_name, source_holding_tank_equipment_id, base_spirit_volume_gal, base_spirit_abv,
         blend_date, target_abv, target_brix, scale_factor, formula_version, formulation_phase,
         final_volume_gal, final_abv, theoretical_volume_gal, theoretical_abv, theoretical_density, theoretical_brix,
-        actual_volume_gal, actual_abv, actual_density, actual_brix, status, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        actual_volume_gal, actual_abv, actual_density, actual_brix, status, output_holding_tank_equipment_id, notes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         row.batch_number, row.product_name, row.source_holding_tank_equipment_id,
         row.base_spirit_volume_gal, row.base_spirit_abv, row.blend_date,
@@ -1449,7 +1500,7 @@ export function saveBlendFormula(
         row.final_volume_gal, row.final_abv,
         row.theoretical_volume_gal, row.theoretical_abv, row.theoretical_density, row.theoretical_brix,
         row.actual_volume_gal, row.actual_abv, row.actual_density, row.actual_brix,
-        row.status, row.notes,
+        row.status, row.output_holding_tank_equipment_id, row.notes,
       ],
     );
   }
@@ -1513,8 +1564,8 @@ function assertSpiritAvailability(
   }
 }
 
-/** Approved execution — consumes tank spirit and inventory lots; posts finished liquid values. */
-export function executeBlendProduct(id: number): void {
+/** Approved execution — consumes tank spirit and inventory lots; deposits finished liquid into a holding tank. */
+export function executeBlendProduct(id: number, outputTankId: number): void {
   const product = queryOne<BlendProduct>('SELECT * FROM blend_products WHERE id = ?', [id]);
   if (!product) throw new Error('Blend formula not found.');
   if (product.status === 'executed' || product.status === 'bottled' || product.status === 'blended') {
@@ -1523,6 +1574,15 @@ export function executeBlendProduct(id: number): void {
   if (product.status !== 'approved') {
     throw new Error('Blend must be approved before execution.');
   }
+  if (!outputTankId) {
+    throw new Error('Choose a holding tank for the finished batch.');
+  }
+
+  const outputTank = queryOne<FloorEquipment>(
+    `SELECT * FROM floor_equipment WHERE id = ? AND equipment_type = 'holding_tank'`,
+    [outputTankId],
+  );
+  if (!outputTank) throw new Error('Output tank not found.');
 
   const spiritSources = getBlendSpiritSources(id).map((s) => ({
     holding_tank_equipment_id: s.holding_tank_equipment_id,
@@ -1535,6 +1595,11 @@ export function executeBlendProduct(id: number): void {
   }
 
   assertSpiritAvailability(sources, id);
+
+  const sourceTankIds = new Set(sources.map((s) => s.holding_tank_equipment_id));
+  if (sourceTankIds.has(outputTankId)) {
+    throw new Error('Finished batch cannot go into a tank you are pulling spirit from.');
+  }
 
   const ingredients = getBlendIngredients(id);
   for (const ing of ingredients) {
@@ -1570,6 +1635,10 @@ export function executeBlendProduct(id: number): void {
   const finalVolume = formulation.reconciliation.effective.volumeGal ?? formulation.theoretical.volumeGal ?? 0;
   const finalAbv = formulation.reconciliation.effective.abv ?? formulation.theoretical.abv ?? 0;
 
+  if (finalVolume <= 0) {
+    throw new Error('Expected batch volume must be greater than zero.');
+  }
+
   runQuery(
     `UPDATE blend_products SET
       status = 'executed',
@@ -1578,7 +1647,8 @@ export function executeBlendProduct(id: number): void {
       final_abv = ?,
       base_spirit_volume_gal = ?,
       base_spirit_abv = ?,
-      source_holding_tank_equipment_id = ?
+      source_holding_tank_equipment_id = ?,
+      output_holding_tank_equipment_id = ?
      WHERE id = ?`,
     [
       finalVolume,
@@ -1586,6 +1656,7 @@ export function executeBlendProduct(id: number): void {
       sources[0]?.volume_gal ?? product.base_spirit_volume_gal,
       sources[0]?.abv ?? product.base_spirit_abv,
       sources[0]?.holding_tank_equipment_id ?? product.source_holding_tank_equipment_id,
+      outputTankId,
       id,
     ],
   );
