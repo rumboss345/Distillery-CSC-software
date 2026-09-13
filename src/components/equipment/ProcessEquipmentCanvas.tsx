@@ -14,6 +14,7 @@ import {
   computeProcessCanvasSize,
   getStageZoneTop,
   PROCESS_STAGE_HEIGHT,
+  snapProcessPosition,
 } from './process-layout';
 import { groupEquipmentByStage } from './process-stages';
 import { EquipmentVisual } from './EquipmentVisual';
@@ -132,21 +133,18 @@ export function ProcessEquipmentCanvas({
         dragMovedRef.current = true;
       }
       const pt = getCanvasPoint(e.clientX, e.clientY);
-      const next = {
+      const next = snapProcessPosition({
         x: pt.x - dragging.offsetX,
         y: pt.y - dragging.offsetY,
-      };
+      });
       livePosRef.current = next;
       setLivePos(next);
     };
 
     const onUp = () => {
       if (livePosRef.current && dragging) {
-        updateEquipmentProcessPosition(
-          dragging.id,
-          Math.round(livePosRef.current.x),
-          Math.round(livePosRef.current.y),
-        );
+        const snapped = snapProcessPosition(livePosRef.current);
+        updateEquipmentProcessPosition(dragging.id, snapped.x, snapped.y);
         onLayoutChange?.();
       }
       livePosRef.current = null;
@@ -201,7 +199,7 @@ export function ProcessEquipmentCanvas({
     <div className="process-view">
       <div className="process-toolbar">
         <span className="process-toolbar-title">Production</span>
-        <span className="process-toolbar-hint">Drag equipment to arrange · Pan empty space to move canvas</span>
+        <span className="process-toolbar-hint">Drag equipment to arrange (snaps to grid) · Pan empty space to move canvas</span>
         <div className="process-toolbar-actions">
           <button type="button" className="btn btn-sm btn-secondary" onClick={zoomOut}>−</button>
           <button type="button" className="btn btn-sm btn-secondary" onClick={fitScreen}>Fit</button>
