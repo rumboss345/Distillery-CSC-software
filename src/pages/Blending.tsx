@@ -1,9 +1,7 @@
 import { useMemo, useState } from 'react';
-import { format } from 'date-fns';
 import {
   computeBlendFormulation,
   executeBlendProduct,
-  getBlendFormulaVersions,
   getBlendIngredients,
   getBlendProducts,
   getBlendSpiritSources,
@@ -19,28 +17,47 @@ import {
 import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
 import {
-  BLEND_FORMULATION_PHASES,
   BLEND_INGREDIENT_TYPES,
-  BLEND_STATUSES,
   INGREDIENT_UNITS,
   defaultIngredientUnit,
 } from '../lib/blending';
 import {
-  scaleFormulation,
+  computeBatchCorrection,
   solveSugarForTargetBrix,
   solveWaterForTargetAbv,
-  suggestCorrections,
-  totalIngredientCost,
+  type BatchCorrectionAction,
   type AdditiveInput,
   type SpiritSourceInput,
 } from '../lib/blend-formulation';
 import type {
-  BlendFormulationPhase,
   BlendIngredientInput,
   BlendProduct,
   BlendSpiritSourceInput,
-  BlendStatus,
 } from '../types';
+
+const WIZARD_STEPS = [
+  { id: 1, label: 'Product', title: 'What are you making?' },
+  { id: 2, label: 'Spirits', title: 'Select your spirits' },
+  { id: 3, label: 'Proof', title: 'Set the target proof (ABV)' },
+  { id: 4, label: 'Additives', title: 'Add sugar, flavors & color' },
+  { id: 5, label: 'Review', title: 'Review your recipe' },
+  { id: 6, label: 'Lab test', title: 'Record lab results' },
+  { id: 7, label: 'Approve', title: 'Approve for production' },
+  { id: 8, label: 'Produce', title: 'Make the batch' },
+  { id: 9, label: 'Verify', title: 'Verify final measurements' },
+] as const;
+
+const STEP_HINTS: Record<number, string> = {
+  1: 'Give your product a name and batch number so you can track it through production.',
+  2: 'Choose which holding tanks to pull spirit from and how many gallons to use from each.',
+  3: 'Enter the proof you want to bottle at. We can calculate how much water to add.',
+  4: 'Add sweetener, flavorings, or color if this product needs them. Skip if not.',
+  5: 'Check the expected yield before running a lab trial or going to production.',
+  6: 'Enter what the lab actually measured. If it is off, use Correct This Batch below.',
+  7: 'Once you are satisfied with the lab results, approve the recipe for production.',
+  8: 'This pulls spirit from tanks and deducts ingredients from inventory. Cannot be undone.',
+  9: 'Record final measurements after production. Correct the batch if needed.',
+};
 
 const emptyIngredient = (type: BlendIngredientInput['ingredient_type'] = 'water'): BlendIngredientInput => ({
   ingredient_type: type,
@@ -105,21 +122,106 @@ function toAdditiveInputs(ingredients: BlendIngredientInput[]): AdditiveInput[] 
   }));
 }
 
+function resumeStep(blend: BlendProduct): number {
+  if (blend.status === 'executed' || blend.status === 'bottled' || blend.status === 'blended') return 9;
+  if (blend.status === 'approved') return 8;
+  if (blend.status === 'trial' || blend.actual_abv != null) return 6;
+  if (blend.target_abv != null) return 5;
+  if (blend.base_spirit_volume_gal > 0) return 3;
+  if (blend.product_name.trim()) return 2;
+  return 1;
+}
+
+function stepLabel(status: BlendProduct['status'], targetAbv: number | null): string {
+  if (status === 'executed' || status === 'bottled' || status === 'blended') return 'Complete';
+  if (status === 'approved') return 'Ready to produce';
+  if (status === 'trial') return 'Lab testing';
+  if (targetAbv != null) return 'Recipe ready';
+  return 'In progress';
+}
+
+function applyCorrectionToIngredients(
+  ingredients: BlendIngredientInput[],
+  action: BatchCorrectionAction,
+): BlendIngredientInput[] {
+  const next = [...ingredients];
+  const typeMap = { water: 'water', spirit: 'other', sugar: 'sugar' } as const;
+  const ingType = typeMap[action.ingredientType];
+  const idx = next.findIndex((i) =>
+    action.ingredientType === 'spirit'
+      ? i.ingredient_type === 'other' && i.name.toLowerCase().includes('spirit')
+      : i.ingredient_type === ingType,
+  );
+  if (idx >= 0) {
+    next[idx] = {
+      ...next[idx],
+      amount: roundAmount(next[idx].amount + action.amount),
+      name: action.label,
+      notes: action.instruction,
+    };
+  } else {
+    next.push({
+      ingredient_type: ingType,
+      name: action.label,
+      amount: action.amount,
+      unit: action.unit,
+      cost_per_unit: null,
+      lot_number: '',
+      inventory_item_id: null,
+      notes: `Correction: ${action.instruction}`,
+    });
+  }
+  return next;
+}
+
+function roundAmount(n: number) {
+  return Math.round(n * 1000) / 1000;
+}
+
+function buildSavePayload(
+  form: FormulaForm,
+  formulation: ReturnType<typeof computeBlendFormulation>,
+  activeSources: BlendSpiritSourceInput[],
+  statusOverride?: FormulaForm['status'],
+) {
+  const primary = activeSources[0];
+  return {
+    ...form,
+    status: statusOverride ?? form.status,
+    source_holding_tank_equipment_id: primary.holding_tank_equipment_id,
+    base_spirit_volume_gal: primary.volume_gal,
+    base_spirit_abv: primary.abv,
+    formulation_phase: form.status === 'trial' || form.actual_abv != null ? 'trial' as const : form.formulation_phase,
+    theoretical_volume_gal: formulation.theoretical.volumeGal,
+    theoretical_abv: formulation.theoretical.abv,
+    theoretical_density: formulation.theoretical.density,
+    theoretical_brix: formulation.theoretical.brix,
+    final_volume_gal: formulation.reconciliation.effective.volumeGal ?? formulation.theoretical.volumeGal,
+    final_abv: formulation.reconciliation.effective.abv ?? formulation.theoretical.abv,
+  };
+}
+
 export function Blending() {
   const { key, refresh } = useRefreshKey();
   const blends = getBlendProducts();
   const inventoryItems = getInventoryItems();
-  const [showForm, setShowForm] = useState(false);
+  const [showWizard, setShowWizard] = useState(false);
+  const [wizardStep, setWizardStep] = useState(1);
   const [editId, setEditId] = useState<number | undefined>();
-  const [selectedId, setSelectedId] = useState<number | null>(null);
   const [form, setForm] = useState<FormulaForm>(emptyProduct());
   const [spiritSources, setSpiritSources] = useState<BlendSpiritSourceInput[]>([emptySpiritSource()]);
-  const [ingredients, setIngredients] = useState<BlendIngredientInput[]>([emptyIngredient('water')]);
+  const [ingredients, setIngredients] = useState<BlendIngredientInput[]>([]);
+  const [showInventoryDetails, setShowInventoryDetails] = useState(false);
+  const [correctionProof, setCorrectionProof] = useState(80);
+  const [measuredForCorrection, setMeasuredForCorrection] = useState<{ abv: string; volume: string; brix: string }>({
+    abv: '',
+    volume: '',
+    brix: '',
+  });
 
   void key;
 
   const chargeableTanks = getChargeableHoldingTanksForBlend(editId);
-
   const activeSources = spiritSources.filter((s) => s.holding_tank_equipment_id > 0 && s.volume_gal > 0);
   const formulation = useMemo(
     () => computeBlendFormulation(activeSources, ingredients, {
@@ -131,37 +233,32 @@ export function Blending() {
     [activeSources, ingredients, form.actual_volume_gal, form.actual_abv, form.actual_density, form.actual_brix],
   );
 
-  const corrections = suggestCorrections(
-    formulation.theoretical,
-    {
-      abv: form.actual_abv ?? undefined,
-      brix: form.actual_brix ?? undefined,
-      density: form.actual_density ?? undefined,
-    },
-    form.target_abv,
-    form.target_brix,
-  );
-
-  const ingredientCost = totalIngredientCost(toAdditiveInputs(ingredients));
-
-  const selectedIngredients = selectedId ? getBlendIngredients(selectedId) : [];
-  const selectedSources = selectedId ? getBlendSpiritSources(selectedId) : [];
-  const selectedVersions = selectedId ? getBlendFormulaVersions(selectedId) : [];
+  const correctionVolume = measuredForCorrection.volume
+    ? parseFloat(measuredForCorrection.volume)
+    : (form.actual_volume_gal ?? formulation.theoretical.volumeGal);
+  const correctionAbv = measuredForCorrection.abv
+    ? parseFloat(measuredForCorrection.abv)
+    : form.actual_abv;
+  const batchCorrection = useMemo(() => {
+    if (form.target_abv == null || correctionAbv == null || correctionVolume <= 0) return null;
+    return computeBatchCorrection(correctionVolume, correctionAbv, form.target_abv, {
+      measuredBrix: measuredForCorrection.brix ? parseFloat(measuredForCorrection.brix) : form.actual_brix,
+      targetBrix: form.target_brix,
+      spiritProofAbv: correctionProof,
+    });
+  }, [correctionVolume, correctionAbv, form.target_abv, form.target_brix, form.actual_brix, measuredForCorrection.brix, correctionProof]);
 
   const openNew = () => {
     setEditId(undefined);
     setForm(emptyProduct());
     setSpiritSources([emptySpiritSource()]);
-    setIngredients([emptyIngredient('water')]);
-    setShowForm(true);
+    setIngredients([]);
+    setWizardStep(1);
+    setMeasuredForCorrection({ abv: '', volume: '', brix: '' });
+    setShowWizard(true);
   };
 
-  const openEdit = (blend: BlendProduct) => {
-    if (blend.status === 'executed' || blend.status === 'bottled' || blend.status === 'blended') {
-      alert('Executed blends are read-only. View version history for audit trail.');
-      setSelectedId(blend.id);
-      return;
-    }
+  const openContinue = (blend: BlendProduct) => {
     setEditId(blend.id);
     setForm({
       batch_number: blend.batch_number,
@@ -185,7 +282,7 @@ export function Blending() {
       actual_abv: blend.actual_abv,
       actual_density: blend.actual_density,
       actual_brix: blend.actual_brix,
-      status: blend.status as BlendStatus,
+      status: blend.status === 'blended' ? 'executed' : blend.status,
       notes: blend.notes,
     });
     const sources = getBlendSpiritSources(blend.id);
@@ -204,20 +301,33 @@ export function Blending() {
     );
     const ings = getBlendIngredients(blend.id);
     setIngredients(
-      ings.length > 0
-        ? ings.map((i) => ({
-          ingredient_type: i.ingredient_type,
-          name: i.name,
-          amount: i.amount,
-          unit: i.unit,
-          cost_per_unit: i.cost_per_unit,
-          lot_number: i.lot_number,
-          inventory_item_id: i.inventory_item_id,
-          notes: i.notes,
-        }))
-        : [emptyIngredient('water')],
+      ings.map((i) => ({
+        ingredient_type: i.ingredient_type,
+        name: i.name,
+        amount: i.amount,
+        unit: i.unit,
+        cost_per_unit: i.cost_per_unit,
+        lot_number: i.lot_number,
+        inventory_item_id: i.inventory_item_id,
+        notes: i.notes,
+      })),
     );
-    setShowForm(true);
+    setMeasuredForCorrection({
+      abv: blend.actual_abv?.toString() ?? '',
+      volume: blend.actual_volume_gal?.toString() ?? '',
+      brix: blend.actual_brix?.toString() ?? '',
+    });
+    setWizardStep(resumeStep(blend));
+    setShowWizard(true);
+  };
+
+  const tankOptionsFor = (tankId: number) => {
+    if (!tankId) return chargeableTanks;
+    if (chargeableTanks.some((t) => t.id === tankId)) return chargeableTanks;
+    const saved = getHoldingTanks().find((t) => t.id === tankId);
+    if (!saved) return chargeableTanks;
+    const contents = getHoldingTankContents(tankId, undefined, editId);
+    return [...chargeableTanks, { ...saved, available_gal: contents.volume_gal, available_abv: contents.abv }];
   };
 
   const updateSpiritSource = (index: number, patch: Partial<BlendSpiritSourceInput>) => {
@@ -227,12 +337,9 @@ export function Blending() {
       if (patch.holding_tank_equipment_id) {
         const chargeable = chargeableTanks.find((t) => t.id === patch.holding_tank_equipment_id);
         if (chargeable) {
-          next.volume_gal = chargeable.available_gal;
           next.abv = chargeable.available_abv;
         } else {
-          const contents = getHoldingTankContents(patch.holding_tank_equipment_id, undefined, editId);
-          next.volume_gal = contents.volume_gal;
-          next.abv = contents.abv;
+          next.abv = getHoldingTankContents(patch.holding_tank_equipment_id, undefined, editId).abv;
         }
       }
       return next;
@@ -240,9 +347,7 @@ export function Blending() {
   };
 
   const addSpiritSource = () => setSpiritSources((prev) => [...prev, emptySpiritSource()]);
-  const removeSpiritSource = (index: number) => {
-    setSpiritSources((prev) => prev.filter((_, i) => i !== index));
-  };
+  const removeSpiritSource = (index: number) => setSpiritSources((prev) => prev.filter((_, i) => i !== index));
 
   const updateIngredient = (index: number, patch: Partial<BlendIngredientInput>) => {
     setIngredients((prev) => prev.map((ing, i) => {
@@ -256,34 +361,23 @@ export function Blending() {
     }));
   };
 
-  const addIngredient = () => setIngredients((prev) => [...prev, emptyIngredient('flavoring')]);
+  const addIngredient = (type: BlendIngredientInput['ingredient_type'] = 'flavoring') => {
+    setIngredients((prev) => [...prev, emptyIngredient(type)]);
+  };
   const removeIngredient = (index: number) => setIngredients((prev) => prev.filter((_, i) => i !== index));
 
-  const handleSolveWater = () => {
-    if (form.target_abv == null) {
-      alert('Enter a target ABV first.');
-      return;
-    }
+  const handleCalculateWater = () => {
+    if (form.target_abv == null) return;
     const solved = solveWaterForTargetAbv(
       toSpiritInputs(spiritSources),
       toAdditiveInputs(ingredients.filter((i) => i.ingredient_type !== 'water')),
       form.target_abv,
     );
-    if (!solved) {
-      alert('Could not solve water for target ABV.');
-      return;
-    }
+    if (!solved) return;
+    const waterLine = emptyIngredient('water');
+    waterLine.amount = solved.waterGal;
+    waterLine.name = 'Proofing water';
     const waterIdx = ingredients.findIndex((i) => i.ingredient_type === 'water');
-    const waterLine: BlendIngredientInput = {
-      ingredient_type: 'water',
-      name: 'Proofing water (calculated)',
-      amount: solved.waterGal,
-      unit: 'gal',
-      cost_per_unit: null,
-      lot_number: '',
-      inventory_item_id: null,
-      notes: '',
-    };
     if (waterIdx >= 0) {
       setIngredients((prev) => prev.map((ing, i) => (i === waterIdx ? waterLine : ing)));
     } else {
@@ -291,31 +385,18 @@ export function Blending() {
     }
   };
 
-  const handleSolveSugar = () => {
-    if (form.target_brix == null) {
-      alert('Enter a target Brix first.');
-      return;
-    }
+  const handleCalculateSugar = () => {
+    if (form.target_brix == null) return;
     const solved = solveSugarForTargetBrix(
       toSpiritInputs(spiritSources),
       toAdditiveInputs(ingredients.filter((i) => i.ingredient_type !== 'sugar')),
       form.target_brix,
     );
-    if (!solved) {
-      alert('Could not solve sugar for target Brix.');
-      return;
-    }
+    if (!solved) return;
+    const sugarLine = emptyIngredient('sugar');
+    sugarLine.amount = solved.sugarLbs;
+    sugarLine.name = 'Sugar';
     const sugarIdx = ingredients.findIndex((i) => i.ingredient_type === 'sugar');
-    const sugarLine: BlendIngredientInput = {
-      ingredient_type: 'sugar',
-      name: 'Sugar (calculated)',
-      amount: solved.sugarLbs,
-      unit: 'lbs',
-      cost_per_unit: null,
-      lot_number: '',
-      inventory_item_id: null,
-      notes: '',
-    };
     if (sugarIdx >= 0) {
       setIngredients((prev) => prev.map((ing, i) => (i === sugarIdx ? sugarLine : ing)));
     } else {
@@ -323,161 +404,550 @@ export function Blending() {
     }
   };
 
-  const handleScale = () => {
-    const factor = form.scale_factor;
-    if (factor <= 0 || factor === 1) return;
-    const scaled = scaleFormulation(toSpiritInputs(spiritSources), toAdditiveInputs(ingredients), factor);
-    setSpiritSources(scaled.spirits.map((s, i) => ({
-      holding_tank_equipment_id: spiritSources[i]?.holding_tank_equipment_id ?? 0,
-      volume_gal: s.volumeGal,
-      abv: s.abv,
-    })));
-    setIngredients(scaled.additives.map((a, i) => ({
-      ...ingredients[i],
-      ingredient_type: a.ingredientType,
-      name: a.name,
-      amount: a.amount,
-      unit: a.unit,
-    })));
-    setForm({ ...form, scale_factor: 1 });
+  const persistFormula = (statusOverride?: FormulaForm['status']): number => {
+    const payload = buildSavePayload(form, formulation, activeSources, statusOverride);
+    return saveBlendFormula(
+      payload,
+      activeSources,
+      ingredients.filter((i) => i.amount > 0 || i.name.trim()),
+      editId,
+    );
   };
 
-  const validateFormula = (): boolean => {
-    if (!form.product_name.trim()) {
-      alert('Enter a product name.');
+  const validateStep = (step: number): boolean => {
+    if (step === 1 && !form.product_name.trim()) {
+      alert('Please enter a product name.');
       return false;
     }
-    if (activeSources.length === 0) {
-      alert('Add at least one spirit source.');
+    if (step === 2 && activeSources.length === 0) {
+      alert('Please select at least one spirit tank and enter a volume.');
       return false;
     }
-    for (const source of activeSources) {
-      const available = getHoldingTankContents(source.holding_tank_equipment_id, undefined, editId);
-      if (source.volume_gal > available.volume_gal + 0.01) {
-        alert(`Spirit draw exceeds available volume (${available.volume_gal.toFixed(1)} gal). Formula saves do not reserve tank volume — verify before execution.`);
-      }
+    if (step === 3 && form.target_abv == null) {
+      alert('Please enter your target proof (ABV).');
+      return false;
     }
     return true;
   };
 
-  const handleSaveFormula = () => {
-    if (!validateFormula()) return;
-    const primary = activeSources[0];
+  const goNext = () => {
+    if (!validateStep(wizardStep)) return;
+    if (wizardStep === 5) {
+      try {
+        const id = persistFormula('draft');
+        setEditId(id);
+        setForm((f) => ({ ...f, status: 'draft' }));
+      } catch (e) {
+        alert(e instanceof Error ? e.message : 'Could not save recipe.');
+        return;
+      }
+    }
+    if (wizardStep === 6) {
+      try {
+        const id = persistFormula('trial');
+        setEditId(id);
+        setForm((f) => ({ ...f, status: 'trial', actual_abv: correctionAbv ?? f.actual_abv, actual_volume_gal: correctionVolume || f.actual_volume_gal }));
+      } catch (e) {
+        alert(e instanceof Error ? e.message : 'Could not save lab results.');
+        return;
+      }
+    }
+    setWizardStep((s) => Math.min(9, s + 1));
+  };
+
+  const goBack = () => setWizardStep((s) => Math.max(1, s - 1));
+
+  const handleApprove = () => {
     try {
-      saveBlendFormula(
-        {
-          ...form,
-          source_holding_tank_equipment_id: primary.holding_tank_equipment_id,
-          base_spirit_volume_gal: primary.volume_gal,
-          base_spirit_abv: primary.abv,
-          theoretical_volume_gal: formulation.theoretical.volumeGal,
-          theoretical_abv: formulation.theoretical.abv,
-          theoretical_density: formulation.theoretical.density,
-          theoretical_brix: formulation.theoretical.brix,
-          final_volume_gal: formulation.reconciliation.effective.volumeGal ?? formulation.theoretical.volumeGal,
-          final_abv: formulation.reconciliation.effective.abv ?? formulation.theoretical.abv,
-        },
-        activeSources,
-        ingredients.filter((i) => i.amount > 0 || i.name.trim()),
-        editId,
-      );
-      setShowForm(false);
+      const id = persistFormula('approved');
+      setEditId(id);
+      setForm((f) => ({ ...f, status: 'approved' }));
+      setWizardStep(8);
       refresh();
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed to save formula.');
+      alert(e instanceof Error ? e.message : 'Could not approve recipe.');
     }
   };
 
-  const handleExecute = () => {
+  const handleProduce = () => {
     if (!editId) {
-      alert('Save the formula first, then approve and execute.');
+      alert('Save the recipe first.');
       return;
     }
-    if (form.status !== 'approved') {
-      alert('Set status to Approved before executing.');
-      return;
-    }
-    if (!confirm('Execute blend? This will consume tank spirit and inventory lots. This cannot be undone.')) {
+    if (!confirm(`Produce "${form.product_name}"?\n\nThis will pull spirit from tanks and deduct ingredients from inventory.`)) {
       return;
     }
     try {
-      saveBlendFormula(
-        {
-          ...form,
-          source_holding_tank_equipment_id: activeSources[0].holding_tank_equipment_id,
-          base_spirit_volume_gal: activeSources[0].volume_gal,
-          base_spirit_abv: activeSources[0].abv,
-          status: 'approved',
-          theoretical_volume_gal: formulation.theoretical.volumeGal,
-          theoretical_abv: formulation.theoretical.abv,
-          theoretical_density: formulation.theoretical.density,
-          theoretical_brix: formulation.theoretical.brix,
-          final_volume_gal: formulation.reconciliation.effective.volumeGal ?? formulation.theoretical.volumeGal,
-          final_abv: formulation.reconciliation.effective.abv ?? formulation.theoretical.abv,
-        },
-        activeSources,
-        ingredients.filter((i) => i.amount > 0 || i.name.trim()),
-        editId,
-      );
+      persistFormula('approved');
       executeBlendProduct(editId);
-      setShowForm(false);
+      setForm((f) => ({ ...f, status: 'executed' }));
+      setWizardStep(9);
       refresh();
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Execution failed.');
+      alert(e instanceof Error ? e.message : 'Production failed.');
     }
+  };
+
+  const handleApplyCorrection = () => {
+    if (!batchCorrection || batchCorrection.onTarget) return;
+    let nextIngredients = ingredients;
+    for (const action of batchCorrection.actions) {
+      nextIngredients = applyCorrectionToIngredients(nextIngredients, action);
+    }
+    setIngredients(nextIngredients);
+    setForm((f) => ({
+      ...f,
+      actual_abv: batchCorrection.measuredAbv,
+      actual_volume_gal: batchCorrection.volumeGal,
+      status: 'trial',
+      notes: `${f.notes}\n[Correction applied] ${batchCorrection.headline}`.trim(),
+    }));
+    setMeasuredForCorrection({ abv: '', volume: '', brix: '' });
+    alert('Correction added to your recipe. Mix, re-test, and continue when ready.');
+    setWizardStep(5);
   };
 
   const handleDelete = (id: number) => {
-    if (!confirm('Delete this formula? No inventory has been consumed for draft/trial formulas.')) return;
+    if (!confirm('Delete this recipe?')) return;
     try {
       deleteBlendProduct(id);
-      if (selectedId === id) setSelectedId(null);
       refresh();
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Delete failed.');
     }
   };
 
-  const tankOptionsFor = (tankId: number) => {
-    if (!tankId) return chargeableTanks;
-    if (chargeableTanks.some((t) => t.id === tankId)) return chargeableTanks;
-    const saved = getHoldingTanks().find((t) => t.id === tankId);
-    if (!saved) return chargeableTanks;
-    const contents = getHoldingTankContents(tankId, undefined, editId);
-    return [...chargeableTanks, { ...saved, available_gal: contents.volume_gal, available_abv: contents.abv }];
+  const renderCorrectBatchPanel = () => (
+    <div className="correct-batch-panel">
+      <h4>Correct This Batch</h4>
+      <p className="field-hint">
+        Measured off target? Enter what you actually got and we will tell you exactly what to add.
+      </p>
+      <div className="correct-batch-inputs">
+        <label>
+          Measured proof (ABV %)
+          <input
+            type="number"
+            step="0.1"
+            placeholder={form.actual_abv?.toString() ?? 'e.g. 41.2'}
+            value={measuredForCorrection.abv}
+            onChange={(e) => setMeasuredForCorrection({ ...measuredForCorrection, abv: e.target.value })}
+          />
+        </label>
+        <label>
+          Batch size (gallons)
+          <input
+            type="number"
+            step="0.1"
+            placeholder={(form.actual_volume_gal ?? formulation.theoretical.volumeGal).toFixed(1)}
+            value={measuredForCorrection.volume}
+            onChange={(e) => setMeasuredForCorrection({ ...measuredForCorrection, volume: e.target.value })}
+          />
+        </label>
+        {form.target_brix != null && (
+          <label>
+            Measured Brix
+            <input
+              type="number"
+              step="0.1"
+              placeholder={form.actual_brix?.toString() ?? ''}
+              value={measuredForCorrection.brix}
+              onChange={(e) => setMeasuredForCorrection({ ...measuredForCorrection, brix: e.target.value })}
+            />
+          </label>
+        )}
+      </div>
+      {batchCorrection && (
+        <div className={`correction-result ${batchCorrection.onTarget ? 'on-target' : 'needs-fix'}`}>
+          <p className="correction-headline">{batchCorrection.headline}</p>
+          {!batchCorrection.onTarget && (
+            <>
+              <ul className="correction-actions">
+                {batchCorrection.actions.map((a, i) => (
+                  <li key={i}>{a.instruction}</li>
+                ))}
+              </ul>
+              {batchCorrection.actions.some((a) => a.ingredientType === 'spirit') && (
+                <label className="correction-proof-input">
+                  Spirit proof for calculation (% ABV)
+                  <input
+                    type="number"
+                    step="1"
+                    value={correctionProof}
+                    onChange={(e) => setCorrectionProof(parseFloat(e.target.value) || 80)}
+                  />
+                </label>
+              )}
+              <button type="button" className="btn btn-primary" onClick={handleApplyCorrection}>
+                Apply correction to recipe
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
+  const renderStepContent = () => {
+    switch (wizardStep) {
+      case 1:
+        return (
+          <>
+            <div className="form-group">
+              <label>Product name</label>
+              <input
+                value={form.product_name}
+                onChange={(e) => setForm({ ...form, product_name: e.target.value })}
+                placeholder="e.g. Spiced Rum, Navy Strength Gin"
+                autoFocus
+              />
+            </div>
+            <div className="form-group">
+              <label>Batch number</label>
+              <input value={form.batch_number} onChange={(e) => setForm({ ...form, batch_number: e.target.value })} />
+            </div>
+            <div className="form-group">
+              <label>Blend date</label>
+              <input type="date" value={form.blend_date} onChange={(e) => setForm({ ...form, blend_date: e.target.value })} />
+            </div>
+          </>
+        );
+
+      case 2:
+        return (
+          <>
+            {spiritSources.map((src, index) => (
+              <div key={index} className="wizard-spirit-row">
+                <div className="form-group">
+                  <label>Holding tank</label>
+                  <select
+                    value={src.holding_tank_equipment_id || ''}
+                    onChange={(e) => updateSpiritSource(index, { holding_tank_equipment_id: parseInt(e.target.value) })}
+                  >
+                    <option value="">— Choose a tank —</option>
+                    {tankOptionsFor(src.holding_tank_equipment_id).map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name} — {t.available_gal.toFixed(1)} gal available @ {t.available_abv.toFixed(1)}%
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Gallons to use</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={src.volume_gal || ''}
+                    onChange={(e) => updateSpiritSource(index, { volume_gal: parseFloat(e.target.value) || 0 })}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Proof (ABV %)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={src.abv || ''}
+                    onChange={(e) => updateSpiritSource(index, { abv: parseFloat(e.target.value) || 0 })}
+                  />
+                </div>
+                {spiritSources.length > 1 && (
+                  <button type="button" className="btn btn-sm btn-ghost wizard-row-remove" onClick={() => removeSpiritSource(index)}>Remove</button>
+                )}
+              </div>
+            ))}
+            <button type="button" className="btn btn-sm btn-secondary" onClick={addSpiritSource}>+ Pull from another tank</button>
+          </>
+        );
+
+      case 3:
+        return (
+          <>
+            <div className="form-group">
+              <label>Target proof — what ABV do you want to bottle at?</label>
+              <input
+                type="number"
+                step="0.1"
+                value={form.target_abv ?? ''}
+                onChange={(e) => setForm({ ...form, target_abv: e.target.value ? parseFloat(e.target.value) : null })}
+                placeholder="e.g. 40"
+              />
+            </div>
+            {form.target_abv != null && (
+              <button type="button" className="btn btn-secondary" onClick={handleCalculateWater}>
+                Calculate how much water to add
+              </button>
+            )}
+            {ingredients.some((i) => i.ingredient_type === 'water' && i.amount > 0) && (
+              <p className="wizard-result-banner">
+                Add <strong>{ingredients.find((i) => i.ingredient_type === 'water')!.amount.toFixed(2)} gallons</strong> of proofing water.
+              </p>
+            )}
+          </>
+        );
+
+      case 4:
+        return (
+          <>
+            <p className="field-hint">Only add what this product needs. You can skip this step for straight spirits.</p>
+            {ingredients.filter((i) => i.ingredient_type !== 'water').map((ing) => {
+              const realIndex = ingredients.indexOf(ing);
+              return (
+                <div key={realIndex} className="wizard-additive-row">
+                  <select
+                    value={ing.ingredient_type}
+                    onChange={(e) => updateIngredient(realIndex, { ingredient_type: e.target.value as BlendIngredientInput['ingredient_type'] })}
+                  >
+                    {BLEND_INGREDIENT_TYPES.filter((t) => t.value !== 'water').map((t) => (
+                      <option key={t.value} value={t.value}>{t.label}</option>
+                    ))}
+                  </select>
+                  <input placeholder="Name" value={ing.name} onChange={(e) => updateIngredient(realIndex, { name: e.target.value })} />
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="Amount"
+                    value={ing.amount || ''}
+                    onChange={(e) => updateIngredient(realIndex, { amount: parseFloat(e.target.value) || 0 })}
+                  />
+                  <select value={ing.unit} onChange={(e) => updateIngredient(realIndex, { unit: e.target.value })}>
+                    {INGREDIENT_UNITS[ing.ingredient_type].map((u) => (
+                      <option key={u} value={u}>{u}</option>
+                    ))}
+                  </select>
+                  <button type="button" className="btn btn-sm btn-ghost" onClick={() => removeIngredient(realIndex)}>×</button>
+                </div>
+              );
+            })}
+            <div className="wizard-add-buttons">
+              <button type="button" className="btn btn-sm btn-secondary" onClick={() => addIngredient('sugar')}>+ Sugar / syrup</button>
+              <button type="button" className="btn btn-sm btn-secondary" onClick={() => addIngredient('flavoring')}>+ Flavoring</button>
+              <button type="button" className="btn btn-sm btn-secondary" onClick={() => addIngredient('color')}>+ Color</button>
+            </div>
+            <div className="form-group" style={{ marginTop: '1rem' }}>
+              <label>Sweetness target (Brix) — optional</label>
+              <div className="inline-field-row">
+                <input
+                  type="number"
+                  step="0.1"
+                  value={form.target_brix ?? ''}
+                  onChange={(e) => setForm({ ...form, target_brix: e.target.value ? parseFloat(e.target.value) : null })}
+                  placeholder="Leave blank if not applicable"
+                />
+                {form.target_brix != null && (
+                  <button type="button" className="btn btn-sm btn-secondary" onClick={handleCalculateSugar}>Calculate sugar</button>
+                )}
+              </div>
+            </div>
+            <label className="checkbox-label">
+              <input type="checkbox" checked={showInventoryDetails} onChange={(e) => setShowInventoryDetails(e.target.checked)} />
+              Show inventory &amp; lot tracking
+            </label>
+            {showInventoryDetails && ingredients.map((ing, index) => (
+              <div key={`inv-${index}`} className="wizard-inventory-row">
+                <span>{ing.name || BLEND_INGREDIENT_TYPES.find((t) => t.value === ing.ingredient_type)?.label}</span>
+                <input placeholder="Lot #" value={ing.lot_number ?? ''} onChange={(e) => updateIngredient(index, { lot_number: e.target.value })} />
+                <select
+                  value={ing.inventory_item_id ?? ''}
+                  onChange={(e) => updateIngredient(index, { inventory_item_id: e.target.value ? parseInt(e.target.value) : null })}
+                >
+                  <option value="">— Inventory item —</option>
+                  {inventoryItems.map((item) => (
+                    <option key={item.id} value={item.id}>{item.name} ({item.quantity} {item.unit})</option>
+                  ))}
+                </select>
+              </div>
+            ))}
+          </>
+        );
+
+      case 5:
+        return (
+          <div className="wizard-review-card">
+            <h4>{form.product_name || 'Your product'}</h4>
+            <p className="wizard-yield-line">
+              Expected yield: <strong>{formulation.theoretical.volumeGal.toFixed(1)} gallons</strong> at{' '}
+              <strong>{formulation.theoretical.abv.toFixed(1)}% ABV</strong>
+              {form.target_abv != null && (
+                <span> (target {form.target_abv}%)</span>
+              )}
+            </p>
+            <div className="wizard-recipe-summary">
+              <h5>Spirit</h5>
+              <ul>
+                {activeSources.map((s, i) => {
+                  const tank = getHoldingTanks().find((t) => t.id === s.holding_tank_equipment_id);
+                  return (
+                    <li key={i}>{s.volume_gal.toFixed(1)} gal from {tank?.name ?? 'tank'} @ {s.abv.toFixed(1)}%</li>
+                  );
+                })}
+              </ul>
+              {ingredients.filter((i) => i.amount > 0).length > 0 && (
+                <>
+                  <h5>Additives</h5>
+                  <ul>
+                    {ingredients.filter((i) => i.amount > 0).map((i, idx) => (
+                      <li key={idx}>{i.amount} {i.unit} {i.name || i.ingredient_type}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </div>
+            <p className="field-hint">Next: run a lab test on a trial batch, or approve if you are confident in the numbers.</p>
+          </div>
+        );
+
+      case 6:
+        return (
+          <>
+            <div className="wizard-lab-inputs">
+              <label>
+                Measured proof (ABV %)
+                <input
+                  type="number"
+                  step="0.1"
+                  value={form.actual_abv ?? ''}
+                  onChange={(e) => {
+                    const v = e.target.value ? parseFloat(e.target.value) : null;
+                    setForm({ ...form, actual_abv: v });
+                    setMeasuredForCorrection({ ...measuredForCorrection, abv: e.target.value });
+                  }}
+                />
+              </label>
+              <label>
+                Measured volume (gallons)
+                <input
+                  type="number"
+                  step="0.1"
+                  value={form.actual_volume_gal ?? ''}
+                  onChange={(e) => {
+                    const v = e.target.value ? parseFloat(e.target.value) : null;
+                    setForm({ ...form, actual_volume_gal: v });
+                    setMeasuredForCorrection({ ...measuredForCorrection, volume: e.target.value });
+                  }}
+                />
+              </label>
+              <label>
+                Measured Brix — if applicable
+                <input
+                  type="number"
+                  step="0.1"
+                  value={form.actual_brix ?? ''}
+                  onChange={(e) => setForm({ ...form, actual_brix: e.target.value ? parseFloat(e.target.value) : null })}
+                />
+              </label>
+            </div>
+            {form.actual_abv != null && form.target_abv != null && (
+              <p className="wizard-result-banner">
+                Lab: {form.actual_abv.toFixed(1)}% vs target {form.target_abv}% —
+                {Math.abs(form.actual_abv - form.target_abv) <= 0.2 ? ' on target!' : ' needs adjustment.'}
+              </p>
+            )}
+            {renderCorrectBatchPanel()}
+          </>
+        );
+
+      case 7:
+        return (
+          <div className="wizard-approve-card">
+            <p>Recipe <strong>{form.product_name}</strong> is ready for production sign-off.</p>
+            {form.actual_abv != null ? (
+              <p>Lab measured {form.actual_abv.toFixed(1)}% ABV (target {form.target_abv}%).</p>
+            ) : (
+              <p className="field-hint">No lab results recorded — you can still approve, but testing is recommended.</p>
+            )}
+            <button type="button" className="btn btn-primary btn-lg" onClick={handleApprove}>
+              Approve for production
+            </button>
+          </div>
+        );
+
+      case 8:
+        return (
+          <div className="wizard-produce-card">
+            <p>You are about to produce batch <strong>{form.batch_number}</strong> — {form.product_name}.</p>
+            <ul className="wizard-produce-checklist">
+              <li>{formulation.theoretical.volumeGal.toFixed(1)} gal expected yield @ {formulation.theoretical.abv.toFixed(1)}% ABV</li>
+              {activeSources.map((s, i) => {
+                const tank = getHoldingTanks().find((t) => t.id === s.holding_tank_equipment_id);
+                return <li key={i}>Pull {s.volume_gal.toFixed(1)} gal from {tank?.name}</li>;
+              })}
+            </ul>
+            <button type="button" className="btn btn-accent btn-lg" onClick={handleProduce}>
+              Produce this batch
+            </button>
+          </div>
+        );
+
+      case 9:
+        return (
+          <>
+            <div className="wizard-verify-card">
+              <p>Batch <strong>{form.batch_number}</strong> has been produced.</p>
+              <div className="wizard-lab-inputs">
+                <label>
+                  Final proof (ABV %)
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={form.actual_abv ?? ''}
+                    onChange={(e) => {
+                      const v = e.target.value ? parseFloat(e.target.value) : null;
+                      setForm({ ...form, actual_abv: v });
+                      setMeasuredForCorrection({ ...measuredForCorrection, abv: e.target.value });
+                    }}
+                  />
+                </label>
+                <label>
+                  Final volume (gallons)
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={form.actual_volume_gal ?? ''}
+                    onChange={(e) => {
+                      const v = e.target.value ? parseFloat(e.target.value) : null;
+                      setForm({ ...form, actual_volume_gal: v });
+                      setMeasuredForCorrection({ ...measuredForCorrection, volume: e.target.value });
+                    }}
+                  />
+                </label>
+              </div>
+            </div>
+            {renderCorrectBatchPanel()}
+          </>
+        );
+
+      default:
+        return null;
+    }
   };
+
+  const currentStep = WIZARD_STEPS[wizardStep - 1];
+  const isLocked = form.status === 'executed' || form.status === 'bottled';
 
   return (
     <div>
       <div className="page-header">
-        <h2>Advanced Blending &amp; Product Formulation Engine</h2>
-        <p>
-          Multi-spirit formulation with proofing water, sugar, syrups, flavors, and colors.
-          Calculations never mutate inventory — only an approved Execute Blend consumes lots and posts finished liquid.
-        </p>
+        <h2>Blending</h2>
+        <p>Follow the steps to build, test, approve, and produce a batch.</p>
         <div className="page-actions">
-          <button className="btn btn-primary" onClick={openNew}>+ New Formula</button>
+          <button className="btn btn-primary" onClick={openNew}>+ New batch</button>
         </div>
       </div>
 
       {blends.length === 0 ? (
         <div className="empty-state">
-          <p>No formulations yet. Build a theoretical recipe, run lab trials, approve, then execute against the ledger.</p>
-          <button className="btn btn-primary" onClick={openNew} style={{ marginTop: '1rem' }}>Create first formula</button>
+          <p>No batches yet. Start a new batch and we will walk you through each step.</p>
+          <button className="btn btn-primary" onClick={openNew} style={{ marginTop: '1rem' }}>Start first batch</button>
         </div>
       ) : (
         <div className="table-wrap">
           <table>
             <thead>
               <tr>
-                <th>Batch #</th>
+                <th>Batch</th>
                 <th>Product</th>
-                <th>Phase</th>
-                <th>Ver.</th>
-                <th>Theoretical</th>
-                <th>Lab / Effective</th>
-                <th>Target ABV</th>
-                <th>Date</th>
+                <th>Target proof</th>
+                <th>Progress</th>
                 <th>Status</th>
                 <th></th>
               </tr>
@@ -487,26 +957,16 @@ export function Blending() {
                 <tr key={b.id}>
                   <td><strong>{b.batch_number}</strong></td>
                   <td>{b.product_name}</td>
-                  <td>{b.formulation_phase ?? 'theoretical'}</td>
-                  <td>v{b.formula_version ?? 1}</td>
-                  <td>
-                    {(b.theoretical_volume_gal ?? b.final_volume_gal).toFixed(1)} gal @{' '}
-                    {(b.theoretical_abv ?? b.final_abv).toFixed(1)}%
-                  </td>
-                  <td>
-                    {b.actual_abv != null
-                      ? `${(b.actual_volume_gal ?? b.final_volume_gal).toFixed(1)} gal @ ${b.actual_abv.toFixed(1)}%`
-                      : '—'}
-                  </td>
                   <td>{b.target_abv != null ? `${b.target_abv}%` : '—'}</td>
-                  <td>{format(new Date(b.blend_date), 'MMM d, yyyy')}</td>
+                  <td>{stepLabel(b.status, b.target_abv)}</td>
                   <td><StatusBadge status={b.status === 'blended' ? 'executed' : b.status} /></td>
                   <td className="td-actions">
-                    <button className="btn btn-sm btn-secondary" onClick={() => setSelectedId(b.id === selectedId ? null : b.id)}>
-                      Details
+                    <button className="btn btn-sm btn-primary" onClick={() => openContinue(b)}>
+                      {b.status === 'executed' || b.status === 'bottled' || b.status === 'blended' ? 'View' : 'Continue'}
                     </button>
-                    <button className="btn btn-sm btn-ghost" onClick={() => openEdit(b)}>Edit</button>
-                    <button className="btn btn-sm btn-ghost" onClick={() => handleDelete(b.id)}>Delete</button>
+                    {b.status !== 'executed' && b.status !== 'bottled' && b.status !== 'blended' && (
+                      <button className="btn btn-sm btn-ghost" onClick={() => handleDelete(b.id)}>Delete</button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -515,371 +975,50 @@ export function Blending() {
         </div>
       )}
 
-      {selectedId && (
-        <div className="detail-panel formulation-detail-panel">
-          <h4>Formula — {blends.find((b) => b.id === selectedId)?.product_name}</h4>
-
-          <div className="formulation-measure-grid">
-            <div className="formulation-measure-card">
-              <h5>Theoretical</h5>
-              {(() => {
-                const b = blends.find((x) => x.id === selectedId)!;
-                return (
-                  <ul>
-                    <li>Volume: {(b.theoretical_volume_gal ?? b.final_volume_gal).toFixed(2)} gal</li>
-                    <li>ABV: {(b.theoretical_abv ?? b.final_abv).toFixed(2)}%</li>
-                    <li>Density: {b.theoretical_density?.toFixed(4) ?? '—'}</li>
-                    <li>Brix: {b.theoretical_brix?.toFixed(1) ?? '—'}</li>
-                  </ul>
-                );
-              })()}
-            </div>
-            <div className="formulation-measure-card">
-              <h5>Lab / Actual</h5>
-              {(() => {
-                const b = blends.find((x) => x.id === selectedId)!;
-                return (
-                  <ul>
-                    <li>Volume: {b.actual_volume_gal?.toFixed(2) ?? '—'} gal</li>
-                    <li>ABV: {b.actual_abv?.toFixed(2) ?? '—'}%</li>
-                    <li>Density: {b.actual_density?.toFixed(4) ?? '—'}</li>
-                    <li>Brix: {b.actual_brix?.toFixed(1) ?? '—'}</li>
-                  </ul>
-                );
-              })()}
-            </div>
-          </div>
-
-          {selectedSources.length > 0 && (
-            <>
-              <h5>Spirit sources</h5>
-              <div className="table-wrap">
-                <table>
-                  <thead><tr><th>Tank</th><th>Volume</th><th>ABV</th></tr></thead>
-                  <tbody>
-                    {selectedSources.map((s) => (
-                      <tr key={s.id}>
-                        <td>{s.tank_name}</td>
-                        <td>{s.volume_gal.toFixed(1)} gal</td>
-                        <td>{s.abv.toFixed(1)}%</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
-
-          {selectedIngredients.length > 0 && (
-            <>
-              <h5>Additives</h5>
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr><th>Type</th><th>Name</th><th>Amount</th><th>Lot</th><th>Cost</th></tr>
-                  </thead>
-                  <tbody>
-                    {selectedIngredients.map((i) => (
-                      <tr key={i.id}>
-                        <td><StatusBadge status={i.ingredient_type} /></td>
-                        <td>{i.name || '—'}</td>
-                        <td>{i.amount} {i.unit}</td>
-                        <td>{i.lot_number || '—'}</td>
-                        <td>{i.cost_per_unit != null ? `$${(i.cost_per_unit * i.amount).toFixed(2)}` : '—'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
-
-          {selectedVersions.length > 0 && (
-            <>
-              <h5>Version history</h5>
-              <ul className="formula-version-list">
-                {selectedVersions.map((v) => (
-                  <li key={v.id}>
-                    v{v.version_number} — {format(new Date(v.created_at), 'MMM d, yyyy h:mm a')}
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-        </div>
-      )}
-
-      {showForm && (
-        <Modal
-          title={editId ? 'Edit Formulation' : 'New Formulation'}
-          onClose={() => setShowForm(false)}
-        >
-          <div className="form-grid">
-            <div className="form-group">
-              <label>Batch Number</label>
-              <input value={form.batch_number} onChange={(e) => setForm({ ...form, batch_number: e.target.value })} />
-            </div>
-            <div className="form-group">
-              <label>Product Name</label>
-              <input
-                value={form.product_name}
-                onChange={(e) => setForm({ ...form, product_name: e.target.value })}
-                placeholder="e.g. Spiced Rum, Navy Strength Gin"
-              />
-            </div>
-            <div className="form-group">
-              <label>Formulation Phase</label>
-              <select
-                value={form.formulation_phase}
-                onChange={(e) => setForm({ ...form, formulation_phase: e.target.value as BlendFormulationPhase })}
-              >
-                {BLEND_FORMULATION_PHASES.map((p) => (
-                  <option key={p.value} value={p.value}>{p.label}</option>
-                ))}
-              </select>
-            </div>
-            <div className="form-group">
-              <label>Status</label>
-              <select
-                value={form.status}
-                onChange={(e) => setForm({ ...form, status: e.target.value as BlendStatus })}
-              >
-                {BLEND_STATUSES.filter((s) => s !== 'executed').map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-            </div>
-            <div className="form-group">
-              <label>Blend Date</label>
-              <input type="date" value={form.blend_date} onChange={(e) => setForm({ ...form, blend_date: e.target.value })} />
-            </div>
-            <div className="form-group">
-              <label>Scale Factor</label>
-              <div className="inline-field-row">
-                <input
-                  type="number"
-                  step="0.1"
-                  min="0.1"
-                  value={form.scale_factor || 1}
-                  onChange={(e) => setForm({ ...form, scale_factor: parseFloat(e.target.value) || 1 })}
-                />
-                <button type="button" className="btn btn-sm btn-secondary" onClick={handleScale}>Apply scale</button>
-              </div>
-            </div>
-
-            <div className="form-group full-width formulation-section">
-              <div className="blend-ingredients-header">
-                <label>Spirit Sources (multi-spirit blending)</label>
-                <button type="button" className="btn btn-sm btn-secondary" onClick={addSpiritSource}>+ Add spirit</button>
-              </div>
-              {spiritSources.map((src, index) => (
-                <div key={index} className="blend-spirit-row">
-                  <select
-                    value={src.holding_tank_equipment_id || ''}
-                    onChange={(e) => updateSpiritSource(index, { holding_tank_equipment_id: parseInt(e.target.value) })}
-                  >
-                    <option value="">— Tank —</option>
-                    {tankOptionsFor(src.holding_tank_equipment_id).map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name} ({t.available_gal.toFixed(1)} gal @ {t.available_abv.toFixed(1)}%)
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="number"
-                    step="0.1"
-                    placeholder="Vol (gal)"
-                    value={src.volume_gal || ''}
-                    onChange={(e) => updateSpiritSource(index, { volume_gal: parseFloat(e.target.value) || 0 })}
-                  />
-                  <input
-                    type="number"
-                    step="0.1"
-                    placeholder="ABV %"
-                    value={src.abv || ''}
-                    onChange={(e) => updateSpiritSource(index, { abv: parseFloat(e.target.value) || 0 })}
-                  />
-                  {spiritSources.length > 1 && (
-                    <button type="button" className="btn btn-sm btn-ghost" onClick={() => removeSpiritSource(index)}>×</button>
-                  )}
-                </div>
+      {showWizard && (
+        <Modal title={currentStep.title} onClose={() => setShowWizard(false)}>
+          <div className="blend-wizard">
+            <nav className="blend-wizard-steps" aria-label="Batch progress">
+              {WIZARD_STEPS.map((step) => (
+                <button
+                  key={step.id}
+                  type="button"
+                  className={`blend-wizard-step ${wizardStep === step.id ? 'active' : ''} ${wizardStep > step.id ? 'done' : ''}`}
+                  onClick={() => !isLocked && setWizardStep(step.id)}
+                  disabled={isLocked && step.id < 9}
+                >
+                  <span className="blend-wizard-step-num">{step.id}</span>
+                  <span className="blend-wizard-step-label">{step.label}</span>
+                </button>
               ))}
+            </nav>
+
+            <p className="blend-wizard-hint">{STEP_HINTS[wizardStep]}</p>
+
+            <div className="blend-wizard-content">
+              {renderStepContent()}
             </div>
 
-            <div className="form-group">
-              <label>Target ABV (%)</label>
-              <div className="inline-field-row">
-                <input
-                  type="number"
-                  step="0.1"
-                  value={form.target_abv ?? ''}
-                  onChange={(e) => setForm({ ...form, target_abv: e.target.value ? parseFloat(e.target.value) : null })}
-                />
-                <button type="button" className="btn btn-sm btn-secondary" onClick={handleSolveWater}>Solve water</button>
-              </div>
+            <div className="blend-wizard-actions">
+              {wizardStep > 1 && wizardStep !== 7 && wizardStep !== 8 && (
+                <button type="button" className="btn btn-secondary" onClick={goBack}>Back</button>
+              )}
+              {wizardStep < 5 && (
+                <button type="button" className="btn btn-primary" onClick={goNext}>Next</button>
+              )}
+              {wizardStep === 5 && (
+                <button type="button" className="btn btn-primary" onClick={goNext}>Save &amp; continue to lab test</button>
+              )}
+              {wizardStep === 6 && !isLocked && (
+                <button type="button" className="btn btn-primary" onClick={goNext}>Save lab results &amp; continue</button>
+              )}
+              {wizardStep === 7 && (
+                <button type="button" className="btn btn-secondary" onClick={goBack}>Back to lab test</button>
+              )}
+              {(wizardStep === 8 || wizardStep === 9) && (
+                <button type="button" className="btn btn-secondary" onClick={() => setShowWizard(false)}>Close</button>
+              )}
             </div>
-            <div className="form-group">
-              <label>Target Brix (°Bx)</label>
-              <div className="inline-field-row">
-                <input
-                  type="number"
-                  step="0.1"
-                  value={form.target_brix ?? ''}
-                  onChange={(e) => setForm({ ...form, target_brix: e.target.value ? parseFloat(e.target.value) : null })}
-                />
-                <button type="button" className="btn btn-sm btn-secondary" onClick={handleSolveSugar}>Solve sugar</button>
-              </div>
-            </div>
-
-            <div className="form-group full-width formulation-section">
-              <div className="blend-ingredients-header">
-                <label>Additives — water, sugar, syrups, flavors, colors</label>
-                <button type="button" className="btn btn-sm btn-secondary" onClick={addIngredient}>+ Add ingredient</button>
-              </div>
-              {ingredients.map((ing, index) => (
-                <div key={index} className="blend-ingredient-row formulation-ingredient-row">
-                  <select
-                    value={ing.ingredient_type}
-                    onChange={(e) => updateIngredient(index, { ingredient_type: e.target.value as BlendIngredientInput['ingredient_type'] })}
-                  >
-                    {BLEND_INGREDIENT_TYPES.map((t) => (
-                      <option key={t.value} value={t.value}>{t.label}</option>
-                    ))}
-                  </select>
-                  <input placeholder="Name" value={ing.name} onChange={(e) => updateIngredient(index, { name: e.target.value })} />
-                  <input
-                    type="number"
-                    step="0.01"
-                    placeholder="Amount"
-                    value={ing.amount || ''}
-                    onChange={(e) => updateIngredient(index, { amount: parseFloat(e.target.value) || 0 })}
-                  />
-                  <select value={ing.unit} onChange={(e) => updateIngredient(index, { unit: e.target.value })}>
-                    {INGREDIENT_UNITS[ing.ingredient_type].map((u) => (
-                      <option key={u} value={u}>{u}</option>
-                    ))}
-                  </select>
-                  <input
-                    placeholder="Lot #"
-                    value={ing.lot_number ?? ''}
-                    onChange={(e) => updateIngredient(index, { lot_number: e.target.value })}
-                  />
-                  <input
-                    type="number"
-                    step="0.01"
-                    placeholder="$/unit"
-                    value={ing.cost_per_unit ?? ''}
-                    onChange={(e) => updateIngredient(index, { cost_per_unit: e.target.value ? parseFloat(e.target.value) : null })}
-                  />
-                  <select
-                    value={ing.inventory_item_id ?? ''}
-                    onChange={(e) => updateIngredient(index, {
-                      inventory_item_id: e.target.value ? parseInt(e.target.value) : null,
-                    })}
-                  >
-                    <option value="">— Inventory lot —</option>
-                    {inventoryItems.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.name} ({item.quantity} {item.unit})
-                      </option>
-                    ))}
-                  </select>
-                  {ingredients.length > 1 && (
-                    <button type="button" className="btn btn-sm btn-ghost" onClick={() => removeIngredient(index)}>×</button>
-                  )}
-                </div>
-              ))}
-              <p className="field-hint">Estimated ingredient cost: ${ingredientCost.toFixed(2)}</p>
-            </div>
-
-            <div className="form-group full-width formulation-measure-grid">
-              <div className="formulation-measure-card">
-                <h5>Theoretical (calculated)</h5>
-                <ul>
-                  <li>{formulation.theoretical.volumeGal.toFixed(2)} gal</li>
-                  <li>{formulation.theoretical.abv.toFixed(2)}% ABV</li>
-                  <li>Density: {formulation.theoretical.density?.toFixed(4) ?? 'N/A (sugared/flavored)'}</li>
-                  <li>Brix: {formulation.theoretical.brix?.toFixed(1) ?? '—'}</li>
-                </ul>
-                {formulation.theoretical.densityFromAbvUnreliable && (
-                  <p className="field-hint">Density-from-ABV is not valid for this formula — use lab measurements.</p>
-                )}
-              </div>
-              <div className="formulation-measure-card">
-                <h5>Lab measurements (override theoretical)</h5>
-                <div className="lab-input-grid">
-                  <label>
-                    Volume (gal)
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={form.actual_volume_gal ?? ''}
-                      onChange={(e) => setForm({ ...form, actual_volume_gal: e.target.value ? parseFloat(e.target.value) : null })}
-                    />
-                  </label>
-                  <label>
-                    ABV (%)
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={form.actual_abv ?? ''}
-                      onChange={(e) => setForm({ ...form, actual_abv: e.target.value ? parseFloat(e.target.value) : null })}
-                    />
-                  </label>
-                  <label>
-                    Density
-                    <input
-                      type="number"
-                      step="0.0001"
-                      value={form.actual_density ?? ''}
-                      onChange={(e) => setForm({ ...form, actual_density: e.target.value ? parseFloat(e.target.value) : null })}
-                    />
-                  </label>
-                  <label>
-                    Brix (°Bx)
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={form.actual_brix ?? ''}
-                      onChange={(e) => setForm({ ...form, actual_brix: e.target.value ? parseFloat(e.target.value) : null })}
-                    />
-                  </label>
-                </div>
-                <p className="field-hint">
-                  Effective: {formulation.reconciliation.effectiveSource === 'lab' ? 'lab values' : 'theoretical'} —{' '}
-                  {(formulation.reconciliation.effective.volumeGal ?? 0).toFixed(2)} gal @{' '}
-                  {(formulation.reconciliation.effective.abv ?? 0).toFixed(2)}%
-                </p>
-              </div>
-            </div>
-
-            {corrections.length > 0 && (
-              <div className="form-group full-width formulation-corrections">
-                <strong>Blend correction suggestions</strong>
-                <ul>
-                  {corrections.map((c, i) => (
-                    <li key={i}>{c.message}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            <div className="form-group full-width">
-              <label>Notes</label>
-              <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
-            </div>
-          </div>
-
-          <p className="form-hint">
-            Save Formula stores the recipe and version snapshot without touching inventory.
-            Execute Blend (approved only) consumes tank spirit and linked inventory lots.
-          </p>
-          <div className="form-actions">
-            <button className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
-            <button className="btn btn-primary" onClick={handleSaveFormula}>Save Formula</button>
-            {editId && form.status === 'approved' && (
-              <button className="btn btn-accent" onClick={handleExecute}>Execute Blend</button>
-            )}
           </div>
         </Modal>
       )}

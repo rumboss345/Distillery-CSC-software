@@ -51,6 +51,27 @@ export interface CorrectionSuggestion {
   message: string;
 }
 
+export interface BatchCorrectionAction {
+  ingredientType: 'water' | 'spirit' | 'sugar';
+  amount: number;
+  unit: string;
+  label: string;
+  /** Plain-language instruction for production staff. */
+  instruction: string;
+  projectedAbv: number | null;
+  projectedBrix: number | null;
+}
+
+export interface BatchCorrectionResult {
+  measuredAbv: number;
+  targetAbv: number;
+  volumeGal: number;
+  onTarget: boolean;
+  actions: BatchCorrectionAction[];
+  headline: string;
+  detail: string;
+}
+
 const round3 = (n: number) => Math.round(n * 1000) / 1000;
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -220,6 +241,113 @@ export function reconcileMeasurements(
     effectiveSource: useLab ? 'lab' : 'theoretical',
     deltas,
     warnings,
+  };
+}
+
+const ABV_TOLERANCE = 0.2;
+
+/**
+ * Calculate exact adjustment amounts to move a measured batch toward target proof.
+ * Example: 41.2% measured vs 40% target → "Add 1.2 gal proofing water."
+ */
+export function computeBatchCorrection(
+  volumeGal: number,
+  measuredAbv: number,
+  targetAbv: number,
+  options?: {
+    measuredBrix?: number | null;
+    targetBrix?: number | null;
+    /** Proof of spirit used when batch is under target ABV. Defaults to 80%. */
+    spiritProofAbv?: number;
+  },
+): BatchCorrectionResult | null {
+  if (volumeGal <= 0 || measuredAbv <= 0 || targetAbv <= 0) return null;
+
+  const spiritProof = options?.spiritProofAbv ?? 80;
+  const pureAlcohol = volumeGal * measuredAbv / 100;
+  const actions: BatchCorrectionAction[] = [];
+  let workingVolume = volumeGal;
+  let workingAbv = measuredAbv;
+  let workingBrix = options?.measuredBrix ?? null;
+
+  const abvDelta = measuredAbv - targetAbv;
+
+  if (Math.abs(abvDelta) <= ABV_TOLERANCE) {
+    // ABV on target — check Brix if provided
+  } else if (abvDelta > ABV_TOLERANCE) {
+    const targetVolume = pureAlcohol / (targetAbv / 100);
+    const waterGal = round3(Math.max(0, targetVolume - volumeGal));
+    if (waterGal > 0.001) {
+      workingVolume = volumeGal + waterGal;
+      workingAbv = targetAbv;
+      actions.push({
+        ingredientType: 'water',
+        amount: waterGal,
+        unit: 'gal',
+        label: 'Proofing water',
+        instruction: `Add ${waterGal.toFixed(2)} gallons of proofing water to bring ABV from ${measuredAbv.toFixed(1)}% down to ${targetAbv.toFixed(1)}%.`,
+        projectedAbv: round2(targetAbv),
+        projectedBrix: workingBrix,
+      });
+    }
+  } else {
+    const pureNeeded = volumeGal * targetAbv / 100 - pureAlcohol;
+    const denom = spiritProof / 100 - targetAbv / 100;
+    if (denom > 0.001 && pureNeeded > 0) {
+      const spiritGal = round3(pureNeeded / denom);
+      const newPure = pureAlcohol + spiritGal * spiritProof / 100;
+      workingVolume = volumeGal + spiritGal;
+      workingAbv = round2((newPure / workingVolume) * 100);
+      actions.push({
+        ingredientType: 'spirit',
+        amount: spiritGal,
+        unit: 'gal',
+        label: `High-proof spirit (${spiritProof}% ABV)`,
+        instruction: `Add ${spiritGal.toFixed(2)} gallons of ${spiritProof}% spirit to raise ABV from ${measuredAbv.toFixed(1)}% up to about ${workingAbv.toFixed(1)}%.`,
+        projectedAbv: workingAbv,
+        projectedBrix: workingBrix,
+      });
+    }
+  }
+
+  const targetBrix = options?.targetBrix;
+  const measuredBrix = options?.measuredBrix;
+  if (targetBrix != null && measuredBrix != null && measuredBrix < targetBrix - 0.5) {
+    const deltaBrix = targetBrix - measuredBrix;
+    const sugarLbs = round3((deltaBrix * workingVolume) / 10);
+    if (sugarLbs > 0.001) {
+      workingBrix = round2(targetBrix);
+      actions.push({
+        ingredientType: 'sugar',
+        amount: sugarLbs,
+        unit: 'lbs',
+        label: 'Sugar',
+        instruction: `Add ${sugarLbs.toFixed(2)} lbs of sugar to raise sweetness from ${measuredBrix.toFixed(1)}° to about ${targetBrix.toFixed(1)}° Brix.`,
+        projectedAbv: workingAbv,
+        projectedBrix: workingBrix,
+      });
+    }
+  }
+
+  const onTarget = actions.length === 0;
+  const headline = onTarget
+    ? `This batch is on target at ${measuredAbv.toFixed(1)}% ABV.`
+    : actions.length === 1
+      ? actions[0].instruction
+      : `${actions.length} adjustments needed to hit your targets.`;
+
+  const detail = onTarget
+    ? 'No changes required — proceed to approval or bottling.'
+    : 'Make these adjustments, mix thoroughly, and re-test before approving.';
+
+  return {
+    measuredAbv,
+    targetAbv,
+    volumeGal,
+    onTarget,
+    actions,
+    headline,
+    detail,
   };
 }
 
