@@ -9,7 +9,7 @@ export type MashStatus =
 
 export type RunStatus = 'planned' | 'running' | 'complete';
 
-export type DistillationRunType = 'wash' | 'low_wines';
+export type DistillationRunType = 'wash' | 'low_wines' | 'heavy_rum';
 
 export type CutType = 'heads' | 'hearts' | 'tails';
 
