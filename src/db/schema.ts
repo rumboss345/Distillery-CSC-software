@@ -151,6 +151,7 @@ CREATE TABLE IF NOT EXISTS blend_products (
   actual_brix REAL,
   status TEXT NOT NULL DEFAULT 'draft',
   executed_at TEXT,
+  output_holding_tank_equipment_id INTEGER REFERENCES floor_equipment(id),
   notes TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -187,6 +188,7 @@ CREATE TABLE IF NOT EXISTS blend_formula_versions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_blend_products_tank ON blend_products(source_holding_tank_equipment_id);
+CREATE INDEX IF NOT EXISTS idx_blend_products_output_tank ON blend_products(output_holding_tank_equipment_id);
 CREATE INDEX IF NOT EXISTS idx_blend_spirit_sources_product ON blend_spirit_sources(blend_product_id);
 CREATE INDEX IF NOT EXISTS idx_blend_spirit_sources_tank ON blend_spirit_sources(holding_tank_equipment_id);
 CREATE INDEX IF NOT EXISTS idx_blend_ingredients_product ON blend_ingredients(blend_product_id);

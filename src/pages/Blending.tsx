@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   computeBlendFormulation,
+  defaultBlendingOutputTankId,
   executeBlendProduct,
   getBlendIngredients,
   getBlendProducts,
@@ -64,7 +65,7 @@ const STEP_HINTS: Record<number, string> = {
   5: 'Check the expected yield before running a lab trial or going to production.',
   6: 'Enter what the lab actually measured. If it is off, use Correct This Batch below.',
   7: 'Once you are satisfied with the lab results, approve the recipe for production.',
-  8: 'This pulls spirit from tanks and deducts ingredients from inventory. Cannot be undone.',
+  8: 'Choose where the finished batch goes, then produce. Spirit is pulled from source tanks and ingredients are deducted. Cannot be undone.',
   9: 'Record final measurements after production. Correct the batch if needed.',
 };
 
@@ -133,6 +134,7 @@ const emptyProduct = (): FormulaForm => ({
   actual_density: null,
   actual_brix: null,
   status: 'draft',
+  output_holding_tank_equipment_id: null,
   notes: '',
 });
 
@@ -318,6 +320,7 @@ export function Blending() {
       actual_density: blend.actual_density,
       actual_brix: blend.actual_brix,
       status: blend.status === 'blended' ? 'executed' : blend.status,
+      output_holding_tank_equipment_id: blend.output_holding_tank_equipment_id,
       notes: blend.notes,
     });
     const sources = getBlendSpiritSources(blend.id);
@@ -467,8 +470,11 @@ export function Blending() {
     }
   };
 
-  const persistFormula = (statusOverride?: FormulaForm['status']): number => {
-    const payload = buildSavePayload(form, formulation, activeSources, statusOverride);
+  const persistFormula = (
+    statusOverride?: FormulaForm['status'],
+    overrides?: Partial<FormulaForm>,
+  ): number => {
+    const payload = buildSavePayload({ ...form, ...overrides }, formulation, activeSources, statusOverride);
     return saveBlendFormula(
       payload,
       activeSources.map(toSpiritSourceInput),
@@ -537,13 +543,39 @@ export function Blending() {
       alert('Save the recipe first.');
       return;
     }
-    if (!confirm(`Produce "${form.product_name}"?\n\nThis will pull spirit from tanks and deduct ingredients from inventory.`)) {
+    const sourceTankIds = activeSources.map((s) => s.holding_tank_equipment_id);
+    const outputTankId = form.output_holding_tank_equipment_id
+      ?? defaultBlendingOutputTankId(sourceTankIds);
+    if (!outputTankId) {
+      alert('Choose a holding tank for the finished batch.');
+      return;
+    }
+    const outputTank = getHoldingTanks().find((t) => t.id === outputTankId);
+    if (!outputTank) {
+      alert('Selected output tank not found.');
+      return;
+    }
+    const yieldGal = formulation.reconciliation.effective.volumeGal ?? formulation.theoretical.volumeGal ?? 0;
+    const destContents = getHoldingTankContents(outputTankId);
+    const newTotal = destContents.volume_gal + yieldGal;
+    if (outputTank.capacity_gal > 0 && newTotal > outputTank.capacity_gal + 0.01) {
+      if (!confirm(
+        `This will put ${newTotal.toFixed(1)} gal in ${outputTank.name} (capacity ${outputTank.capacity_gal} gal).\n\nContinue anyway?`,
+      )) {
+        return;
+      }
+    }
+    if (!confirm(
+      `Produce "${form.product_name}" into ${outputTank.name}?\n\n`
+      + `Expected yield: ${yieldGal.toFixed(1)} gal @ ${(formulation.reconciliation.effective.abv ?? formulation.theoretical.abv ?? 0).toFixed(1)}% ABV.\n\n`
+      + 'Spirit will be pulled from source tanks and ingredients deducted from inventory.',
+    )) {
       return;
     }
     try {
-      persistFormula('approved');
-      executeBlendProduct(editId);
-      setForm((f) => ({ ...f, status: 'executed' }));
+      persistFormula('approved', { output_holding_tank_equipment_id: outputTankId });
+      executeBlendProduct(editId, outputTankId);
+      setForm((f) => ({ ...f, status: 'executed', output_holding_tank_equipment_id: outputTankId }));
       setWizardStep(9);
       refresh();
     } catch (e) {
@@ -1017,29 +1049,82 @@ export function Blending() {
           </div>
         );
 
-      case 8:
+      case 8: {
+        const sourceTankIds = activeSources.map((s) => s.holding_tank_equipment_id);
+        const outputTanks = getHoldingTanks().filter((t) => !sourceTankIds.includes(t.id));
+        const yieldGal = formulation.reconciliation.effective.volumeGal ?? formulation.theoretical.volumeGal ?? 0;
+        const selectedOutputId = form.output_holding_tank_equipment_id
+          ?? defaultBlendingOutputTankId(sourceTankIds)
+          ?? 0;
+        const formatOutputTankLabel = (tank: (typeof outputTanks)[number]) => {
+          const contents = getHoldingTankContents(tank.id);
+          if (contents.volume_gal <= 0) {
+            return `${tank.name} (empty · ${tank.capacity_gal} gal cap)`;
+          }
+          return `${tank.name} (${contents.volume_gal.toFixed(1)} gal @ ${contents.abv.toFixed(1)}% · ${tank.capacity_gal} gal cap)`;
+        };
         return (
           <div className="wizard-produce-card">
             <p>You are about to produce batch <strong>{form.batch_number}</strong> — {form.product_name}.</p>
             <ul className="wizard-produce-checklist">
-              <li>{formulation.theoretical.volumeGal.toFixed(1)} gal expected yield @ {formulation.theoretical.abv.toFixed(1)}% ABV</li>
+              <li>{yieldGal.toFixed(1)} gal expected yield @ {(formulation.reconciliation.effective.abv ?? formulation.theoretical.abv ?? 0).toFixed(1)}% ABV</li>
               {activeSources.map((s, i) => {
                 const tank = getHoldingTanks().find((t) => t.id === s.holding_tank_equipment_id);
                 const entered = s.amount > 0 ? `${s.amount} ${s.unit}` : `${s.volume_gal.toFixed(1)} gal`;
                 return <li key={i}>Pull {entered} ({s.volume_gal.toFixed(2)} gal) from {tank?.name}</li>;
               })}
             </ul>
-            <button type="button" className="btn btn-accent btn-lg" onClick={handleProduce}>
+            <label className="wizard-output-tank-label">
+              Where should this batch go?
+              <select
+                value={selectedOutputId || ''}
+                onChange={(e) => {
+                  const tankId = e.target.value ? parseInt(e.target.value, 10) : null;
+                  setForm((f) => ({ ...f, output_holding_tank_equipment_id: tankId }));
+                }}
+              >
+                <option value="">Select a holding tank…</option>
+                {outputTanks.map((tank) => (
+                  <option key={tank.id} value={tank.id}>
+                    {formatOutputTankLabel(tank)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {selectedOutputId > 0 && yieldGal > 0 && (() => {
+              const tank = outputTanks.find((t) => t.id === selectedOutputId);
+              if (!tank) return null;
+              const after = getHoldingTankContents(tank.id).volume_gal + yieldGal;
+              return (
+                <p className="field-hint">
+                  After production, {tank.name} will hold about {after.toFixed(1)} gal
+                  {tank.capacity_gal > 0 ? ` (capacity ${tank.capacity_gal} gal)` : ''}.
+                </p>
+              );
+            })()}
+            <button
+              type="button"
+              className="btn btn-accent btn-lg"
+              onClick={handleProduce}
+              disabled={!selectedOutputId}
+            >
               Produce this batch
             </button>
           </div>
         );
+      }
 
       case 9:
         return (
           <>
             <div className="wizard-verify-card">
               <p>Batch <strong>{form.batch_number}</strong> has been produced.</p>
+              {form.output_holding_tank_equipment_id ? (
+                <p className="field-hint">
+                  Finished liquid deposited in{' '}
+                  {getHoldingTanks().find((t) => t.id === form.output_holding_tank_equipment_id)?.name ?? 'holding tank'}.
+                </p>
+              ) : null}
               <div className="wizard-lab-inputs">
                 <label>
                   Final proof (ABV %)
