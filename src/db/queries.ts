@@ -31,6 +31,7 @@ import type {
   EquipmentVolumeReport,
   YieldReport,
 } from '../types';
+import { mlToGallons } from '../types';
 import {
   insertRow,
   queryAll,
@@ -339,6 +340,7 @@ export function getHoldingTankContents(
   tankId: number,
   excludeRunId?: number,
   excludeBlendId?: number,
+  excludeBottlingRunId?: number,
 ): HoldingTankContents {
   const ins = queryOne<{ volume_gal: number; gpa: number; run_count: number; cut_count: number }>(`
     SELECT
@@ -370,6 +372,16 @@ export function getHoldingTankContents(
       AND (? IS NULL OR id != ?)
   `, [tankId, excludeBlendId ?? null, excludeBlendId ?? -1]);
 
+  const bottlingOuts = queryOne<{ volume_gal: number; gpa: number }>(`
+    SELECT
+      COALESCE(SUM(source_volume_gal), 0) as volume_gal,
+      COALESCE(SUM(source_volume_gal * COALESCE(final_abv, 0) / 100), 0) as gpa
+    FROM bottling_runs
+    WHERE source_holding_tank_equipment_id = ?
+      AND source_volume_gal > 0
+      AND (? IS NULL OR id != ?)
+  `, [tankId, excludeBottlingRunId ?? null, excludeBottlingRunId ?? -1]);
+
   const transferIns = queryOne<{ volume_gal: number; gpa: number }>(`
     SELECT
       COALESCE(SUM(volume_gal), 0) as volume_gal,
@@ -387,9 +399,11 @@ export function getHoldingTankContents(
   `, [tankId]);
 
   const volumeIn = (ins?.volume_gal ?? 0) + (transferIns?.volume_gal ?? 0);
-  const volumeOut = (runOuts?.volume_gal ?? 0) + (blendOuts?.volume_gal ?? 0) + (transferOuts?.volume_gal ?? 0);
+  const volumeOut = (runOuts?.volume_gal ?? 0) + (blendOuts?.volume_gal ?? 0)
+    + (bottlingOuts?.volume_gal ?? 0) + (transferOuts?.volume_gal ?? 0);
   const gpaIn = (ins?.gpa ?? 0) + (transferIns?.gpa ?? 0);
-  const gpaOut = (runOuts?.gpa ?? 0) + (blendOuts?.gpa ?? 0) + (transferOuts?.gpa ?? 0);
+  const gpaOut = (runOuts?.gpa ?? 0) + (blendOuts?.gpa ?? 0)
+    + (bottlingOuts?.gpa ?? 0) + (transferOuts?.gpa ?? 0);
   const volume_gal = Math.max(0, volumeIn - volumeOut);
   const gpaRemaining = Math.max(0, gpaIn - gpaOut);
   const abv = volume_gal > 0 ? (gpaRemaining / volume_gal) * 100 : 0;
@@ -429,6 +443,22 @@ export function getChargeableHoldingTanksForBlend(excludeBlendId?: number): (Flo
   return getHoldingTanks()
     .map((tank) => {
       const contents = getHoldingTankContents(tank.id, undefined, excludeBlendId);
+      return {
+        ...tank,
+        available_gal: contents.volume_gal,
+        available_abv: contents.abv,
+      };
+    })
+    .filter((tank) => tank.available_gal > 0);
+}
+
+export function getChargeableHoldingTanksForBottling(excludeBottlingRunId?: number): (FloorEquipment & {
+  available_gal: number;
+  available_abv: number;
+})[] {
+  return getHoldingTanks()
+    .map((tank) => {
+      const contents = getHoldingTankContents(tank.id, undefined, undefined, excludeBottlingRunId);
       return {
         ...tank,
         available_gal: contents.volume_gal,
@@ -1085,21 +1115,37 @@ export function getBottlingRuns(): BottlingRun[] {
 }
 
 export function saveBottlingRun(run: Omit<BottlingRun, 'id' | 'created_at'>, id?: number): void {
+  const fromTank = run.source_holding_tank_equipment_id != null;
+  const sourceBarrelId = fromTank ? null : run.source_barrel_id;
+  const sourceTankId = fromTank ? run.source_holding_tank_equipment_id : null;
+  const sourceVolumeGal = fromTank && run.bottle_count > 0
+    ? mlToGallons(run.bottle_count * run.bottle_size_ml)
+    : null;
+
+  if (fromTank && sourceTankId && sourceVolumeGal != null && sourceVolumeGal > 0) {
+    const available = getHoldingTankContents(sourceTankId, undefined, undefined, id);
+    if (sourceVolumeGal > available.volume_gal + 0.01) {
+      throw new Error(`Only ${available.volume_gal.toFixed(1)} gal available in that tank.`);
+    }
+  }
+
   if (id) {
     runQuery(
-      `UPDATE bottling_runs SET batch_number=?, source_barrel_id=?, source_run_id=?, bottling_date=?, packaging_bottle=?, bottle_size_ml=?, bottle_count=?, final_abv=?, product_name=?, lot_number=?, notes=? WHERE id=?`,
-      [run.batch_number, run.source_barrel_id, run.source_run_id, run.bottling_date, run.packaging_bottle, run.bottle_size_ml, run.bottle_count, run.final_abv, run.product_name, run.lot_number, run.notes, id],
+      `UPDATE bottling_runs SET batch_number=?, source_barrel_id=?, source_holding_tank_equipment_id=?, source_volume_gal=?, source_run_id=?, bottling_date=?, packaging_bottle=?, bottle_size_ml=?, bottle_count=?, final_abv=?, product_name=?, lot_number=?, notes=? WHERE id=?`,
+      [run.batch_number, sourceBarrelId, sourceTankId, sourceVolumeGal, run.source_run_id, run.bottling_date, run.packaging_bottle, run.bottle_size_ml, run.bottle_count, run.final_abv, run.product_name, run.lot_number, run.notes, id],
     );
   } else {
     insertRow(
-      `INSERT INTO bottling_runs (batch_number, source_barrel_id, source_run_id, bottling_date, packaging_bottle, bottle_size_ml, bottle_count, final_abv, product_name, lot_number, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [run.batch_number, run.source_barrel_id, run.source_run_id, run.bottling_date, run.packaging_bottle, run.bottle_size_ml, run.bottle_count, run.final_abv, run.product_name, run.lot_number, run.notes],
+      `INSERT INTO bottling_runs (batch_number, source_barrel_id, source_holding_tank_equipment_id, source_volume_gal, source_run_id, bottling_date, packaging_bottle, bottle_size_ml, bottle_count, final_abv, product_name, lot_number, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [run.batch_number, sourceBarrelId, sourceTankId, sourceVolumeGal, run.source_run_id, run.bottling_date, run.packaging_bottle, run.bottle_size_ml, run.bottle_count, run.final_abv, run.product_name, run.lot_number, run.notes],
     );
   }
+  syncHoldingTankStatuses();
 }
 
 export function deleteBottlingRun(id: number): void {
   runQuery('DELETE FROM bottling_runs WHERE id = ?', [id]);
+  syncHoldingTankStatuses();
 }
 
 // ── Blending ───────────────────────────────────────────────

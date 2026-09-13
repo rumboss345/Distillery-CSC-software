@@ -225,6 +225,8 @@ export interface BottlingRun {
   id: number;
   batch_number: string;
   source_barrel_id: number | null;
+  source_holding_tank_equipment_id: number | null;
+  source_volume_gal: number | null;
   source_run_id: number | null;
   bottling_date: string;
   packaging_bottle: string;
