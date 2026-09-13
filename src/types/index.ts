@@ -268,6 +268,7 @@ export interface BlendProduct {
   theoretical_density: number | null;
   theoretical_brix: number | null;
   actual_volume_gal: number | null;
+  actual_weight_lbs: number | null;
   actual_abv: number | null;
   actual_density: number | null;
   actual_brix: number | null;

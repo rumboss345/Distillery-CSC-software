@@ -146,6 +146,7 @@ CREATE TABLE IF NOT EXISTS blend_products (
   theoretical_density REAL,
   theoretical_brix REAL,
   actual_volume_gal REAL,
+  actual_weight_lbs REAL,
   actual_abv REAL,
   actual_density REAL,
   actual_brix REAL,
