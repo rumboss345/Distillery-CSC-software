@@ -1,0 +1,75 @@
+import { describe, expect, it } from 'vitest';
+import {
+  ingredientVolumeGal,
+  ingredientWeightLbs,
+  inferMeasureMode,
+  measureAlternate,
+  recommendMeasureMode,
+  toGallonsFromVolumeUnit,
+  toLbs,
+} from './blending';
+
+describe('recommendMeasureMode', () => {
+  it('recommends weight for dry sugar', () => {
+    expect(recommendMeasureMode('sugar').mode).toBe('weight');
+  });
+
+  it('recommends volume for water and flavoring', () => {
+    expect(recommendMeasureMode('water').mode).toBe('volume');
+    expect(recommendMeasureMode('flavoring').mode).toBe('volume');
+  });
+});
+
+describe('ingredientVolumeGal', () => {
+  it('converts volume units', () => {
+    expect(ingredientVolumeGal({ amount: 1, unit: 'gal', ingredient_type: 'water' })).toBe(1);
+    expect(ingredientVolumeGal({ amount: 128, unit: 'fl oz', ingredient_type: 'water' })).toBe(1);
+  });
+
+  it('converts sugar weight to approximate volume', () => {
+    const gal = ingredientVolumeGal({ amount: 10, unit: 'lbs', ingredient_type: 'sugar' });
+    expect(gal).toBeGreaterThan(1);
+    expect(gal).toBeLessThan(1.5);
+  });
+});
+
+describe('ingredientWeightLbs', () => {
+  it('converts weight units to lbs', () => {
+    expect(ingredientWeightLbs({ amount: 16, unit: 'oz', ingredient_type: 'sugar' })).toBe(1);
+  });
+
+  it('converts water volume to weight', () => {
+    expect(ingredientWeightLbs({ amount: 1, unit: 'gal', ingredient_type: 'water' })).toBeCloseTo(8.34, 1);
+  });
+});
+
+describe('measureAlternate', () => {
+  it('shows volume equivalent for sugar by weight', () => {
+    const alt = measureAlternate({ amount: 10, unit: 'lbs', ingredient_type: 'sugar' });
+    expect(alt).not.toBeNull();
+    expect(alt!.label).toContain('gal');
+  });
+
+  it('shows weight equivalent for flavoring by volume', () => {
+    const alt = measureAlternate({ amount: 1, unit: 'gal', ingredient_type: 'flavoring' });
+    expect(alt).not.toBeNull();
+    expect(alt!.label).toContain('lbs');
+  });
+});
+
+describe('inferMeasureMode', () => {
+  it('infers from unit', () => {
+    expect(inferMeasureMode('lbs')).toBe('weight');
+    expect(inferMeasureMode('gal')).toBe('volume');
+  });
+});
+
+describe('toLbs and toGallonsFromVolumeUnit', () => {
+  it('converts kg to lbs', () => {
+    expect(toLbs(1, 'kg')).toBeCloseTo(2.20462, 3);
+  });
+
+  it('converts ml to gal', () => {
+    expect(toGallonsFromVolumeUnit(3785.41, 'ml')).toBeCloseTo(1, 2);
+  });
+});

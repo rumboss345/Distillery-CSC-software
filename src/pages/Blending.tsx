@@ -18,8 +18,12 @@ import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
 import {
   BLEND_INGREDIENT_TYPES,
-  INGREDIENT_UNITS,
-  defaultIngredientUnit,
+  defaultUnitForMode,
+  inferMeasureMode,
+  measureAlternate,
+  recommendMeasureMode,
+  unitsForMeasureMode,
+  type MeasureMode,
 } from '../lib/blending';
 import {
   computeBatchCorrection,
@@ -63,7 +67,7 @@ const emptyIngredient = (type: BlendIngredientInput['ingredient_type'] = 'water'
   ingredient_type: type,
   name: type === 'water' ? 'Proofing water' : '',
   amount: 0,
-  unit: defaultIngredientUnit(type),
+  unit: defaultUnitForMode(type, recommendMeasureMode(type).mode),
   cost_per_unit: null,
   lot_number: '',
   inventory_item_id: null,
@@ -354,10 +358,18 @@ export function Blending() {
       if (i !== index) return ing;
       const next = { ...ing, ...patch };
       if (patch.ingredient_type) {
-        next.unit = defaultIngredientUnit(patch.ingredient_type);
+        const rec = recommendMeasureMode(patch.ingredient_type);
+        next.unit = defaultUnitForMode(patch.ingredient_type, rec.mode);
         if (patch.ingredient_type === 'water' && !next.name) next.name = 'Proofing water';
       }
       return next;
+    }));
+  };
+
+  const setIngredientMeasureMode = (index: number, mode: MeasureMode) => {
+    setIngredients((prev) => prev.map((ing, i) => {
+      if (i !== index) return ing;
+      return { ...ing, unit: defaultUnitForMode(ing.ingredient_type, mode) };
     }));
   };
 
@@ -677,11 +689,17 @@ export function Blending() {
                 Calculate how much water to add
               </button>
             )}
-            {ingredients.some((i) => i.ingredient_type === 'water' && i.amount > 0) && (
-              <p className="wizard-result-banner">
-                Add <strong>{ingredients.find((i) => i.ingredient_type === 'water')!.amount.toFixed(2)} gallons</strong> of proofing water.
-              </p>
-            )}
+            {ingredients.some((i) => i.ingredient_type === 'water' && i.amount > 0) && (() => {
+              const water = ingredients.find((i) => i.ingredient_type === 'water')!;
+              const alt = measureAlternate(water);
+              return (
+                <p className="wizard-result-banner">
+                  Add <strong>{water.amount.toFixed(2)} {water.unit}</strong> of proofing water
+                  {alt ? ` (${alt.label})` : ''}.
+                  <span className="measure-tip-inline"> Water is always measured by volume.</span>
+                </p>
+              );
+            })()}
           </>
         );
 
@@ -691,30 +709,63 @@ export function Blending() {
             <p className="field-hint">Only add what this product needs. You can skip this step for straight spirits.</p>
             {ingredients.filter((i) => i.ingredient_type !== 'water').map((ing) => {
               const realIndex = ingredients.indexOf(ing);
+              const measureMode = inferMeasureMode(ing.unit);
+              const recommendation = recommendMeasureMode(ing.ingredient_type);
+              const alternate = ing.amount > 0 ? measureAlternate(ing) : null;
+              const unitOptions = unitsForMeasureMode(ing.ingredient_type, measureMode);
               return (
-                <div key={realIndex} className="wizard-additive-row">
-                  <select
-                    value={ing.ingredient_type}
-                    onChange={(e) => updateIngredient(realIndex, { ingredient_type: e.target.value as BlendIngredientInput['ingredient_type'] })}
-                  >
-                    {BLEND_INGREDIENT_TYPES.filter((t) => t.value !== 'water').map((t) => (
-                      <option key={t.value} value={t.value}>{t.label}</option>
-                    ))}
-                  </select>
-                  <input placeholder="Name" value={ing.name} onChange={(e) => updateIngredient(realIndex, { name: e.target.value })} />
-                  <input
-                    type="number"
-                    step="0.01"
-                    placeholder="Amount"
-                    value={ing.amount || ''}
-                    onChange={(e) => updateIngredient(realIndex, { amount: parseFloat(e.target.value) || 0 })}
-                  />
-                  <select value={ing.unit} onChange={(e) => updateIngredient(realIndex, { unit: e.target.value })}>
-                    {INGREDIENT_UNITS[ing.ingredient_type].map((u) => (
-                      <option key={u} value={u}>{u}</option>
-                    ))}
-                  </select>
-                  <button type="button" className="btn btn-sm btn-ghost" onClick={() => removeIngredient(realIndex)}>×</button>
+                <div key={realIndex} className="wizard-additive-card">
+                  <div className="wizard-additive-row">
+                    <select
+                      value={ing.ingredient_type}
+                      onChange={(e) => updateIngredient(realIndex, { ingredient_type: e.target.value as BlendIngredientInput['ingredient_type'] })}
+                    >
+                      {BLEND_INGREDIENT_TYPES.filter((t) => t.value !== 'water').map((t) => (
+                        <option key={t.value} value={t.value}>{t.label}</option>
+                      ))}
+                    </select>
+                    <input placeholder="Name (optional)" value={ing.name} onChange={(e) => updateIngredient(realIndex, { name: e.target.value })} />
+                    <button type="button" className="btn btn-sm btn-ghost" onClick={() => removeIngredient(realIndex)}>Remove</button>
+                  </div>
+                  <div className="measure-mode-toggle">
+                    <span className="measure-mode-label">How will you measure it?</span>
+                    <div className="measure-mode-buttons">
+                      <button
+                        type="button"
+                        className={`btn btn-sm ${measureMode === 'weight' ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => setIngredientMeasureMode(realIndex, 'weight')}
+                      >
+                        Weight (scale)
+                        {recommendation.mode === 'weight' && <span className="measure-best-tag">Best</span>}
+                      </button>
+                      <button
+                        type="button"
+                        className={`btn btn-sm ${measureMode === 'volume' ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => setIngredientMeasureMode(realIndex, 'volume')}
+                      >
+                        Volume (container)
+                        {recommendation.mode === 'volume' && <span className="measure-best-tag">Best</span>}
+                      </button>
+                    </div>
+                    <p className="measure-tip">{recommendation.reason}</p>
+                  </div>
+                  <div className="wizard-additive-amount-row">
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="Amount"
+                      value={ing.amount || ''}
+                      onChange={(e) => updateIngredient(realIndex, { amount: parseFloat(e.target.value) || 0 })}
+                    />
+                    <select value={ing.unit} onChange={(e) => updateIngredient(realIndex, { unit: e.target.value })}>
+                      {unitOptions.map((u) => (
+                        <option key={u} value={u}>{u}</option>
+                      ))}
+                    </select>
+                  </div>
+                  {alternate && (
+                    <p className="measure-alt">{alternate.label}</p>
+                  )}
                 </div>
               );
             })}

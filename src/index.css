@@ -1207,12 +1207,91 @@ tr:hover td {
   margin-bottom: 0.25rem;
 }
 
+.wizard-additive-card {
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  background: var(--bg-hover);
+}
+
 .wizard-additive-row {
   display: grid;
-  grid-template-columns: 1fr 1.2fr 0.8fr 0.7fr auto;
+  grid-template-columns: 1fr 1.2fr auto;
   gap: 0.5rem;
   margin-bottom: 0.5rem;
   align-items: center;
+}
+
+.wizard-additive-amount-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.5rem;
+  max-width: 16rem;
+}
+
+.wizard-additive-amount-row input,
+.wizard-additive-amount-row select {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.85rem;
+}
+
+.measure-mode-toggle {
+  margin: 0.5rem 0;
+}
+
+.measure-mode-label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+}
+
+.measure-mode-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.measure-mode-buttons .btn {
+  position: relative;
+}
+
+.measure-best-tag {
+  margin-left: 0.35rem;
+  padding: 0.1rem 0.35rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  background: var(--success);
+  color: #fff;
+  border-radius: 3px;
+  vertical-align: middle;
+}
+
+.measure-tip {
+  margin: 0.5rem 0 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.measure-tip-inline {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.measure-alt {
+  margin: 0.35rem 0 0;
+  font-size: 0.85rem;
+  color: var(--accent);
 }
 
 .wizard-additive-row input,

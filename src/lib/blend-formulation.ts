@@ -1,4 +1,4 @@
-import { ingredientVolumeGal } from './blending';
+import { formatCorrectionWithAlternate, ingredientVolumeGal, toLbs } from './blending';
 import type { BlendIngredientType } from '../types';
 
 export interface SpiritSourceInput {
@@ -84,12 +84,10 @@ function hasDissolvedSolids(additives: AdditiveInput[]): boolean {
 function additiveBrixContribution(additive: AdditiveInput, totalVolumeGal: number): number {
   if (additive.amount <= 0 || totalVolumeGal <= 0) return 0;
   if (additive.brixPerGal != null) {
-    return (additive.brixPerGal * ingredientVolumeGal(additive)) / totalVolumeGal;
+    return (additive.brixPerGal * ingredientVolumeGal({ ...additive, ingredient_type: additive.ingredientType })) / totalVolumeGal;
   }
   if (additive.ingredientType === 'sugar') {
-    const lbs = additive.unit === 'lbs' ? additive.amount
-      : additive.unit === 'oz' ? additive.amount / 16
-        : 0;
+    const lbs = toLbs(additive.amount, additive.unit);
     if (lbs <= 0) return 0;
     // Approximate: 1 lb sucrose ~ 0.12 gal volume; ~10 °Bx per lb in 10 gal batch scale factor
     return (lbs * 10) / totalVolumeGal;
@@ -108,7 +106,7 @@ export function computeTheoreticalBlend(
     0,
   );
   const additiveVolume = additives.reduce(
-    (s, a) => s + ingredientVolumeGal(a),
+    (s, a) => s + ingredientVolumeGal({ ...a, ingredient_type: a.ingredientType }),
     0,
   );
   const volumeGal = spiritVolume + additiveVolume;
@@ -143,7 +141,7 @@ export function solveWaterForTargetAbv(
   const nonWater = additives.filter((a) => a.ingredientType !== 'water');
   const pureAlcohol = spirits.reduce((s, sp) => s + sp.volumeGal * sp.abv / 100, 0);
   const fixedVolume = spirits.reduce((s, sp) => s + sp.volumeGal, 0)
-    + nonWater.reduce((s, a) => s + ingredientVolumeGal(a), 0);
+    + nonWater.reduce((s, a) => s + ingredientVolumeGal({ ...a, ingredient_type: a.ingredientType }), 0);
   if (pureAlcohol <= 0) return null;
 
   const totalVolumeNeeded = pureAlcohol / (targetAbv / 100);
@@ -285,7 +283,12 @@ export function computeBatchCorrection(
         amount: waterGal,
         unit: 'gal',
         label: 'Proofing water',
-        instruction: `Add ${waterGal.toFixed(2)} gallons of proofing water to bring ABV from ${measuredAbv.toFixed(1)}% down to ${targetAbv.toFixed(1)}%.`,
+        instruction: formatCorrectionWithAlternate(
+          waterGal,
+          'gal',
+          'water',
+          `Add ${waterGal.toFixed(2)} gallons of proofing water to bring ABV from ${measuredAbv.toFixed(1)}% down to ${targetAbv.toFixed(1)}%.`,
+        ),
         projectedAbv: round2(targetAbv),
         projectedBrix: workingBrix,
       });
@@ -322,7 +325,12 @@ export function computeBatchCorrection(
         amount: sugarLbs,
         unit: 'lbs',
         label: 'Sugar',
-        instruction: `Add ${sugarLbs.toFixed(2)} lbs of sugar to raise sweetness from ${measuredBrix.toFixed(1)}° to about ${targetBrix.toFixed(1)}° Brix.`,
+        instruction: formatCorrectionWithAlternate(
+          sugarLbs,
+          'lbs',
+          'sugar',
+          `Add ${sugarLbs.toFixed(2)} lbs of sugar to raise sweetness from ${measuredBrix.toFixed(1)}° to about ${targetBrix.toFixed(1)}° Brix.`,
+        ),
         projectedAbv: workingAbv,
         projectedBrix: workingBrix,
       });
