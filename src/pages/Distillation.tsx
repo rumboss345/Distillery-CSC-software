@@ -265,6 +265,7 @@ export function Distillation() {
   };
 
   const selectedRun = runs.find((r) => r.id === selectedRunId);
+  const selectedRunIsComplete = selectedRun?.status === 'complete';
   const cuts = selectedRunId ? getDistillationCuts(selectedRunId) : [];
   const hasHeadsCut = cuts.some((c) => c.cut_type === 'heads');
   const availableCutTypes = hasHeadsCut
@@ -275,6 +276,10 @@ export function Distillation() {
     defaultTankForCutType(cutType, { run, existingCuts: runCuts });
 
   const openAddCutForm = () => {
+    if (selectedRunIsComplete) {
+      alert('This run is complete — cuts cannot be added.');
+      return;
+    }
     const run = runs.find((r) => r.id === selectedRunId);
     const initialCutType: CutType = hasHeadsCut ? 'hearts' : 'heads';
     setCutForm({
@@ -314,6 +319,10 @@ export function Distillation() {
 
   const handleAddCut = () => {
     if (!selectedRunId) return;
+    if (selectedRunIsComplete) {
+      alert('This run is complete — cuts cannot be added.');
+      return;
+    }
     if (cutForm.volume_gal <= 0 || !Number.isFinite(cutForm.volume_gal)) {
       alert('Enter the cut volume (gal) before adding a cut.');
       return;
@@ -343,16 +352,21 @@ export function Distillation() {
         }
       }
     }
-    saveDistillationCut({
-      distillation_run_id: selectedRunId,
-      cut_type: cutForm.cut_type,
-      holding_tank_equipment_id: tankId,
-      start_time: cutForm.start_time,
-      end_time: cutForm.end_time || null,
-      volume_gal: cutForm.volume_gal,
-      abv: cutForm.abv,
-      notes: cutForm.notes,
-    });
+    try {
+      saveDistillationCut({
+        distillation_run_id: selectedRunId,
+        cut_type: cutForm.cut_type,
+        holding_tank_equipment_id: tankId,
+        start_time: cutForm.start_time,
+        end_time: cutForm.end_time || null,
+        volume_gal: cutForm.volume_gal,
+        abv: cutForm.abv,
+        notes: cutForm.notes,
+      });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Could not save cut.');
+      return;
+    }
     setShowCutForm(false);
     setCutForm({
       cut_type: 'heads',
@@ -543,11 +557,17 @@ export function Distillation() {
                 Hearts: {heartsTotal.toFixed(1)} gal · GPA: {gpa.toFixed(2)} gal
               </span>}
             </h4>
-            <button className="btn btn-primary btn-sm" onClick={openAddCutForm}>+ Add Cut</button>
+            {selectedRunIsComplete ? (
+              <span className="text-muted" style={{ fontSize: '0.85rem' }}>Run complete — cuts locked</span>
+            ) : (
+              <button type="button" className="btn btn-primary btn-sm" onClick={openAddCutForm}>+ Add Cut</button>
+            )}
           </div>
 
           {cuts.length === 0 ? (
-            <p style={{ color: 'var(--text-muted)' }}>No cuts recorded for this run.</p>
+            <p style={{ color: 'var(--text-muted)' }}>
+              {selectedRunIsComplete ? 'No cuts recorded for this completed run.' : 'No cuts recorded for this run.'}
+            </p>
           ) : (
             <div className="table-wrap">
               <table>

@@ -996,6 +996,13 @@ export function getDistillationCuts(runId: number): DistillationCutView[] {
 }
 
 export function saveDistillationCut(cut: Omit<DistillationCut, 'id'>, id?: number): void {
+  const run = queryOne<{ status: string }>(
+    'SELECT status FROM distillation_runs WHERE id = ?',
+    [cut.distillation_run_id],
+  );
+  if (run?.status === 'complete') {
+    throw new Error('Cannot add or change cuts on a completed distillation run.');
+  }
   if (cut.cut_type === 'heads') {
     const existingHeads = queryOne<{ id: number }>(
       `SELECT id FROM distillation_cuts
