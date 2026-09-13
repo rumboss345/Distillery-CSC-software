@@ -294,6 +294,7 @@ export interface BlendProduct {
   status: BlendStatus | LegacyBlendStatus;
   executed_at: string | null;
   output_holding_tank_equipment_id: number | null;
+  blend_recipe_id: number | null;
   notes: string;
   created_at: string;
 }
@@ -324,6 +325,7 @@ export interface BlendIngredient {
 export interface BlendProductView extends BlendProduct {
   source_tank_name?: string;
   output_tank_name?: string;
+  blend_recipe_name?: string;
 }
 
 export interface BlendIngredientInput {

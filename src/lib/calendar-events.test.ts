@@ -196,6 +196,7 @@ describe('buildCalendarEventsFromData', () => {
         status: 'draft',
         executed_at: null,
         output_holding_tank_equipment_id: null,
+        blend_recipe_id: null,
         notes: '',
         created_at: '2026-05-15',
       } satisfies BlendProduct],

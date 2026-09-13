@@ -1462,6 +1462,19 @@ tr:hover td {
   margin: 1rem 0 0.5rem;
 }
 
+.blend-size-panel {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 1rem;
+  margin-bottom: 1rem;
+  background: var(--bg-elevated);
+}
+
+.blend-size-title {
+  margin: 0 0 0.75rem;
+  font-weight: 600;
+}
+
 .correct-batch-panel {
   margin-top: 1.5rem;
   padding: 1rem;

@@ -8,7 +8,6 @@ import {
   getBlendRecipe,
   getBlendRecipes,
   getBlendSpiritSources,
-  saveBlendRecipeFromWizard,
   getChargeableHoldingTanksForBlend,
   getHoldingTankContents,
   getHoldingTanks,
@@ -43,14 +42,20 @@ import {
   type AdditiveInput,
   type SpiritSourceInput,
 } from '../lib/blend-formulation';
+import {
+  scaleFactorFromTargetYield,
+  scaleIngredients,
+  scaleSpiritSources,
+} from '../lib/blend-recipe-scale';
 import type {
   BlendIngredientInput,
   BlendProduct,
+  BlendRecipeSpiritSourceInput,
   BlendSpiritSourceInput,
 } from '../types';
 
 const WIZARD_STEPS = [
-  { id: 1, label: 'Product', title: 'What are you making?' },
+  { id: 1, label: 'Recipe', title: 'Choose recipe & batch size' },
   { id: 2, label: 'Spirits', title: 'Select your spirits' },
   { id: 3, label: 'Proof', title: 'Set the target proof (ABV)' },
   { id: 4, label: 'Additives', title: 'Add sugar, flavors & color' },
@@ -62,7 +67,7 @@ const WIZARD_STEPS = [
 ] as const;
 
 const STEP_HINTS: Record<number, string> = {
-  1: 'Give your product a name and batch number, or load a saved blend recipe. You will pick tanks when you get to the spirits step.',
+  1: 'Pick a saved blend recipe, then scale the batch up or down before you assign tanks and produce.',
   2: 'Choose holding tanks and how much spirit to pull — by the gallon (recommended) or by weight on a scale.',
   3: 'Enter the proof you want to bottle at. We can calculate how much water to add.',
   4: 'Add sweetener, flavorings, or color if this product needs them. Skip if not.',
@@ -140,8 +145,14 @@ const emptyProduct = (): FormulaForm => ({
   actual_brix: null,
   status: 'draft',
   output_holding_tank_equipment_id: null,
+  blend_recipe_id: null,
   notes: '',
 });
+
+interface RecipeTemplate {
+  spirit_sources: BlendRecipeSpiritSourceInput[];
+  ingredients: BlendIngredientInput[];
+}
 
 function toSpiritInputs(sources: SpiritSourceRow[]): SpiritSourceInput[] {
   return sources
@@ -261,8 +272,25 @@ export function Blending() {
     weight: '',
   });
   const [verifyMeasureMode, setVerifyMeasureMode] = useState<MeasureMode>('volume');
+  const [selectedRecipeId, setSelectedRecipeId] = useState<number | null>(null);
+  const [recipeTemplate, setRecipeTemplate] = useState<RecipeTemplate | null>(null);
+  const [targetYieldInput, setTargetYieldInput] = useState('');
 
   void key;
+
+  const baseFormulation = useMemo(() => {
+    if (!recipeTemplate || recipeTemplate.spirit_sources.every((source) => source.volume_gal <= 0)) {
+      return null;
+    }
+    const baseSpirits: BlendSpiritSourceInput[] = recipeTemplate.spirit_sources
+      .filter((source) => source.volume_gal > 0)
+      .map((source) => ({
+        holding_tank_equipment_id: 0,
+        volume_gal: source.volume_gal,
+        abv: source.abv,
+      }));
+    return computeBlendFormulation(baseSpirits, recipeTemplate.ingredients);
+  }, [recipeTemplate]);
 
   const chargeableTanks = getChargeableHoldingTanksForBlend(editId);
   const activeSources = spiritSources
@@ -277,6 +305,11 @@ export function Blending() {
     }),
     [activeSources, ingredients, form.actual_volume_gal, form.actual_abv, form.actual_density, form.actual_brix],
   );
+
+  const baseYieldGal = baseFormulation?.theoretical.volumeGal ?? 0;
+  const scaledYieldGal = baseYieldGal > 0
+    ? baseYieldGal * (form.scale_factor || 1)
+    : formulation.theoretical.volumeGal;
 
   const verifyAbv = form.actual_abv ?? form.final_abv ?? formulation.theoretical.abv ?? 0;
   const correctionAbv = measuredForCorrection.abv
@@ -302,31 +335,39 @@ export function Blending() {
     });
   }, [correctionVolume, correctionAbv, form.target_abv, form.target_brix, form.actual_brix, measuredForCorrection.brix, correctionProof, verifyMeasureMode, wizardStep, measuredForCorrection.weight, form.actual_weight_lbs, verifyAbv]);
 
-  const applyBlendRecipe = (recipeId: number) => {
+  const applyScaledRecipeAmounts = (
+    template: RecipeTemplate,
+    factor: number,
+    preserveTankIds: number[] = [],
+  ) => {
+    setSpiritSources(scaleSpiritSources(template.spirit_sources, factor, preserveTankIds));
+    setIngredients(scaleIngredients(template.ingredients, factor));
+  };
+
+  const setBatchScale = (factor: number) => {
+    if (!recipeTemplate || factor <= 0) return;
+    const safeFactor = Math.round(factor * 1000) / 1000;
+    setForm((prev) => ({ ...prev, scale_factor: safeFactor }));
+    applyScaledRecipeAmounts(
+      recipeTemplate,
+      safeFactor,
+      spiritSources.map((source) => source.holding_tank_equipment_id),
+    );
+    if (baseYieldGal > 0) {
+      setTargetYieldInput((baseYieldGal * safeFactor).toFixed(1));
+    }
+  };
+
+  const applyBlendRecipe = (recipeId: number, factor = 1) => {
     const recipe = getBlendRecipe(recipeId);
     if (!recipe) return;
-    setEditId(undefined);
-    setForm({
-      ...emptyProduct(),
-      product_name: recipe.product_name,
-      target_abv: recipe.target_abv,
-      target_brix: recipe.target_brix,
-      scale_factor: recipe.scale_factor ?? 1,
-      notes: recipe.notes,
-    });
-    setSpiritSources(
-      recipe.spirit_sources.length > 0
-        ? recipe.spirit_sources.map((source) => ({
-          holding_tank_equipment_id: 0,
-          volume_gal: source.volume_gal,
-          abv: source.abv,
-          amount: source.volume_gal,
-          unit: 'gal',
-        }))
-        : [emptySpiritSource()],
-    );
-    setIngredients(
-      recipe.ingredients.map((ingredient) => ({
+    const template: RecipeTemplate = {
+      spirit_sources: recipe.spirit_sources.map((source) => ({
+        spirit_label: source.spirit_label,
+        volume_gal: source.volume_gal,
+        abv: source.abv,
+      })),
+      ingredients: recipe.ingredients.map((ingredient) => ({
         ingredient_type: ingredient.ingredient_type,
         name: ingredient.name,
         amount: ingredient.amount,
@@ -336,14 +377,47 @@ export function Blending() {
         inventory_item_id: ingredient.inventory_item_id,
         notes: ingredient.notes,
       })),
-    );
+    };
+    setEditId(undefined);
+    setSelectedRecipeId(recipeId);
+    setRecipeTemplate(template);
+    setForm({
+      ...emptyProduct(),
+      product_name: recipe.product_name,
+      target_abv: recipe.target_abv,
+      target_brix: recipe.target_brix,
+      scale_factor: factor,
+      blend_recipe_id: recipeId,
+      notes: recipe.notes,
+    });
+    applyScaledRecipeAmounts(template, factor);
+    const baseSpirits = template.spirit_sources
+      .filter((source) => source.volume_gal > 0)
+      .map((source) => ({
+        holding_tank_equipment_id: 0,
+        volume_gal: source.volume_gal,
+        abv: source.abv,
+      }));
+    if (baseSpirits.length > 0) {
+      const base = computeBlendFormulation(baseSpirits, template.ingredients);
+      setTargetYieldInput((base.theoretical.volumeGal * factor).toFixed(1));
+    } else {
+      setTargetYieldInput('');
+    }
     setMeasuredForCorrection({ abv: '', volume: '', brix: '', weight: '' });
     setVerifyMeasureMode('volume');
     setWizardStep(1);
   };
 
   const openNew = () => {
+    if (blendRecipes.length === 0) {
+      alert('Create a blend recipe on the Recipes page before starting a batch.');
+      return;
+    }
     setEditId(undefined);
+    setSelectedRecipeId(null);
+    setRecipeTemplate(null);
+    setTargetYieldInput('');
     setForm(emptyProduct());
     setSpiritSources([emptySpiritSource()]);
     setIngredients([]);
@@ -351,23 +425,6 @@ export function Blending() {
     setMeasuredForCorrection({ abv: '', volume: '', brix: '', weight: '' });
     setVerifyMeasureMode('volume');
     setShowWizard(true);
-  };
-
-  const handleSaveAsRecipe = () => {
-    const defaultName = form.product_name.trim() || 'Blend recipe';
-    const name = prompt('Save this formula as a blend recipe:', defaultName);
-    if (!name?.trim()) return;
-    try {
-      saveBlendRecipeFromWizard(
-        name.trim(),
-        form,
-        activeSources.map(toSpiritSourceInput),
-        ingredients.filter((ingredient) => ingredient.amount > 0 || ingredient.name.trim()),
-      );
-      alert('Blend recipe saved. Find it on the Recipes page under Blending.');
-    } catch (error) {
-      alert(error instanceof Error ? error.message : 'Could not save blend recipe.');
-    }
   };
 
   const openContinue = (blend: BlendProduct) => {
@@ -397,8 +454,59 @@ export function Blending() {
       actual_brix: blend.actual_brix,
       status: blend.status === 'blended' ? 'executed' : blend.status,
       output_holding_tank_equipment_id: blend.output_holding_tank_equipment_id,
+      blend_recipe_id: blend.blend_recipe_id,
       notes: blend.notes,
     });
+    if (blend.blend_recipe_id) {
+      const recipe = getBlendRecipe(blend.blend_recipe_id);
+      if (recipe) {
+        setSelectedRecipeId(recipe.id);
+        setRecipeTemplate({
+          spirit_sources: recipe.spirit_sources.map((source) => ({
+            spirit_label: source.spirit_label,
+            volume_gal: source.volume_gal,
+            abv: source.abv,
+          })),
+          ingredients: recipe.ingredients.map((ingredient) => ({
+            ingredient_type: ingredient.ingredient_type,
+            name: ingredient.name,
+            amount: ingredient.amount,
+            unit: ingredient.unit,
+            cost_per_unit: ingredient.cost_per_unit,
+            lot_number: ingredient.lot_number,
+            inventory_item_id: ingredient.inventory_item_id,
+            notes: ingredient.notes,
+          })),
+        });
+        const baseSpirits = recipe.spirit_sources
+          .filter((source) => source.volume_gal > 0)
+          .map((source) => ({
+            holding_tank_equipment_id: 0,
+            volume_gal: source.volume_gal,
+            abv: source.abv,
+          }));
+        if (baseSpirits.length > 0) {
+          const base = computeBlendFormulation(
+            baseSpirits,
+            recipe.ingredients.map((ingredient) => ({
+              ingredient_type: ingredient.ingredient_type,
+              name: ingredient.name,
+              amount: ingredient.amount,
+              unit: ingredient.unit,
+              cost_per_unit: ingredient.cost_per_unit,
+              lot_number: ingredient.lot_number,
+              inventory_item_id: ingredient.inventory_item_id,
+              notes: ingredient.notes,
+            })),
+          );
+          setTargetYieldInput((base.theoretical.volumeGal * (blend.scale_factor ?? 1)).toFixed(1));
+        }
+      }
+    } else {
+      setSelectedRecipeId(null);
+      setRecipeTemplate(null);
+      setTargetYieldInput('');
+    }
     const sources = getBlendSpiritSources(blend.id);
     setSpiritSources(
       sources.length > 0
@@ -562,9 +670,19 @@ export function Blending() {
   };
 
   const validateStep = (step: number): boolean => {
-    if (step === 1 && !form.product_name.trim()) {
-      alert('Please enter a product name.');
-      return false;
+    if (step === 1) {
+      if (!editId && !selectedRecipeId) {
+        alert('Select a blend recipe to continue.');
+        return false;
+      }
+      if (!form.product_name.trim()) {
+        alert('Please enter a product name.');
+        return false;
+      }
+      if (!form.scale_factor || form.scale_factor <= 0) {
+        alert('Batch size must be greater than zero.');
+        return false;
+      }
     }
     if (step === 2 && activeSources.length === 0) {
       alert('Please select at least one spirit tank and enter a volume.');
@@ -819,24 +937,75 @@ export function Blending() {
       case 1:
         return (
           <>
-            {blendRecipes.length > 0 && (
+            {blendRecipes.length === 0 ? (
+              <p className="field-hint">No blend recipes yet. Add one on the Recipes page under Blending before starting a batch.</p>
+            ) : (
               <div className="form-group">
-                <label>Start from saved blend recipe</label>
+                <label>Blend recipe (required)</label>
                 <select
-                  defaultValue=""
+                  value={selectedRecipeId ?? ''}
                   onChange={(e) => {
                     const recipeId = e.target.value ? parseInt(e.target.value, 10) : 0;
-                    if (recipeId) applyBlendRecipe(recipeId);
+                    if (recipeId) applyBlendRecipe(recipeId, 1);
                   }}
                 >
-                  <option value="">— Start from scratch —</option>
+                  <option value="">— Select a recipe —</option>
                   {blendRecipes.map((recipe) => (
                     <option key={recipe.id} value={recipe.id}>
                       {recipe.name}{recipe.product_name ? ` — ${recipe.product_name}` : ''}
                     </option>
                   ))}
                 </select>
-                <p className="field-hint">Loads spirit amounts, target proof, and additives. You still choose tanks in the next step.</p>
+              </div>
+            )}
+            {selectedRecipeId && recipeTemplate && (
+              <div className="blend-size-panel">
+                <p className="blend-size-title">Size this batch</p>
+                <div className="measure-mode-buttons">
+                  {[0.5, 1, 1.5, 2].map((factor) => (
+                    <button
+                      key={factor}
+                      type="button"
+                      className={`btn btn-sm ${Math.abs(form.scale_factor - factor) < 0.001 ? 'btn-primary' : 'btn-secondary'}`}
+                      onClick={() => setBatchScale(factor)}
+                    >
+                      {factor}×
+                    </button>
+                  ))}
+                </div>
+                <div className="wizard-lab-inputs">
+                  <label>
+                    Scale factor
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      value={form.scale_factor || ''}
+                      onChange={(e) => setBatchScale(parseFloat(e.target.value) || 1)}
+                    />
+                  </label>
+                  <label>
+                    Target yield (gal)
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      value={targetYieldInput}
+                      onChange={(e) => {
+                        setTargetYieldInput(e.target.value);
+                        const target = parseFloat(e.target.value);
+                        if (baseYieldGal > 0 && target > 0) {
+                          setBatchScale(scaleFactorFromTargetYield(baseYieldGal, target));
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+                {baseYieldGal > 0 && (
+                  <p className="field-hint">
+                    Recipe base yield: {baseYieldGal.toFixed(1)} gal → this batch: {scaledYieldGal.toFixed(1)} gal at {form.target_abv != null ? `${form.target_abv}%` : 'target proof'}
+                  </p>
+                )}
               </div>
             )}
             <div className="form-group">
@@ -1131,11 +1300,9 @@ export function Blending() {
                 </>
               )}
             </div>
-            <div className="wizard-review-actions">
-              <button type="button" className="btn btn-secondary" onClick={handleSaveAsRecipe}>
-                Save as blend recipe
-              </button>
-            </div>
+            {form.scale_factor !== 1 && (
+              <p className="field-hint">Batch sized at {form.scale_factor}× the saved recipe.</p>
+            )}
             <p className="field-hint">Next: run a lab test on a trial batch, or approve if you are confident in the numbers.</p>
           </div>
         );
@@ -1389,7 +1556,7 @@ export function Blending() {
     <div>
       <div className="page-header">
         <h2>Blending</h2>
-        <p>Follow the steps to build, test, approve, and produce a batch.</p>
+        <p>Every batch starts from a saved blend recipe. Scale it, assign tanks, then produce.</p>
         <div className="page-actions">
           <button className="btn btn-primary" onClick={openNew}>+ New batch</button>
         </div>
@@ -1397,7 +1564,7 @@ export function Blending() {
 
       {blends.length === 0 ? (
         <div className="empty-state">
-          <p>No batches yet. Start a new batch and we will walk you through each step.</p>
+          <p>No batches yet. Create a blend recipe on the Recipes page, then start a new batch here.</p>
           <button className="btn btn-primary" onClick={openNew} style={{ marginTop: '1rem' }}>Start first batch</button>
         </div>
       ) : (
@@ -1407,6 +1574,8 @@ export function Blending() {
               <tr>
                 <th>Batch</th>
                 <th>Product</th>
+                <th>Recipe</th>
+                <th>Size</th>
                 <th>Target proof</th>
                 <th>Progress</th>
                 <th>Status</th>
@@ -1418,6 +1587,8 @@ export function Blending() {
                 <tr key={b.id}>
                   <td><strong>{b.batch_number}</strong></td>
                   <td>{b.product_name}</td>
+                  <td>{b.blend_recipe_name ?? '—'}</td>
+                  <td>{b.scale_factor !== 1 ? `${b.scale_factor}×` : '1×'}</td>
                   <td>{b.target_abv != null ? `${b.target_abv}%` : '—'}</td>
                   <td>{stepLabel(b.status, b.target_abv)}</td>
                   <td><StatusBadge status={b.status === 'blended' ? 'executed' : b.status} /></td>
