@@ -1121,6 +1121,280 @@ tr:hover td {
   filter: brightness(1.05);
 }
 
+.btn-lg {
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+}
+
+/* Blending wizard */
+.blend-wizard-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.blend-wizard-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  cursor: pointer;
+  min-width: 3.5rem;
+}
+
+.blend-wizard-step.active {
+  border-color: var(--accent);
+  background: var(--accent-muted);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.blend-wizard-step.done {
+  color: var(--success);
+  border-color: var(--success);
+}
+
+.blend-wizard-step:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.blend-wizard-step-num {
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.blend-wizard-hint {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  margin: 0 0 1.25rem;
+  line-height: 1.5;
+}
+
+.blend-wizard-content {
+  min-height: 12rem;
+}
+
+.blend-wizard-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.wizard-spirit-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr auto;
+  gap: 0.75rem;
+  align-items: end;
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px dashed var(--border-subtle);
+}
+
+.wizard-row-remove {
+  margin-bottom: 0.25rem;
+}
+
+.wizard-additive-row {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr 0.8fr 0.7fr auto;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  align-items: center;
+}
+
+.wizard-additive-row input,
+.wizard-additive-row select {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.85rem;
+}
+
+.wizard-add-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.wizard-inventory-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.5fr;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  align-items: center;
+}
+
+.wizard-result-banner {
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  background: var(--accent-muted);
+  border-radius: var(--radius);
+  font-size: 0.95rem;
+}
+
+.wizard-review-card,
+.wizard-approve-card,
+.wizard-produce-card,
+.wizard-verify-card {
+  padding: 1rem;
+  background: var(--bg-hover);
+  border-radius: var(--radius);
+  border: 1px solid var(--border-subtle);
+}
+
+.wizard-review-card h4 {
+  margin: 0 0 0.5rem;
+}
+
+.wizard-yield-line {
+  font-size: 1.1rem;
+  margin: 0 0 1rem;
+}
+
+.wizard-recipe-summary h5 {
+  margin: 0.75rem 0 0.35rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.wizard-recipe-summary ul {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.wizard-lab-inputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.wizard-lab-inputs label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+}
+
+.wizard-lab-inputs input {
+  padding: 0.5rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  color: var(--text);
+}
+
+.wizard-produce-checklist {
+  margin: 1rem 0;
+  padding-left: 1.2rem;
+}
+
+.correct-batch-panel {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  border: 2px solid var(--warning);
+  border-radius: var(--radius);
+  background: var(--warning-bg);
+}
+
+.correct-batch-panel h4 {
+  margin: 0 0 0.5rem;
+  color: var(--warning);
+}
+
+.correct-batch-inputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.correct-batch-inputs label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+}
+
+.correct-batch-inputs input {
+  padding: 0.45rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+}
+
+.correction-result {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  border-radius: var(--radius);
+  background: var(--bg-card);
+}
+
+.correction-result.on-target {
+  border-left: 4px solid var(--success);
+}
+
+.correction-result.needs-fix {
+  border-left: 4px solid var(--warning);
+}
+
+.correction-headline {
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+}
+
+.correction-actions {
+  margin: 0.5rem 0 1rem;
+  padding-left: 1.2rem;
+}
+
+.correction-proof-input {
+  display: block;
+  margin-bottom: 0.75rem;
+  font-size: 0.85rem;
+}
+
+.correction-proof-input input {
+  display: block;
+  margin-top: 0.25rem;
+  padding: 0.4rem;
+  width: 8rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+}
+
+@media (max-width: 768px) {
+  .blend-wizard-steps {
+    justify-content: center;
+  }
+
+  .wizard-spirit-row,
+  .wizard-additive-row,
+  .correct-batch-inputs,
+  .wizard-lab-inputs {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 900px) {
   .blend-ingredient-row,
   .formulation-ingredient-row {

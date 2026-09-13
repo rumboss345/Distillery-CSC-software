@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  computeBatchCorrection,
   computeTheoreticalBlend,
   reconcileMeasurements,
   scaleFormulation,
@@ -97,6 +98,31 @@ describe('suggestCorrections', () => {
     const theoretical = computeTheoreticalBlend([{ volumeGal: 10, abv: 60 }], []);
     const suggestions = suggestCorrections(theoretical, { abv: 45 }, 40, null);
     expect(suggestions.some((s) => s.field === 'water')).toBe(true);
+  });
+});
+
+describe('computeBatchCorrection', () => {
+  it('calculates water to add when batch is over target ABV', () => {
+    const result = computeBatchCorrection(100, 41.2, 40);
+    expect(result).not.toBeNull();
+    expect(result!.onTarget).toBe(false);
+    expect(result!.actions).toHaveLength(1);
+    expect(result!.actions[0].ingredientType).toBe('water');
+    expect(result!.actions[0].amount).toBeGreaterThan(0);
+    expect(result!.actions[0].instruction).toContain('41.2%');
+    expect(result!.actions[0].instruction).toContain('40.0%');
+  });
+
+  it('reports on-target when within tolerance', () => {
+    const result = computeBatchCorrection(100, 40.1, 40);
+    expect(result!.onTarget).toBe(true);
+    expect(result!.actions).toHaveLength(0);
+  });
+
+  it('calculates spirit to add when batch is under target ABV', () => {
+    const result = computeBatchCorrection(100, 38, 40, { spiritProofAbv: 80 });
+    expect(result!.actions.some((a) => a.ingredientType === 'spirit')).toBe(true);
+    expect(result!.actions[0].amount).toBeGreaterThan(0);
   });
 });
 
