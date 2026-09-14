@@ -68,18 +68,31 @@ function FermenterLogPanel({
     ? estimateAbvFromBrix(startBrix, currentBrix)
     : null;
 
+  const temperature = logForm.temperature_f.trim() ? parseFloat(logForm.temperature_f) : null;
+  const brix = logForm.brix.trim() ? parseFloat(logForm.brix) : null;
+  const canAddLog = temperature != null && !Number.isNaN(temperature)
+    && brix != null && !Number.isNaN(brix);
+
   const handleAddLog = () => {
-    addFermentationLog({
-      mash_batch_id: mashBatchId,
-      floor_equipment_id: equipmentId,
-      logged_at: new Date().toISOString(),
-      temperature_f: logForm.temperature_f ? parseFloat(logForm.temperature_f) : null,
-      brix: logForm.brix ? parseFloat(logForm.brix) : null,
-      ph: logForm.ph ? parseFloat(logForm.ph) : null,
-      notes: logForm.notes,
-    });
-    setLogForm(emptyLogForm());
-    onAdded();
+    if (!canAddLog) {
+      alert('Temperature (°F) and Brix are required for each fermentation log.');
+      return;
+    }
+    try {
+      addFermentationLog({
+        mash_batch_id: mashBatchId,
+        floor_equipment_id: equipmentId,
+        logged_at: new Date().toISOString(),
+        temperature_f: temperature,
+        brix,
+        ph: logForm.ph.trim() ? parseFloat(logForm.ph) : null,
+        notes: logForm.notes,
+      });
+      setLogForm(emptyLogForm());
+      onAdded();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Could not save fermentation log.');
+    }
   };
 
   return (
@@ -97,12 +110,24 @@ function FermenterLogPanel({
       </p>
       <div className="form-grid" style={{ marginBottom: '1rem' }}>
         <div className="form-group">
-          <label>Temp (°F)</label>
-          <input value={logForm.temperature_f} onChange={(e) => setLogForm({ ...logForm, temperature_f: e.target.value })} placeholder="72" inputMode="decimal" />
+          <label>Temp (°F) *</label>
+          <input
+            value={logForm.temperature_f}
+            onChange={(e) => setLogForm({ ...logForm, temperature_f: e.target.value })}
+            placeholder="72"
+            inputMode="decimal"
+            required
+          />
         </div>
         <div className="form-group">
-          <label>Brix</label>
-          <input value={logForm.brix} onChange={(e) => setLogForm({ ...logForm, brix: e.target.value })} placeholder="10.5" />
+          <label>Brix *</label>
+          <input
+            value={logForm.brix}
+            onChange={(e) => setLogForm({ ...logForm, brix: e.target.value })}
+            placeholder="10.5"
+            inputMode="decimal"
+            required
+          />
         </div>
         <div className="form-group">
           <label>pH</label>
@@ -113,7 +138,9 @@ function FermenterLogPanel({
           <input value={logForm.notes} onChange={(e) => setLogForm({ ...logForm, notes: e.target.value })} />
         </div>
       </div>
-      <button className="btn btn-primary btn-sm" onClick={handleAddLog}>+ Log Reading</button>
+      <button className="btn btn-primary btn-sm" onClick={handleAddLog} disabled={!canAddLog}>
+        + Log Reading
+      </button>
 
       {logs.length > 0 && (
         <div className="table-wrap" style={{ marginTop: '1rem' }}>

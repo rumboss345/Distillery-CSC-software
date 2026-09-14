@@ -1050,6 +1050,12 @@ export function addFermentationLog(log: Omit<FermentationLog, 'id'>): void {
   if (!batch || batch.status !== 'fermenting') {
     throw new Error('Fermentation logs can only be added while batch status is fermenting.');
   }
+  if (log.temperature_f == null || Number.isNaN(log.temperature_f)) {
+    throw new Error('Temperature (°F) is required for fermentation logs.');
+  }
+  if (log.brix == null || Number.isNaN(log.brix)) {
+    throw new Error('Brix is required for fermentation logs.');
+  }
   insertRow(
     `INSERT INTO fermentation_logs (mash_batch_id, floor_equipment_id, logged_at, temperature_f, brix, ph, notes) VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [
