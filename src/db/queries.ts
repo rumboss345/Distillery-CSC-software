@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { isFermenterSourcedRun, isTankSourcedRun, runUsesDestHoldingTank } from '../lib/distillation-run-types';
-import { FERMENTATION_READY_MAX_BRIX, isBrixReadyForDistillation } from '../lib/fermentation';
 import { initDatabase, clearAllData } from './database';
 import type {
   Barrel,
@@ -394,9 +393,6 @@ export function getChargeableFermentersForMash(
 ): (MashFermenterAssignment & { equipment_name: string })[] {
   const assignments = getMashFermenterAssignments(mashBatchId);
   return assignments.filter((a) => {
-    const latestBrix = getLatestFermentationBrix(mashBatchId, a.floor_equipment_id);
-    if (!isBrixReadyForDistillation(latestBrix)) return false;
-
     const alreadyCharged = queryOne<{ id: number }>(
       `SELECT id FROM distillation_runs
        WHERE source_mash_batch_id = ?
@@ -1114,18 +1110,6 @@ export function getDistillationRuns(): DistillationRunView[] {
 
 export function saveDistillationRun(run: Omit<DistillationRun, 'id' | 'created_at'>, id?: number): void {
   const runType = (run.run_type ?? 'wash') as DistillationRunType;
-  if (isFermenterSourcedRun(runType) && run.source_mash_batch_id && run.source_fermenter_equipment_id) {
-    const latestBrix = getLatestFermentationBrix(
-      run.source_mash_batch_id,
-      run.source_fermenter_equipment_id,
-    );
-    if (!isBrixReadyForDistillation(latestBrix)) {
-      const reading = latestBrix != null ? `${latestBrix}°` : 'no log reading';
-      throw new Error(
-        `Fermentation must be below ${FERMENTATION_READY_MAX_BRIX}° Brix before distillation (latest: ${reading}).`,
-      );
-    }
-  }
   if (id) {
     runQuery(
       `UPDATE distillation_runs SET batch_number=?, run_type=?, source_mash_batch_id=?, source_fermenter_equipment_id=?, source_holding_tank_equipment_id=?, dest_holding_tank_equipment_id=?, still_name=?, run_date=?, charge_volume_gal=?, charge_abv=?, status=?, assigned_user_id=?, assigned_user_name=?, notes=? WHERE id=?`,
