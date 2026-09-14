@@ -186,11 +186,20 @@ export const BLEND_RECIPES_2024: BlendRecipeSeed[] = [
   rumBlendRecipe(
     'Dark Rum (60 cases)',
     'Dark Rum',
-    '585 lbs 93% rum + 974 lbs water = 1,559 lbs total. Source: RECEIPES 2024.',
+    '60 cases. 585 lbs 93% rum + 974 lbs water = 1,559 lbs total. 7 × 50 lb bags dark brown sugar. 1.75 L YT75 in 1 L bottles (12-pack boxes). Source: RECEIPES 2024.',
     585,
     974,
     '93% rum',
-    [sugarBags(7, 'Dark brown sugar'), flavorMl(1750, 'YT75')],
+    [
+      {
+        ...sugarBags(7, 'Dark brown sugar'),
+        notes: '7 × 50 lb bags',
+      },
+      {
+        ...colorMl(1750, 'YT75'),
+        notes: '1.75 L total; 1 L bottles from 12-pack boxes',
+      },
+    ],
   ),
   rumBlendRecipe(
     "Jack's Dark Rum (30 cases)",

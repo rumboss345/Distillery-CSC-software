@@ -483,11 +483,32 @@ function seedBlendRecipes2024(): void {
   if (!hasTable) return;
 
   for (const recipe of BLEND_RECIPES_2024) {
-    const exists = queryOne<{ id: number }>(
-      'SELECT id FROM blend_recipes WHERE name = ? COLLATE NOCASE',
+    const existing = queryOne<{ id: number; notes: string }>(
+      'SELECT id, notes FROM blend_recipes WHERE name = ? COLLATE NOCASE',
       [recipe.name],
     );
-    if (exists) continue;
+
+    if (existing) {
+      if (existing.notes === recipe.notes) continue;
+
+      db.run(
+        `UPDATE blend_recipes
+         SET product_name = ?, target_abv = ?, target_brix = ?, notes = ?
+         WHERE id = ?`,
+        [
+          recipe.product_name,
+          recipe.target_abv,
+          recipe.target_brix,
+          recipe.notes,
+          existing.id,
+        ],
+      );
+      db.run('DELETE FROM blend_recipe_spirit_sources WHERE blend_recipe_id = ?', [existing.id]);
+      db.run('DELETE FROM blend_recipe_ingredients WHERE blend_recipe_id = ?', [existing.id]);
+      insertBlendRecipeSpiritSources(existing.id, recipe.spirit_sources);
+      insertBlendRecipeIngredients(existing.id, recipe.ingredients);
+      continue;
+    }
 
     db.run(
       `INSERT INTO blend_recipes (name, product_name, target_abv, target_brix, scale_factor, notes)
