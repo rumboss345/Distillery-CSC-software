@@ -6,7 +6,14 @@ import {
   useRefreshKey,
 } from '../db/queries';
 import { Modal } from './Modal';
-import { BLEND_INGREDIENT_TYPES, defaultUnitForMode, recommendMeasureMode } from '../lib/blending';
+import {
+  BLEND_INGREDIENT_TYPES,
+  defaultUnitForMode,
+  formatBlendRecipeSpiritPull,
+  formatSpiritPullWeightLbs,
+  recommendMeasureMode,
+  spiritWeightLbsFromVolumeGal,
+} from '../lib/blending';
 import type {
   BlendIngredientInput,
   BlendRecipeSpiritSourceInput,
@@ -182,10 +189,26 @@ export function BlendRecipesTab() {
               <ul>
                 {selected.spirit_sources.map((source, index) => (
                   <li key={index}>
-                    {source.spirit_label || `Spirit ${index + 1}`}: {source.volume_gal.toFixed(1)} gal @ {source.abv.toFixed(1)}%
+                    {formatBlendRecipeSpiritPull(
+                      source.spirit_label || `Spirit ${index + 1}`,
+                      source.volume_gal,
+                      source.abv,
+                    )}
                   </li>
                 ))}
               </ul>
+              {(() => {
+                const totalLbs = selected.spirit_sources.reduce(
+                  (sum, source) => sum + spiritWeightLbsFromVolumeGal(source.volume_gal, source.abv),
+                  0,
+                );
+                if (totalLbs <= 0) return null;
+                return (
+                  <p className="field-hint" style={{ marginTop: '0.35rem' }}>
+                    Total spirit weight: {totalLbs >= 10 ? totalLbs.toFixed(1) : totalLbs.toFixed(2)} lbs
+                  </p>
+                );
+              })()}
             </>
           )}
           {selected.ingredients.length > 0 && (
@@ -288,6 +311,10 @@ export function BlendRecipesTab() {
                         i === index ? { ...row, volume_gal: parseFloat(e.target.value) || 0 } : row
                       )))}
                     />
+                    {(() => {
+                      const weight = formatSpiritPullWeightLbs(source.volume_gal, source.abv);
+                      return weight ? <span className="field-hint">≈ {weight}</span> : null;
+                    })()}
                   </div>
                   <div className="form-group">
                     <label>ABV %</label>

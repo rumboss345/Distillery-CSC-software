@@ -152,6 +152,23 @@ export function spiritWeightLbsFromVolumeGal(volumeGal: number, abv: number): nu
   return volumeGal * spiritLbsPerGallon(abv);
 }
 
+export function formatSpiritPullWeightLbs(volumeGal: number, abv: number): string | null {
+  const lbs = spiritWeightLbsFromVolumeGal(volumeGal, abv);
+  if (lbs <= 0) return null;
+  return lbs >= 10 ? `${lbs.toFixed(1)} lbs` : `${lbs.toFixed(2)} lbs`;
+}
+
+export function formatBlendRecipeSpiritPull(
+  label: string,
+  volumeGal: number,
+  abv: number,
+): string {
+  const name = label.trim() || 'Spirit';
+  const volume = `${volumeGal.toFixed(1)} gal @ ${abv.toFixed(1)}%`;
+  const weight = formatSpiritPullWeightLbs(volumeGal, abv);
+  return weight ? `${name}: ${weight} · ${volume}` : `${name}: ${volume}`;
+}
+
 export function spiritMeasureAlternate(amount: number, unit: string, abv: number): MeasureAlternate | null {
   if (amount <= 0 || abv <= 0) return null;
 
