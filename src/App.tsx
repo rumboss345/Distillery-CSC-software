@@ -17,6 +17,7 @@ import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { ApproveUser } from './pages/ApproveUser';
 import { AdminUsers } from './pages/AdminUsers';
+import { SpiritWeightCalculator } from './pages/SpiritWeightCalculator';
 import { useDatabaseReady } from './db/queries';
 
 function AppContent() {
@@ -54,6 +55,7 @@ function AppContent() {
             <Route path="/recipes" element={<Recipes />} />
             <Route path="/distillation" element={<Distillation />} />
             <Route path="/blending" element={<Blending />} />
+            <Route path="/tools/spirit-calculator" element={<SpiritWeightCalculator />} />
             <Route path="/barrels" element={<Barrels />} />
             <Route path="/bottling" element={<Bottling />} />
             <Route path="/inventory" element={<Inventory />} />

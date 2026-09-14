@@ -9,6 +9,7 @@ const navItems: { to: string; label: string; icon: string; permission: Permissio
   { to: '/wash', label: 'Wash & Ferment', icon: '◉', permission: 'wash' },
   { to: '/distillation', label: 'Distillation', icon: '△', permission: 'distillation' },
   { to: '/blending', label: 'Blending', icon: '◆', permission: 'blending' },
+  { to: '/tools/spirit-calculator', label: 'Spirit Calculator', icon: '⚖', permission: 'blending' },
   { to: '/barrels', label: 'Barrel Aging', icon: '▣', permission: 'barrels' },
   { to: '/bottling', label: 'Bottling', icon: '◇', permission: 'bottling' },
   { to: '/inventory', label: 'Inventory', icon: '☰', permission: 'inventory' },
