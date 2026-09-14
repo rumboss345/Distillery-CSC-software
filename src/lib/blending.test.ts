@@ -8,6 +8,8 @@ import {
   spiritLbsPerGallon,
   spiritMeasureAlternate,
   spiritVolumeGalFromAmount,
+  formatBlendRecipeSpiritPull,
+  formatSpiritPullWeightLbs,
   spiritWeightLbsFromVolumeGal,
   SPIRIT_MEASURE_RECOMMENDATION,
   toGallonsFromVolumeUnit,
@@ -89,6 +91,13 @@ describe('spirit measurement', () => {
     const alt = spiritMeasureAlternate(10, 'gal', 40);
     expect(alt).not.toBeNull();
     expect(alt!.label).toContain('lbs');
+  });
+
+  it('formats blend recipe spirit pulls with weight and volume', () => {
+    expect(formatSpiritPullWeightLbs(83.57, 93)).toContain('lbs');
+    expect(formatBlendRecipeSpiritPull('93% rum', 83.57, 93)).toContain('93% rum');
+    expect(formatBlendRecipeSpiritPull('93% rum', 83.57, 93)).toContain('gal @ 93.0%');
+    expect(formatBlendRecipeSpiritPull('93% rum', 83.57, 93)).toContain('lbs');
   });
 });
 
