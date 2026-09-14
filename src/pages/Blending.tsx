@@ -18,8 +18,11 @@ import {
   generateBatchNumber,
   useRefreshKey,
 } from '../db/queries';
+import { AssigneeCell, AssigneeSelect } from '../components/AssigneeSelect';
 import { DatePicker } from '../components/DatePicker';
 import { Modal } from '../components/Modal';
+import { useAuth } from '../context/AuthContext';
+import { defaultAssignee } from '../lib/assignee';
 import { StatusBadge } from '../components/StatusBadge';
 import {
   BLEND_INGREDIENT_TYPES,
@@ -147,6 +150,8 @@ const emptyProduct = (): FormulaForm => ({
   status: 'draft',
   output_holding_tank_equipment_id: null,
   blend_recipe_id: null,
+  assigned_user_id: null,
+  assigned_user_name: null,
   notes: '',
 });
 
@@ -254,6 +259,7 @@ function buildSavePayload(
 }
 
 export function Blending() {
+  const { user } = useAuth();
   const { key, refresh } = useRefreshKey();
   const blends = getBlendProducts();
   const blendRecipes = getBlendRecipes();
@@ -384,6 +390,7 @@ export function Blending() {
     setRecipeTemplate(template);
     setForm({
       ...emptyProduct(),
+      ...defaultAssignee(user),
       product_name: recipe.product_name,
       target_abv: recipe.target_abv,
       target_brix: recipe.target_brix,
@@ -419,7 +426,7 @@ export function Blending() {
     setSelectedRecipeId(null);
     setRecipeTemplate(null);
     setTargetYieldInput('');
-    setForm(emptyProduct());
+    setForm({ ...emptyProduct(), ...defaultAssignee(user) });
     setSpiritSources([emptySpiritSource()]);
     setIngredients([]);
     setWizardStep(1);
@@ -456,6 +463,8 @@ export function Blending() {
       status: blend.status === 'blended' ? 'executed' : blend.status,
       output_holding_tank_equipment_id: blend.output_holding_tank_equipment_id,
       blend_recipe_id: blend.blend_recipe_id,
+      assigned_user_id: blend.assigned_user_id,
+      assigned_user_name: blend.assigned_user_name,
       notes: blend.notes,
     });
     if (blend.blend_recipe_id) {
@@ -682,6 +691,10 @@ export function Blending() {
       }
       if (!form.scale_factor || form.scale_factor <= 0) {
         alert('Batch size must be greater than zero.');
+        return false;
+      }
+      if (!form.assigned_user_id) {
+        alert('Select the employee assigned to this blend batch.');
         return false;
       }
     }
@@ -1027,6 +1040,17 @@ export function Blending() {
               <DatePicker
                 value={form.blend_date}
                 onChange={(blend_date) => setForm({ ...form, blend_date })}
+              />
+            </div>
+            <div className="form-group">
+              <label>Assigned employee</label>
+              <AssigneeSelect
+                value={{
+                  assigned_user_id: form.assigned_user_id,
+                  assigned_user_name: form.assigned_user_name,
+                }}
+                onChange={(assignee) => setForm({ ...form, ...assignee })}
+                required
               />
             </div>
           </>
@@ -1581,6 +1605,7 @@ export function Blending() {
                 <th>Recipe</th>
                 <th>Size</th>
                 <th>Target proof</th>
+                <th>Assigned to</th>
                 <th>Progress</th>
                 <th>Status</th>
                 <th></th>
@@ -1594,6 +1619,7 @@ export function Blending() {
                   <td>{b.blend_recipe_name ?? '—'}</td>
                   <td>{b.scale_factor !== 1 ? `${b.scale_factor}×` : '1×'}</td>
                   <td>{b.target_abv != null ? `${b.target_abv}%` : '—'}</td>
+                  <td><AssigneeCell name={b.assigned_user_name} /></td>
                   <td>{stepLabel(b.status, b.target_abv)}</td>
                   <td><StatusBadge status={b.status === 'blended' ? 'executed' : b.status} /></td>
                   <td className="td-actions">

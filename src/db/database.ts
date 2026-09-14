@@ -411,7 +411,21 @@ function runMigrations(): void {
   migrateBlendRecipes();
   migrateFloorPlanPages();
   migrateAdvancedBlending();
+  migrateAssignedEmployee();
   persistDb();
+}
+
+function migrateAssignedEmployee(): void {
+  if (!db) return;
+  for (const table of ['mash_batches', 'distillation_runs', 'blend_products']) {
+    const hasAssignee = queryOne<{ name: string }>(
+      `SELECT name FROM pragma_table_info('${table}') WHERE name='assigned_user_id'`,
+    );
+    if (!hasAssignee) {
+      db.run(`ALTER TABLE ${table} ADD COLUMN assigned_user_id INTEGER`);
+      db.run(`ALTER TABLE ${table} ADD COLUMN assigned_user_name TEXT NOT NULL DEFAULT ''`);
+    }
+  }
 }
 
 function seedPackagingBottles(): void {

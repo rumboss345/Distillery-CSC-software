@@ -82,6 +82,16 @@ export interface ProcessAssignmentEntry {
   name: string | null;
 }
 
+export interface AssignableUser {
+  id: number;
+  email: string;
+  name: string | null;
+}
+
+export async function fetchAssignableUsers() {
+  return apiFetch<{ users: AssignableUser[] }>('/api/users/assignable');
+}
+
 export async function fetchProcessAssignments() {
   return apiFetch<{ assignments: Record<string, ProcessAssignmentEntry[]> }>(
     '/api/process/assignments',

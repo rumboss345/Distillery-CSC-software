@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { format } from 'date-fns';
+import { AssigneeCell, AssigneeSelect } from '../components/AssigneeSelect';
 import { DatePicker, DateTimePicker } from '../components/DatePicker';
+import { useAuth } from '../context/AuthContext';
+import { defaultAssignee } from '../lib/assignee';
 import {
   getDistillationRuns,
   saveDistillationRun,
@@ -73,10 +76,13 @@ const emptyRun = (runType: DistillationRunType = 'wash'): Omit<DistillationRun, 
   charge_volume_gal: 0,
   charge_abv: null,
   status: 'planned',
+  assigned_user_id: null,
+  assigned_user_name: null,
   notes: '',
 });
 
 export function Distillation() {
+  const { user } = useAuth();
   const { key, refresh } = useRefreshKey();
   const runs = getDistillationRuns();
   const mashes = getMashBatches();
@@ -190,7 +196,7 @@ export function Distillation() {
 
   const openNewRun = (runType: DistillationRunType = 'wash') => {
     setEditRunId(undefined);
-    setRunForm(emptyRun(runType));
+    setRunForm({ ...emptyRun(runType), ...defaultAssignee(user) });
     setShowRunForm(true);
   };
 
@@ -207,6 +213,10 @@ export function Distillation() {
   };
 
   const handleSaveRun = () => {
+    if (!runForm.assigned_user_id) {
+      alert('Select the employee assigned to this distillation run.');
+      return;
+    }
     if (isFermenterSourcedRun(runForm.run_type)) {
       if (
         runForm.source_mash_batch_id
@@ -514,6 +524,7 @@ export function Distillation() {
                 <th>Source</th>
                 <th>Still</th>
                 <th>Date</th>
+                <th>Assigned to</th>
                 <th>Charge</th>
                 <th>Status</th>
                 <th></th>
@@ -529,6 +540,7 @@ export function Distillation() {
                     <td>{runSourceSummary(r)}</td>
                     <td>{r.still_name}</td>
                     <td>{format(new Date(r.run_date), 'MMM d, yyyy')}</td>
+                    <td><AssigneeCell name={r.assigned_user_name} /></td>
                     <td>
                       {r.charge_volume_gal} gal
                       {isTankSourcedRun(runType) && r.charge_abv != null ? ` @ ${r.charge_abv.toFixed(1)}%` : ''}
@@ -729,6 +741,17 @@ export function Distillation() {
               <DatePicker
                 value={runForm.run_date}
                 onChange={(run_date) => setRunForm({ ...runForm, run_date })}
+              />
+            </div>
+            <div className="form-group">
+              <label>Assigned employee</label>
+              <AssigneeSelect
+                value={{
+                  assigned_user_id: runForm.assigned_user_id,
+                  assigned_user_name: runForm.assigned_user_name,
+                }}
+                onChange={(assignee) => setRunForm({ ...runForm, ...assignee })}
+                required
               />
             </div>
             <div className="form-group">
