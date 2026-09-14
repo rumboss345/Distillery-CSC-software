@@ -40,6 +40,7 @@ import {
   runTypeLabel,
 } from '../lib/distillation-run-types';
 import { FERMENTATION_READY_MAX_BRIX, isBrixReadyForDistillation } from '../lib/fermentation';
+import { chargeExceedsStillCapacity } from '../lib/still-charge';
 import type {
   DistillationRun,
   DistillationRunType,
@@ -136,6 +137,7 @@ export function Distillation() {
     ? getHoldingTankContents(runForm.source_holding_tank_equipment_id, editRunId)
     : null;
 
+  const selectedStill = stills.find((s) => s.name === runForm.still_name);
   const selectedFermenterAssignment = chargeableFermenters.find(
     (a) => a.floor_equipment_id === runForm.source_fermenter_equipment_id,
   );
@@ -237,11 +239,29 @@ export function Distillation() {
     setShowRunForm(true);
   };
 
+  const validateStillChargeVolume = (): boolean => {
+    if (!selectedStill) {
+      if (runForm.charge_volume_gal > 0) {
+        alert('Select a pot still before entering charge volume.');
+        return false;
+      }
+      return true;
+    }
+    if (chargeExceedsStillCapacity(runForm.charge_volume_gal, selectedStill.capacity_gal)) {
+      alert(
+        `Charge volume cannot exceed ${selectedStill.name} capacity (${selectedStill.capacity_gal} gal).`,
+      );
+      return false;
+    }
+    return true;
+  };
+
   const handleSaveRun = () => {
     if (!runForm.assigned_user_id) {
       alert('Select the employee assigned to this distillation run.');
       return;
     }
+    if (!validateStillChargeVolume()) return;
     if (isFermenterSourcedRun(runForm.run_type)) {
       if (
         runForm.source_mash_batch_id
@@ -794,7 +814,9 @@ export function Distillation() {
               >
                 <option value="">— Select still —</option>
                 {stills.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
+                  <option key={s.id} value={s.id}>
+                    {s.name}{s.capacity_gal > 0 ? ` (${s.capacity_gal} gal cap)` : ''}
+                  </option>
                 ))}
               </select>
             </div>
@@ -818,7 +840,17 @@ export function Distillation() {
             </div>
             <div className="form-group">
               <label>Charge Volume (gal)</label>
-              <input type="number" step="0.1" value={runForm.charge_volume_gal || ''} onChange={(e) => setRunForm({ ...runForm, charge_volume_gal: parseFloat(e.target.value) || 0 })} />
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                max={selectedStill && selectedStill.capacity_gal > 0 ? selectedStill.capacity_gal : undefined}
+                value={runForm.charge_volume_gal || ''}
+                onChange={(e) => setRunForm({ ...runForm, charge_volume_gal: parseFloat(e.target.value) || 0 })}
+              />
+              {selectedStill && selectedStill.capacity_gal > 0 && (
+                <p className="field-hint">Maximum charge for {selectedStill.name}: {selectedStill.capacity_gal} gal</p>
+              )}
             </div>
             {isTankSourcedRun(runForm.run_type) && (
               <div className="form-group">

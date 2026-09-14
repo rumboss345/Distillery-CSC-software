@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { isFermenterSourcedRun, isTankSourcedRun, runUsesDestHoldingTank } from '../lib/distillation-run-types';
+import { chargeExceedsStillCapacity, stillChargeCapacityMessage } from '../lib/still-charge';
 import { initDatabase, clearAllData } from './database';
 import type {
   Barrel,
@@ -416,6 +417,17 @@ export function getPotStills(): FloorEquipment[] {
   return getFloorEquipment().filter(
     (e) => e.equipment_type === 'pot_still' || e.equipment_type === 'column_still',
   );
+}
+
+export function getStillCapacityByName(stillName: string): number | null {
+  const trimmed = stillName.trim();
+  if (!trimmed) return null;
+  const row = queryOne<{ capacity_gal: number }>(
+    `SELECT capacity_gal FROM floor_equipment
+     WHERE name = ? AND equipment_type IN ('pot_still', 'column_still')`,
+    [trimmed],
+  );
+  return row?.capacity_gal ?? null;
 }
 
 export function getHoldingTanks(): FloorEquipment[] {
@@ -1110,6 +1122,12 @@ export function getDistillationRuns(): DistillationRunView[] {
 
 export function saveDistillationRun(run: Omit<DistillationRun, 'id' | 'created_at'>, id?: number): void {
   const runType = (run.run_type ?? 'wash') as DistillationRunType;
+  const stillCapacity = getStillCapacityByName(run.still_name);
+  if (chargeExceedsStillCapacity(run.charge_volume_gal, stillCapacity)) {
+    throw new Error(
+      stillChargeCapacityMessage(run.charge_volume_gal, run.still_name, stillCapacity!),
+    );
+  }
   if (id) {
     runQuery(
       `UPDATE distillation_runs SET batch_number=?, run_type=?, source_mash_batch_id=?, source_fermenter_equipment_id=?, source_holding_tank_equipment_id=?, dest_holding_tank_equipment_id=?, still_name=?, run_date=?, charge_volume_gal=?, charge_abv=?, status=?, assigned_user_id=?, assigned_user_name=?, notes=? WHERE id=?`,
