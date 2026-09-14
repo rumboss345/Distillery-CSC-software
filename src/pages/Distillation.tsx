@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { format } from 'date-fns';
+import { DatePicker, DateTimePicker } from '../components/DatePicker';
 import {
   getDistillationRuns,
   saveDistillationRun,
@@ -725,7 +726,10 @@ export function Distillation() {
             </div>
             <div className="form-group">
               <label>Run Date</label>
-              <input type="date" value={runForm.run_date} onChange={(e) => setRunForm({ ...runForm, run_date: e.target.value })} />
+              <DatePicker
+                value={runForm.run_date}
+                onChange={(run_date) => setRunForm({ ...runForm, run_date })}
+              />
             </div>
             <div className="form-group">
               <label>Charge Volume (gal)</label>
@@ -863,10 +867,9 @@ export function Distillation() {
             </div>
             <div className="form-group">
               <label>Transfer Date</label>
-              <input
-                type="date"
+              <DatePicker
                 value={transferForm.transfer_date}
-                onChange={(e) => setTransferForm({ ...transferForm, transfer_date: e.target.value })}
+                onChange={(transfer_date) => setTransferForm({ ...transferForm, transfer_date })}
               />
             </div>
             <div className="form-group full-width">
@@ -1022,11 +1025,17 @@ export function Distillation() {
             </div>
             <div className="form-group">
               <label>Start Time</label>
-              <input type="datetime-local" value={cutForm.start_time} onChange={(e) => setCutForm({ ...cutForm, start_time: e.target.value })} />
+              <DateTimePicker
+                value={cutForm.start_time}
+                onChange={(start_time) => setCutForm({ ...cutForm, start_time })}
+              />
             </div>
             <div className="form-group">
               <label>End Time</label>
-              <input type="datetime-local" value={cutForm.end_time} onChange={(e) => setCutForm({ ...cutForm, end_time: e.target.value })} />
+              <DateTimePicker
+                value={cutForm.end_time}
+                onChange={(end_time) => setCutForm({ ...cutForm, end_time })}
+              />
             </div>
             <div className="form-group">
               <label>Volume (gal) *</label>

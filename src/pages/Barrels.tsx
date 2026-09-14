@@ -7,6 +7,7 @@ import {
   getDistillationRuns,
   useRefreshKey,
 } from '../db/queries';
+import { DatePicker } from '../components/DatePicker';
 import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
 import type { Barrel, BarrelStatus } from '../types';
@@ -161,7 +162,10 @@ export function Barrels() {
             </div>
             <div className="form-group">
               <label>Fill Date</label>
-              <input type="date" value={form.fill_date} onChange={(e) => setForm({ ...form, fill_date: e.target.value })} />
+              <DatePicker
+                value={form.fill_date}
+                onChange={(fill_date) => setForm({ ...form, fill_date })}
+              />
             </div>
             <div className="form-group">
               <label>Source Run</label>
