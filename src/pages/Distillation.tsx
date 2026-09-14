@@ -38,6 +38,7 @@ import {
   RUN_TYPE_LABELS,
   runTypeLabel,
 } from '../lib/distillation-run-types';
+import { FERMENTATION_READY_MAX_BRIX } from '../lib/fermentation';
 import type {
   DistillationRun,
   DistillationRunType,
@@ -114,9 +115,11 @@ export function Distillation() {
     ? getChargeableFermentersForMash(runForm.source_mash_batch_id, editRunId)
     : [];
 
-  const destTanks = isTankSourcedRun(runForm.run_type)
+  const destTanks = runForm.run_type === 'low_wines'
     ? getHighWinesDestinationTanks(runForm.source_holding_tank_equipment_id)
-    : [];
+    : runForm.run_type === 'heavy_rum'
+      ? getHighWinesDestinationTanks()
+      : [];
 
   const chargeableSourceTanks = isTankSourcedRun(runForm.run_type)
     ? getChargeableHoldingTanks(editRunId)
@@ -147,6 +150,8 @@ export function Distillation() {
       still_name: runForm.still_name,
       run_date: runForm.run_date,
       status: runForm.status,
+      assigned_user_id: runForm.assigned_user_id,
+      assigned_user_name: runForm.assigned_user_name,
     });
   };
 
@@ -218,14 +223,32 @@ export function Distillation() {
       return;
     }
     if (isFermenterSourcedRun(runForm.run_type)) {
-      if (
-        runForm.source_mash_batch_id
-        && chargeableFermenters.length > 0
-        && !runForm.source_fermenter_equipment_id
-      ) {
+      if (!runForm.source_mash_batch_id) {
+        alert('Select the source wash batch.');
+        return;
+      }
+      if (chargeableFermenters.length === 0) {
+        alert(
+          `No fermenters are ready to charge. Log fermentation below ${FERMENTATION_READY_MAX_BRIX}° Brix on each fermenter before distilling.`,
+        );
+        return;
+      }
+      if (!runForm.source_fermenter_equipment_id) {
         alert('Select which fermenter to charge from.');
         return;
       }
+      if (runForm.run_type === 'heavy_rum' && !runForm.dest_holding_tank_equipment_id) {
+        alert('Select the heavy rum storage tank.');
+        return;
+      }
+      try {
+        saveDistillationRun(runForm, editRunId);
+        setShowRunForm(false);
+        refresh();
+      } catch (error) {
+        alert(error instanceof Error ? error.message : 'Could not save distillation run.');
+      }
+      return;
     } else {
       if (!runForm.source_holding_tank_equipment_id) {
         alert('Select the low wines holding tank to charge from.');
@@ -252,14 +275,14 @@ export function Distillation() {
         return;
       }
       const chargeAbv = runForm.charge_abv ?? available.abv;
-      saveDistillationRun({ ...runForm, charge_abv: chargeAbv }, editRunId);
-      setShowRunForm(false);
-      refresh();
-      return;
+      try {
+        saveDistillationRun({ ...runForm, charge_abv: chargeAbv }, editRunId);
+        setShowRunForm(false);
+        refresh();
+      } catch (error) {
+        alert(error instanceof Error ? error.message : 'Could not save distillation run.');
+      }
     }
-    saveDistillationRun(runForm, editRunId);
-    setShowRunForm(false);
-    refresh();
   };
 
   const runSourceSummary = (run: DistillationRun & {
@@ -492,7 +515,7 @@ export function Distillation() {
     <div>
       <div className="page-header">
         <h2>Distillation</h2>
-        <p>Low wine rum from fermenters · Spirit and heavy rum runs from holding tanks</p>
+        <p>Low wine and heavy rum runs charge fermenters (Brix below {FERMENTATION_READY_MAX_BRIX}°) · Spirit runs use holding tanks</p>
         <div className="page-actions">
           <button type="button" className="btn btn-primary" onClick={() => openNewRun('wash')}>
             {RUN_TYPE_BUTTON_LABELS.wash}
@@ -639,10 +662,16 @@ export function Distillation() {
                   onChange={(e) => handleMashChange(e.target.value ? parseInt(e.target.value) : null)}
                 >
                   <option value="">— None —</option>
-                  {mashes.filter((m) => m.status === 'complete' || m.status === 'fermenting' || m.id === runForm.source_mash_batch_id).map((m) => (
+                  {mashes.filter((m) => (
+                    m.id === runForm.source_mash_batch_id
+                    || getChargeableFermentersForMash(m.id, editRunId).length > 0
+                  )).map((m) => (
                     <option key={m.id} value={m.id}>{m.batch_number} — {m.recipe_name}</option>
                   ))}
                 </select>
+                <p className="field-hint">
+                  Only washes with fermentation logs below {FERMENTATION_READY_MAX_BRIX}° Brix appear here.
+                </p>
                 {chargeableFermenters.length === 1 && runForm.source_fermenter_equipment_id && (
                   <p className="field-hint">
                     Charging from {chargeableFermenters[0].equipment_name} ({chargeableFermenters[0].volume_gal} gal)
@@ -668,7 +697,25 @@ export function Distillation() {
                   <p className="field-hint">Previously charged from {savedFermenterName}</p>
                 )}
                 {chargeableFermenters.length === 0 && runForm.source_mash_batch_id && !savedFermenterName && (
-                  <p className="field-hint">No fermenter assignments for this wash — charge volume is manual.</p>
+                  <p className="field-hint">
+                    No fermenters ready — log Brix below {FERMENTATION_READY_MAX_BRIX}° on each fermenter, or assign fermenters on the wash batch.
+                  </p>
+                )}
+                {runForm.run_type === 'heavy_rum' && (
+                  <div className="form-group" style={{ marginTop: '0.75rem' }}>
+                    <label>Heavy Rum Storage Tank</label>
+                    <select
+                      value={runForm.dest_holding_tank_equipment_id ?? ''}
+                      onChange={(e) => handleDestTankChange(e.target.value ? parseInt(e.target.value) : null)}
+                    >
+                      <option value="">— Select tank —</option>
+                      {destTanks.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {holdingTankLabel(t)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 )}
               </div>
             ) : (
@@ -783,13 +830,17 @@ export function Distillation() {
           <p className="form-hint">
             {isFermenterSourcedRun(runForm.run_type) ? (
               <>
+                Fermenters only charge when logs show Brix below {FERMENTATION_READY_MAX_BRIX}°.
                 Saving with a source fermenter selected marks that tank <strong>empty</strong> on the floor plan
                 {chargeableFermenters.length > 1 ? ' (other fermenters stay in use until charged in a separate run)' : ''}.
+                {runForm.run_type === 'heavy_rum' && (
+                  <> Hearts cuts go into the <strong>Heavy Rum Storage Tank</strong> you select.</>
+                )}
               </>
             ) : (
               <>
                 Charging draws spirit from the source tank. Hearts cuts go into the
-                {' '}<strong>{runForm.run_type === 'heavy_rum' ? 'Heavy Rum Storage Tank' : 'High Wines Storage Tank'}</strong> you select.
+                {' '}<strong>High Wines Storage Tank</strong> you select.
               </>
             )}
             {' '}Setting status to <strong>planned</strong> or <strong>running</strong> marks the still as in use.
