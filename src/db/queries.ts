@@ -310,14 +310,14 @@ export function getMashBatch(id: number): MashBatch | undefined {
 export function saveMashBatch(batch: Omit<MashBatch, 'id' | 'created_at'>, id?: number): number {
   if (id) {
     runQuery(
-      `UPDATE mash_batches SET batch_number=?, recipe_name=?, grain_type=?, grain_lbs=?, water_gal=?, yeast_strain=?, yeast_lbs=?, start_date=?, target_brix=?, actual_brix=?, target_final_brix=?, status=?, notes=? WHERE id=?`,
-      [batch.batch_number, batch.recipe_name, batch.grain_type, batch.grain_lbs, batch.water_gal, batch.yeast_strain, batch.yeast_lbs, batch.start_date, batch.target_brix, batch.actual_brix, batch.target_final_brix, batch.status, batch.notes, id],
+      `UPDATE mash_batches SET batch_number=?, recipe_name=?, grain_type=?, grain_lbs=?, water_gal=?, yeast_strain=?, yeast_lbs=?, start_date=?, target_brix=?, actual_brix=?, target_final_brix=?, status=?, assigned_user_id=?, assigned_user_name=?, notes=? WHERE id=?`,
+      [batch.batch_number, batch.recipe_name, batch.grain_type, batch.grain_lbs, batch.water_gal, batch.yeast_strain, batch.yeast_lbs, batch.start_date, batch.target_brix, batch.actual_brix, batch.target_final_brix, batch.status, batch.assigned_user_id, batch.assigned_user_name ?? '', batch.notes, id],
     );
     return id;
   }
   return insertRow(
-    `INSERT INTO mash_batches (batch_number, recipe_name, grain_type, grain_lbs, water_gal, yeast_strain, yeast_lbs, start_date, target_brix, actual_brix, target_final_brix, actual_final_brix, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [batch.batch_number, batch.recipe_name, batch.grain_type, batch.grain_lbs, batch.water_gal, batch.yeast_strain, batch.yeast_lbs, batch.start_date, batch.target_brix, batch.actual_brix, batch.target_final_brix, batch.actual_final_brix, batch.status, batch.notes],
+    `INSERT INTO mash_batches (batch_number, recipe_name, grain_type, grain_lbs, water_gal, yeast_strain, yeast_lbs, start_date, target_brix, actual_brix, target_final_brix, actual_final_brix, status, assigned_user_id, assigned_user_name, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [batch.batch_number, batch.recipe_name, batch.grain_type, batch.grain_lbs, batch.water_gal, batch.yeast_strain, batch.yeast_lbs, batch.start_date, batch.target_brix, batch.actual_brix, batch.target_final_brix, batch.actual_final_brix, batch.status, batch.assigned_user_id, batch.assigned_user_name ?? '', batch.notes],
   );
 }
 
@@ -1106,7 +1106,7 @@ export function saveDistillationRun(run: Omit<DistillationRun, 'id' | 'created_a
   const runType = (run.run_type ?? 'wash') as DistillationRunType;
   if (id) {
     runQuery(
-      `UPDATE distillation_runs SET batch_number=?, run_type=?, source_mash_batch_id=?, source_fermenter_equipment_id=?, source_holding_tank_equipment_id=?, dest_holding_tank_equipment_id=?, still_name=?, run_date=?, charge_volume_gal=?, charge_abv=?, status=?, notes=? WHERE id=?`,
+      `UPDATE distillation_runs SET batch_number=?, run_type=?, source_mash_batch_id=?, source_fermenter_equipment_id=?, source_holding_tank_equipment_id=?, dest_holding_tank_equipment_id=?, still_name=?, run_date=?, charge_volume_gal=?, charge_abv=?, status=?, assigned_user_id=?, assigned_user_name=?, notes=? WHERE id=?`,
       [
         run.batch_number,
         runType,
@@ -1119,13 +1119,15 @@ export function saveDistillationRun(run: Omit<DistillationRun, 'id' | 'created_a
         run.charge_volume_gal,
         isTankSourcedRun(runType) ? run.charge_abv : null,
         run.status,
+        run.assigned_user_id,
+        run.assigned_user_name ?? '',
         run.notes,
         id,
       ],
     );
   } else {
     insertRow(
-      `INSERT INTO distillation_runs (batch_number, run_type, source_mash_batch_id, source_fermenter_equipment_id, source_holding_tank_equipment_id, dest_holding_tank_equipment_id, still_name, run_date, charge_volume_gal, charge_abv, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO distillation_runs (batch_number, run_type, source_mash_batch_id, source_fermenter_equipment_id, source_holding_tank_equipment_id, dest_holding_tank_equipment_id, still_name, run_date, charge_volume_gal, charge_abv, status, assigned_user_id, assigned_user_name, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         run.batch_number,
         runType,
@@ -1138,6 +1140,8 @@ export function saveDistillationRun(run: Omit<DistillationRun, 'id' | 'created_a
         run.charge_volume_gal,
         isTankSourcedRun(runType) ? run.charge_abv : null,
         run.status,
+        run.assigned_user_id,
+        run.assigned_user_name ?? '',
         run.notes,
       ],
     );
@@ -1716,6 +1720,8 @@ export function saveBlendFormula(
     status: product.status,
     output_holding_tank_equipment_id: product.output_holding_tank_equipment_id ?? null,
     blend_recipe_id: product.blend_recipe_id ?? null,
+    assigned_user_id: product.assigned_user_id,
+    assigned_user_name: product.assigned_user_name ?? '',
     notes: product.notes,
   };
 
@@ -1729,7 +1735,7 @@ export function saveBlendFormula(
         batch_number=?, product_name=?, source_holding_tank_equipment_id=?, base_spirit_volume_gal=?, base_spirit_abv=?,
         blend_date=?, target_abv=?, target_brix=?, scale_factor=?, formula_version=?, formulation_phase=?,
         final_volume_gal=?, final_abv=?, theoretical_volume_gal=?, theoretical_abv=?, theoretical_density=?, theoretical_brix=?,
-        actual_volume_gal=?, actual_weight_lbs=?, actual_abv=?, actual_density=?, actual_brix=?, status=?, output_holding_tank_equipment_id=?, blend_recipe_id=?, notes=?
+        actual_volume_gal=?, actual_weight_lbs=?, actual_abv=?, actual_density=?, actual_brix=?, status=?, output_holding_tank_equipment_id=?, blend_recipe_id=?, assigned_user_id=?, assigned_user_name=?, notes=?
        WHERE id=?`,
       [
         row.batch_number, row.product_name, row.source_holding_tank_equipment_id,
@@ -1738,7 +1744,7 @@ export function saveBlendFormula(
         row.final_volume_gal, row.final_abv,
         row.theoretical_volume_gal, row.theoretical_abv, row.theoretical_density, row.theoretical_brix,
         row.actual_volume_gal, row.actual_weight_lbs, row.actual_abv, row.actual_density, row.actual_brix,
-        row.status, row.output_holding_tank_equipment_id, row.blend_recipe_id, row.notes, id,
+        row.status, row.output_holding_tank_equipment_id, row.blend_recipe_id, row.assigned_user_id, row.assigned_user_name, row.notes, id,
       ],
     );
   } else {
@@ -1747,8 +1753,8 @@ export function saveBlendFormula(
         batch_number, product_name, source_holding_tank_equipment_id, base_spirit_volume_gal, base_spirit_abv,
         blend_date, target_abv, target_brix, scale_factor, formula_version, formulation_phase,
         final_volume_gal, final_abv, theoretical_volume_gal, theoretical_abv, theoretical_density, theoretical_brix,
-        actual_volume_gal, actual_weight_lbs, actual_abv, actual_density, actual_brix, status, output_holding_tank_equipment_id, blend_recipe_id, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        actual_volume_gal, actual_weight_lbs, actual_abv, actual_density, actual_brix, status, output_holding_tank_equipment_id, blend_recipe_id, assigned_user_id, assigned_user_name, notes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         row.batch_number, row.product_name, row.source_holding_tank_equipment_id,
         row.base_spirit_volume_gal, row.base_spirit_abv, row.blend_date,
@@ -1756,7 +1762,7 @@ export function saveBlendFormula(
         row.final_volume_gal, row.final_abv,
         row.theoretical_volume_gal, row.theoretical_abv, row.theoretical_density, row.theoretical_brix,
         row.actual_volume_gal, row.actual_weight_lbs, row.actual_abv, row.actual_density, row.actual_brix,
-        row.status, row.output_holding_tank_equipment_id, row.blend_recipe_id, row.notes,
+        row.status, row.output_holding_tank_equipment_id, row.blend_recipe_id, row.assigned_user_id, row.assigned_user_name, row.notes,
       ],
     );
   }

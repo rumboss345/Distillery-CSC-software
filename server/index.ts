@@ -38,6 +38,7 @@ import {
   getUserById,
   initializeAuthDatabase,
   listAllUsers,
+  listAssignableUsers,
   listPendingUsers,
   listProcessAssignmentsByStage,
   publicUser,
@@ -264,6 +265,10 @@ app.post('/api/admin/users/:id/reject', authMiddleware, adminMiddleware, (req, r
 
 app.get('/api/process/assignments', authMiddleware, (_req, res) => {
   res.json({ assignments: listProcessAssignmentsByStage() });
+});
+
+app.get('/api/users/assignable', authMiddleware, (_req, res) => {
+  res.json({ users: listAssignableUsers() });
 });
 
 app.get('/api/admin/users', authMiddleware, adminMiddleware, (_req, res) => {

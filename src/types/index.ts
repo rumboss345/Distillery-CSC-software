@@ -111,6 +111,8 @@ export interface MashBatch {
   target_final_brix: number | null;
   actual_final_brix: number | null;
   status: MashStatus;
+  assigned_user_id: number | null;
+  assigned_user_name: string | null;
   notes: string;
   created_at: string;
 }
@@ -143,6 +145,8 @@ export interface DistillationRun {
   charge_volume_gal: number;
   charge_abv: number | null;
   status: RunStatus;
+  assigned_user_id: number | null;
+  assigned_user_name: string | null;
   notes: string;
   created_at: string;
 }
@@ -295,6 +299,8 @@ export interface BlendProduct {
   executed_at: string | null;
   output_holding_tank_equipment_id: number | null;
   blend_recipe_id: number | null;
+  assigned_user_id: number | null;
+  assigned_user_name: string | null;
   notes: string;
   created_at: string;
 }

@@ -322,6 +322,18 @@ export function listAllUsers(): PublicUser[] {
   return rows.map(publicUser);
 }
 
+export function listAssignableUsers(): ProcessAssignmentEntry[] {
+  const rows = ensureDb()
+    .prepare(
+      `SELECT id, email, name
+       FROM users
+       WHERE status = 'approved'
+       ORDER BY name COLLATE NOCASE, email COLLATE NOCASE`,
+    )
+    .all() as { id: number; email: string; name: string | null }[];
+  return rows.map((row) => ({ id: row.id, email: row.email, name: row.name }));
+}
+
 export interface ProcessAssignmentEntry {
   id: number;
   email: string;

@@ -254,7 +254,9 @@ export function buildWashCalendarEvent(
     title: batch.batch_number,
     status: batch.status,
     statusCategory: mapWashStatus(batch.status),
-    detail: batch.recipe_name || batch.grain_type,
+    detail: [batch.recipe_name || batch.grain_type, batch.assigned_user_name]
+      .filter(Boolean)
+      .join(' · '),
   };
 }
 
@@ -277,7 +279,7 @@ export function buildCalendarEventsFromData(data: CalendarProductionData): Calen
       title: run.batch_number,
       status: run.status,
       statusCategory: mapRunStatus(run.status),
-      detail: run.still_name,
+      detail: [run.still_name, run.assigned_user_name].filter(Boolean).join(' · '),
     });
   }
 
@@ -324,7 +326,7 @@ export function buildCalendarEventsFromData(data: CalendarProductionData): Calen
       title: blend.product_name || blend.batch_number,
       status: blend.status,
       statusCategory: mapBlendStatus(blend.status),
-      detail: blend.batch_number,
+      detail: [blend.batch_number, blend.assigned_user_name].filter(Boolean).join(' · '),
     });
   }
 

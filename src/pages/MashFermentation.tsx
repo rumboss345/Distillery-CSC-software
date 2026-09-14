@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
+import { AssigneeCell, AssigneeSelect } from '../components/AssigneeSelect';
 import { DatePicker } from '../components/DatePicker';
+import { useAuth } from '../context/AuthContext';
+import { defaultAssignee } from '../lib/assignee';
 import {
   getMashBatches,
   saveMashBatchWithFermenters,
@@ -155,6 +158,8 @@ const emptyBatch = (): Omit<MashBatch, 'id' | 'created_at'> => ({
   target_final_brix: null,
   actual_final_brix: null,
   status: 'planned',
+  assigned_user_id: null,
+  assigned_user_name: null,
   notes: '',
 });
 
@@ -167,6 +172,7 @@ const emptyFermenterForm = () => ({
 });
 
 export function MashFermentation() {
+  const { user } = useAuth();
   const { key, refresh } = useRefreshKey();
   const batches = getMashBatches();
   const allAssignments = getAllMashFermenterAssignments();
@@ -230,7 +236,7 @@ export function MashFermentation() {
 
   const openNew = () => {
     setEditId(undefined);
-    setForm(emptyBatch());
+    setForm({ ...emptyBatch(), ...defaultAssignee(user) });
     loadFermenterForm();
     setShowForm(true);
   };
@@ -284,6 +290,10 @@ export function MashFermentation() {
       if (!confirm(`${form.yeast_strain} inventory is ${yeastItem.quantity} ${yeastItem.unit}, but this batch uses ${form.yeast_lbs} lbs. Save anyway?`)) {
         return;
       }
+    }
+    if (!form.assigned_user_id) {
+      alert('Select the employee assigned to this wash batch.');
+      return;
     }
 
     saveMashBatchWithFermenters(form, buildAssignments(), editId);
@@ -347,6 +357,7 @@ export function MashFermentation() {
                 <th>Start → Current Brix</th>
                 <th>Est. ABV</th>
                 <th>Started</th>
+                <th>Assigned to</th>
                 <th>Status</th>
                 <th></th>
               </tr>
@@ -381,6 +392,7 @@ export function MashFermentation() {
                     </td>
                     <td>{formatAbvEstimate(estAbv)}</td>
                     <td>{format(new Date(b.start_date), 'MMM d, yyyy')}</td>
+                    <td><AssigneeCell name={b.assigned_user_name} /></td>
                     <td><StatusBadge status={STATUS_LABELS[b.status] ?? b.status} /></td>
                     <td className="td-actions">
                       <button
@@ -525,6 +537,17 @@ export function MashFermentation() {
               <DatePicker
                 value={form.start_date}
                 onChange={(start_date) => setForm({ ...form, start_date })}
+              />
+            </div>
+            <div className="form-group">
+              <label>Assigned employee</label>
+              <AssigneeSelect
+                value={{
+                  assigned_user_id: form.assigned_user_id,
+                  assigned_user_name: form.assigned_user_name,
+                }}
+                onChange={(assignee) => setForm({ ...form, ...assignee })}
+                required
               />
             </div>
             <div className="form-group">

@@ -48,6 +48,8 @@ CREATE TABLE IF NOT EXISTS mash_batches (
   target_final_brix REAL,
   actual_final_brix REAL,
   status TEXT NOT NULL DEFAULT 'planned',
+  assigned_user_id INTEGER,
+  assigned_user_name TEXT NOT NULL DEFAULT '',
   notes TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -76,6 +78,8 @@ CREATE TABLE IF NOT EXISTS distillation_runs (
   charge_volume_gal REAL NOT NULL DEFAULT 0,
   charge_abv REAL,
   status TEXT NOT NULL DEFAULT 'planned',
+  assigned_user_id INTEGER,
+  assigned_user_name TEXT NOT NULL DEFAULT '',
   notes TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -202,6 +206,8 @@ CREATE TABLE IF NOT EXISTS blend_products (
   executed_at TEXT,
   output_holding_tank_equipment_id INTEGER REFERENCES floor_equipment(id),
   blend_recipe_id INTEGER REFERENCES blend_recipes(id),
+  assigned_user_id INTEGER,
+  assigned_user_name TEXT NOT NULL DEFAULT '',
   notes TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
