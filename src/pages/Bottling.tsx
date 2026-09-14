@@ -12,6 +12,7 @@ import {
   generateBatchNumber,
   useRefreshKey,
 } from '../db/queries';
+import { DatePicker } from '../components/DatePicker';
 import { Modal } from '../components/Modal';
 import {
   formatLinesSummary,
@@ -357,7 +358,10 @@ export function Bottling() {
             </div>
             <div className="form-group">
               <label>Bottling Date</label>
-              <input type="date" value={form.bottling_date} onChange={(e) => setForm({ ...form, bottling_date: e.target.value })} />
+              <DatePicker
+                value={form.bottling_date}
+                onChange={(bottling_date) => setForm({ ...form, bottling_date })}
+              />
             </div>
             <div className="form-group full-width">
               <label>Spirit Source</label>

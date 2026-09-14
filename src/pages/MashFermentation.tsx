@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
+import { DatePicker } from '../components/DatePicker';
 import {
   getMashBatches,
   saveMashBatchWithFermenters,
@@ -521,7 +522,10 @@ export function MashFermentation() {
             </div>
             <div className="form-group">
               <label>Start Date</label>
-              <input type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} />
+              <DatePicker
+                value={form.start_date}
+                onChange={(start_date) => setForm({ ...form, start_date })}
+              />
             </div>
             <div className="form-group">
               <label>Status</label>

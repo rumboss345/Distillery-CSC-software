@@ -9,6 +9,7 @@ import {
   getBarrels,
   getBottlingRuns,
 } from '../db/queries';
+import { MonthPicker } from '../components/DatePicker';
 import { StatusBadge } from '../components/StatusBadge';
 import { equipmentTypeLabel } from '../lib/equipment';
 
@@ -63,11 +64,10 @@ export function Reports() {
           <div className="form-group report-month-filter">
             <label htmlFor="report-month">Report period</label>
             <div className="report-month-controls">
-              <input
+              <MonthPicker
                 id="report-month"
-                type="month"
                 value={reportMonth}
-                onChange={(e) => setReportMonth(e.target.value)}
+                onChange={setReportMonth}
               />
               <button
                 type="button"

@@ -18,6 +18,7 @@ import {
   generateBatchNumber,
   useRefreshKey,
 } from '../db/queries';
+import { DatePicker } from '../components/DatePicker';
 import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
 import {
@@ -1023,7 +1024,10 @@ export function Blending() {
             </div>
             <div className="form-group">
               <label>Blend date</label>
-              <input type="date" value={form.blend_date} onChange={(e) => setForm({ ...form, blend_date: e.target.value })} />
+              <DatePicker
+                value={form.blend_date}
+                onChange={(blend_date) => setForm({ ...form, blend_date })}
+              />
             </div>
           </>
         );

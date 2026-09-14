@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { DatePicker } from '../components/DatePicker';
 import {
   addDays,
   addMonths,
@@ -398,11 +399,7 @@ function DayViewList({
     <div className="calendar-day-view-inner">
       <label className="calendar-day-picker">
         <span>Select date</span>
-        <input
-          type="date"
-          value={date}
-          onChange={(e) => onSelectDate(e.target.value)}
-        />
+        <DatePicker value={date} onChange={onSelectDate} />
       </label>
       {events.length === 0 ? (
         <p className="text-muted">No activities on this date with the current filters.</p>
