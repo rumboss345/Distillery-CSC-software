@@ -14,6 +14,7 @@
     "postinstall": "npm rebuild better-sqlite3",
     "start": "tsx server/index.ts",
     "reset-admin": "tsx server/reset-admin.ts",
+    "create-user": "tsx server/create-user.ts",
     "preview": "vite preview",
     "test": "vitest run"
   },
