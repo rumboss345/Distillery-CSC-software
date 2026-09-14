@@ -1,7 +1,9 @@
 import initSqlJs, { Database, SqlValue } from 'sql.js/dist/sql-wasm.js';
 import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
+import { BLEND_RECIPES_2024 } from '../lib/blend-recipes-2024';
 import { buildCscFloorEquipmentRows, CSC_FLOOR_PLAN_SIZE } from '../lib/csc-floor-equipment';
 import { PACKAGING_BOTTLES } from '../lib/packaging-bottles';
+import type { BlendIngredientInput, BlendRecipeSpiritSourceInput } from '../types';
 import { SCHEMA, SEED_DATA } from './schema';
 
 const FLOOR_MIGRATION = `
@@ -412,6 +414,7 @@ function runMigrations(): void {
   migrateFloorPlanPages();
   migrateAdvancedBlending();
   migrateAssignedEmployee();
+  seedBlendRecipes2024();
   persistDb();
 }
 
@@ -425,6 +428,82 @@ function migrateAssignedEmployee(): void {
       db.run(`ALTER TABLE ${table} ADD COLUMN assigned_user_id INTEGER`);
       db.run(`ALTER TABLE ${table} ADD COLUMN assigned_user_name TEXT NOT NULL DEFAULT ''`);
     }
+  }
+}
+
+function insertBlendRecipeSpiritSources(
+  recipeId: number,
+  sources: BlendRecipeSpiritSourceInput[],
+): void {
+  if (!db) return;
+  sources
+    .filter((source) => source.volume_gal > 0)
+    .forEach((source, index) => {
+      db!.run(
+        `INSERT INTO blend_recipe_spirit_sources (blend_recipe_id, spirit_label, volume_gal, abv, sort_order)
+         VALUES (?, ?, ?, ?, ?)`,
+        [recipeId, source.spirit_label, source.volume_gal, source.abv, index],
+      );
+    });
+}
+
+function insertBlendRecipeIngredients(
+  recipeId: number,
+  ingredients: BlendIngredientInput[],
+): void {
+  if (!db) return;
+  ingredients
+    .filter((ingredient) => ingredient.amount > 0 || ingredient.name.trim())
+    .forEach((ingredient) => {
+      db!.run(
+        `INSERT INTO blend_recipe_ingredients (
+          blend_recipe_id, ingredient_type, name, amount, unit, cost_per_unit, lot_number, inventory_item_id, notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          recipeId,
+          ingredient.ingredient_type,
+          ingredient.name,
+          ingredient.amount,
+          ingredient.unit,
+          ingredient.cost_per_unit ?? null,
+          ingredient.lot_number ?? '',
+          ingredient.inventory_item_id ?? null,
+          ingredient.notes,
+        ],
+      );
+    });
+}
+
+function seedBlendRecipes2024(): void {
+  if (!db) return;
+
+  const hasTable = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='blend_recipes'",
+  );
+  if (!hasTable) return;
+
+  for (const recipe of BLEND_RECIPES_2024) {
+    const exists = queryOne<{ id: number }>(
+      'SELECT id FROM blend_recipes WHERE name = ? COLLATE NOCASE',
+      [recipe.name],
+    );
+    if (exists) continue;
+
+    db.run(
+      `INSERT INTO blend_recipes (name, product_name, target_abv, target_brix, scale_factor, notes)
+       VALUES (?, ?, ?, ?, 1, ?)`,
+      [
+        recipe.name,
+        recipe.product_name,
+        recipe.target_abv,
+        recipe.target_brix,
+        recipe.notes,
+      ],
+    );
+    const row = queryOne<{ id: number }>('SELECT last_insert_rowid() as id');
+    if (!row) continue;
+    insertBlendRecipeSpiritSources(row.id, recipe.spirit_sources);
+    insertBlendRecipeIngredients(row.id, recipe.ingredients);
   }
 }
 
@@ -728,6 +807,7 @@ export async function initDatabase(): Promise<Database> {
     db.run(SCHEMA);
     db.run(SEED_DATA);
     seedCscFloorEquipment({ assignSequentialIds: true, demoStatusForFirstTwo: true });
+    seedBlendRecipes2024();
     persistDb();
   }
 
