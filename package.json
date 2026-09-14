@@ -15,7 +15,8 @@
     "start": "tsx server/index.ts",
     "reset-admin": "tsx server/reset-admin.ts",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build:table3": "python3 scripts/build-table3-data.py"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

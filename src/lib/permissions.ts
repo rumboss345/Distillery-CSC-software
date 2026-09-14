@@ -32,6 +32,7 @@ export const ROUTE_PERMISSIONS: Record<string, PermissionKey> = {
   '/recipes': 'wash',
   '/distillation': 'distillation',
   '/blending': 'blending',
+  '/tools/spirit-calculator': 'blending',
   '/barrels': 'barrels',
   '/bottling': 'bottling',
   '/floor-plan': 'equipment',
