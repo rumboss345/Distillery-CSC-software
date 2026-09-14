@@ -1,3 +1,10 @@
+/** Fermentations must reach this Brix before charging a fermenter to the still. */
+export const FERMENTATION_READY_MAX_BRIX = 10;
+
+export function isBrixReadyForDistillation(brix: number | null | undefined): boolean {
+  return brix != null && brix < FERMENTATION_READY_MAX_BRIX;
+}
+
 /** Convert Brix (Balling) to specific gravity. */
 export function brixToSg(brix: number): number {
   return 1 + brix / (258.6 - (brix / 258.2) * 227.1);
