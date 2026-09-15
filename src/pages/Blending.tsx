@@ -188,8 +188,9 @@ interface RecipeTemplate {
 
 function toSpiritInputs(sources: SpiritSourceRow[]): SpiritSourceInput[] {
   return sources
-    .map(toSpiritSourceInput)
-    .filter((s) => s.holding_tank_equipment_id > 0 && s.volume_gal > 0)
+    .map(syncSpiritVolume)
+    .filter((s) => s.volume_gal > 0 && s.abv > 0
+      && (s.holding_tank_equipment_id > 0 || (s.barrel_id != null && s.barrel_id > 0)))
     .map((s) => ({ volumeGal: s.volume_gal, abv: s.abv }));
 }
 
@@ -856,12 +857,26 @@ export function Blending() {
 
   const handleCalculateWater = () => {
     if (form.target_abv == null) return;
+    const spirits = toSpiritInputs(spiritSources);
+    if (spirits.length === 0) {
+      alert(isBarrelBlendWizard
+        ? 'Select aging barrels and enter pull volumes on step 2 before calculating water.'
+        : 'Select holding tanks and enter pull volumes on step 2 before calculating water.');
+      return;
+    }
     const solved = solveWaterForTargetAbv(
-      toSpiritInputs(spiritSources),
+      spirits,
       toAdditiveInputs(ingredients.filter((i) => i.ingredient_type !== 'water')),
       form.target_abv,
     );
-    if (!solved) return;
+    if (!solved) {
+      alert('Could not calculate water — check spirit volumes, ABV readings, and target proof.');
+      return;
+    }
+    setWaterAdjustmentNote(
+      `Add ${solved.waterGal.toFixed(2)} gal proofing water to reach ${form.target_abv}% ABV `
+      + `from ${spirits.reduce((sum, s) => sum + s.volumeGal, 0).toFixed(1)} gal spirit at blend strength.`,
+    );
     const waterLine = emptyIngredient('water');
     waterLine.amount = solved.waterGal;
     waterLine.name = 'Proofing water';
