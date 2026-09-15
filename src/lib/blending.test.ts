@@ -8,9 +8,11 @@ import {
   spiritLbsPerGallon,
   spiritMeasureAlternate,
   spiritVolumeGalFromAmount,
+  filterInventoryForBlendIngredient,
   formatBlendRecipeAdditive,
   formatBlendRecipeSpiritPull,
   formatSpiritPullWeightLbs,
+  unitOptionsForBlendIngredient,
   spiritWeightLbsFromVolumeGal,
   SPIRIT_MEASURE_RECOMMENDATION,
   toGallonsFromVolumeUnit,
@@ -106,6 +108,24 @@ describe('spirit measurement', () => {
     expect(formatBlendRecipeSpiritPull('93% rum', 83.57, 93)).toContain('93% rum');
     expect(formatBlendRecipeSpiritPull('93% rum', 83.57, 93)).toContain('gal @ 93.0%');
     expect(formatBlendRecipeSpiritPull('93% rum', 83.57, 93)).toContain('lbs');
+  });
+});
+
+describe('blend recipe inventory helpers', () => {
+  const items = [
+    { id: 1, name: 'Raw Cane Sugar', category: 'sugar', unit: 'lbs', quantity: 10, reorder_level: 1, notes: '', created_at: '', updated_at: '' },
+    { id: 2, name: '750ml Bottles', category: 'packaging', unit: 'each', quantity: 100, reorder_level: 10, notes: '', created_at: '', updated_at: '' },
+    { id: 3, name: 'Vanilla', category: 'flavoring', unit: 'ml', quantity: 5000, reorder_level: 500, notes: '', created_at: '', updated_at: '' },
+  ];
+
+  it('filters inventory by additive type and excludes water', () => {
+    expect(filterInventoryForBlendIngredient(items, 'water')).toEqual([]);
+    expect(filterInventoryForBlendIngredient(items, 'sugar').map((i) => i.name)).toEqual(['Raw Cane Sugar']);
+    expect(filterInventoryForBlendIngredient(items, 'flavoring').map((i) => i.name)).toEqual(['Vanilla']);
+  });
+
+  it('includes current unit in selectable unit options', () => {
+    expect(unitOptionsForBlendIngredient({ ingredient_type: 'sugar', unit: 'kg' })).toContain('kg');
   });
 });
 
