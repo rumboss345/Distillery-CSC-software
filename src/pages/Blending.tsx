@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   computeBlendFormulation,
   defaultBlendingOutputTankId,
   executeBlendProduct,
+  getBarrelsForBlend,
   getBlendIngredients,
   getBlendProducts,
   getBlendRecipe,
@@ -18,6 +20,7 @@ import {
   generateBatchNumber,
   useRefreshKey,
 } from '../db/queries';
+import { formatBarrelInventoryOption, spiritLabelForBarrel } from '../lib/barrel-blending';
 import { AbvTemperatureInput, correctedAbvFromInputs } from '../components/AbvTemperatureInput';
 import { BlendAbvConfirmation } from '../components/BlendAbvConfirmation';
 import { BlendProductionWorksheet } from '../components/BlendProductionWorksheet';
@@ -110,6 +113,7 @@ interface SpiritSourceRow extends BlendSpiritSourceInput {
 
 const emptySpiritSource = (): SpiritSourceRow => ({
   holding_tank_equipment_id: 0,
+  barrel_id: null,
   volume_gal: 0,
   abv: 0,
   recipe_abv: 0,
@@ -138,6 +142,7 @@ function toSpiritSourceInput(row: SpiritSourceRow): BlendSpiritSourceInput {
   const synced = syncSpiritVolume(row);
   return {
     holding_tank_equipment_id: synced.holding_tank_equipment_id,
+    barrel_id: synced.barrel_id ?? null,
     volume_gal: synced.volume_gal,
     abv: synced.abv,
   };
@@ -177,7 +182,7 @@ const emptyProduct = (): FormulaForm => ({
 });
 
 interface RecipeTemplate {
-  spirit_sources: BlendRecipeSpiritSourceInput[];
+  spirit_sources: (BlendRecipeSpiritSourceInput & { barrel_id?: number | null })[];
   ingredients: BlendIngredientInput[];
 }
 
@@ -282,9 +287,11 @@ function buildSavePayload(
 
 export function Blending() {
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
   const { key, refresh } = useRefreshKey();
   const blends = getBlendProducts();
   const blendRecipes = getBlendRecipes();
+  const barrelInventory = useMemo(() => getBarrelsForBlend(), [key]);
   const inventoryItems = getInventoryItems();
   const [showWizard, setShowWizard] = useState(false);
   const [wizardStep, setWizardStep] = useState(1);
@@ -316,9 +323,18 @@ export function Blending() {
   const [waterAdjustmentNote, setWaterAdjustmentNote] = useState<string | null>(null);
   const [abvConfirmed, setAbvConfirmed] = useState(false);
   const [worksheetPdfExporting, setWorksheetPdfExporting] = useState(false);
+  const [wizardSpiritSource, setWizardSpiritSource] = useState<'tank' | 'barrel'>('tank');
   const worksheetPrintRef = useRef<HTMLDivElement>(null);
+  const deepLinkHandled = useRef(false);
 
   void key;
+
+  const wizardBlendRecipes = useMemo(
+    () => blendRecipes.filter((recipe) => (recipe.source_type ?? 'tank') === wizardSpiritSource),
+    [blendRecipes, wizardSpiritSource],
+  );
+
+  const isBarrelBlendWizard = wizardSpiritSource === 'barrel';
 
   const nonWaterIngredients = useMemo(
     () => ingredients.filter((i) => i.ingredient_type !== 'water'),
@@ -418,7 +434,7 @@ export function Blending() {
   const chargeableTanks = getChargeableHoldingTanksForBlend(editId);
   const activeSources = spiritSources
     .map(syncSpiritVolume)
-    .filter((s) => s.holding_tank_equipment_id > 0 && s.volume_gal > 0);
+    .filter((s) => s.volume_gal > 0 && (s.holding_tank_equipment_id > 0 || (s.barrel_id != null && s.barrel_id > 0)));
   const formulation = useMemo(
     () => computeBlendFormulation(activeSources.map(toSpiritSourceInput), ingredients, {
       volume_gal: form.actual_volume_gal,
@@ -503,11 +519,13 @@ export function Blending() {
   const applyBlendRecipe = (recipeId: number, factor = 1) => {
     const recipe = getBlendRecipe(recipeId);
     if (!recipe) return;
+    setWizardSpiritSource(recipe.source_type ?? 'tank');
     const template: RecipeTemplate = {
       spirit_sources: recipe.spirit_sources.map((source) => ({
         spirit_label: source.spirit_label,
         volume_gal: source.volume_gal,
         abv: source.abv,
+        barrel_id: source.barrel_id ?? null,
       })),
       ingredients: recipe.ingredients.map((ingredient) => ({
         ingredient_type: ingredient.ingredient_type,
@@ -555,6 +573,20 @@ export function Blending() {
     setAbvConfirmed(false);
     setWizardStep(1);
   };
+
+  useEffect(() => {
+    if (deepLinkHandled.current) return;
+    deepLinkHandled.current = true;
+    if (searchParams.get('source') === 'barrel') {
+      setWizardSpiritSource('barrel');
+      setShowWizard(true);
+    }
+    const recipeId = parseInt(searchParams.get('recipe') ?? '', 10);
+    if (recipeId > 0) {
+      applyBlendRecipe(recipeId, 1);
+      setShowWizard(true);
+    }
+  }, [searchParams]);
 
   const openNew = () => {
     if (blendRecipes.length === 0) {
@@ -668,6 +700,7 @@ export function Blending() {
       sources.length > 0
         ? sources.map((s, index) => spiritRowWithObservedAbv({
           holding_tank_equipment_id: s.holding_tank_equipment_id,
+          barrel_id: s.barrel_id ?? templateSources?.[index]?.barrel_id ?? null,
           volume_gal: s.volume_gal,
           abv: s.abv,
           recipe_abv: templateSources?.[index]?.abv ?? s.abv,
@@ -759,6 +792,24 @@ export function Blending() {
       const lbs = spiritWeightLbsFromVolumeGal(synced.volume_gal, synced.abv);
       return syncSpiritVolume({ ...synced, unit: 'lbs', amount: lbs });
     }));
+  };
+
+  const selectBarrelForSpirit = (index: number, rawId: string) => {
+    if (!rawId) {
+      updateSpiritSource(index, { barrel_id: null });
+      return;
+    }
+    const barrelId = parseInt(rawId, 10);
+    const barrel = barrelInventory.find((b) => b.id === barrelId);
+    if (!barrel) return;
+    updateSpiritSource(index, {
+      barrel_id: barrel.id,
+      holding_tank_equipment_id: 0,
+      abv: barrel.initial_abv,
+      observed_abv: barrel.initial_abv > 0 ? barrel.initial_abv.toString() : '',
+      amount: recipeTemplate?.spirit_sources[index]?.volume_gal ?? barrel.current_volume_gal,
+      unit: 'gal',
+    });
   };
 
   const addSpiritSource = () => setSpiritSources((prev) => [...prev, emptySpiritSource()]);
@@ -860,7 +911,9 @@ export function Blending() {
       }
     }
     if (step === 2 && activeSources.length === 0) {
-      alert('Please select at least one spirit tank and enter a volume.');
+      alert(isBarrelBlendWizard
+        ? 'Please select at least one aging barrel and enter a pull volume.'
+        : 'Please select at least one spirit tank and enter a volume.');
       return false;
     }
     if (step === 3 && form.target_abv == null) {
@@ -1143,11 +1196,15 @@ export function Blending() {
       case 1:
         return (
           <>
-            {blendRecipes.length === 0 ? (
-              <p className="field-hint">No blend recipes yet. Add one on the Recipes page under Blending before starting a batch.</p>
+            {wizardBlendRecipes.length === 0 ? (
+              <p className="field-hint">
+                {isBarrelBlendWizard
+                  ? 'No barrel blend recipes yet. Add one on Recipes → Blending → Barrel blending.'
+                  : 'No blend recipes yet. Add one on the Recipes page under Blending before starting a batch.'}
+              </p>
             ) : (
               <div className="form-group">
-                <label>Blend recipe (required)</label>
+                <label>{isBarrelBlendWizard ? 'Barrel blend recipe (required)' : 'Blend recipe (required)'}</label>
                 <select
                   value={selectedRecipeId ?? ''}
                   onChange={(e) => {
@@ -1156,7 +1213,7 @@ export function Blending() {
                   }}
                 >
                   <option value="">— Select a recipe —</option>
-                  {blendRecipes.map((recipe) => (
+                  {wizardBlendRecipes.map((recipe) => (
                     <option key={recipe.id} value={recipe.id}>
                       {recipe.name}{recipe.product_name ? ` — ${recipe.product_name}` : ''}
                     </option>
@@ -1270,18 +1327,40 @@ export function Blending() {
               return (
                 <div key={index} className="wizard-additive-card">
                   <div className="form-group">
-                    <label>Holding tank — {spiritLabel}</label>
-                    <select
-                      value={src.holding_tank_equipment_id || ''}
-                      onChange={(e) => updateSpiritSource(index, { holding_tank_equipment_id: parseInt(e.target.value) })}
-                    >
-                      <option value="">— Choose a tank —</option>
-                      {tankOptionsFor(src.holding_tank_equipment_id).map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.name} — {t.available_gal.toFixed(1)} gal available @ {t.available_abv.toFixed(1)}%
-                        </option>
-                      ))}
-                    </select>
+                    {isBarrelBlendWizard ? (
+                      <>
+                        <label>Barrel — {spiritLabel}</label>
+                        <select
+                          value={src.barrel_id ?? ''}
+                          onChange={(e) => selectBarrelForSpirit(index, e.target.value)}
+                        >
+                          <option value="">— Choose a barrel —</option>
+                          {barrelInventory.map((barrel) => (
+                            <option key={barrel.id} value={barrel.id}>
+                              {formatBarrelInventoryOption(barrel)}
+                            </option>
+                          ))}
+                        </select>
+                        {barrelInventory.length === 0 && (
+                          <p className="field-hint">No aging barrels with volume — register fills on Barrel Aging.</p>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <label>Holding tank — {spiritLabel}</label>
+                        <select
+                          value={src.holding_tank_equipment_id || ''}
+                          onChange={(e) => updateSpiritSource(index, { holding_tank_equipment_id: parseInt(e.target.value) })}
+                        >
+                          <option value="">— Choose a tank —</option>
+                          {tankOptionsFor(src.holding_tank_equipment_id).map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.name} — {t.available_gal.toFixed(1)} gal available @ {t.available_abv.toFixed(1)}%
+                            </option>
+                          ))}
+                        </select>
+                      </>
+                    )}
                   </div>
                   <div className="measure-mode-toggle">
                     <span className="measure-mode-label">How will you measure the pull?</span>
@@ -1338,7 +1417,8 @@ export function Blending() {
                   />
                   {synced.volume_gal > 0 && (
                     <p className="measure-alt">
-                      Tank ledger will record <strong>{synced.volume_gal.toFixed(2)} gal</strong>
+                      {isBarrelBlendWizard ? 'Barrel inventory will deduct' : 'Tank ledger will record'}{' '}
+                      <strong>{synced.volume_gal.toFixed(2)} gal</strong>
                       {alternate ? ` (${alternate.label})` : ''}
                     </p>
                   )}
@@ -1353,7 +1433,9 @@ export function Blending() {
                 </div>
               );
             })}
-            <button type="button" className="btn btn-sm btn-secondary" onClick={addSpiritSource}>+ Pull from another tank</button>
+            <button type="button" className="btn btn-sm btn-secondary" onClick={addSpiritSource}>
+              {isBarrelBlendWizard ? '+ Pull from another barrel' : '+ Pull from another tank'}
+            </button>
           </>
         );
 
@@ -1525,10 +1607,16 @@ export function Blending() {
               <ul>
                 {activeSources.map((s, i) => {
                   const tank = getHoldingTanks().find((t) => t.id === s.holding_tank_equipment_id);
+                  const barrel = s.barrel_id
+                    ? barrelInventory.find((b) => b.id === s.barrel_id)
+                    : undefined;
                   const alt = s.amount > 0 ? spiritMeasureAlternate(s.amount, s.unit, s.abv) : null;
+                  const sourceName = barrel
+                    ? spiritLabelForBarrel(barrel)
+                    : (tank?.name ?? 'tank');
                   return (
                     <li key={i}>
-                      {s.amount > 0 ? `${s.amount} ${s.unit}` : `${s.volume_gal.toFixed(1)} gal`} from {tank?.name ?? 'tank'} @ {s.abv.toFixed(1)}%
+                      {s.amount > 0 ? `${s.amount} ${s.unit}` : `${s.volume_gal.toFixed(1)} gal`} from {sourceName} @ {s.abv.toFixed(1)}%
                       {alt ? ` — ${alt.label}` : ''}
                     </li>
                   );

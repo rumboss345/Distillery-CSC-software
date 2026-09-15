@@ -443,6 +443,7 @@ function runMigrations(): void {
   migrateBottlingTankSourceColumns();
   migrateBottlingRunLines();
   migrateBlendRecipes();
+  migrateBarrelBlendRecipes();
   migrateFloorPlanPages();
   migrateAdvancedBlending();
   migrateAssignedEmployee();
@@ -674,6 +675,28 @@ function migrateBlendRecipes(): void {
   db.run(`
     CREATE INDEX IF NOT EXISTS idx_blend_recipe_ingredients_recipe ON blend_recipe_ingredients(blend_recipe_id)
   `);
+}
+
+function migrateBarrelBlendRecipes(): void {
+  if (!db) return;
+  const hasSourceType = queryOne<{ name: string }>(
+    "SELECT name FROM pragma_table_info('blend_recipes') WHERE name='source_type'",
+  );
+  if (!hasSourceType) {
+    db.run(`ALTER TABLE blend_recipes ADD COLUMN source_type TEXT NOT NULL DEFAULT 'tank'`);
+  }
+  const hasRecipeBarrel = queryOne<{ name: string }>(
+    "SELECT name FROM pragma_table_info('blend_recipe_spirit_sources') WHERE name='barrel_id'",
+  );
+  if (!hasRecipeBarrel) {
+    db.run(`ALTER TABLE blend_recipe_spirit_sources ADD COLUMN barrel_id INTEGER REFERENCES barrels(id)`);
+  }
+  const hasBlendBarrel = queryOne<{ name: string }>(
+    "SELECT name FROM pragma_table_info('blend_spirit_sources') WHERE name='barrel_id'",
+  );
+  if (!hasBlendBarrel) {
+    db.run(`ALTER TABLE blend_spirit_sources ADD COLUMN barrel_id INTEGER REFERENCES barrels(id)`);
+  }
 }
 
 function migrateFloorPlanPages(): void {

@@ -1262,6 +1262,11 @@ export function getBarrels(): Barrel[] {
   );
 }
 
+/** Aging barrels with spirit available for barrel blend recipes and production pulls. */
+export function getBarrelsForBlend(): Barrel[] {
+  return getBarrels().filter((b) => b.status === 'aging' && b.current_volume_gal > 0);
+}
+
 export function saveBarrel(barrel: Omit<Barrel, 'id' | 'created_at'>, id?: number): void {
   if (id) {
     runQuery(
@@ -1433,9 +1438,9 @@ function persistBlendRecipeSpiritSources(
     .filter((source) => source.volume_gal > 0)
     .forEach((source, index) => {
       insertRow(
-        `INSERT INTO blend_recipe_spirit_sources (blend_recipe_id, spirit_label, volume_gal, abv, sort_order)
-         VALUES (?, ?, ?, ?, ?)`,
-        [recipeId, source.spirit_label, source.volume_gal, source.abv, index],
+        `INSERT INTO blend_recipe_spirit_sources (blend_recipe_id, spirit_label, volume_gal, abv, barrel_id, sort_order)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [recipeId, source.spirit_label, source.volume_gal, source.abv, source.barrel_id ?? null, index],
       );
     });
 }
@@ -1486,10 +1491,12 @@ export function saveBlendRecipe(
 ): number {
   if (!recipe.name.trim()) throw new Error('Recipe name is required.');
 
+  const sourceType = recipe.source_type ?? 'tank';
+
   if (id) {
     runQuery(
       `UPDATE blend_recipes SET
-        name = ?, product_name = ?, target_abv = ?, target_brix = ?, scale_factor = ?, notes = ?, updated_at = datetime('now')
+        name = ?, product_name = ?, target_abv = ?, target_brix = ?, scale_factor = ?, source_type = ?, notes = ?, updated_at = datetime('now')
        WHERE id = ?`,
       [
         recipe.name.trim(),
@@ -1497,20 +1504,22 @@ export function saveBlendRecipe(
         recipe.target_abv,
         recipe.target_brix,
         recipe.scale_factor ?? 1,
+        sourceType,
         recipe.notes,
         id,
       ],
     );
   } else {
     id = insertRow(
-      `INSERT INTO blend_recipes (name, product_name, target_abv, target_brix, scale_factor, notes)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO blend_recipes (name, product_name, target_abv, target_brix, scale_factor, source_type, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         recipe.name.trim(),
         recipe.product_name,
         recipe.target_abv,
         recipe.target_brix,
         recipe.scale_factor ?? 1,
+        sourceType,
         recipe.notes,
       ],
     );
@@ -1559,6 +1568,7 @@ export function saveBlendRecipeFromWizard(
       target_abv: product.target_abv,
       target_brix: product.target_brix,
       scale_factor: product.scale_factor ?? 1,
+      source_type: 'tank',
       notes: product.notes,
     },
     blendRecipeSpiritSourcesFromWizard(spiritSources),
@@ -1594,9 +1604,10 @@ export function getBlendIngredients(blendProductId: number): BlendIngredient[] {
 
 export function getBlendSpiritSources(blendProductId: number): BlendSpiritSource[] {
   return queryAll(
-    `SELECT bss.*, fe.name as tank_name
+    `SELECT bss.*, fe.name as tank_name, b.barrel_number
      FROM blend_spirit_sources bss
-     JOIN floor_equipment fe ON fe.id = bss.holding_tank_equipment_id
+     LEFT JOIN floor_equipment fe ON fe.id = bss.holding_tank_equipment_id
+     LEFT JOIN barrels b ON b.id = bss.barrel_id
      WHERE bss.blend_product_id = ?
      ORDER BY bss.sort_order, bss.id`,
     [blendProductId],
@@ -1630,9 +1641,16 @@ function persistSpiritSources(blendProductId: number, sources: BlendSpiritSource
   sources.forEach((source, index) => {
     if (source.volume_gal <= 0) return;
     insertRow(
-      `INSERT INTO blend_spirit_sources (blend_product_id, holding_tank_equipment_id, volume_gal, abv, sort_order)
-       VALUES (?, ?, ?, ?, ?)`,
-      [blendProductId, source.holding_tank_equipment_id, source.volume_gal, source.abv, index],
+      `INSERT INTO blend_spirit_sources (blend_product_id, holding_tank_equipment_id, barrel_id, volume_gal, abv, sort_order)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        blendProductId,
+        source.holding_tank_equipment_id ?? 0,
+        source.barrel_id ?? null,
+        source.volume_gal,
+        source.abv,
+        index,
+      ],
     );
   });
 }
@@ -1838,6 +1856,22 @@ function assertSpiritAvailability(
 ): void {
   for (const source of sources) {
     if (source.volume_gal <= 0) continue;
+    if (source.barrel_id) {
+      const barrel = queryOne<{ barrel_number: string; current_volume_gal: number }>(
+        'SELECT barrel_number, current_volume_gal FROM barrels WHERE id = ? AND status = ?',
+        [source.barrel_id, 'aging'],
+      );
+      if (!barrel) {
+        throw new Error('Selected barrel is not available for blending.');
+      }
+      if (source.volume_gal > barrel.current_volume_gal + 0.01) {
+        throw new Error(
+          `Only ${barrel.current_volume_gal.toFixed(1)} gal available in ${barrel.barrel_number}; formula requires ${source.volume_gal.toFixed(1)} gal.`,
+        );
+      }
+      continue;
+    }
+    if (source.holding_tank_equipment_id <= 0) continue;
     const available = getHoldingTankContents(source.holding_tank_equipment_id, undefined, excludeBlendId);
     if (source.volume_gal > available.volume_gal + 0.01) {
       const tank = queryOne<{ name: string }>(
@@ -1873,6 +1907,7 @@ export function executeBlendProduct(id: number, outputTankId: number): void {
 
   const spiritSources = getBlendSpiritSources(id).map((s) => ({
     holding_tank_equipment_id: s.holding_tank_equipment_id,
+    barrel_id: s.barrel_id ?? null,
     volume_gal: s.volume_gal,
     abv: s.abv,
   }));
@@ -1883,9 +1918,26 @@ export function executeBlendProduct(id: number, outputTankId: number): void {
 
   assertSpiritAvailability(sources, id);
 
-  const sourceTankIds = new Set(sources.map((s) => s.holding_tank_equipment_id));
+  const sourceTankIds = new Set(
+    sources.map((s) => s.holding_tank_equipment_id).filter((tankId) => tankId > 0),
+  );
   if (sourceTankIds.has(outputTankId)) {
     throw new Error('Finished batch cannot go into a tank you are pulling spirit from.');
+  }
+
+  for (const source of sources) {
+    if (!source.barrel_id || source.volume_gal <= 0) continue;
+    const barrel = queryOne<{ current_volume_gal: number }>(
+      'SELECT current_volume_gal FROM barrels WHERE id = ?',
+      [source.barrel_id],
+    );
+    if (!barrel) continue;
+    const remaining = Math.max(0, barrel.current_volume_gal - source.volume_gal);
+    const nextStatus = remaining <= 0.01 ? 'empty' : 'aging';
+    runQuery(
+      'UPDATE barrels SET current_volume_gal = ?, status = ? WHERE id = ?',
+      [remaining, nextStatus, source.barrel_id],
+    );
   }
 
   const ingredients = getBlendIngredients(id);

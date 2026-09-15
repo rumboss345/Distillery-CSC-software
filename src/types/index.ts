@@ -312,10 +312,12 @@ export interface BlendSpiritSource {
   id: number;
   blend_product_id: number;
   holding_tank_equipment_id: number;
+  barrel_id?: number | null;
   volume_gal: number;
   abv: number;
   sort_order: number;
   tank_name?: string;
+  barrel_number?: string;
 }
 
 export interface BlendIngredient {
@@ -352,6 +354,7 @@ export interface BlendIngredientInput {
 
 export interface BlendSpiritSourceInput {
   holding_tank_equipment_id: number;
+  barrel_id?: number | null;
   volume_gal: number;
   abv: number;
 }
@@ -363,9 +366,19 @@ export interface BlendRecipe {
   target_abv: number | null;
   target_brix: number | null;
   scale_factor: number;
+  source_type: BlendRecipeSourceType;
   notes: string;
   created_at: string;
   updated_at: string;
+}
+
+export type BlendRecipeSourceType = 'tank' | 'barrel';
+
+export interface BlendRecipeSpiritSourceInput {
+  spirit_label: string;
+  volume_gal: number;
+  abv: number;
+  barrel_id?: number | null;
 }
 
 export interface BlendRecipeSpiritSource {
@@ -374,6 +387,7 @@ export interface BlendRecipeSpiritSource {
   spirit_label: string;
   volume_gal: number;
   abv: number;
+  barrel_id?: number | null;
   sort_order: number;
 }
 
@@ -388,12 +402,6 @@ export interface BlendRecipeIngredient {
   lot_number: string;
   inventory_item_id: number | null;
   notes: string;
-}
-
-export interface BlendRecipeSpiritSourceInput {
-  spirit_label: string;
-  volume_gal: number;
-  abv: number;
 }
 
 export interface BlendRecipeView extends BlendRecipe {

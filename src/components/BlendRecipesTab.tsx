@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { BlendAbvConfirmation } from './BlendAbvConfirmation';
 import { computeRecipeTheoreticalAbv } from '../lib/blend-abv-confirm';
 import {
   deleteBlendRecipe,
+  getBarrelsForBlend,
   getBlendRecipes,
   getInventoryItems,
   saveBlendRecipe,
   useRefreshKey,
 } from '../db/queries';
+import { formatBarrelInventoryOption, spiritLabelForBarrel } from '../lib/barrel-blending';
 import { Modal } from './Modal';
 import {
   BLEND_INGREDIENT_TYPES,
@@ -30,12 +33,14 @@ import {
 import type {
   BlendIngredientInput,
   BlendRecipeSpiritSourceInput,
+  BlendRecipeSourceType,
   BlendRecipeView,
 } from '../types';
 
 interface SpiritRecipeRow extends BlendRecipeSpiritSourceInput {
   amount: number;
   unit: string;
+  barrel_id?: number | null;
 }
 
 const emptySpiritLine = (): SpiritRecipeRow => ({
@@ -59,6 +64,7 @@ function toSpiritRecipeInput(row: SpiritRecipeRow): BlendRecipeSpiritSourceInput
     spirit_label: synced.spirit_label,
     volume_gal: synced.volume_gal,
     abv: synced.abv,
+    barrel_id: synced.barrel_id ?? null,
   };
 }
 
@@ -82,9 +88,13 @@ const emptyRecipeForm = () => ({
   notes: '',
 });
 
-export function BlendRecipesTab() {
+export function BlendRecipesTab({ sourceType = 'tank' }: { sourceType?: BlendRecipeSourceType }) {
   const { key, refresh } = useRefreshKey();
-  const recipes = getBlendRecipes();
+  const recipes = useMemo(
+    () => getBlendRecipes().filter((recipe) => (recipe.source_type ?? 'tank') === sourceType),
+    [key, sourceType],
+  );
+  const barrelInventory = useMemo(() => getBarrelsForBlend(), [key]);
   const inventoryItems = getInventoryItems();
   const inventoryById = new Map(inventoryItems.map((item) => [item.id, item]));
   const [showForm, setShowForm] = useState(false);
@@ -141,6 +151,7 @@ export function BlendRecipesTab() {
           spirit_label: source.spirit_label,
           volume_gal: source.volume_gal,
           abv: source.abv,
+          barrel_id: source.barrel_id ?? null,
           amount: source.volume_gal,
           unit: 'gal',
         }))
@@ -173,7 +184,7 @@ export function BlendRecipesTab() {
     }
     try {
       saveBlendRecipe(
-        form,
+        { ...form, source_type: sourceType },
         syncedSpiritSources.map(toSpiritRecipeInput),
         ingredients,
         editId,
@@ -224,6 +235,23 @@ export function BlendRecipesTab() {
     }));
   };
 
+  const selectBarrelForSpirit = (index: number, rawId: string) => {
+    if (!rawId) {
+      updateSpiritSource(index, { barrel_id: null });
+      return;
+    }
+    const barrelId = parseInt(rawId, 10);
+    const barrel = barrelInventory.find((b) => b.id === barrelId);
+    if (!barrel) return;
+    updateSpiritSource(index, {
+      barrel_id: barrel.id,
+      spirit_label: spiritLabelForBarrel(barrel),
+      abv: barrel.initial_abv,
+      amount: barrel.current_volume_gal,
+      unit: 'gal',
+    });
+  };
+
   const setSpiritMeasureMode = (index: number, mode: MeasureMode) => {
     setSpiritSources((prev) => prev.map((row, i) => {
       if (i !== index) return row;
@@ -254,7 +282,11 @@ export function BlendRecipesTab() {
     <>
       {recipes.length === 0 ? (
         <div className="empty-state card">
-          <p>No blend recipes yet. Save a formula from the blending wizard or create one here.</p>
+          <p>
+            {sourceType === 'barrel'
+              ? 'No barrel blend recipes yet. Create one that pulls from aging barrels in inventory.'
+              : 'No blend recipes yet. Save a formula from the blending wizard or create one here.'}
+          </p>
         </div>
       ) : (
         <div className="table-wrap">
@@ -310,9 +342,16 @@ export function BlendRecipesTab() {
               </>
             )}
           </dl>
+          {sourceType === 'barrel' && (
+            <div className="page-actions" style={{ marginTop: '0.75rem' }}>
+              <Link to={`/blending?recipe=${selected.id}`} className="btn btn-primary btn-sm">
+                Start barrel blending
+              </Link>
+            </div>
+          )}
           {selected.spirit_sources.length > 0 && (
             <>
-              <h4>Spirit pulls</h4>
+              <h4>{sourceType === 'barrel' ? 'Barrel pulls' : 'Spirit pulls'}</h4>
               <ul>
                 {selected.spirit_sources.map((source, index) => (
                   <li key={index}>
@@ -436,7 +475,9 @@ export function BlendRecipesTab() {
 
             <section className="blend-recipe-section">
               <div className="blend-recipe-section-header">
-                <h4 className="blend-recipe-section-title">Spirit pulls</h4>
+                <h4 className="blend-recipe-section-title">
+                  {sourceType === 'barrel' ? 'Barrel pulls' : 'Spirit pulls'}
+                </h4>
                 <button
                   type="button"
                   className="btn btn-sm btn-secondary"
@@ -469,14 +510,34 @@ export function BlendRecipesTab() {
                           </button>
                         )}
                       </header>
-                      <div className="form-group">
-                        <label>Label</label>
-                        <input
-                          value={source.spirit_label}
-                          onChange={(e) => updateSpiritSource(index, { spirit_label: e.target.value })}
-                          placeholder="High proof cane"
-                        />
-                      </div>
+                      {sourceType === 'barrel' ? (
+                        <div className="form-group">
+                          <label>Barrel (aging inventory)</label>
+                          <select
+                            value={source.barrel_id ?? ''}
+                            onChange={(e) => selectBarrelForSpirit(index, e.target.value)}
+                          >
+                            <option value="">— Select barrel —</option>
+                            {barrelInventory.map((barrel) => (
+                              <option key={barrel.id} value={barrel.id}>
+                                {formatBarrelInventoryOption(barrel)}
+                              </option>
+                            ))}
+                          </select>
+                          {barrelInventory.length === 0 && (
+                            <p className="field-hint">Register aging barrels on the Barrel Aging page first.</p>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="form-group">
+                          <label>Label</label>
+                          <input
+                            value={source.spirit_label}
+                            onChange={(e) => updateSpiritSource(index, { spirit_label: e.target.value })}
+                            placeholder="High proof cane"
+                          />
+                        </div>
+                      )}
                       <div className="measure-mode-toggle">
                         <span className="measure-mode-label">Measure pull by</span>
                         <div className="measure-mode-buttons">
@@ -715,7 +776,9 @@ export function BlendRecipesTab() {
       )}
 
       <div className="page-actions" style={{ marginTop: '1rem' }}>
-        <button type="button" className="btn btn-primary" onClick={openNew}>+ Add Blend Recipe</button>
+        <button type="button" className="btn btn-primary" onClick={openNew}>
+          {sourceType === 'barrel' ? '+ Add barrel blend recipe' : '+ Add blend recipe'}
+        </button>
       </div>
     </>
   );

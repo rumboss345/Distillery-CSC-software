@@ -2,6 +2,7 @@ import type { BlendIngredientInput, BlendRecipeSpiritSourceInput } from '../type
 
 export interface ScaledSpiritRow {
   holding_tank_equipment_id: number;
+  barrel_id?: number | null;
   volume_gal: number;
   abv: number;
   /** Recipe ABV at this line (for tank-vs-recipe compensation). */
@@ -34,6 +35,7 @@ export function scaleSpiritSources(
     const volume = roundScaledAmount(source.volume_gal * safeFactor);
     return {
       holding_tank_equipment_id: tankIds[index] ?? 0,
+      barrel_id: source.barrel_id ?? null,
       volume_gal: volume,
       abv: source.abv,
       recipe_abv: source.abv,
