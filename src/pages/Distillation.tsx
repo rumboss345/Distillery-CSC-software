@@ -29,6 +29,8 @@ import {
   generateBatchNumber,
   useRefreshKey,
 } from '../db/queries';
+import { AbvVolumeTemperatureFields } from '../components/AbvVolumeTemperatureFields';
+import { AbvTemperatureInput, correctedAbvFromInputs } from '../components/AbvTemperatureInput';
 import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
 import {
@@ -62,7 +64,8 @@ const emptyTransferForm = () => ({
   source_tank_equipment_id: 0,
   dest_tank_equipment_id: 0,
   volume_gal: 0,
-  abv: 0,
+  observed_abv: '',
+  sample_temp_f: '60',
   transfer_date: new Date().toISOString().slice(0, 10),
   notes: '',
 });
@@ -106,10 +109,13 @@ export function Distillation() {
     start_time: new Date().toISOString().slice(0, 16),
     end_time: '',
     volume_gal: 0,
-    abv: 0,
+    observed_abv: '',
+    sample_temp_f: '60',
     notes: '',
   });
   const [transferForm, setTransferForm] = useState(emptyTransferForm);
+  const [chargeAbvObserved, setChargeAbvObserved] = useState('');
+  const [chargeTempF, setChargeTempF] = useState('60');
 
   void key;
 
@@ -210,6 +216,20 @@ export function Distillation() {
         ? destId
         : defaultDestTankIdForRunType(runForm.run_type, tankId),
     });
+    if (tank) {
+      setChargeAbvObserved(tank.available_abv.toString());
+      setChargeTempF('60');
+    } else {
+      setChargeAbvObserved('');
+      setChargeTempF('60');
+    }
+  };
+
+  const syncChargeAbvFromObservation = (observed: string, tempF: string) => {
+    setChargeAbvObserved(observed);
+    setChargeTempF(tempF);
+    const corrected = correctedAbvFromInputs(observed, tempF);
+    setRunForm((prev) => ({ ...prev, charge_abv: corrected }));
   };
 
   const handleDestTankChange = (tankId: number | null) => {
@@ -224,6 +244,8 @@ export function Distillation() {
   const openNewRun = (runType: DistillationRunType = 'wash') => {
     setEditRunId(undefined);
     setRunForm({ ...emptyRun(runType), ...defaultAssignee(user) });
+    setChargeAbvObserved('');
+    setChargeTempF('60');
     setShowRunForm(true);
   };
 
@@ -236,6 +258,8 @@ export function Distillation() {
       dest_holding_tank_equipment_id: run.dest_holding_tank_equipment_id ?? null,
       charge_abv: run.charge_abv ?? null,
     });
+    setChargeAbvObserved(run.charge_abv?.toString() ?? '');
+    setChargeTempF('60');
     setShowRunForm(true);
   };
 
@@ -356,7 +380,8 @@ export function Distillation() {
       start_time: new Date().toISOString().slice(0, 16),
       end_time: '',
       volume_gal: 0,
-      abv: 0,
+      observed_abv: '',
+      sample_temp_f: '60',
       notes: '',
     });
     setShowCutForm(true);
@@ -381,9 +406,10 @@ export function Distillation() {
     }
   };
 
+  const cutCorrectedAbv = correctedAbvFromInputs(cutForm.observed_abv, cutForm.sample_temp_f);
   const cutFormHasVolumeAndAbv =
     cutForm.volume_gal > 0 && Number.isFinite(cutForm.volume_gal)
-    && cutForm.abv > 0 && Number.isFinite(cutForm.abv);
+    && cutCorrectedAbv != null && cutCorrectedAbv > 0;
 
   const handleAddCut = () => {
     if (!selectedRunId) return;
@@ -395,7 +421,7 @@ export function Distillation() {
       alert('Enter the cut volume (gal) before adding a cut.');
       return;
     }
-    if (cutForm.abv <= 0 || !Number.isFinite(cutForm.abv)) {
+    if (cutCorrectedAbv == null || cutCorrectedAbv <= 0) {
       alert('Enter the cut ABV (%) before adding a cut.');
       return;
     }
@@ -428,7 +454,7 @@ export function Distillation() {
         start_time: cutForm.start_time,
         end_time: cutForm.end_time || null,
         volume_gal: cutForm.volume_gal,
-        abv: cutForm.abv,
+        abv: cutCorrectedAbv,
         notes: cutForm.notes,
       });
     } catch (err) {
@@ -442,7 +468,8 @@ export function Distillation() {
       start_time: new Date().toISOString().slice(0, 16),
       end_time: '',
       volume_gal: 0,
-      abv: 0,
+      observed_abv: '',
+      sample_temp_f: '60',
       notes: '',
     });
     refresh();
@@ -497,9 +524,15 @@ export function Distillation() {
       dest_tank_equipment_id: transferForm.dest_tank_equipment_id === tankId
         ? 0
         : transferForm.dest_tank_equipment_id,
-      abv: contents ? Math.round(contents.abv * 10) / 10 : 0,
+      observed_abv: contents ? (Math.round(contents.abv * 10) / 10).toString() : '',
+      sample_temp_f: '60',
     });
   };
+
+  const transferCorrectedAbv = correctedAbvFromInputs(
+    transferForm.observed_abv,
+    transferForm.sample_temp_f,
+  );
 
   const handleSaveTransfer = () => {
     if (!transferForm.source_tank_equipment_id) {
@@ -512,6 +545,10 @@ export function Distillation() {
     }
     if (transferForm.volume_gal <= 0) {
       alert('Enter the volume to transfer.');
+      return;
+    }
+    if (transferCorrectedAbv == null || transferCorrectedAbv <= 0) {
+      alert('Enter the transfer ABV (%).');
       return;
     }
     if (transferSourceContents && transferForm.volume_gal > transferSourceContents.volume_gal + 0.01) {
@@ -529,7 +566,15 @@ export function Distillation() {
       }
     }
     try {
-      saveHoldingTankTransfer(transferForm);
+      saveHoldingTankTransfer({
+        spirit_type: transferForm.spirit_type,
+        source_tank_equipment_id: transferForm.source_tank_equipment_id,
+        dest_tank_equipment_id: transferForm.dest_tank_equipment_id,
+        volume_gal: transferForm.volume_gal,
+        abv: transferCorrectedAbv,
+        transfer_date: transferForm.transfer_date,
+        notes: transferForm.notes,
+      });
       setShowTransferForm(false);
       setTransferForm(emptyTransferForm());
       refresh();
@@ -853,13 +898,18 @@ export function Distillation() {
               )}
             </div>
             {isTankSourcedRun(runForm.run_type) && (
-              <div className="form-group">
-                <label>Charge ABV (%)</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={runForm.charge_abv ?? ''}
-                  onChange={(e) => setRunForm({ ...runForm, charge_abv: e.target.value ? parseFloat(e.target.value) : null })}
+              <div className="form-group full-width">
+                <AbvTemperatureInput
+                  abvLabel="Observed charge ABV (% at sample temp)"
+                  abvValue={chargeAbvObserved}
+                  temperatureValue={chargeTempF}
+                  onAbvChange={(value) => syncChargeAbvFromObservation(value, chargeTempF)}
+                  onTemperatureChange={(value) => syncChargeAbvFromObservation(chargeAbvObserved, value)}
+                  abvPlaceholder={
+                    runForm.charge_abv?.toString()
+                    ?? selectedLowWineAvailable?.abv.toFixed(1)
+                    ?? undefined
+                  }
                 />
               </div>
             )}
@@ -1033,23 +1083,27 @@ export function Distillation() {
                   return <option key={t.id} value={t.id}>{label}</option>;
                 })}
               </select>
-              {transferDestContents && transferForm.dest_tank_equipment_id > 0 && transferForm.volume_gal > 0 && (
-                <p className="field-hint">
-                  After transfer: {(transferDestContents.volume_gal + transferForm.volume_gal).toFixed(1)} gal
-                  {' '}@ blended {(
-                    (transferDestContents.volume_gal * transferDestContents.abv + transferForm.volume_gal * transferForm.abv)
-                    / (transferDestContents.volume_gal + transferForm.volume_gal)
-                  ).toFixed(1)}% ABV
-                </p>
-              )}
             </div>
-            <div className="form-group">
-              <label>Volume (gal)</label>
-              <input
-                type="number"
-                step="0.1"
-                value={transferForm.volume_gal || ''}
-                onChange={(e) => setTransferForm({ ...transferForm, volume_gal: parseFloat(e.target.value) || 0 })}
+            <div className="form-group full-width">
+              <AbvVolumeTemperatureFields
+                volumeGal={transferForm.volume_gal}
+                volumeEditable
+                onVolumeChange={(volume_gal) => setTransferForm({ ...transferForm, volume_gal })}
+                volumeLabel="Volume (gal)"
+                abvLabel="Observed transfer ABV (% at sample temp)"
+                abvValue={transferForm.observed_abv}
+                temperatureValue={transferForm.sample_temp_f}
+                onAbvChange={(observed_abv) => setTransferForm({ ...transferForm, observed_abv })}
+                onTemperatureChange={(sample_temp_f) => setTransferForm({ ...transferForm, sample_temp_f })}
+                abvPlaceholder={transferSourceContents?.abv.toFixed(1)}
+                blendPreview={
+                  transferDestContents && transferForm.dest_tank_equipment_id > 0
+                    ? {
+                      existingVolumeGal: transferDestContents.volume_gal,
+                      existingAbv: transferDestContents.abv,
+                    }
+                    : undefined
+                }
               />
               {transferSourceContents && transferForm.source_tank_equipment_id > 0 && (
                 <button
@@ -1059,21 +1113,13 @@ export function Distillation() {
                   onClick={() => setTransferForm({
                     ...transferForm,
                     volume_gal: Math.round(transferSourceContents.volume_gal * 10) / 10,
-                    abv: Math.round(transferSourceContents.abv * 10) / 10,
+                    observed_abv: (Math.round(transferSourceContents.abv * 10) / 10).toString(),
+                    sample_temp_f: '60',
                   })}
                 >
                   Transfer all ({transferSourceContents.volume_gal.toFixed(1)} gal)
                 </button>
               )}
-            </div>
-            <div className="form-group">
-              <label>ABV (%)</label>
-              <input
-                type="number"
-                step="0.1"
-                value={transferForm.abv || ''}
-                onChange={(e) => setTransferForm({ ...transferForm, abv: parseFloat(e.target.value) || 0 })}
-              />
             </div>
             <div className="form-group full-width">
               <label>Notes</label>
@@ -1133,16 +1179,6 @@ export function Distillation() {
               {cutForm.cut_type === 'heads' && (
                 <p className="field-hint">Leave empty if heads are discarded rather than stored.</p>
               )}
-              {selectedTankContents && selectedTankContents.volume_gal > 0 && cutForm.volume_gal > 0 && (
-                <p className="field-hint">
-                  After this cut: {(selectedTankContents.volume_gal + cutForm.volume_gal).toFixed(1)} gal
-                  {' '}@ blended {(
-                    (selectedTankContents.volume_gal * selectedTankContents.abv + cutForm.volume_gal * cutForm.abv)
-                    / (selectedTankContents.volume_gal + cutForm.volume_gal)
-                  ).toFixed(1)}% ABV
-                  {' '}(from {selectedTankContents.run_count + 1} runs)
-                </p>
-              )}
             </div>
             <div className="form-group">
               <label>Start Time</label>
@@ -1158,26 +1194,26 @@ export function Distillation() {
                 onChange={(end_time) => setCutForm({ ...cutForm, end_time })}
               />
             </div>
-            <div className="form-group">
-              <label>Volume (gal) *</label>
-              <input
-                type="number"
-                step="0.1"
-                min="0.1"
-                required
-                value={cutForm.volume_gal || ''}
-                onChange={(e) => setCutForm({ ...cutForm, volume_gal: parseFloat(e.target.value) || 0 })}
-              />
-            </div>
-            <div className="form-group">
-              <label>ABV (%) *</label>
-              <input
-                type="number"
-                step="0.1"
-                min="0.1"
-                required
-                value={cutForm.abv || ''}
-                onChange={(e) => setCutForm({ ...cutForm, abv: parseFloat(e.target.value) || 0 })}
+            <div className="form-group full-width">
+              <AbvVolumeTemperatureFields
+                volumeGal={cutForm.volume_gal}
+                volumeEditable
+                onVolumeChange={(volume_gal) => setCutForm({ ...cutForm, volume_gal })}
+                volumeLabel="Volume (gal) *"
+                abvLabel="Observed cut ABV (% at sample temp) *"
+                abvValue={cutForm.observed_abv}
+                temperatureValue={cutForm.sample_temp_f}
+                onAbvChange={(observed_abv) => setCutForm({ ...cutForm, observed_abv })}
+                onTemperatureChange={(sample_temp_f) => setCutForm({ ...cutForm, sample_temp_f })}
+                blendPreview={
+                  selectedTankContents && selectedTankContents.volume_gal > 0
+                    ? {
+                      existingVolumeGal: selectedTankContents.volume_gal,
+                      existingAbv: selectedTankContents.abv,
+                      runCount: selectedTankContents.run_count,
+                    }
+                    : undefined
+                }
               />
             </div>
             <div className="form-group full-width">

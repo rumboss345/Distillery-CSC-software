@@ -1635,6 +1635,44 @@ tr:hover td {
   margin-bottom: 1rem;
 }
 
+.abv-temp-input {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.abv-temp-input label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.abv-temp-correction {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.abv-temp-note {
+  display: block;
+  margin-top: 0.35rem;
+}
+
+.abv-volume-temp-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.abv-volume-readout {
+  margin: 0;
+}
+
+.abv-blend-preview {
+  margin: 0;
+}
+
 .wizard-lab-inputs label {
   display: flex;
   flex-direction: column;
