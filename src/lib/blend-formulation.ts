@@ -161,6 +161,73 @@ export function solveWaterForTargetAbv(
   return { waterGal: round3(waterGal), result };
 }
 
+export interface SpiritAbvDelta {
+  index: number;
+  label: string;
+  recipeAbv: number;
+  actualAbv: number;
+}
+
+/** Compare actual tank/pull ABV to recipe ABV per spirit line. */
+export function spiritAbvDeltas(
+  recipeSpirits: { abv: number; volume_gal?: number; spirit_label?: string }[],
+  actualSpirits: { abv: number; volume_gal: number }[],
+  tolerance = 0.05,
+): SpiritAbvDelta[] {
+  const deltas: SpiritAbvDelta[] = [];
+  actualSpirits.forEach((actual, index) => {
+    if (actual.volume_gal <= 0 || actual.abv <= 0) return;
+    const recipe = recipeSpirits[index];
+    if (!recipe) return;
+    if (Math.abs(actual.abv - recipe.abv) > tolerance) {
+      deltas.push({
+        index,
+        label: recipe.spirit_label?.trim() || `Spirit ${index + 1}`,
+        recipeAbv: recipe.abv,
+        actualAbv: actual.abv,
+      });
+    }
+  });
+  return deltas;
+}
+
+export interface ProofingWaterCompensation {
+  adjusted: boolean;
+  waterGal: number;
+  recipeWaterGal: number;
+  deltas: SpiritAbvDelta[];
+}
+
+/**
+ * When tank ABV differs from the recipe, recalculate proofing water for the target ABV.
+ * Returns null when no compensation is needed or inputs are incomplete.
+ */
+export function compensateProofingWater(
+  recipeSpirits: { abv: number; spirit_label?: string }[],
+  actualSpirits: SpiritSourceInput[],
+  nonWaterAdditives: AdditiveInput[],
+  targetAbv: number,
+  scaledRecipeWaterGal: number,
+): ProofingWaterCompensation | null {
+  if (targetAbv <= 0 || actualSpirits.length === 0) return null;
+
+  const deltas = spiritAbvDeltas(
+    recipeSpirits,
+    actualSpirits.map((s) => ({ abv: s.abv, volume_gal: s.volumeGal })),
+  );
+  if (deltas.length === 0) return null;
+
+  const solved = solveWaterForTargetAbv(actualSpirits, nonWaterAdditives, targetAbv);
+  if (!solved) return null;
+
+  return {
+    adjusted: true,
+    waterGal: solved.waterGal,
+    recipeWaterGal: round3(scaledRecipeWaterGal),
+    deltas,
+  };
+}
+
 /** Solve sugar (lbs) to approach target Brix — approximate for formulation trials. */
 export function solveSugarForTargetBrix(
   spirits: SpiritSourceInput[],

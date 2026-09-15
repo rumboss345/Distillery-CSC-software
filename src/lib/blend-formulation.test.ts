@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  compensateProofingWater,
   computeBatchCorrection,
   computeTheoreticalBlend,
   reconcileMeasurements,
   scaleFormulation,
   solveSugarForTargetBrix,
   solveWaterForTargetAbv,
+  spiritAbvDeltas,
   suggestCorrections,
   totalIngredientCost,
 } from './blend-formulation';
@@ -45,6 +47,45 @@ describe('solveWaterForTargetAbv', () => {
     expect(solved).not.toBeNull();
     expect(solved!.waterGal).toBeGreaterThan(0);
     expect(solved!.result.abv).toBeCloseTo(40, 0);
+  });
+});
+
+describe('spirit ABV compensation', () => {
+  it('detects recipe vs tank ABV differences', () => {
+    const deltas = spiritAbvDeltas(
+      [{ abv: 93, spirit_label: '93% rum' }],
+      [{ abv: 91, volume_gal: 85 }],
+    );
+    expect(deltas).toHaveLength(1);
+    expect(deltas[0].recipeAbv).toBe(93);
+    expect(deltas[0].actualAbv).toBe(91);
+  });
+
+  it('recalculates water when tank ABV is lower than recipe', () => {
+    const recipeWater = 100;
+    const atRecipe = solveWaterForTargetAbv([{ volumeGal: 85, abv: 93 }], [], 35);
+    const compensation = compensateProofingWater(
+      [{ abv: 93, spirit_label: '93% rum' }],
+      [{ volumeGal: 85, abv: 91 }],
+      [],
+      35,
+      recipeWater,
+    );
+    expect(compensation).not.toBeNull();
+    expect(compensation!.waterGal).toBeLessThan(atRecipe!.waterGal);
+  });
+
+  it('recalculates water when tank ABV is higher than recipe', () => {
+    const atRecipe = solveWaterForTargetAbv([{ volumeGal: 85, abv: 93 }], [], 35);
+    const compensation = compensateProofingWater(
+      [{ abv: 93, spirit_label: '93% rum' }],
+      [{ volumeGal: 85, abv: 95 }],
+      [],
+      35,
+      100,
+    );
+    expect(compensation).not.toBeNull();
+    expect(compensation!.waterGal).toBeGreaterThan(atRecipe!.waterGal);
   });
 });
 

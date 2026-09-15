@@ -4,6 +4,8 @@ export interface ScaledSpiritRow {
   holding_tank_equipment_id: number;
   volume_gal: number;
   abv: number;
+  /** Recipe ABV at this line (for tank-vs-recipe compensation). */
+  recipe_abv: number;
   amount: number;
   unit: string;
 }
@@ -23,6 +25,7 @@ export function scaleSpiritSources(
       holding_tank_equipment_id: 0,
       volume_gal: 0,
       abv: 0,
+      recipe_abv: 0,
       amount: 0,
       unit: 'gal',
     }];
@@ -33,6 +36,7 @@ export function scaleSpiritSources(
       holding_tank_equipment_id: tankIds[index] ?? 0,
       volume_gal: volume,
       abv: source.abv,
+      recipe_abv: source.abv,
       amount: volume,
       unit: 'gal',
     };
