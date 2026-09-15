@@ -19,4 +19,14 @@ describe('blend-recipes-2024', () => {
     expect(darkRum?.notes).toContain('60 cases');
     expect(darkRum?.notes).toContain('Liqour Blending FINAL (003).xlsx');
   });
+
+  it('estimates target ABV including sugar and flavor volume', () => {
+    const coconut = BLEND_RECIPES_2024.find((recipe) => recipe.name === 'Coconut Rum (70 cases)');
+    expect(coconut?.target_abv).toBeGreaterThan(33);
+    expect(coconut?.target_abv).toBeLessThan(35);
+
+    const coffee = BLEND_RECIPES_2024.find((recipe) => recipe.name === 'Coffee Liqueur (60 cases)');
+    expect(coffee?.target_abv).toBeGreaterThan(26);
+    expect(coffee?.target_abv).toBeLessThan(28);
+  });
 });

@@ -1,4 +1,5 @@
 import type { BlendIngredientInput, BlendRecipeSpiritSourceInput } from '../types';
+import { computeTheoreticalBlend, type AdditiveInput, type SpiritSourceInput } from './blend-formulation';
 
 /** Approximate bulk density for high-proof rum (93% ABV). */
 export const LBS_PER_GAL_93_RUM = 7.0;
@@ -86,12 +87,13 @@ function sugarBags(count: number, name: string, lbsPerBag = 50): BlendIngredient
   return sugarLbs(round2(count * lbsPerBag), name);
 }
 
-function flavorMl(ml: number, name: string): BlendIngredientInput {
+function flavorMl(ml: number, name: string, abv?: number): BlendIngredientInput {
   return {
     ingredient_type: 'flavoring',
     name,
     amount: ml,
     unit: 'ml',
+    ...(abv != null ? { abv } : {}),
     ...emptyIngredientFields(),
   };
 }
@@ -131,16 +133,30 @@ function otherGrams(amount: number, name: string, notes = ''): BlendIngredientIn
   };
 }
 
+function toSpiritInputs(sources: BlendRecipeSpiritSourceInput[]): SpiritSourceInput[] {
+  return sources.map((source) => ({
+    volumeGal: source.volume_gal,
+    abv: source.abv,
+    label: source.spirit_label,
+  }));
+}
+
+function toAdditiveInputs(ingredients: BlendIngredientInput[]): AdditiveInput[] {
+  return ingredients.map((ingredient) => ({
+    ingredientType: ingredient.ingredient_type,
+    name: ingredient.name,
+    amount: ingredient.amount,
+    unit: ingredient.unit,
+    abv: ingredient.abv,
+  }));
+}
+
 function estimateTargetAbv(
   spirits: BlendRecipeSpiritSourceInput[],
-  waterLbs: number,
+  ingredients: BlendIngredientInput[],
 ): number | null {
-  const spiritGal = spirits.reduce((sum, source) => sum + source.volume_gal, 0);
-  const waterGal = waterLbs / LBS_PER_GAL_WATER;
-  const totalGal = spiritGal + waterGal;
-  if (totalGal <= 0) return null;
-  const proofingGal = spirits.reduce((sum, source) => sum + source.volume_gal * source.abv, 0);
-  return round1(proofingGal / totalGal);
+  const result = computeTheoreticalBlend(toSpiritInputs(spirits), toAdditiveInputs(ingredients));
+  return result.volumeGal > 0 ? round1(result.abv) : null;
 }
 
 function rumBlendRecipe(
@@ -154,14 +170,15 @@ function rumBlendRecipe(
   rumAbv = 93,
 ): BlendRecipeSeed {
   const spirit = spiritFromLbs(rumLbs, rumLabel, rumAbv);
+  const allIngredients = [waterFromLbs(waterLbs), ...ingredients];
   return {
     name,
     product_name: productName,
-    target_abv: estimateTargetAbv([spirit], waterLbs),
+    target_abv: estimateTargetAbv([spirit], allIngredients),
     target_brix: null,
     notes: batchNotes,
     spirit_sources: [spirit],
-    ingredients: [waterFromLbs(waterLbs), ...ingredients],
+    ingredients: allIngredients,
   };
 }
 
@@ -248,8 +265,8 @@ export const BLEND_RECIPES_2024: BlendRecipeSeed[] = [
     '93% rum',
     [
       syrupLbs(16.3, 'CS1 sweetener'),
-      flavorMl(408, 'Natural vanilla'),
-      flavorMl(194, 'Artificial vanilla'),
+      flavorMl(408, 'Natural vanilla', 10),
+      flavorMl(194, 'Artificial vanilla', 10),
       flavorMl(490, 'Natural spiced rum flavor'),
       colorMl(490),
     ],
@@ -458,20 +475,24 @@ export const BLEND_RECIPES_2024: BlendRecipeSeed[] = [
     ],
     ingredients: [colorMl(36)],
   },
-  {
-    name: 'Cookie Rum (50 L)',
-    product_name: 'Cookie Rum',
-    target_abv: estimateTargetAbv([spiritFromLiters(15, '93% rum', 93)], 63),
-    target_brix: null,
-    notes: '15 L (27 lbs) 93% rum + 29 L (63 lbs) water + 25 lbs sugar. Source: RECEIPES 2024.',
-    spirit_sources: [spiritFromLiters(15, '93% rum', 93)],
-    ingredients: [
+  (() => {
+    const spirit = spiritFromLiters(15, '93% rum', 93);
+    const ingredients = [
       waterFromLbs(63),
       sugarLbs(25, 'Sugar'),
       flavorMl(350, 'Cookie flavor'),
-      flavorMl(200, 'Natural vanilla'),
-    ],
-  },
+      flavorMl(200, 'Natural vanilla', 10),
+    ];
+    return {
+      name: 'Cookie Rum (50 L)',
+      product_name: 'Cookie Rum',
+      target_abv: estimateTargetAbv([spirit], ingredients),
+      target_brix: null,
+      notes: '15 L (27 lbs) 93% rum + 29 L (63 lbs) water + 25 lbs sugar. Source: RECEIPES 2024.',
+      spirit_sources: [spirit],
+      ingredients,
+    };
+  })(),
   ginBotanicalRecipe(
     'Gin — Offshore',
     [

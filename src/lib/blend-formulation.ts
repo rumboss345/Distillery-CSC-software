@@ -1,6 +1,7 @@
 import {
   formatCorrectionWithAlternate,
   formatSpiritCorrectionWithAlternate,
+  ingredientPureAlcoholGal,
   ingredientVolumeGal,
   toLbs,
 } from './blending';
@@ -17,6 +18,8 @@ export interface AdditiveInput {
   name: string;
   amount: number;
   unit: string;
+  /** ABV % when this additive contributes alcohol (e.g. vanilla extract). */
+  abv?: number | null;
   /** Optional dissolved solids contribution (°Bx per gallon equivalent). */
   brixPerGal?: number;
   costPerUnit?: number;
@@ -106,10 +109,15 @@ export function computeTheoreticalBlend(
   additives: AdditiveInput[],
 ): TheoreticalBlendResult {
   const spiritVolume = spirits.reduce((s, sp) => s + Math.max(0, sp.volumeGal), 0);
-  const pureAlcoholGal = spirits.reduce(
+  const spiritAlcoholGal = spirits.reduce(
     (s, sp) => s + Math.max(0, sp.volumeGal) * Math.max(0, sp.abv) / 100,
     0,
   );
+  const additiveAlcoholGal = additives.reduce(
+    (s, a) => s + ingredientPureAlcoholGal({ ...a, ingredient_type: a.ingredientType }),
+    0,
+  );
+  const pureAlcoholGal = spiritAlcoholGal + additiveAlcoholGal;
   const additiveVolume = additives.reduce(
     (s, a) => s + ingredientVolumeGal({ ...a, ingredient_type: a.ingredientType }),
     0,
@@ -144,7 +152,11 @@ export function solveWaterForTargetAbv(
 ): { waterGal: number; result: TheoreticalBlendResult } | null {
   if (targetAbv <= 0) return null;
   const nonWater = additives.filter((a) => a.ingredientType !== 'water');
-  const pureAlcohol = spirits.reduce((s, sp) => s + sp.volumeGal * sp.abv / 100, 0);
+  const pureAlcohol = spirits.reduce((s, sp) => s + sp.volumeGal * sp.abv / 100, 0)
+    + nonWater.reduce(
+      (s, a) => s + ingredientPureAlcoholGal({ ...a, ingredient_type: a.ingredientType }),
+      0,
+    );
   const fixedVolume = spirits.reduce((s, sp) => s + sp.volumeGal, 0)
     + nonWater.reduce((s, a) => s + ingredientVolumeGal({ ...a, ingredient_type: a.ingredientType }), 0);
   if (pureAlcohol <= 0) return null;

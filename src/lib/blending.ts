@@ -16,14 +16,31 @@ export const BLEND_INGREDIENT_TYPES: { value: BlendIngredientType; label: string
 export const WEIGHT_UNITS = ['lbs', 'oz', 'kg', 'g'] as const;
 export const VOLUME_UNITS = ['gal', 'fl oz', 'ml', 'l'] as const;
 
+/**
+ * Bulk density (g/ml) for converting weight → displaced liquid volume.
+ * Sugar and CS1 syrup values from Liqour Blending FINAL (003).xlsx.
+ */
+const BULK_DENSITY_G_PER_ML: Record<BlendIngredientType, number> = {
+  water: 1.0,
+  sugar: 1.59,
+  syrup: 1.368,
+  flavoring: 1.0,
+  color: 1.0,
+  other: 1.0,
+};
+
+function lbsPerGallonFromDensity(densityGPerMl: number): number {
+  return (ML_PER_GALLON * densityGPerMl) / 453.592;
+}
+
 /** Approximate bulk density for converting weight → liquid volume added. */
 const LBS_PER_GALLON: Record<BlendIngredientType, number> = {
   water: 8.34,
-  sugar: 8.33,
-  syrup: 11.0,
-  flavoring: 8.34,
-  color: 8.34,
-  other: 8.34,
+  sugar: lbsPerGallonFromDensity(BULK_DENSITY_G_PER_ML.sugar),
+  syrup: lbsPerGallonFromDensity(BULK_DENSITY_G_PER_ML.syrup),
+  flavoring: lbsPerGallonFromDensity(BULK_DENSITY_G_PER_ML.flavoring),
+  color: lbsPerGallonFromDensity(BULK_DENSITY_G_PER_ML.color),
+  other: lbsPerGallonFromDensity(BULK_DENSITY_G_PER_ML.other),
 };
 
 export interface MeasureRecommendation {
@@ -344,6 +361,14 @@ export function ingredientWeightLbs(
   return volGal * LBS_PER_GALLON[ingredient.ingredient_type];
 }
 
+export function ingredientPureAlcoholGal(
+  ingredient: Pick<BlendIngredientInput, 'amount' | 'unit' | 'ingredient_type'> & { abv?: number | null },
+): number {
+  const abv = ingredient.abv ?? 0;
+  if (abv <= 0) return 0;
+  return ingredientVolumeGal(ingredient) * abv / 100;
+}
+
 export function ingredientVolumeGal(
   ingredient: Pick<BlendIngredientInput, 'amount' | 'unit' | 'ingredient_type'>,
 ): number {
@@ -413,14 +438,18 @@ export function formatCorrectionWithAlternate(
 export function computeBlendTotals(
   baseSpiritVolumeGal: number,
   baseSpiritAbv: number,
-  ingredients: BlendIngredientInput[],
+  ingredients: (BlendIngredientInput & { abv?: number | null })[],
 ): { finalVolumeGal: number; finalAbv: number } {
   const extraVolumeGal = ingredients.reduce(
     (sum, ing) => sum + ingredientVolumeGal(ing),
     0,
   );
+  const additiveAlcoholGal = ingredients.reduce(
+    (sum, ing) => sum + ingredientPureAlcoholGal(ing),
+    0,
+  );
   const finalVolumeGal = baseSpiritVolumeGal + extraVolumeGal;
-  const baseGpa = baseSpiritVolumeGal * baseSpiritAbv / 100;
+  const baseGpa = baseSpiritVolumeGal * baseSpiritAbv / 100 + additiveAlcoholGal;
   const finalAbv = finalVolumeGal > 0 ? (baseGpa / finalVolumeGal) * 100 : 0;
   return {
     finalVolumeGal: Math.round(finalVolumeGal * 1000) / 1000,

@@ -35,6 +35,32 @@ describe('computeTheoreticalBlend', () => {
     expect(result.density).toBeNull();
     expect(result.brix).not.toBeNull();
   });
+
+  it('includes sugar volume when calculating final ABV', () => {
+    const withoutSugar = computeTheoreticalBlend(
+      [{ volumeGal: 88.29, abv: 93 }],
+      [{ ingredientType: 'water', name: 'Water', amount: 120.38, unit: 'gal' }],
+    );
+    const withSugar = computeTheoreticalBlend(
+      [{ volumeGal: 88.29, abv: 93 }],
+      [
+        { ingredientType: 'water', name: 'Water', amount: 120.38, unit: 'gal' },
+        { ingredientType: 'sugar', name: 'White sugar', amount: 406, unit: 'lbs' },
+        { ingredientType: 'flavoring', name: 'Coconut', amount: 2760, unit: 'ml' },
+      ],
+    );
+    expect(withSugar.abv).toBeLessThan(withoutSugar.abv);
+    expect(withSugar.abv).toBeCloseTo(34.2, 0);
+  });
+
+  it('includes alcoholic additives in pure alcohol', () => {
+    const result = computeTheoreticalBlend(
+      [{ volumeGal: 10, abv: 40 }],
+      [{ ingredientType: 'flavoring', name: 'Vanilla', amount: 1, unit: 'gal', abv: 10 }],
+    );
+    expect(result.volumeGal).toBe(11);
+    expect(result.abv).toBeCloseTo(37.27, 1);
+  });
 });
 
 describe('solveWaterForTargetAbv', () => {
@@ -47,6 +73,22 @@ describe('solveWaterForTargetAbv', () => {
     expect(solved).not.toBeNull();
     expect(solved!.waterGal).toBeGreaterThan(0);
     expect(solved!.result.abv).toBeCloseTo(40, 0);
+  });
+
+  it('accounts for sugar volume when solving proofing water', () => {
+    const withoutSugar = solveWaterForTargetAbv(
+      [{ volumeGal: 88.29, abv: 93 }],
+      [],
+      35,
+    );
+    const withSugar = solveWaterForTargetAbv(
+      [{ volumeGal: 88.29, abv: 93 }],
+      [{ ingredientType: 'sugar', name: 'White sugar', amount: 406, unit: 'lbs' }],
+      35,
+    );
+    expect(withSugar).not.toBeNull();
+    expect(withSugar!.waterGal).toBeLessThan(withoutSugar!.waterGal);
+    expect(withSugar!.result.abv).toBeCloseTo(35, 0);
   });
 });
 

@@ -339,6 +339,8 @@ export interface BlendIngredientInput {
   name: string;
   amount: number;
   unit: string;
+  /** ABV % when this additive contributes alcohol (e.g. vanilla extract). */
+  abv?: number | null;
   cost_per_unit?: number | null;
   lot_number?: string;
   inventory_item_id?: number | null;
