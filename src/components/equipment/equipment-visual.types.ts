@@ -16,6 +16,8 @@ export interface EquipmentVisualData {
   abv?: number;
   status: EquipmentVisualStatus;
   isFermenting?: boolean;
+  /** When set on in-use fermenters, drives red vs green liquid fill from Brix. */
+  fermenterLatestBrix?: number | null;
   detail?: string;
   planName?: string;
 }

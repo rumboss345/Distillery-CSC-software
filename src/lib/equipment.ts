@@ -1,4 +1,5 @@
 import type { EquipmentType, EquipmentStatus } from '../types';
+import { fermenterLiquidBrixPhase } from './fermentation';
 
 export const EQUIPMENT_TYPES: { value: EquipmentType; label: string }[] = [
   { value: 'fermenter', label: 'Fermenter' },
@@ -27,17 +28,27 @@ export const TYPE_COLORS: Record<EquipmentType, string> = {
 /** Distinct colours when equipment is actively running */
 export const IN_USE_COLORS = {
   fermenter: '#22c55e',
+  fermenterHighBrix: '#dc2626',
   still: '#f97316',
   holding_tank: '#38bdf8',
   default: '#38bdf8',
 } as const;
 
+export function getFermenterInUseDisplayColor(latestBrix: number | null | undefined): string {
+  const phase = fermenterLiquidBrixPhase(latestBrix);
+  if (phase === 'ready') return IN_USE_COLORS.fermenter;
+  return IN_USE_COLORS.fermenterHighBrix;
+}
+
 export function getEquipmentDisplayColor(
   type: EquipmentType,
   status: EquipmentStatus,
+  options?: { fermenterLatestBrix?: number | null },
 ): string {
   if (status === 'in_use') {
-    if (type === 'fermenter') return IN_USE_COLORS.fermenter;
+    if (type === 'fermenter') {
+      return getFermenterInUseDisplayColor(options?.fermenterLatestBrix);
+    }
     if (type === 'pot_still' || type === 'column_still') return IN_USE_COLORS.still;
     if (type === 'holding_tank') return IN_USE_COLORS.holding_tank;
     return IN_USE_COLORS.default;

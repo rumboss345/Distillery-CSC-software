@@ -2212,19 +2212,29 @@ export function getFloorEquipmentWithContext(planId = 1): FloorEquipmentView[] {
       };
     }
     if (eq.status !== 'in_use' || eq.equipment_type !== 'fermenter') return eq;
-    const info = queryOne<{ batch_number: string; volume_gal: number; status: string }>(`
-      SELECT m.batch_number, a.volume_gal, m.status
+    const info = queryOne<{
+      mash_batch_id: number;
+      batch_number: string;
+      volume_gal: number;
+      status: string;
+      actual_brix: number | null;
+      target_brix: number | null;
+    }>(`
+      SELECT m.id AS mash_batch_id, m.batch_number, a.volume_gal, m.status, m.actual_brix, m.target_brix
       FROM mash_fermenter_assignments a
       JOIN mash_batches m ON m.id = a.mash_batch_id
       WHERE a.floor_equipment_id = ?
       LIMIT 1
     `, [eq.id]);
     if (!info) return eq;
+    const logBrix = getLatestFermentationBrix(info.mash_batch_id, eq.id);
+    const active_latest_brix = logBrix ?? info.actual_brix ?? info.target_brix ?? null;
     return {
       ...eq,
       active_batch_number: info.batch_number,
       active_volume_gal: info.volume_gal,
       active_mash_status: info.status as FloorEquipmentView['active_mash_status'],
+      active_latest_brix,
     };
   });
 }
