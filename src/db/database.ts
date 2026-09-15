@@ -367,6 +367,20 @@ function runMigrations(): void {
     WHERE name = 'Mash Tun' AND equipment_type = 'mash_tun'
   `);
   seedCscFloorEquipment({ onlyMissing: true });
+  db.run(`
+    UPDATE floor_equipment
+    SET equipment_type = 'holding_tank',
+        status = CASE WHEN status = 'offline' THEN 'empty' ELSE status END,
+        notes = CASE name
+          WHEN 'Latina 500L' THEN '500L holding tank'
+          WHEN 'Latina 300-1' THEN '300L holding tank'
+          WHEN 'Latina 300-2' THEN '300L holding tank'
+          WHEN 'Latina 300-3' THEN '300L holding tank'
+          ELSE notes
+        END
+    WHERE name IN ('Latina 500L', 'Latina 300-1', 'Latina 300-2', 'Latina 300-3')
+      AND equipment_type IN ('pot_still', 'column_still')
+  `);
   db.run(`UPDATE floor_equipment SET capacity_gal = 1000 WHERE equipment_type = 'fermenter'`);
   const hasProcessPos = queryOne<{ name: string }>(
     "SELECT name FROM pragma_table_info('floor_equipment') WHERE name='process_pos_x'",
