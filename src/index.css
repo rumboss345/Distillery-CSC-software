@@ -2512,6 +2512,13 @@ tr:hover td {
   color: #111;
 }
 
+.blend-worksheet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
 .blend-production-worksheet {
   padding: 1.25rem 1.5rem;
   font-size: 0.92rem;
@@ -2622,6 +2629,7 @@ tr:hover td {
   .wizard-produce-checklist,
   .wizard-output-tank-label,
   .field-hint,
+  .blend-worksheet-actions,
   .no-print,
   .modal-overlay > button,
   .modal-header {

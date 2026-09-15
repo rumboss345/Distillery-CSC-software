@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   computeBlendFormulation,
   defaultBlendingOutputTankId,
@@ -25,6 +25,7 @@ import { DatePicker } from '../components/DatePicker';
 import { Modal } from '../components/Modal';
 import { useAuth } from '../context/AuthContext';
 import { defaultAssignee } from '../lib/assignee';
+import { downloadWorksheetPdf, worksheetPdfFilename } from '../lib/download-worksheet-pdf';
 import { StatusBadge } from '../components/StatusBadge';
 import {
   BLEND_INGREDIENT_TYPES,
@@ -292,6 +293,8 @@ export function Blending() {
   const [targetYieldInput, setTargetYieldInput] = useState('');
   const [waterAdjustmentNote, setWaterAdjustmentNote] = useState<string | null>(null);
   const [abvConfirmed, setAbvConfirmed] = useState(false);
+  const [worksheetPdfExporting, setWorksheetPdfExporting] = useState(false);
+  const worksheetPrintRef = useRef<HTMLDivElement>(null);
 
   void key;
 
@@ -864,6 +867,28 @@ export function Blending() {
       refresh();
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Could not approve recipe.');
+    }
+  };
+
+  const handleDownloadWorksheetPdf = async () => {
+    const container = worksheetPrintRef.current;
+    const worksheet = container?.querySelector('.blend-production-worksheet') as HTMLElement | null;
+    if (!worksheet) {
+      alert('Worksheet is not ready yet.');
+      return;
+    }
+
+    setWorksheetPdfExporting(true);
+    try {
+      await downloadWorksheetPdf(
+        worksheet,
+        worksheetPdfFilename(form.batch_number),
+        container,
+      );
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Could not generate PDF.');
+    } finally {
+      setWorksheetPdfExporting(false);
     }
   };
 
@@ -1596,7 +1621,7 @@ export function Blending() {
                 return <li key={i}>Pull {entered} ({s.volume_gal.toFixed(2)} gal) from {tank?.name}</li>;
               })}
             </ul>
-            <div className="blend-worksheet-print-area">
+            <div className="blend-worksheet-print-area" ref={worksheetPrintRef}>
               <BlendProductionWorksheet
                 batchNumber={form.batch_number}
                 productName={form.product_name}
@@ -1615,13 +1640,23 @@ export function Blending() {
                 notes={form.notes}
               />
             </div>
-            <button
-              type="button"
-              className="btn btn-secondary no-print"
-              onClick={() => window.print()}
-            >
-              Print staff worksheet
-            </button>
+            <div className="blend-worksheet-actions no-print">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => window.print()}
+              >
+                Print staff worksheet
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={handleDownloadWorksheetPdf}
+                disabled={worksheetPdfExporting}
+              >
+                {worksheetPdfExporting ? 'Generating PDF…' : 'Download PDF'}
+              </button>
+            </div>
             <label className="wizard-output-tank-label">
               Where should this batch go?
               <select
