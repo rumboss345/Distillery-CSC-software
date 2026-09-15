@@ -119,6 +119,7 @@ export function FloorCanvas({
           const color = getEquipmentDisplayColor(item.equipment_type, item.status);
           const isSelected = selectedId === item.id;
           const isDragging = dragging?.id === item.id;
+          const isFermenting = item.equipment_type === 'fermenter' && item.active_mash_status === 'fermenting';
           const posX = isDragging && livePos ? livePos.x : item.pos_x_ft;
           const posY = isDragging && livePos ? livePos.y : item.pos_y_ft;
           const w = item.width_ft * PX_PER_FT;
@@ -127,7 +128,7 @@ export function FloorCanvas({
           return (
             <div
               key={item.id}
-              className={`floor-equipment floor-equipment--${item.equipment_type}${isSelected ? ' selected' : ''}${item.status === 'in_use' ? ' in-use' : ''}${item.status === 'cleaning' ? ' cleaning' : ''}${item.status === 'offline' ? ' offline' : ''}${isDragging ? ' dragging' : ''}`}
+              className={`floor-equipment floor-equipment--${item.equipment_type}${isSelected ? ' selected' : ''}${item.status === 'in_use' ? ' in-use' : ''}${isFermenting ? ' fermenting' : ''}${item.status === 'cleaning' ? ' cleaning' : ''}${item.status === 'offline' ? ' offline' : ''}${isDragging ? ' dragging' : ''}`}
               style={{
                 left: posX * PX_PER_FT,
                 top: posY * PX_PER_FT,
@@ -149,7 +150,15 @@ export function FloorCanvas({
               }}
             >
               <div className="floor-equipment-icon">
-                {item.equipment_type === 'fermenter' && <div className="eq-shape eq-fermenter" />}
+                {item.equipment_type === 'fermenter' && (
+                  <div className="eq-shape eq-fermenter">
+                    {isFermenting && (
+                      <div className="fermenter-bubbles" aria-hidden>
+                        <span /><span /><span /><span /><span />
+                      </div>
+                    )}
+                  </div>
+                )}
                 {item.equipment_type === 'pot_still' && <div className="eq-shape eq-pot-still" />}
                 {item.equipment_type === 'column_still' && <div className="eq-shape eq-column-still" />}
                 {item.equipment_type === 'mash_tun' && <div className="eq-shape eq-mash-tun" />}
@@ -201,6 +210,10 @@ export function FloorLegend() {
         <div className="floor-legend-item">
           <span className="floor-legend-swatch" style={{ background: IN_USE_COLORS.fermenter }} />
           Fermenter in use
+        </div>
+        <div className="floor-legend-item">
+          <span className="floor-legend-swatch floor-legend-swatch--fermenting" />
+          Fermenting (bubbles)
         </div>
         <div className="floor-legend-item">
           <span className="floor-legend-swatch" style={{ background: IN_USE_COLORS.still }} />

@@ -15,6 +15,7 @@ export interface EquipmentVisualData {
   liquidName?: string;
   abv?: number;
   status: EquipmentVisualStatus;
+  isFermenting?: boolean;
   detail?: string;
   planName?: string;
 }

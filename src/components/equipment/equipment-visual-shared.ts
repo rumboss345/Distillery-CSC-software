@@ -82,6 +82,7 @@ export function buildEquipmentVisualData(
     liquidName: liquidName || undefined,
     abv: report?.abv ?? (item.active_abv != null && item.active_abv > 0 ? item.active_abv : undefined),
     status: mapVisualStatus(item.status, fillPercent),
+    isFermenting: item.equipment_type === 'fermenter' && item.active_mash_status === 'fermenting',
     detail: report?.detail || item.notes || undefined,
     planName,
   };
