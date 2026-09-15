@@ -1,4 +1,4 @@
-import type { BlendIngredientInput, BlendIngredientType } from '../types';
+import type { BlendIngredientInput, BlendIngredientType, InventoryItem } from '../types';
 import { ML_PER_GALLON } from '../types';
 import { proofFromAbv, weightFromWineGallons, wineGallonsFromWeight } from '../services/spirit-gauging';
 
@@ -117,6 +117,55 @@ export function unitsForMeasureMode(type: BlendIngredientType, mode: MeasureMode
   if (type === 'syrup') return ['gal', 'ml', 'fl oz'];
   if (type === 'color') return ['ml', 'fl oz'];
   return ['gal', 'fl oz', 'ml', 'l'];
+}
+
+const NON_BLEND_INVENTORY_CATEGORIES = new Set([
+  'packaging',
+  'bottles',
+  'labels',
+  'barrels',
+  'yeast',
+]);
+
+/** Preferred inventory categories for each blend additive type (water excluded). */
+export function inventoryCategoriesForBlendType(type: BlendIngredientType): string[] {
+  switch (type) {
+    case 'sugar':
+      return ['sugar'];
+    case 'syrup':
+      return ['sugar', 'syrup'];
+    case 'flavoring':
+      return ['flavoring', 'other'];
+    case 'color':
+      return ['color', 'other'];
+    case 'other':
+      return ['other'];
+    default:
+      return [];
+  }
+}
+
+export function filterInventoryForBlendIngredient(
+  items: InventoryItem[],
+  type: BlendIngredientType,
+): InventoryItem[] {
+  if (type === 'water') return [];
+  const categories = inventoryCategoriesForBlendType(type);
+  const filtered = items.filter((item) => categories.includes(item.category.toLowerCase()));
+  if (filtered.length > 0) return filtered;
+  return items.filter((item) => !NON_BLEND_INVENTORY_CATEGORIES.has(item.category.toLowerCase()));
+}
+
+/** Unit choices for a blend additive row, always including the current unit. */
+export function unitOptionsForBlendIngredient(
+  ingredient: Pick<BlendIngredientInput, 'ingredient_type' | 'unit'>,
+): string[] {
+  const mode = inferMeasureMode(ingredient.unit);
+  const options = unitsForMeasureMode(ingredient.ingredient_type, mode);
+  if (ingredient.unit && !options.includes(ingredient.unit)) {
+    return [ingredient.unit, ...options];
+  }
+  return options;
 }
 
 export function spiritUnitsForMeasureMode(mode: MeasureMode): string[] {

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import {
   deleteBlendRecipe,
   getBlendRecipes,
+  getInventoryItems,
   saveBlendRecipe,
   useRefreshKey,
 } from '../db/queries';
@@ -13,9 +14,14 @@ import {
   formatBlendRecipeSpiritPull,
   formatSpiritPullWeightLbs,
   ingredientWeightLbs,
+  filterInventoryForBlendIngredient,
+  inferMeasureMode,
   measureAlternate,
   recommendMeasureMode,
   spiritWeightLbsFromVolumeGal,
+  unitOptionsForBlendIngredient,
+  unitsForMeasureMode,
+  type MeasureMode,
 } from '../lib/blending';
 import type {
   BlendIngredientInput,
@@ -52,6 +58,8 @@ const emptyRecipeForm = () => ({
 export function BlendRecipesTab() {
   const { key, refresh } = useRefreshKey();
   const recipes = getBlendRecipes();
+  const inventoryItems = getInventoryItems();
+  const inventoryById = new Map(inventoryItems.map((item) => [item.id, item]));
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<number | undefined>();
   const [form, setForm] = useState(emptyRecipeForm());
@@ -124,6 +132,45 @@ export function BlendRecipesTab() {
     deleteBlendRecipe(id);
     if (selectedId === id) setSelectedId(null);
     refresh();
+  };
+
+  const updateIngredient = (index: number, patch: Partial<BlendIngredientInput>) => {
+    setIngredients((prev) => prev.map((row, i) => {
+      if (i !== index) return row;
+      const next = { ...row, ...patch };
+      if (patch.ingredient_type) {
+        next.unit = defaultUnitForMode(
+          patch.ingredient_type,
+          recommendMeasureMode(patch.ingredient_type).mode,
+        );
+        if (patch.ingredient_type === 'water') {
+          next.inventory_item_id = null;
+          if (!next.name.trim()) next.name = 'Proofing water';
+        }
+      }
+      return next;
+    }));
+  };
+
+  const setIngredientMeasureMode = (index: number, mode: MeasureMode) => {
+    setIngredients((prev) => prev.map((row, i) => {
+      if (i !== index) return row;
+      return { ...row, unit: defaultUnitForMode(row.ingredient_type, mode) };
+    }));
+  };
+
+  const handleInventorySelect = (index: number, rawId: string) => {
+    if (!rawId) {
+      updateIngredient(index, { inventory_item_id: null });
+      return;
+    }
+    const item = inventoryById.get(parseInt(rawId, 10));
+    if (!item) return;
+    updateIngredient(index, {
+      inventory_item_id: item.id,
+      name: item.name,
+      unit: item.unit,
+    });
   };
 
   return (
@@ -218,11 +265,19 @@ export function BlendRecipesTab() {
             <>
               <h4>Additives</h4>
               <ul>
-                {selected.ingredients.map((ingredient, index) => (
-                  <li key={index}>
-                    {formatBlendRecipeAdditive(ingredient)}
-                  </li>
-                ))}
+                {selected.ingredients.map((ingredient, index) => {
+                  const linked = ingredient.inventory_item_id
+                    ? inventoryById.get(ingredient.inventory_item_id)
+                    : null;
+                  return (
+                    <li key={index}>
+                      {formatBlendRecipeAdditive(ingredient)}
+                      {linked && (
+                        <span className="field-hint"> · Inventory: {linked.name}</span>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
               {(() => {
                 const totalLbs = selected.ingredients.reduce(
@@ -372,74 +427,125 @@ export function BlendRecipesTab() {
                   + Add additive
                 </button>
               </div>
-              {ingredients.map((ingredient, index) => (
-                <div key={index} className="bottling-line-row">
-                  <div className="form-group">
-                    <label>Type</label>
-                    <select
-                      value={ingredient.ingredient_type}
-                      onChange={(e) => setIngredients((prev) => prev.map((row, i) => (
-                        i === index
-                          ? {
-                            ...row,
+              {ingredients.map((ingredient, index) => {
+                const measureMode = inferMeasureMode(ingredient.unit);
+                const recommendation = recommendMeasureMode(ingredient.ingredient_type);
+                const unitOptions = unitOptionsForBlendIngredient(ingredient);
+                const inventoryOptions = filterInventoryForBlendIngredient(
+                  inventoryItems,
+                  ingredient.ingredient_type,
+                );
+                const isWater = ingredient.ingredient_type === 'water';
+
+                return (
+                  <div key={index} className="wizard-additive-card" style={{ marginBottom: '0.75rem' }}>
+                    <div className="bottling-line-row">
+                      <div className="form-group">
+                        <label>Type</label>
+                        <select
+                          value={ingredient.ingredient_type}
+                          onChange={(e) => updateIngredient(index, {
                             ingredient_type: e.target.value as BlendIngredientInput['ingredient_type'],
-                            unit: defaultUnitForMode(
-                              e.target.value as BlendIngredientInput['ingredient_type'],
-                              recommendMeasureMode(e.target.value as BlendIngredientInput['ingredient_type']).mode,
-                            ),
-                          }
-                          : row
-                      )))}
-                    >
-                      {BLEND_INGREDIENT_TYPES.map((type) => (
-                        <option key={type.value} value={type.value}>{type.label}</option>
-                      ))}
-                    </select>
+                          })}
+                        >
+                          {BLEND_INGREDIENT_TYPES.map((type) => (
+                            <option key={type.value} value={type.value}>{type.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="form-group">
+                        <label>Name</label>
+                        <input
+                          value={ingredient.name}
+                          onChange={(e) => updateIngredient(index, { name: e.target.value })}
+                        />
+                      </div>
+                      {!isWater && (
+                        <div className="form-group">
+                          <label>Inventory item</label>
+                          <select
+                            value={ingredient.inventory_item_id ?? ''}
+                            onChange={(e) => handleInventorySelect(index, e.target.value)}
+                          >
+                            <option value="">— Select item —</option>
+                            {inventoryOptions.map((item) => (
+                              <option key={item.id} value={item.id}>
+                                {item.name} ({item.quantity} {item.unit})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                      <div className="form-group bottling-line-meta">
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-ghost"
+                          onClick={() => setIngredients((prev) => prev.filter((_, i) => i !== index))}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                    {!isWater && (
+                      <div className="measure-mode-toggle">
+                        <span className="measure-mode-label">Measure by</span>
+                        <div className="measure-mode-buttons">
+                          <button
+                            type="button"
+                            className={`btn btn-sm ${measureMode === 'weight' ? 'btn-primary' : 'btn-secondary'}`}
+                            onClick={() => setIngredientMeasureMode(index, 'weight')}
+                          >
+                            Weight
+                            {recommendation.mode === 'weight' && <span className="measure-best-tag">Best</span>}
+                          </button>
+                          <button
+                            type="button"
+                            className={`btn btn-sm ${measureMode === 'volume' ? 'btn-primary' : 'btn-secondary'}`}
+                            onClick={() => setIngredientMeasureMode(index, 'volume')}
+                          >
+                            Volume
+                            {recommendation.mode === 'volume' && <span className="measure-best-tag">Best</span>}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    {isWater && (
+                      <p className="field-hint">Water is measured by volume only (not tied to inventory).</p>
+                    )}
+                    <div className="bottling-line-row">
+                      <div className="form-group">
+                        <label>Amount</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={ingredient.amount || ''}
+                          onChange={(e) => updateIngredient(index, {
+                            amount: parseFloat(e.target.value) || 0,
+                          })}
+                        />
+                        {(() => {
+                          const alt = measureAlternate(ingredient);
+                          return alt ? <span className="field-hint">{alt.label}</span> : null;
+                        })()}
+                      </div>
+                      <div className="form-group">
+                        <label>Unit</label>
+                        <select
+                          value={ingredient.unit}
+                          onChange={(e) => updateIngredient(index, { unit: e.target.value })}
+                        >
+                          {(isWater
+                            ? unitsForMeasureMode('water', 'volume')
+                            : unitOptions
+                          ).map((unit) => (
+                            <option key={unit} value={unit}>{unit}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
                   </div>
-                  <div className="form-group">
-                    <label>Name</label>
-                    <input
-                      value={ingredient.name}
-                      onChange={(e) => setIngredients((prev) => prev.map((row, i) => (
-                        i === index ? { ...row, name: e.target.value } : row
-                      )))}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>Amount</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={ingredient.amount || ''}
-                      onChange={(e) => setIngredients((prev) => prev.map((row, i) => (
-                        i === index ? { ...row, amount: parseFloat(e.target.value) || 0 } : row
-                      )))}
-                    />
-                    {(() => {
-                      const alt = measureAlternate(ingredient);
-                      return alt ? <span className="field-hint">{alt.label}</span> : null;
-                    })()}
-                  </div>
-                  <div className="form-group">
-                    <label>Unit</label>
-                    <input
-                      value={ingredient.unit}
-                      onChange={(e) => setIngredients((prev) => prev.map((row, i) => (
-                        i === index ? { ...row, unit: e.target.value } : row
-                      )))}
-                    />
-                  </div>
-                  <div className="form-group bottling-line-meta">
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-ghost"
-                      onClick={() => setIngredients((prev) => prev.filter((_, i) => i !== index))}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
           <div className="modal-actions">
