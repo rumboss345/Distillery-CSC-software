@@ -1023,11 +1023,25 @@ tr:hover td {
   box-shadow: inset 0 -6px 12px rgba(255, 255, 255, 0.12);
 }
 
-.fermenter-bubble {
-  fill: rgba(255, 255, 255, 0.5);
+@keyframes fermenter-bubble-rise-svg {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 0.7;
+  }
+  70% {
+    opacity: 0.35;
+  }
+  100% {
+    transform: translateY(-75px) scale(0.55);
+    opacity: 0;
+  }
+}
+
+.fermenter-bubbles-svg .fermenter-bubble {
+  fill: rgba(255, 255, 255, 0.55);
   transform-box: fill-box;
   transform-origin: center;
-  animation: fermenter-bubble-rise 2.6s ease-in infinite;
+  animation: fermenter-bubble-rise-svg 2.6s ease-in infinite;
 }
 
 .floor-legend-swatch--fermenting {
@@ -1037,7 +1051,7 @@ tr:hover td {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .fermenter-bubble,
+  .fermenter-bubbles-svg .fermenter-bubble,
   .fermenter-bubbles span {
     animation: none;
     opacity: 0.35;

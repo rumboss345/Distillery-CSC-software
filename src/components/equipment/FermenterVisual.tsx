@@ -21,7 +21,10 @@ export function FermenterVisual(props: EquipmentVisualProps) {
   const topY = 52;
   const innerHeight = bottomY - topY;
   const liquid = LIQUID_COLORS[data.status];
-  const fillH = (data.fillPercent / 100) * innerHeight;
+  const effectiveFillPercent = data.fillPercent > 0
+    ? data.fillPercent
+    : (data.isFermenting ? 60 : 0);
+  const fillH = (effectiveFillPercent / 100) * innerHeight;
   const surfaceY = bottomY - fillH;
 
   const vesselPath = useMemo(
@@ -91,7 +94,7 @@ export function FermenterVisual(props: EquipmentVisualProps) {
         <g clipPath={`url(#${uid}-clip)`}>{slats}</g>
 
         {/* Liquid fill */}
-        {data.fillPercent > 0 && (
+        {effectiveFillPercent > 0 && (
           <g clipPath={`url(#${uid}-clip)`}>
             <rect
               className="equipment-liquid-fill"
@@ -102,7 +105,7 @@ export function FermenterVisual(props: EquipmentVisualProps) {
               fill={`url(#${uid}-liq)`}
               opacity="0.9"
             />
-            {data.fillPercent > 4 && (
+            {effectiveFillPercent > 4 && (
               <ellipse
                 className="equipment-liquid-surface"
                 cx="75"

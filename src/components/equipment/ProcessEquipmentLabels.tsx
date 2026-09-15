@@ -4,11 +4,12 @@ import type { TankVisualData } from './tank-visual.types';
 
 type LabelData = Pick<
   EquipmentVisualData,
-  'name' | 'capacityGal' | 'currentVolumeGal' | 'fillPercent' | 'liquidName' | 'abv'
+  'name' | 'capacityGal' | 'currentVolumeGal' | 'fillPercent' | 'liquidName' | 'abv' | 'isFermenting'
 >;
 
 export function ProcessEquipmentLabels({ data }: { data: LabelData | TankVisualData }) {
   const isEmpty = data.currentVolumeGal <= 0 && data.fillPercent <= 0 && !data.liquidName;
+  const isFermenting = 'isFermenting' in data && data.isFermenting === true;
   const volumeText = isEmpty
     ? `EMPTY (${formatGal(data.capacityGal)} gal)`
     : `${formatGal(data.currentVolumeGal)} gal`;
@@ -16,9 +17,12 @@ export function ProcessEquipmentLabels({ data }: { data: LabelData | TankVisualD
   return (
     <div className="process-equipment-labels">
       <div className="process-equipment-id">{data.name}</div>
-      <div className={`process-equipment-status${isEmpty ? ' process-equipment-status--empty' : ''}`}>
-        {volumeText}
+      <div className={`process-equipment-status${isEmpty ? ' process-equipment-status--empty' : ''}${isFermenting ? ' process-equipment-status--fermenting' : ''}`}>
+        {isFermenting ? 'Fermenting' : volumeText}
       </div>
+      {isFermenting && !isEmpty && (
+        <div className="process-equipment-abv">{volumeText}</div>
+      )}
       {!isEmpty && (
         <div className="process-equipment-abv">
           {data.abv != null && data.abv > 0 ? `${data.abv.toFixed(1)}% ABV` : '—'}
