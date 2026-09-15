@@ -574,25 +574,7 @@ export function Blending() {
     setWizardStep(1);
   };
 
-  useEffect(() => {
-    if (deepLinkHandled.current) return;
-    deepLinkHandled.current = true;
-    if (searchParams.get('source') === 'barrel') {
-      setWizardSpiritSource('barrel');
-      setShowWizard(true);
-    }
-    const recipeId = parseInt(searchParams.get('recipe') ?? '', 10);
-    if (recipeId > 0) {
-      applyBlendRecipe(recipeId, 1);
-      setShowWizard(true);
-    }
-  }, [searchParams]);
-
-  const openNew = () => {
-    if (blendRecipes.length === 0) {
-      alert('Create a blend recipe on the Recipes page before starting a batch.');
-      return;
-    }
+  const resetWizardForNewBatch = () => {
     setEditId(undefined);
     setSelectedRecipeId(null);
     setRecipeTemplate(null);
@@ -609,6 +591,38 @@ export function Blending() {
     setAbvConfirmed(false);
     setShowWizard(true);
   };
+
+  const openNew = () => {
+    const tankRecipes = blendRecipes.filter((recipe) => (recipe.source_type ?? 'tank') !== 'barrel');
+    if (tankRecipes.length === 0) {
+      alert('Create a tank blend recipe on the Recipes page before starting a batch.');
+      return;
+    }
+    setWizardSpiritSource('tank');
+    resetWizardForNewBatch();
+  };
+
+  const openBarrelBlending = () => {
+    setWizardSpiritSource('barrel');
+    resetWizardForNewBatch();
+  };
+
+  useEffect(() => {
+    if (deepLinkHandled.current) return;
+    deepLinkHandled.current = true;
+    if (searchParams.get('source') === 'barrel') {
+      openBarrelBlending();
+      return;
+    }
+    const recipeId = parseInt(searchParams.get('recipe') ?? '', 10);
+    if (recipeId > 0) {
+      const recipe = getBlendRecipe(recipeId);
+      if (recipe?.source_type === 'barrel') {
+        openBarrelBlending();
+      }
+      applyBlendRecipe(recipeId, 1);
+    }
+  }, [searchParams]);
 
   const openContinue = (blend: BlendProduct) => {
     setEditId(blend.id);
@@ -893,7 +907,7 @@ export function Blending() {
 
   const validateStep = (step: number): boolean => {
     if (step === 1) {
-      if (!editId && !selectedRecipeId) {
+      if (!editId && !selectedRecipeId && !isBarrelBlendWizard) {
         alert('Select a blend recipe to continue.');
         return false;
       }
@@ -1196,15 +1210,45 @@ export function Blending() {
       case 1:
         return (
           <>
-            {wizardBlendRecipes.length === 0 ? (
-              <p className="field-hint">
-                {isBarrelBlendWizard
-                  ? 'No barrel blend recipes yet. Add one on Recipes → Blending → Barrel blending.'
-                  : 'No blend recipes yet. Add one on the Recipes page under Blending before starting a batch.'}
-              </p>
+            {isBarrelBlendWizard ? (
+              <>
+                <p className="field-hint">
+                  Pull from aging barrels in inventory on the next step. Optionally load a saved barrel blend recipe below.
+                </p>
+                {wizardBlendRecipes.length > 0 && (
+                  <div className="form-group">
+                    <label>Barrel blend recipe (optional)</label>
+                    <select
+                      value={selectedRecipeId ?? ''}
+                      onChange={(e) => {
+                        const recipeId = e.target.value ? parseInt(e.target.value, 10) : 0;
+                        if (recipeId) {
+                          applyBlendRecipe(recipeId, 1);
+                        } else {
+                          setSelectedRecipeId(null);
+                          setRecipeTemplate(null);
+                          setSpiritSources([emptySpiritSource()]);
+                          setIngredients([]);
+                          setTargetYieldInput('');
+                          setForm((prev) => ({ ...prev, scale_factor: 1, blend_recipe_id: null }));
+                        }
+                      }}
+                    >
+                      <option value="">— Start without a recipe —</option>
+                      {wizardBlendRecipes.map((recipe) => (
+                        <option key={recipe.id} value={recipe.id}>
+                          {recipe.name}{recipe.product_name ? ` — ${recipe.product_name}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </>
+            ) : wizardBlendRecipes.length === 0 ? (
+              <p className="field-hint">No blend recipes yet. Add one on the Recipes page under Blending before starting a batch.</p>
             ) : (
               <div className="form-group">
-                <label>{isBarrelBlendWizard ? 'Barrel blend recipe (required)' : 'Blend recipe (required)'}</label>
+                <label>Blend recipe (required)</label>
                 <select
                   value={selectedRecipeId ?? ''}
                   onChange={(e) => {
@@ -1960,16 +2004,20 @@ export function Blending() {
     <div>
       <div className="page-header">
         <h2>Blending</h2>
-        <p>Every batch starts from a saved blend recipe. Scale it, assign tanks, then produce.</p>
+        <p>Tank batches use saved recipes and holding tanks. Barrel blending pulls directly from aging barrel inventory.</p>
         <div className="page-actions">
-          <button className="btn btn-primary" onClick={openNew}>+ New batch</button>
+          <button type="button" className="btn btn-primary" onClick={openNew}>+ New tank batch</button>
+          <button type="button" className="btn btn-secondary" onClick={openBarrelBlending}>+ Barrel blending</button>
         </div>
       </div>
 
       {blends.length === 0 ? (
         <div className="empty-state">
-          <p>No batches yet. Create a blend recipe on the Recipes page, then start a new batch here.</p>
-          <button className="btn btn-primary" onClick={openNew} style={{ marginTop: '1rem' }}>Start first batch</button>
+          <p>No batches yet. Start a tank batch from a saved recipe, or use barrel blending to pull from aging barrels.</p>
+          <div className="page-actions" style={{ marginTop: '1rem', justifyContent: 'center' }}>
+            <button type="button" className="btn btn-primary" onClick={openNew}>New tank batch</button>
+            <button type="button" className="btn btn-secondary" onClick={openBarrelBlending}>Barrel blending</button>
+          </div>
         </div>
       ) : (
         <div className="table-wrap">

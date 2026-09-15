@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
 import {
   getRecipes,
   getInventoryByCategory,
@@ -26,8 +25,6 @@ const emptyRecipe = (): Omit<Recipe, 'id' | 'created_at' | 'updated_at'> => ({
 });
 
 type RecipeTab = 'wash' | 'blend';
-type BlendRecipeTab = 'tank' | 'barrel';
-
 export function Recipes() {
   const { hasPermission } = useAuth();
   const canWash = hasPermission('wash');
@@ -38,7 +35,6 @@ export function Recipes() {
   const sugarItems = getInventoryByCategory('sugar');
   const yeastItems = getInventoryByCategory('yeast');
   const [tab, setTab] = useState<RecipeTab>(defaultTab);
-  const [blendTab, setBlendTab] = useState<BlendRecipeTab>('tank');
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<number | undefined>();
   const [form, setForm] = useState(emptyRecipe());
@@ -197,38 +193,7 @@ export function Recipes() {
         </>
       )}
 
-      {tab === 'blend' && canBlend && (
-        <>
-          <div className="recipe-tabs blend-source-tabs" role="tablist" aria-label="Blend recipe source">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={blendTab === 'tank'}
-              className={`recipe-tab${blendTab === 'tank' ? ' active' : ''}`}
-              onClick={() => setBlendTab('tank')}
-            >
-              Tank blending
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={blendTab === 'barrel'}
-              className={`recipe-tab${blendTab === 'barrel' ? ' active' : ''}`}
-              onClick={() => setBlendTab('barrel')}
-            >
-              Barrel blending
-            </button>
-          </div>
-          {blendTab === 'barrel' && (
-            <div className="page-actions" style={{ marginBottom: '1rem' }}>
-              <Link to="/blending?source=barrel" className="btn btn-secondary">
-                Open barrel blending batch
-              </Link>
-            </div>
-          )}
-          <BlendRecipesTab sourceType={blendTab} />
-        </>
-      )}
+      {tab === 'blend' && canBlend && <BlendRecipesTab />}
 
       {showForm && (
         <Modal title={editId ? 'Edit Recipe' : 'New Recipe'} onClose={() => setShowForm(false)}>
