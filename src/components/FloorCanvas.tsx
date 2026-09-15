@@ -116,7 +116,9 @@ export function FloorCanvas({
         </svg>
 
         {equipment.map((item) => {
-          const color = getEquipmentDisplayColor(item.equipment_type, item.status);
+          const color = getEquipmentDisplayColor(item.equipment_type, item.status, {
+            fermenterLatestBrix: item.equipment_type === 'fermenter' ? item.active_latest_brix : undefined,
+          });
           const isSelected = selectedId === item.id;
           const isDragging = dragging?.id === item.id;
           const isFermenting = item.equipment_type === 'fermenter' && item.active_mash_status === 'fermenting';

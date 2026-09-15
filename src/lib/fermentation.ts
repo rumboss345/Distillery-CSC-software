@@ -1,8 +1,20 @@
 /** Fermentations must reach this Brix before charging a fermenter to the still. */
 export const FERMENTATION_READY_MAX_BRIX = 10;
 
+/** Floor / process view: green liquid below this Brix (logs or starting gravity). */
+export const FERMENTER_LIQUID_GREEN_BELOW_BRIX = 6;
+
 export function isBrixReadyForDistillation(brix: number | null | undefined): boolean {
   return brix != null && brix < FERMENTATION_READY_MAX_BRIX;
+}
+
+export type FermenterLiquidBrixPhase = 'high' | 'ready' | 'unknown';
+
+/** High-sugar (red) vs ready-to-distill (green) fermenter fill from latest Brix reading. */
+export function fermenterLiquidBrixPhase(brix: number | null | undefined): FermenterLiquidBrixPhase {
+  if (brix == null || Number.isNaN(brix)) return 'unknown';
+  if (brix < FERMENTER_LIQUID_GREEN_BELOW_BRIX) return 'ready';
+  return 'high';
 }
 
 /** Convert Brix (Balling) to specific gravity. */

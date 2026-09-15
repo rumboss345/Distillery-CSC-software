@@ -1,7 +1,7 @@
 import { useId, useMemo } from 'react';
 import type { EquipmentVisualProps } from './equipment-visual.types';
 import { EquipmentVisualFrame } from './EquipmentVisualFrame';
-import { LIQUID_COLORS } from './equipment-visual-shared';
+import { liquidColorsForFermenter } from './equipment-visual-shared';
 
 const FERMENTER_BUBBLES = [
   { cx: 56, r: 2.4, delay: 0 },
@@ -20,7 +20,7 @@ export function FermenterVisual(props: EquipmentVisualProps) {
   const bottomY = 172;
   const topY = 52;
   const innerHeight = bottomY - topY;
-  const liquid = LIQUID_COLORS[data.status];
+  const liquid = liquidColorsForFermenter(data.status, data.fermenterLatestBrix);
   const effectiveFillPercent = data.fillPercent > 0
     ? data.fillPercent
     : (data.isFermenting ? 60 : 0);

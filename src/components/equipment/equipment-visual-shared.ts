@@ -2,6 +2,7 @@ import type { EquipmentStatus, EquipmentType } from '../../types';
 import { equipmentTypeLabel } from '../../lib/equipment';
 import type { EquipmentVolumeReport } from '../../types';
 import type { FloorEquipmentView } from '../../types';
+import { fermenterLiquidBrixPhase } from '../../lib/fermentation';
 import type { EquipmentVisualData, EquipmentVisualStatus } from './equipment-visual.types';
 
 export function formatGal(value: number): string {
@@ -51,6 +52,24 @@ export const LIQUID_COLORS: Record<EquipmentVisualStatus, { base: string; highli
   empty: { base: '#4a5568', highlight: '#718096', edge: '#2d3748' },
 };
 
+const FERMENTER_LIQUID_HIGH_BRIX = {
+  base: '#b91c1c',
+  highlight: '#f87171',
+  edge: '#7f1d1d',
+};
+
+const FERMENTER_LIQUID_READY = LIQUID_COLORS.active;
+
+export function liquidColorsForFermenter(
+  visualStatus: EquipmentVisualStatus,
+  latestBrix: number | null | undefined,
+): { base: string; highlight: string; edge: string } {
+  if (visualStatus !== 'active') return LIQUID_COLORS[visualStatus];
+  const phase = fermenterLiquidBrixPhase(latestBrix);
+  if (phase === 'ready') return FERMENTER_LIQUID_READY;
+  return FERMENTER_LIQUID_HIGH_BRIX;
+}
+
 export function buildEquipmentVisualData(
   item: FloorEquipmentView,
   report?: EquipmentVolumeReport,
@@ -83,6 +102,7 @@ export function buildEquipmentVisualData(
     abv: report?.abv ?? (item.active_abv != null && item.active_abv > 0 ? item.active_abv : undefined),
     status: mapVisualStatus(item.status, fillPercent),
     isFermenting: item.equipment_type === 'fermenter' && item.active_mash_status === 'fermenting',
+    fermenterLatestBrix: item.equipment_type === 'fermenter' ? item.active_latest_brix : undefined,
     detail: report?.detail || item.notes || undefined,
     planName,
   };
