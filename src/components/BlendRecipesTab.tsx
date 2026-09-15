@@ -375,60 +375,69 @@ export function BlendRecipesTab() {
       )}
 
       {showForm && (
-        <Modal title={editId ? 'Edit Blend Recipe' : 'New Blend Recipe'} onClose={() => setShowForm(false)}>
-          <div className="form-grid">
-            <div className="form-group">
-              <label>Recipe name</label>
-              <input
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="Spiced Rum 80 proof"
-              />
-            </div>
-            <div className="form-group">
-              <label>Product name</label>
-              <input
-                value={form.product_name}
-                onChange={(e) => setForm({ ...form, product_name: e.target.value })}
-                placeholder="Default product name for new batches"
-              />
-            </div>
-            <div className="form-group">
-              <label>Target proof (ABV %)</label>
-              <input
-                type="number"
-                step="0.1"
-                value={form.target_abv ?? ''}
-                onChange={(e) => setForm({
-                  ...form,
-                  target_abv: e.target.value ? parseFloat(e.target.value) : null,
-                })}
-              />
-            </div>
-            <div className="form-group">
-              <label>Target Brix</label>
-              <input
-                type="number"
-                step="0.1"
-                value={form.target_brix ?? ''}
-                onChange={(e) => setForm({
-                  ...form,
-                  target_brix: e.target.value ? parseFloat(e.target.value) : null,
-                })}
-              />
-            </div>
-            <div className="form-group full-width">
-              <label>Notes</label>
-              <textarea
-                rows={3}
-                value={form.notes}
-                onChange={(e) => setForm({ ...form, notes: e.target.value })}
-              />
-            </div>
+        <Modal
+          wide
+          title={editId ? 'Edit Blend Recipe' : 'New Blend Recipe'}
+          onClose={() => setShowForm(false)}
+        >
+          <div className="blend-recipe-form">
+            <section className="blend-recipe-section">
+              <h4 className="blend-recipe-section-title">Recipe details</h4>
+              <div className="form-grid blend-recipe-basics-grid">
+                <div className="form-group">
+                  <label>Recipe name</label>
+                  <input
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    placeholder="Spiced Rum 80 proof"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Product name</label>
+                  <input
+                    value={form.product_name}
+                    onChange={(e) => setForm({ ...form, product_name: e.target.value })}
+                    placeholder="Default product name for new batches"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Target proof (ABV %)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={form.target_abv ?? ''}
+                    onChange={(e) => setForm({
+                      ...form,
+                      target_abv: e.target.value ? parseFloat(e.target.value) : null,
+                    })}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Target Brix</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={form.target_brix ?? ''}
+                    onChange={(e) => setForm({
+                      ...form,
+                      target_brix: e.target.value ? parseFloat(e.target.value) : null,
+                    })}
+                  />
+                </div>
+                <div className="form-group full-width">
+                  <label>Notes</label>
+                  <textarea
+                    rows={2}
+                    value={form.notes}
+                    onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                  />
+                </div>
+              </div>
+            </section>
 
-            <div className="form-group full-width bottling-lines-section">
-              <div className="bottling-lines-header">
-                <label>Spirit pulls</label>
+            <section className="blend-recipe-section">
+              <div className="blend-recipe-section-header">
+                <h4 className="blend-recipe-section-title">Spirit pulls</h4>
                 <button
                   type="button"
                   className="btn btn-sm btn-secondary"
@@ -437,103 +446,107 @@ export function BlendRecipesTab() {
                   + Add spirit
                 </button>
               </div>
-              {spiritSources.map((source, index) => {
-                const synced = syncSpiritRecipeVolume(source);
-                const measureMode = inferMeasureMode(source.unit);
-                const unitOptions = spiritUnitsForMeasureMode(measureMode);
-                const alternate = source.amount > 0 && source.abv > 0
-                  ? spiritMeasureAlternate(source.amount, source.unit, source.abv)
-                  : null;
-                return (
-                  <div key={index} className="bottling-line-row wizard-additive-card" style={{ marginBottom: '0.75rem' }}>
-                    <div className="form-group">
-                      <label>Label</label>
-                      <input
-                        value={source.spirit_label}
-                        onChange={(e) => updateSpiritSource(index, { spirit_label: e.target.value })}
-                        placeholder="High proof cane"
-                      />
-                    </div>
-                    <div className="measure-mode-toggle">
-                      <span className="measure-mode-label">Measure pull by</span>
-                      <div className="measure-mode-buttons">
-                        <button
-                          type="button"
-                          className={`btn btn-sm ${measureMode === 'weight' ? 'btn-primary' : 'btn-secondary'}`}
-                          onClick={() => setSpiritMeasureMode(index, 'weight')}
-                        >
-                          Weight (scale)
-                        </button>
-                        <button
-                          type="button"
-                          className={`btn btn-sm ${measureMode === 'volume' ? 'btn-primary' : 'btn-secondary'}`}
-                          onClick={() => setSpiritMeasureMode(index, 'volume')}
-                        >
-                          Volume (gallons)
-                          {SPIRIT_MEASURE_RECOMMENDATION.mode === 'volume' && (
-                            <span className="measure-best-tag">Best</span>
-                          )}
-                        </button>
-                      </div>
-                      <p className="measure-tip">{SPIRIT_MEASURE_RECOMMENDATION.reason}</p>
-                    </div>
-                    <div className="wizard-spirit-amount-row">
+              <div className="blend-recipe-card-list">
+                {spiritSources.map((source, index) => {
+                  const synced = syncSpiritRecipeVolume(source);
+                  const measureMode = inferMeasureMode(source.unit);
+                  const unitOptions = spiritUnitsForMeasureMode(measureMode);
+                  const alternate = source.amount > 0 && source.abv > 0
+                    ? spiritMeasureAlternate(source.amount, source.unit, source.abv)
+                    : null;
+                  return (
+                    <article key={index} className="blend-recipe-spirit-card">
+                      <header className="blend-recipe-card-header">
+                        <span className="blend-recipe-card-title">
+                          {source.spirit_label.trim() || `Spirit ${index + 1}`}
+                        </span>
+                        {spiritSources.length > 1 && (
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-ghost"
+                            onClick={() => setSpiritSources((prev) => prev.filter((_, i) => i !== index))}
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </header>
                       <div className="form-group">
-                        <label>Amount</label>
+                        <label>Label</label>
                         <input
-                          type="number"
-                          step="0.1"
-                          value={source.amount || ''}
-                          onChange={(e) => updateSpiritSource(index, { amount: parseFloat(e.target.value) || 0 })}
+                          value={source.spirit_label}
+                          onChange={(e) => updateSpiritSource(index, { spirit_label: e.target.value })}
+                          placeholder="High proof cane"
                         />
                       </div>
-                      <div className="form-group">
-                        <label>Unit</label>
-                        <select
-                          value={source.unit}
-                          onChange={(e) => updateSpiritSource(index, { unit: e.target.value })}
-                        >
-                          {unitOptions.map((u) => (
-                            <option key={u} value={u}>{u}</option>
-                          ))}
-                        </select>
+                      <div className="measure-mode-toggle">
+                        <span className="measure-mode-label">Measure pull by</span>
+                        <div className="measure-mode-buttons">
+                          <button
+                            type="button"
+                            className={`btn btn-sm ${measureMode === 'weight' ? 'btn-primary' : 'btn-secondary'}`}
+                            onClick={() => setSpiritMeasureMode(index, 'weight')}
+                          >
+                            Weight (scale)
+                          </button>
+                          <button
+                            type="button"
+                            className={`btn btn-sm ${measureMode === 'volume' ? 'btn-primary' : 'btn-secondary'}`}
+                            onClick={() => setSpiritMeasureMode(index, 'volume')}
+                          >
+                            Volume (gallons)
+                            {SPIRIT_MEASURE_RECOMMENDATION.mode === 'volume' && (
+                              <span className="measure-best-tag">Best</span>
+                            )}
+                          </button>
+                        </div>
+                        <p className="measure-tip">{SPIRIT_MEASURE_RECOMMENDATION.reason}</p>
                       </div>
-                      <div className="form-group">
-                        <label>ABV %</label>
-                        <input
-                          type="number"
-                          step="0.1"
-                          value={source.abv || ''}
-                          onChange={(e) => updateSpiritSource(index, { abv: parseFloat(e.target.value) || 0 })}
-                        />
+                      <div className="wizard-spirit-amount-row blend-recipe-spirit-amount-row">
+                        <div className="form-group">
+                          <label>Amount</label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={source.amount || ''}
+                            onChange={(e) => updateSpiritSource(index, { amount: parseFloat(e.target.value) || 0 })}
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label>Unit</label>
+                          <select
+                            value={source.unit}
+                            onChange={(e) => updateSpiritSource(index, { unit: e.target.value })}
+                          >
+                            {unitOptions.map((u) => (
+                              <option key={u} value={u}>{u}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="form-group">
+                          <label>ABV %</label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={source.abv || ''}
+                            onChange={(e) => updateSpiritSource(index, { abv: parseFloat(e.target.value) || 0 })}
+                          />
+                        </div>
                       </div>
-                    </div>
-                    {synced.volume_gal > 0 && (
-                      <p className="measure-alt">
-                        Recipe stores <strong>{synced.volume_gal.toFixed(2)} gal</strong>
-                        {alternate ? ` (${alternate.label})` : ''}
-                        <span className="field-hint" title="TTB Table No. 3 at 60 °F"> — volume is used for formulation and scaling</span>
-                      </p>
-                    )}
-                    <div className="form-group bottling-line-meta">
-                      {spiritSources.length > 1 && (
-                        <button
-                          type="button"
-                          className="btn btn-sm btn-ghost"
-                          onClick={() => setSpiritSources((prev) => prev.filter((_, i) => i !== index))}
-                        >
-                          Remove
-                        </button>
+                      {synced.volume_gal > 0 && (
+                        <p className="measure-alt blend-recipe-stored-volume">
+                          Stored as <strong>{synced.volume_gal.toFixed(2)} gal</strong>
+                          {alternate ? ` · ${alternate.label}` : ''}
+                        </p>
                       )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
 
-            <div className="form-group full-width bottling-lines-section">
-              <div className="bottling-lines-header">
-                <label>Additives</label>
+            <section className="blend-recipe-section">
+              <div className="blend-recipe-section-header">
+                <h4 className="blend-recipe-section-title">Additives</h4>
                 <button
                   type="button"
                   className="btn btn-sm btn-secondary"
@@ -542,154 +555,167 @@ export function BlendRecipesTab() {
                   + Add additive
                 </button>
               </div>
-              {ingredients.map((ingredient, index) => {
-                const measureMode = inferMeasureMode(ingredient.unit);
-                const recommendation = recommendMeasureMode(ingredient.ingredient_type);
-                const unitOptions = unitOptionsForBlendIngredient(ingredient);
-                const inventoryOptions = filterInventoryForBlendIngredient(
-                  inventoryItems,
-                  ingredient.ingredient_type,
-                );
-                const isWater = ingredient.ingredient_type === 'water';
+              {ingredients.length === 0 ? (
+                <p className="field-hint blend-recipe-empty-hint">No additives — add water, sugar, or flavorings if this recipe needs them.</p>
+              ) : (
+                <div className="blend-recipe-card-list">
+                  {ingredients.map((ingredient, index) => {
+                    const measureMode = inferMeasureMode(ingredient.unit);
+                    const recommendation = recommendMeasureMode(ingredient.ingredient_type);
+                    const unitOptions = unitOptionsForBlendIngredient(ingredient);
+                    const inventoryOptions = filterInventoryForBlendIngredient(
+                      inventoryItems,
+                      ingredient.ingredient_type,
+                    );
+                    const isWater = ingredient.ingredient_type === 'water';
 
-                return (
-                  <div key={index} className="wizard-additive-card" style={{ marginBottom: '0.75rem' }}>
-                    <div className="bottling-line-row">
-                      <div className="form-group">
-                        <label>Type</label>
-                        <select
-                          value={ingredient.ingredient_type}
-                          onChange={(e) => updateIngredient(index, {
-                            ingredient_type: e.target.value as BlendIngredientInput['ingredient_type'],
-                          })}
-                        >
-                          {BLEND_INGREDIENT_TYPES.map((type) => (
-                            <option key={type.value} value={type.value}>{type.label}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="form-group">
-                        <label>Name</label>
-                        <input
-                          value={ingredient.name}
-                          onChange={(e) => updateIngredient(index, { name: e.target.value })}
-                        />
-                      </div>
-                      {!isWater && (
-                        <div className="form-group">
-                          <label>Inventory item</label>
-                          <select
-                            value={ingredient.inventory_item_id ?? ''}
-                            onChange={(e) => handleInventorySelect(index, e.target.value)}
-                          >
-                            <option value="">— Select item —</option>
-                            {inventoryOptions.map((item) => (
-                              <option key={item.id} value={item.id}>
-                                {item.name} ({item.quantity} {item.unit})
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      )}
-                      <div className="form-group bottling-line-meta">
-                        <button
-                          type="button"
-                          className="btn btn-sm btn-ghost"
-                          onClick={() => setIngredients((prev) => prev.filter((_, i) => i !== index))}
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    </div>
-                    {!isWater && (
-                      <div className="measure-mode-toggle">
-                        <span className="measure-mode-label">Measure by</span>
-                        <div className="measure-mode-buttons">
+                    return (
+                      <article key={index} className="blend-recipe-additive-card">
+                        <header className="blend-recipe-card-header">
+                          <span className="blend-recipe-card-title">
+                            {ingredient.name.trim() || BLEND_INGREDIENT_TYPES.find((t) => t.value === ingredient.ingredient_type)?.label || 'Additive'}
+                          </span>
                           <button
                             type="button"
-                            className={`btn btn-sm ${measureMode === 'weight' ? 'btn-primary' : 'btn-secondary'}`}
-                            onClick={() => setIngredientMeasureMode(index, 'weight')}
+                            className="btn btn-sm btn-ghost"
+                            onClick={() => setIngredients((prev) => prev.filter((_, i) => i !== index))}
                           >
-                            Weight
-                            {recommendation.mode === 'weight' && <span className="measure-best-tag">Best</span>}
+                            Remove
                           </button>
-                          <button
-                            type="button"
-                            className={`btn btn-sm ${measureMode === 'volume' ? 'btn-primary' : 'btn-secondary'}`}
-                            onClick={() => setIngredientMeasureMode(index, 'volume')}
-                          >
-                            Volume
-                            {recommendation.mode === 'volume' && <span className="measure-best-tag">Best</span>}
-                          </button>
+                        </header>
+                        <div className="blend-recipe-additive-fields">
+                          <div className="form-group">
+                            <label>Type</label>
+                            <select
+                              value={ingredient.ingredient_type}
+                              onChange={(e) => updateIngredient(index, {
+                                ingredient_type: e.target.value as BlendIngredientInput['ingredient_type'],
+                              })}
+                            >
+                              {BLEND_INGREDIENT_TYPES.map((type) => (
+                                <option key={type.value} value={type.value}>{type.label}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="form-group">
+                            <label>Name</label>
+                            <input
+                              value={ingredient.name}
+                              onChange={(e) => updateIngredient(index, { name: e.target.value })}
+                            />
+                          </div>
+                          {!isWater && (
+                            <div className="form-group">
+                              <label>Inventory item</label>
+                              <select
+                                value={ingredient.inventory_item_id ?? ''}
+                                onChange={(e) => handleInventorySelect(index, e.target.value)}
+                              >
+                                <option value="">— Select item —</option>
+                                {inventoryOptions.map((item) => (
+                                  <option key={item.id} value={item.id}>
+                                    {item.name} ({item.quantity} {item.unit})
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    )}
-                    {isWater && (
-                      <p className="field-hint">Water is measured by volume only (not tied to inventory).</p>
-                    )}
-                    <div className="bottling-line-row">
-                      <div className="form-group">
-                        <label>Amount</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={ingredient.amount || ''}
-                          onChange={(e) => updateIngredient(index, {
-                            amount: parseFloat(e.target.value) || 0,
-                          })}
-                        />
-                        {(() => {
-                          const alt = measureAlternate(ingredient);
-                          return alt ? <span className="field-hint">{alt.label}</span> : null;
-                        })()}
-                      </div>
-                      <div className="form-group">
-                        <label>Unit</label>
-                        <select
-                          value={ingredient.unit}
-                          onChange={(e) => updateIngredient(index, { unit: e.target.value })}
-                        >
-                          {(isWater
-                            ? unitsForMeasureMode('water', 'volume')
-                            : unitOptions
-                          ).map((unit) => (
-                            <option key={unit} value={unit}>{unit}</option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+                        {!isWater && (
+                          <div className="measure-mode-toggle">
+                            <span className="measure-mode-label">Measure by</span>
+                            <div className="measure-mode-buttons">
+                              <button
+                                type="button"
+                                className={`btn btn-sm ${measureMode === 'weight' ? 'btn-primary' : 'btn-secondary'}`}
+                                onClick={() => setIngredientMeasureMode(index, 'weight')}
+                              >
+                                Weight
+                                {recommendation.mode === 'weight' && <span className="measure-best-tag">Best</span>}
+                              </button>
+                              <button
+                                type="button"
+                                className={`btn btn-sm ${measureMode === 'volume' ? 'btn-primary' : 'btn-secondary'}`}
+                                onClick={() => setIngredientMeasureMode(index, 'volume')}
+                              >
+                                Volume
+                                {recommendation.mode === 'volume' && <span className="measure-best-tag">Best</span>}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        {isWater && (
+                          <p className="field-hint">Water is measured by volume only (not tied to inventory).</p>
+                        )}
+                        <div className="wizard-additive-amount-row blend-recipe-amount-row">
+                          <div className="form-group">
+                            <label>Amount</label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={ingredient.amount || ''}
+                              onChange={(e) => updateIngredient(index, {
+                                amount: parseFloat(e.target.value) || 0,
+                              })}
+                            />
+                            {(() => {
+                              const alt = measureAlternate(ingredient);
+                              return alt ? <span className="field-hint">{alt.label}</span> : null;
+                            })()}
+                          </div>
+                          <div className="form-group">
+                            <label>Unit</label>
+                            <select
+                              value={ingredient.unit}
+                              onChange={(e) => updateIngredient(index, { unit: e.target.value })}
+                            >
+                              {(isWater
+                                ? unitsForMeasureMode('water', 'volume')
+                                : unitOptions
+                              ).map((unit) => (
+                                <option key={unit} value={unit}>{unit}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+
+            <section className="blend-recipe-section blend-recipe-section--proof">
+              <h4 className="blend-recipe-section-title">Calculated proof</h4>
+              <BlendAbvConfirmation
+                calculatedAbv={calculatedRecipe.abv}
+                calculatedVolumeGal={calculatedRecipe.volumeGal}
+                targetAbv={form.target_abv}
+                confirmed={abvConfirmed}
+                onConfirmChange={setAbvConfirmed}
+                onApplyCalculatedTarget={() => setForm({
+                  ...form,
+                  target_abv: calculatedRecipe.abv != null
+                    ? Math.round(calculatedRecipe.abv * 10) / 10
+                    : null,
+                })}
+              />
+            </section>
+
+            <div className="form-actions blend-recipe-form-actions">
+              <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleSave}
+                disabled={
+                  !form.name.trim()
+                  || (calculatedRecipe.abv != null && !abvConfirmed)
+                }
+              >
+                Save Recipe
+              </button>
             </div>
-
-            <BlendAbvConfirmation
-              calculatedAbv={calculatedRecipe.abv}
-              calculatedVolumeGal={calculatedRecipe.volumeGal}
-              targetAbv={form.target_abv}
-              confirmed={abvConfirmed}
-              onConfirmChange={setAbvConfirmed}
-              onApplyCalculatedTarget={() => setForm({
-                ...form,
-                target_abv: calculatedRecipe.abv != null
-                  ? Math.round(calculatedRecipe.abv * 10) / 10
-                  : null,
-              })}
-            />
-          </div>
-          <div className="modal-actions">
-            <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={handleSave}
-              disabled={
-                !form.name.trim()
-                || (calculatedRecipe.abv != null && !abvConfirmed)
-              }
-            >
-              Save Recipe
-            </button>
           </div>
         </Modal>
       )}
