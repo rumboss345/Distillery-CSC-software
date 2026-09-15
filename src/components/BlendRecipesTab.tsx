@@ -79,7 +79,7 @@ export function BlendRecipesTab() {
 
   useEffect(() => {
     setAbvConfirmed(false);
-  }, [calculatedRecipe.abv, calculatedRecipe.volumeGal, form.target_abv, spiritSources, ingredients]);
+  }, [calculatedRecipe.abv, calculatedRecipe.volumeGal, form.target_abv]);
 
   const selected = recipes.find((recipe) => recipe.id === selectedId);
 
