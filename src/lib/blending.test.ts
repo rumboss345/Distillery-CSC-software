@@ -15,6 +15,7 @@ import {
   toGallonsFromVolumeUnit,
   toLbs,
 } from './blending';
+import { proofFromAbv, weightFromWineGallons } from '../services/spirit-gauging';
 
 describe('recommendMeasureMode', () => {
   it('recommends weight for dry sugar', () => {
@@ -82,9 +83,15 @@ describe('spirit measurement', () => {
     expect(gal).toBeLessThan(20);
   });
 
-  it('converts spirit volume to weight', () => {
+  it('converts spirit volume to weight via TTB Table No. 3', () => {
     const lbs = spiritWeightLbsFromVolumeGal(10, 40);
-    expect(lbs).toBeCloseTo(10 * spiritLbsPerGallon(40), 1);
+    expect(lbs).toBe(weightFromWineGallons(10, proofFromAbv(40)));
+    expect(spiritLbsPerGallon(93)).toBeCloseTo(weightFromWineGallons(1, proofFromAbv(93)), 2);
+  });
+
+  it('matches Table No. 3 for 85.27 gal at 93% ABV', () => {
+    expect(spiritWeightLbsFromVolumeGal(85.27, 93)).toBe(584.75);
+    expect(formatSpiritPullWeightLbs(85.27, 93)).toBe('584.8 lbs');
   });
 
   it('shows alternate measure for spirit', () => {

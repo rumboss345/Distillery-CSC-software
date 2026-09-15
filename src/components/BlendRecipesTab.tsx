@@ -313,7 +313,11 @@ export function BlendRecipesTab() {
                     />
                     {(() => {
                       const weight = formatSpiritPullWeightLbs(source.volume_gal, source.abv);
-                      return weight ? <span className="field-hint">≈ {weight}</span> : null;
+                      return weight ? (
+                        <span className="field-hint" title="TTB Table No. 3 at 60 °F">
+                          ≈ {weight}
+                        </span>
+                      ) : null;
                     })()}
                   </div>
                   <div className="form-group">
