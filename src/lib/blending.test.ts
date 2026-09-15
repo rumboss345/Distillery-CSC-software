@@ -37,9 +37,15 @@ describe('ingredientVolumeGal', () => {
     expect(ingredientVolumeGal({ amount: 128, unit: 'fl oz', ingredient_type: 'water' })).toBe(1);
   });
 
-  it('converts sugar weight to approximate volume', () => {
+  it('converts sugar weight using bulk density from blending workbook', () => {
     const gal = ingredientVolumeGal({ amount: 10, unit: 'lbs', ingredient_type: 'sugar' });
-    expect(gal).toBeGreaterThan(1);
+    expect(gal).toBeGreaterThan(0.7);
+    expect(gal).toBeLessThan(0.8);
+  });
+
+  it('converts syrup weight using CS1 bulk density', () => {
+    const gal = ingredientVolumeGal({ amount: 16.3, unit: 'lbs', ingredient_type: 'syrup' });
+    expect(gal).toBeGreaterThan(1.4);
     expect(gal).toBeLessThan(1.5);
   });
 });
