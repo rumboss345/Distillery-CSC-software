@@ -9,8 +9,11 @@ import { Modal } from './Modal';
 import {
   BLEND_INGREDIENT_TYPES,
   defaultUnitForMode,
+  formatBlendRecipeAdditive,
   formatBlendRecipeSpiritPull,
   formatSpiritPullWeightLbs,
+  ingredientWeightLbs,
+  measureAlternate,
   recommendMeasureMode,
   spiritWeightLbsFromVolumeGal,
 } from '../lib/blending';
@@ -217,10 +220,22 @@ export function BlendRecipesTab() {
               <ul>
                 {selected.ingredients.map((ingredient, index) => (
                   <li key={index}>
-                    {ingredient.amount} {ingredient.unit} {ingredient.name || ingredient.ingredient_type}
+                    {formatBlendRecipeAdditive(ingredient)}
                   </li>
                 ))}
               </ul>
+              {(() => {
+                const totalLbs = selected.ingredients.reduce(
+                  (sum, ingredient) => sum + ingredientWeightLbs(ingredient),
+                  0,
+                );
+                if (totalLbs <= 0) return null;
+                return (
+                  <p className="field-hint" style={{ marginTop: '0.35rem' }}>
+                    Total additive weight: {totalLbs >= 10 ? totalLbs.toFixed(1) : totalLbs.toFixed(2)} lbs
+                  </p>
+                );
+              })()}
             </>
           )}
         </div>
@@ -400,6 +415,10 @@ export function BlendRecipesTab() {
                         i === index ? { ...row, amount: parseFloat(e.target.value) || 0 } : row
                       )))}
                     />
+                    {(() => {
+                      const alt = measureAlternate(ingredient);
+                      return alt ? <span className="field-hint">{alt.label}</span> : null;
+                    })()}
                   </div>
                   <div className="form-group">
                     <label>Unit</label>
