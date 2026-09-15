@@ -15,8 +15,8 @@ describe('blend-recipes-2024', () => {
     const darkRum = BLEND_RECIPES_2024.find((recipe) => recipe.name === 'Dark Rum (60 cases)');
     expect(darkRum?.spirit_sources[0].volume_gal).toBeGreaterThan(0);
     expect(darkRum?.ingredients.some((item) => item.ingredient_type === 'sugar')).toBe(true);
-    expect(darkRum?.ingredients.some((item) => item.name === 'YT75' && item.amount === 1750)).toBe(true);
+    expect(darkRum?.ingredients.some((item) => item.name === 'YT75' && item.amount === 1741)).toBe(true);
     expect(darkRum?.notes).toContain('60 cases');
-    expect(darkRum?.notes).toContain('12-pack boxes');
+    expect(darkRum?.notes).toContain('Liqour Blending FINAL (003).xlsx');
   });
 });
