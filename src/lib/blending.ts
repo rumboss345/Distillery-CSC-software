@@ -1,5 +1,6 @@
 import type { BlendIngredientInput, BlendIngredientType } from '../types';
 import { ML_PER_GALLON } from '../types';
+import { proofFromAbv, weightFromWineGallons, wineGallonsFromWeight } from '../services/spirit-gauging';
 
 export type MeasureMode = 'weight' | 'volume';
 
@@ -131,9 +132,10 @@ export function spiritDensityGPerMl(abv: number): number {
   return 0.79 + abv * 0.0011;
 }
 
+/** TTB Table No. 3 lb/US wine gal at the given ABV (percent). */
 export function spiritLbsPerGallon(abv: number): number {
   if (abv <= 0) return 8.34;
-  return spiritDensityGPerMl(abv) * ML_PER_GALLON / 453.592;
+  return weightFromWineGallons(1, proofFromAbv(abv));
 }
 
 export function spiritVolumeGalFromAmount(amount: number, unit: string, abv: number): number {
@@ -141,15 +143,16 @@ export function spiritVolumeGalFromAmount(amount: number, unit: string, abv: num
   if (isVolumeUnit(unit)) return toGallonsFromVolumeUnit(amount, unit);
   if (isWeightUnit(unit)) {
     const lbs = toLbs(amount, unit);
-    const lbsPerGal = spiritLbsPerGallon(abv);
-    return lbsPerGal > 0 ? lbs / lbsPerGal : 0;
+    if (abv <= 0) return 0;
+    return wineGallonsFromWeight(lbs, proofFromAbv(abv));
   }
   return 0;
 }
 
+/** Net weight (lb) for a wine-gallon spirit volume at ABV % via TTB Table No. 3. */
 export function spiritWeightLbsFromVolumeGal(volumeGal: number, abv: number): number {
-  if (volumeGal <= 0) return 0;
-  return volumeGal * spiritLbsPerGallon(abv);
+  if (volumeGal <= 0 || abv <= 0) return 0;
+  return weightFromWineGallons(volumeGal, proofFromAbv(abv));
 }
 
 export function formatSpiritPullWeightLbs(volumeGal: number, abv: number): string | null {
