@@ -410,8 +410,6 @@ export function Blending() {
     formulation.theoretical.abv,
     formulation.theoretical.volumeGal,
     form.target_abv,
-    activeSources,
-    ingredients,
   ]);
 
   const baseYieldGal = baseFormulation?.theoretical.volumeGal ?? 0;
