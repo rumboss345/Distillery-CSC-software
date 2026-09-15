@@ -25,7 +25,6 @@ import {
   spiritVolumeGalFromAmount,
   spiritWeightLbsFromVolumeGal,
   unitOptionsForBlendIngredient,
-  unitsForMeasureMode,
   type MeasureMode,
 } from '../lib/blending';
 import type {
@@ -621,31 +620,29 @@ export function BlendRecipesTab() {
                             </div>
                           )}
                         </div>
-                        {!isWater && (
-                          <div className="measure-mode-toggle">
-                            <span className="measure-mode-label">Measure by</span>
-                            <div className="measure-mode-buttons">
-                              <button
-                                type="button"
-                                className={`btn btn-sm ${measureMode === 'weight' ? 'btn-primary' : 'btn-secondary'}`}
-                                onClick={() => setIngredientMeasureMode(index, 'weight')}
-                              >
-                                Weight
-                                {recommendation.mode === 'weight' && <span className="measure-best-tag">Best</span>}
-                              </button>
-                              <button
-                                type="button"
-                                className={`btn btn-sm ${measureMode === 'volume' ? 'btn-primary' : 'btn-secondary'}`}
-                                onClick={() => setIngredientMeasureMode(index, 'volume')}
-                              >
-                                Volume
-                                {recommendation.mode === 'volume' && <span className="measure-best-tag">Best</span>}
-                              </button>
-                            </div>
+                        <div className="measure-mode-toggle">
+                          <span className="measure-mode-label">Measure by</span>
+                          <div className="measure-mode-buttons">
+                            <button
+                              type="button"
+                              className={`btn btn-sm ${measureMode === 'weight' ? 'btn-primary' : 'btn-secondary'}`}
+                              onClick={() => setIngredientMeasureMode(index, 'weight')}
+                            >
+                              Weight
+                              {recommendation.mode === 'weight' && <span className="measure-best-tag">Best</span>}
+                            </button>
+                            <button
+                              type="button"
+                              className={`btn btn-sm ${measureMode === 'volume' ? 'btn-primary' : 'btn-secondary'}`}
+                              onClick={() => setIngredientMeasureMode(index, 'volume')}
+                            >
+                              Volume
+                              {recommendation.mode === 'volume' && <span className="measure-best-tag">Best</span>}
+                            </button>
                           </div>
-                        )}
+                        </div>
                         {isWater && (
-                          <p className="field-hint">Water is measured by volume only (not tied to inventory).</p>
+                          <p className="field-hint">Proofing water is not tied to inventory; ABV math uses gallon-equivalent volume (8.34 lb/gal when weighed).</p>
                         )}
                         <div className="wizard-additive-amount-row blend-recipe-amount-row">
                           <div className="form-group">
@@ -669,10 +666,7 @@ export function BlendRecipesTab() {
                               value={ingredient.unit}
                               onChange={(e) => updateIngredient(index, { unit: e.target.value })}
                             >
-                              {(isWater
-                                ? unitsForMeasureMode('water', 'volume')
-                                : unitOptions
-                              ).map((unit) => (
+                              {unitOptions.map((unit) => (
                                 <option key={unit} value={unit}>{unit}</option>
                               ))}
                             </select>
