@@ -18,6 +18,7 @@ import {
   generateBatchNumber,
   useRefreshKey,
 } from '../db/queries';
+import { BlendAbvConfirmation } from '../components/BlendAbvConfirmation';
 import { BlendProductionWorksheet } from '../components/BlendProductionWorksheet';
 import { AssigneeCell, AssigneeSelect } from '../components/AssigneeSelect';
 import { DatePicker } from '../components/DatePicker';
@@ -79,7 +80,7 @@ const STEP_HINTS: Record<number, string> = {
   2: 'Choose holding tanks and how much spirit to pull — by the gallon (recommended) or by weight on a scale.',
   3: 'Enter the proof you want to bottle at. We can calculate how much water to add.',
   4: 'Add sweetener, flavorings, or color if this product needs them. Skip if not.',
-  5: 'Check the expected yield before running a lab trial or going to production.',
+  5: 'Confirm the calculated proof matches your expectations before saving or running a lab trial.',
   6: 'Enter what the lab actually measured. If it is off, use Correct This Batch below.',
   7: 'Once you are satisfied with the lab results, approve the recipe for production.',
   8: 'Choose where the finished batch goes, then produce. Spirit is pulled from source tanks and ingredients are deducted. Cannot be undone.',
@@ -290,6 +291,7 @@ export function Blending() {
   const [recipeTemplate, setRecipeTemplate] = useState<RecipeTemplate | null>(null);
   const [targetYieldInput, setTargetYieldInput] = useState('');
   const [waterAdjustmentNote, setWaterAdjustmentNote] = useState<string | null>(null);
+  const [abvConfirmed, setAbvConfirmed] = useState(false);
 
   void key;
 
@@ -402,6 +404,16 @@ export function Blending() {
     [activeSources, ingredients, form.actual_volume_gal, form.actual_abv, form.actual_density, form.actual_brix],
   );
 
+  useEffect(() => {
+    setAbvConfirmed(false);
+  }, [
+    formulation.theoretical.abv,
+    formulation.theoretical.volumeGal,
+    form.target_abv,
+    activeSources,
+    ingredients,
+  ]);
+
   const baseYieldGal = baseFormulation?.theoretical.volumeGal ?? 0;
   const scaledYieldGal = baseYieldGal > 0
     ? baseYieldGal * (form.scale_factor || 1)
@@ -504,6 +516,7 @@ export function Blending() {
     setMeasuredForCorrection({ abv: '', volume: '', brix: '', weight: '' });
     setVerifyMeasureMode('volume');
     setWaterAdjustmentNote(null);
+    setAbvConfirmed(false);
     setWizardStep(1);
   };
 
@@ -523,6 +536,7 @@ export function Blending() {
     setMeasuredForCorrection({ abv: '', volume: '', brix: '', weight: '' });
     setVerifyMeasureMode('volume');
     setWaterAdjustmentNote(null);
+    setAbvConfirmed(false);
     setShowWizard(true);
   };
 
@@ -651,6 +665,7 @@ export function Blending() {
       weight: blend.actual_weight_lbs?.toString() ?? '',
     });
     setVerifyMeasureMode(blend.actual_weight_lbs != null ? 'weight' : 'volume');
+    setAbvConfirmed(resumeStep(blend) > 5 && blend.theoretical_abv != null);
     setWizardStep(resumeStep(blend));
     setShowWizard(true);
   };
@@ -801,6 +816,16 @@ export function Blending() {
     if (step === 3 && form.target_abv == null) {
       alert('Please enter your target proof (ABV).');
       return false;
+    }
+    if (step === 5) {
+      if (formulation.theoretical.volumeGal <= 0 || formulation.theoretical.abv <= 0) {
+        alert('Add spirit pulls and ingredients so the software can calculate final proof before continuing.');
+        return false;
+      }
+      if (!abvConfirmed) {
+        alert('Please confirm the calculated proof (ABV) before continuing.');
+        return false;
+      }
     }
     return true;
   };
@@ -1402,6 +1427,15 @@ export function Blending() {
                 </select>
               </div>
             ))}
+            {formulation.theoretical.abv > 0 && (
+              <p className="wizard-result-banner">
+                Current calculated proof: <strong>{formulation.theoretical.abv.toFixed(1)}% ABV</strong>
+                {form.target_abv != null && (
+                  <span> (target {form.target_abv}%)</span>
+                )}
+                . You will confirm this on the review step.
+              </p>
+            )}
           </>
         );
 
@@ -1444,6 +1478,17 @@ export function Blending() {
             {form.scale_factor !== 1 && (
               <p className="field-hint">Batch sized at {form.scale_factor}× the saved recipe.</p>
             )}
+            <BlendAbvConfirmation
+              calculatedAbv={formulation.theoretical.abv}
+              calculatedVolumeGal={formulation.theoretical.volumeGal}
+              targetAbv={form.target_abv}
+              confirmed={abvConfirmed}
+              onConfirmChange={setAbvConfirmed}
+              onApplyCalculatedTarget={() => setForm({
+                ...form,
+                target_abv: Math.round(formulation.theoretical.abv * 10) / 10,
+              })}
+            />
             <p className="field-hint">Next: run a lab test on a trial batch, or approve if you are confident in the numbers.</p>
           </div>
         );

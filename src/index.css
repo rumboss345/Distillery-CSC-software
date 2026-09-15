@@ -1564,6 +1564,53 @@ tr:hover td {
   margin: 0 0 0.5rem;
 }
 
+.wizard-abv-confirm {
+  margin-top: 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg);
+}
+
+.wizard-abv-confirm.on-target {
+  border-color: var(--success, #2d6a4f);
+  background: color-mix(in srgb, var(--success, #2d6a4f) 8%, var(--bg));
+}
+
+.wizard-abv-confirm.mismatch {
+  border-color: var(--warning, #b08900);
+  background: color-mix(in srgb, var(--warning, #b08900) 10%, var(--bg));
+}
+
+.wizard-abv-confirm h5 {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+}
+
+.wizard-abv-confirm p {
+  margin: 0 0 0.35rem;
+}
+
+.wizard-abv-delta {
+  color: var(--warning, #b08900);
+}
+
+.wizard-abv-match {
+  color: var(--success, #2d6a4f);
+}
+
+.wizard-abv-apply {
+  margin: 0.5rem 0;
+}
+
+.wizard-abv-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  font-weight: 500;
+}
+
 .wizard-yield-line {
   font-size: 1.1rem;
   margin: 0 0 1rem;
