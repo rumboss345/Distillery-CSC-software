@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
+import { AbvTemperatureInput, correctedAbvFromInputs } from '../components/AbvTemperatureInput';
 import {
-  abvFromProof,
   gaugeFromLiters,
   gaugeFromWeightKg,
   gaugeFromWeightLb,
@@ -9,12 +9,22 @@ import {
   proofFromAbv,
   type SpiritGaugingResult,
 } from '../services/spirit-gauging';
+import {
+  applyAbvTemperatureCorrection,
+  STANDARD_GAUGING_TEMP_F,
+} from '../services/temperature-correction';
 
 type InputMode = 'weight' | 'volume';
 type WeightUnit = 'lb' | 'kg';
 type VolumeUnit = 'gal' | 'l';
 
-function ResultPanel({ result }: { result: SpiritGaugingResult | null }) {
+function ResultPanel({
+  result,
+  temperatureCorrected,
+}: {
+  result: SpiritGaugingResult | null;
+  temperatureCorrected: boolean;
+}) {
   if (!result) {
     return (
       <div className="card" style={{ marginTop: '1rem' }}>
@@ -27,8 +37,8 @@ function ResultPanel({ result }: { result: SpiritGaugingResult | null }) {
     <div className="card spirit-calculator-results" style={{ marginTop: '1rem' }}>
       <h3>Results</h3>
       <dl className="detail-grid">
-        <dt>Proof</dt><dd>{result.proof.toFixed(1)} proof</dd>
-        <dt>ABV</dt><dd>{result.abv.toFixed(2)}%</dd>
+        <dt>Proof (60 °F)</dt><dd>{result.proof.toFixed(1)} proof</dd>
+        <dt>ABV (60 °F)</dt><dd>{result.abv.toFixed(2)}%</dd>
         <dt>Physical volume</dt>
         <dd>
           {result.wineGallons.toFixed(2)} US gal<br />
@@ -47,7 +57,10 @@ function ResultPanel({ result }: { result: SpiritGaugingResult | null }) {
         </dd>
       </dl>
       <p className="field-hint">
-        Based on TTB Gauging Manual Table No. 3 (27 CFR §30.63). Values are at 60 °F with no temperature correction.
+        Based on TTB Gauging Manual Table No. 3 (27 CFR §30.63).
+        {temperatureCorrected
+          ? ' Observed proof was corrected to 60 °F before gauging.'
+          : ' Proof and ABV are on the 60 °F basis.'}
       </p>
     </div>
   );
@@ -60,14 +73,28 @@ export function SpiritWeightCalculator() {
   const [weightValue, setWeightValue] = useState('1000');
   const [volumeValue, setVolumeValue] = useState('500');
   const [abvValue, setAbvValue] = useState('60');
-  const [proofValue, setProofValue] = useState('120');
+  const [sampleTempF, setSampleTempF] = useState('60');
   const [useWeighing, setUseWeighing] = useState(false);
   const [grossWeight, setGrossWeight] = useState('');
   const [tareWeight, setTareWeight] = useState('');
 
-  const parsedAbv = parseFloat(abvValue);
-  const parsedProof = parseFloat(proofValue);
-  const proof = Number.isFinite(parsedProof) ? parsedProof : proofFromAbv(parsedAbv || 0);
+  const temperatureCorrection = useMemo(() => {
+    const observedAbv = abvValue.trim() ? parseFloat(abvValue) : null;
+    if (observedAbv == null || !Number.isFinite(observedAbv)) return null;
+    return applyAbvTemperatureCorrection(
+      observedAbv,
+      sampleTempF.trim() ? parseFloat(sampleTempF) : STANDARD_GAUGING_TEMP_F,
+    );
+  }, [abvValue, sampleTempF]);
+
+  const correctedAbv = useMemo(
+    () => correctedAbvFromInputs(abvValue, sampleTempF),
+    [abvValue, sampleTempF],
+  );
+
+  const proof = useMemo(() => (
+    correctedAbv != null && correctedAbv > 0 ? proofFromAbv(correctedAbv) : 0
+  ), [correctedAbv]);
 
   const result = useMemo(() => {
     if (proof <= 0) return null;
@@ -102,19 +129,8 @@ export function SpiritWeightCalculator() {
     volumeValue,
     weightUnit,
     weightValue,
+    sampleTempF,
   ]);
-
-  const handleAbvChange = (value: string) => {
-    setAbvValue(value);
-    const abv = parseFloat(value);
-    if (Number.isFinite(abv)) setProofValue(String(proofFromAbv(abv)));
-  };
-
-  const handleProofChange = (value: string) => {
-    setProofValue(value);
-    const nextProof = parseFloat(value);
-    if (Number.isFinite(nextProof)) setAbvValue(String(abvFromProof(nextProof)));
-  };
 
   return (
     <div className="page">
@@ -122,7 +138,7 @@ export function SpiritWeightCalculator() {
         <div>
           <h1>Spirit Weight Calculator</h1>
           <p className="page-subtitle">
-            TTB Table No. 3 gauging — convert between weight, physical volume, and proof gallons.
+            TTB Table No. 3 gauging — convert between weight, physical volume, and proof gallons. Enter observed ABV and sample temperature; values are corrected to 60 °F before lookup.
           </p>
         </div>
       </div>
@@ -204,19 +220,26 @@ export function SpiritWeightCalculator() {
           </div>
         )}
 
-        <div className="form-grid" style={{ marginTop: '1rem' }}>
-          <div className="form-group">
-            <label>ABV (%)</label>
-            <input type="number" step="0.01" value={abvValue} onChange={(e) => handleAbvChange(e.target.value)} />
-          </div>
-          <div className="form-group">
-            <label>Proof</label>
-            <input type="number" step="0.1" value={proofValue} onChange={(e) => handleProofChange(e.target.value)} />
-          </div>
+        <div className="form-group full-width" style={{ marginTop: '1rem' }}>
+          <AbvTemperatureInput
+            abvLabel="Observed ABV (% at sample temp)"
+            abvValue={abvValue}
+            temperatureValue={sampleTempF}
+            onAbvChange={setAbvValue}
+            onTemperatureChange={setSampleTempF}
+          />
+          {proof > 0 && correctedAbv != null && (
+            <p className="field-hint" style={{ marginTop: '0.5rem' }}>
+              Table No. 3 gauging uses <strong>{proof.toFixed(1)} proof</strong> ({correctedAbv.toFixed(2)}% ABV) at {STANDARD_GAUGING_TEMP_F} °F.
+            </p>
+          )}
         </div>
       </div>
 
-      <ResultPanel result={result} />
+      <ResultPanel
+        result={result}
+        temperatureCorrected={temperatureCorrection?.applied ?? false}
+      />
     </div>
   );
 }
