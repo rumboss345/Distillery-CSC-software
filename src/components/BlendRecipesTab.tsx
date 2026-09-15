@@ -14,12 +14,15 @@ import {
   defaultUnitForMode,
   formatBlendRecipeAdditive,
   formatBlendRecipeSpiritPull,
-  formatSpiritPullWeightLbs,
   ingredientWeightLbs,
   filterInventoryForBlendIngredient,
   inferMeasureMode,
   measureAlternate,
   recommendMeasureMode,
+  SPIRIT_MEASURE_RECOMMENDATION,
+  spiritMeasureAlternate,
+  spiritUnitsForMeasureMode,
+  spiritVolumeGalFromAmount,
   spiritWeightLbsFromVolumeGal,
   unitOptionsForBlendIngredient,
   unitsForMeasureMode,
@@ -31,11 +34,34 @@ import type {
   BlendRecipeView,
 } from '../types';
 
-const emptySpiritLine = (): BlendRecipeSpiritSourceInput => ({
+interface SpiritRecipeRow extends BlendRecipeSpiritSourceInput {
+  amount: number;
+  unit: string;
+}
+
+const emptySpiritLine = (): SpiritRecipeRow => ({
   spirit_label: '',
   volume_gal: 0,
   abv: 0,
+  amount: 0,
+  unit: 'gal',
 });
+
+function syncSpiritRecipeVolume(row: SpiritRecipeRow): SpiritRecipeRow {
+  return {
+    ...row,
+    volume_gal: spiritVolumeGalFromAmount(row.amount, row.unit, row.abv),
+  };
+}
+
+function toSpiritRecipeInput(row: SpiritRecipeRow): BlendRecipeSpiritSourceInput {
+  const synced = syncSpiritRecipeVolume(row);
+  return {
+    spirit_label: synced.spirit_label,
+    volume_gal: synced.volume_gal,
+    abv: synced.abv,
+  };
+}
 
 const emptyIngredient = (): BlendIngredientInput => ({
   ingredient_type: 'water',
@@ -65,16 +91,24 @@ export function BlendRecipesTab() {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<number | undefined>();
   const [form, setForm] = useState(emptyRecipeForm());
-  const [spiritSources, setSpiritSources] = useState<BlendRecipeSpiritSourceInput[]>([emptySpiritLine()]);
+  const [spiritSources, setSpiritSources] = useState<SpiritRecipeRow[]>([emptySpiritLine()]);
   const [ingredients, setIngredients] = useState<BlendIngredientInput[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [abvConfirmed, setAbvConfirmed] = useState(false);
 
   void key;
 
+  const syncedSpiritSources = useMemo(
+    () => spiritSources.map(syncSpiritRecipeVolume),
+    [spiritSources],
+  );
+
   const calculatedRecipe = useMemo(
-    () => computeRecipeTheoreticalAbv(spiritSources, ingredients),
-    [spiritSources, ingredients],
+    () => computeRecipeTheoreticalAbv(
+      syncedSpiritSources.map(toSpiritRecipeInput),
+      ingredients,
+    ),
+    [syncedSpiritSources, ingredients],
   );
 
   useEffect(() => {
@@ -108,6 +142,8 @@ export function BlendRecipesTab() {
           spirit_label: source.spirit_label,
           volume_gal: source.volume_gal,
           abv: source.abv,
+          amount: source.volume_gal,
+          unit: 'gal',
         }))
         : [emptySpiritLine()],
     );
@@ -137,7 +173,12 @@ export function BlendRecipesTab() {
       return;
     }
     try {
-      saveBlendRecipe(form, spiritSources, ingredients, editId);
+      saveBlendRecipe(
+        form,
+        syncedSpiritSources.map(toSpiritRecipeInput),
+        ingredients,
+        editId,
+      );
       setShowForm(false);
       refresh();
     } catch (error) {
@@ -174,6 +215,25 @@ export function BlendRecipesTab() {
     setIngredients((prev) => prev.map((row, i) => {
       if (i !== index) return row;
       return { ...row, unit: defaultUnitForMode(row.ingredient_type, mode) };
+    }));
+  };
+
+  const updateSpiritSource = (index: number, patch: Partial<SpiritRecipeRow>) => {
+    setSpiritSources((prev) => prev.map((row, i) => {
+      if (i !== index) return row;
+      return syncSpiritRecipeVolume({ ...row, ...patch });
+    }));
+  };
+
+  const setSpiritMeasureMode = (index: number, mode: MeasureMode) => {
+    setSpiritSources((prev) => prev.map((row, i) => {
+      if (i !== index) return row;
+      const synced = syncSpiritRecipeVolume(row);
+      if (mode === 'volume') {
+        return syncSpiritRecipeVolume({ ...synced, unit: 'gal', amount: synced.volume_gal });
+      }
+      const lbs = spiritWeightLbsFromVolumeGal(synced.volume_gal, synced.abv);
+      return syncSpiritRecipeVolume({ ...synced, unit: 'lbs', amount: lbs });
     }));
   };
 
@@ -377,61 +437,98 @@ export function BlendRecipesTab() {
                   + Add spirit
                 </button>
               </div>
-              {spiritSources.map((source, index) => (
-                <div key={index} className="bottling-line-row">
-                  <div className="form-group">
-                    <label>Label</label>
-                    <input
-                      value={source.spirit_label}
-                      onChange={(e) => setSpiritSources((prev) => prev.map((row, i) => (
-                        i === index ? { ...row, spirit_label: e.target.value } : row
-                      )))}
-                      placeholder="High proof cane"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>Volume (gal)</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={source.volume_gal || ''}
-                      onChange={(e) => setSpiritSources((prev) => prev.map((row, i) => (
-                        i === index ? { ...row, volume_gal: parseFloat(e.target.value) || 0 } : row
-                      )))}
-                    />
-                    {(() => {
-                      const weight = formatSpiritPullWeightLbs(source.volume_gal, source.abv);
-                      return weight ? (
-                        <span className="field-hint" title="TTB Table No. 3 at 60 °F">
-                          ≈ {weight}
-                        </span>
-                      ) : null;
-                    })()}
-                  </div>
-                  <div className="form-group">
-                    <label>ABV %</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={source.abv || ''}
-                      onChange={(e) => setSpiritSources((prev) => prev.map((row, i) => (
-                        i === index ? { ...row, abv: parseFloat(e.target.value) || 0 } : row
-                      )))}
-                    />
-                  </div>
-                  <div className="form-group bottling-line-meta">
-                    {spiritSources.length > 1 && (
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-ghost"
-                        onClick={() => setSpiritSources((prev) => prev.filter((_, i) => i !== index))}
-                      >
-                        Remove
-                      </button>
+              {spiritSources.map((source, index) => {
+                const synced = syncSpiritRecipeVolume(source);
+                const measureMode = inferMeasureMode(source.unit);
+                const unitOptions = spiritUnitsForMeasureMode(measureMode);
+                const alternate = source.amount > 0 && source.abv > 0
+                  ? spiritMeasureAlternate(source.amount, source.unit, source.abv)
+                  : null;
+                return (
+                  <div key={index} className="bottling-line-row wizard-additive-card" style={{ marginBottom: '0.75rem' }}>
+                    <div className="form-group">
+                      <label>Label</label>
+                      <input
+                        value={source.spirit_label}
+                        onChange={(e) => updateSpiritSource(index, { spirit_label: e.target.value })}
+                        placeholder="High proof cane"
+                      />
+                    </div>
+                    <div className="measure-mode-toggle">
+                      <span className="measure-mode-label">Measure pull by</span>
+                      <div className="measure-mode-buttons">
+                        <button
+                          type="button"
+                          className={`btn btn-sm ${measureMode === 'weight' ? 'btn-primary' : 'btn-secondary'}`}
+                          onClick={() => setSpiritMeasureMode(index, 'weight')}
+                        >
+                          Weight (scale)
+                        </button>
+                        <button
+                          type="button"
+                          className={`btn btn-sm ${measureMode === 'volume' ? 'btn-primary' : 'btn-secondary'}`}
+                          onClick={() => setSpiritMeasureMode(index, 'volume')}
+                        >
+                          Volume (gallons)
+                          {SPIRIT_MEASURE_RECOMMENDATION.mode === 'volume' && (
+                            <span className="measure-best-tag">Best</span>
+                          )}
+                        </button>
+                      </div>
+                      <p className="measure-tip">{SPIRIT_MEASURE_RECOMMENDATION.reason}</p>
+                    </div>
+                    <div className="wizard-spirit-amount-row">
+                      <div className="form-group">
+                        <label>Amount</label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={source.amount || ''}
+                          onChange={(e) => updateSpiritSource(index, { amount: parseFloat(e.target.value) || 0 })}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Unit</label>
+                        <select
+                          value={source.unit}
+                          onChange={(e) => updateSpiritSource(index, { unit: e.target.value })}
+                        >
+                          {unitOptions.map((u) => (
+                            <option key={u} value={u}>{u}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="form-group">
+                        <label>ABV %</label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={source.abv || ''}
+                          onChange={(e) => updateSpiritSource(index, { abv: parseFloat(e.target.value) || 0 })}
+                        />
+                      </div>
+                    </div>
+                    {synced.volume_gal > 0 && (
+                      <p className="measure-alt">
+                        Recipe stores <strong>{synced.volume_gal.toFixed(2)} gal</strong>
+                        {alternate ? ` (${alternate.label})` : ''}
+                        <span className="field-hint" title="TTB Table No. 3 at 60 °F"> — volume is used for formulation and scaling</span>
+                      </p>
                     )}
+                    <div className="form-group bottling-line-meta">
+                      {spiritSources.length > 1 && (
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-ghost"
+                          onClick={() => setSpiritSources((prev) => prev.filter((_, i) => i !== index))}
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             <div className="form-group full-width bottling-lines-section">
