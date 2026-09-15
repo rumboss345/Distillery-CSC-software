@@ -8,6 +8,7 @@ import {
   spiritLbsPerGallon,
   spiritMeasureAlternate,
   spiritVolumeGalFromAmount,
+  formatBlendRecipeAdditive,
   formatBlendRecipeSpiritPull,
   formatSpiritPullWeightLbs,
   spiritWeightLbsFromVolumeGal,
@@ -105,6 +106,42 @@ describe('spirit measurement', () => {
     expect(formatBlendRecipeSpiritPull('93% rum', 83.57, 93)).toContain('93% rum');
     expect(formatBlendRecipeSpiritPull('93% rum', 83.57, 93)).toContain('gal @ 93.0%');
     expect(formatBlendRecipeSpiritPull('93% rum', 83.57, 93)).toContain('lbs');
+  });
+});
+
+describe('formatBlendRecipeAdditive', () => {
+  it('shows weight and volume for water by gallon', () => {
+    const line = formatBlendRecipeAdditive({
+      amount: 116.8,
+      unit: 'gal',
+      name: 'Proofing water',
+      ingredient_type: 'water',
+    });
+    expect(line).toContain('Proofing water');
+    expect(line).toContain('116.8 gal');
+    expect(line).toContain('lbs');
+  });
+
+  it('shows weight and volume for sugar by pound', () => {
+    const line = formatBlendRecipeAdditive({
+      amount: 400,
+      unit: 'lbs',
+      name: 'White sugar',
+      ingredient_type: 'sugar',
+    });
+    expect(line).toContain('400 lbs');
+    expect(line).toContain('gal');
+  });
+
+  it('shows weight and volume for flavoring by ml', () => {
+    const line = formatBlendRecipeAdditive({
+      amount: 2760,
+      unit: 'ml',
+      name: 'Natural coconut flavor',
+      ingredient_type: 'flavoring',
+    });
+    expect(line).toContain('2760 ml');
+    expect(line).toContain('lbs');
   });
 });
 

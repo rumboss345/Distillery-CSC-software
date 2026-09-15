@@ -172,6 +172,39 @@ export function formatBlendRecipeSpiritPull(
   return weight ? `${name}: ${weight} · ${volume}` : `${name}: ${volume}`;
 }
 
+function formatAdditiveWeightLbs(lbs: number): string | null {
+  if (lbs <= 0) return null;
+  return lbs >= 10 ? `${lbs.toFixed(1)} lbs` : `${lbs.toFixed(2)} lbs`;
+}
+
+function formatAdditiveVolumeGal(gal: number): string | null {
+  if (gal <= 0) return null;
+  const liters = gal * ML_PER_GALLON / 1000;
+  const galLabel = `${gal.toFixed(2)} gal`;
+  return liters >= 1 ? `${galLabel} (${liters.toFixed(1)} L)` : galLabel;
+}
+
+/** Recipe display: primary amount plus weight/volume equivalent for additives. */
+export function formatBlendRecipeAdditive(
+  ingredient: Pick<BlendIngredientInput, 'amount' | 'unit' | 'name' | 'ingredient_type'>,
+): string {
+  const name = (ingredient.name || ingredient.ingredient_type).trim();
+  const primary = `${ingredient.amount} ${ingredient.unit}`.trim();
+  if (ingredient.amount <= 0) return `${name}: ${primary}`;
+
+  if (isWeightUnit(ingredient.unit)) {
+    const volume = formatAdditiveVolumeGal(ingredientVolumeGal(ingredient));
+    return volume ? `${name}: ${primary} · ${volume}` : `${name}: ${primary}`;
+  }
+
+  if (isVolumeUnit(ingredient.unit)) {
+    const weight = formatAdditiveWeightLbs(ingredientWeightLbs(ingredient));
+    return weight ? `${name}: ${primary} · ${weight}` : `${name}: ${primary}`;
+  }
+
+  return `${name}: ${primary}`;
+}
+
 export function spiritMeasureAlternate(amount: number, unit: string, abv: number): MeasureAlternate | null {
   if (amount <= 0 || abv <= 0) return null;
 
