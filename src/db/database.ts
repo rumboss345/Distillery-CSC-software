@@ -381,6 +381,20 @@ function runMigrations(): void {
     WHERE name IN ('Latina 500L', 'Latina 300-1', 'Latina 300-2', 'Latina 300-3')
       AND equipment_type IN ('pot_still', 'column_still')
   `);
+  db.run(`
+    UPDATE floor_equipment
+    SET name = 'Legacy wash tank (demo)',
+        notes = 'Superseded by Groen wash tank on CSC floor plan'
+    WHERE name = 'Wash Tank' AND equipment_type = 'mash_tun'
+      AND EXISTS (SELECT 1 FROM floor_equipment WHERE name = 'Groen kettle')
+  `);
+  db.run(`
+    UPDATE floor_equipment
+    SET name = 'Wash tank',
+        equipment_type = 'mash_tun',
+        notes = 'Groen wash kettle'
+    WHERE name = 'Groen kettle'
+  `);
   db.run(`UPDATE floor_equipment SET capacity_gal = 1000 WHERE equipment_type = 'fermenter'`);
   const hasProcessPos = queryOne<{ name: string }>(
     "SELECT name FROM pragma_table_info('floor_equipment') WHERE name='process_pos_x'",
