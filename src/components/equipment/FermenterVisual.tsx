@@ -3,6 +3,15 @@ import type { EquipmentVisualProps } from './equipment-visual.types';
 import { EquipmentVisualFrame } from './EquipmentVisualFrame';
 import { LIQUID_COLORS } from './equipment-visual-shared';
 
+const FERMENTER_BUBBLES = [
+  { cx: 56, r: 2.4, delay: 0 },
+  { cx: 66, r: 1.8, delay: 0.45 },
+  { cx: 76, r: 2.1, delay: 0.9 },
+  { cx: 86, r: 1.6, delay: 1.35 },
+  { cx: 62, r: 1.5, delay: 1.8 },
+  { cx: 82, r: 2, delay: 2.1 },
+] as const;
+
 /** Wooden open-top fermenter with conical bottom — ledger-driven fill. */
 export function FermenterVisual(props: EquipmentVisualProps) {
   const { data } = props;
@@ -102,6 +111,20 @@ export function FermenterVisual(props: EquipmentVisualProps) {
                 ry="4.5"
                 fill={`url(#${uid}-surf)`}
               />
+            )}
+            {data.isFermenting && (
+              <g className="fermenter-bubbles-svg">
+                {FERMENTER_BUBBLES.map((bubble, index) => (
+                  <circle
+                    key={index}
+                    className="fermenter-bubble"
+                    cx={bubble.cx}
+                    cy={bottomY - 6}
+                    r={bubble.r}
+                    style={{ animationDelay: `${bubble.delay}s` }}
+                  />
+                ))}
+              </g>
             )}
           </g>
         )}

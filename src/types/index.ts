@@ -66,6 +66,7 @@ export interface FloorEquipmentView extends FloorEquipment {
   active_volume_gal?: number;
   active_abv?: number;
   active_run_count?: number;
+  active_mash_status?: MashStatus;
 }
 
 export interface InventoryItem {
