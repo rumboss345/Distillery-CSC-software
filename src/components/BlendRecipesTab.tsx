@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { BlendAbvConfirmation } from './BlendAbvConfirmation';
+import { computeRecipeTheoreticalAbv } from '../lib/blend-abv-confirm';
 import {
   deleteBlendRecipe,
   getBlendRecipes,
@@ -66,8 +68,18 @@ export function BlendRecipesTab() {
   const [spiritSources, setSpiritSources] = useState<BlendRecipeSpiritSourceInput[]>([emptySpiritLine()]);
   const [ingredients, setIngredients] = useState<BlendIngredientInput[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [abvConfirmed, setAbvConfirmed] = useState(false);
 
   void key;
+
+  const calculatedRecipe = useMemo(
+    () => computeRecipeTheoreticalAbv(spiritSources, ingredients),
+    [spiritSources, ingredients],
+  );
+
+  useEffect(() => {
+    setAbvConfirmed(false);
+  }, [calculatedRecipe.abv, calculatedRecipe.volumeGal, form.target_abv, spiritSources, ingredients]);
 
   const selected = recipes.find((recipe) => recipe.id === selectedId);
 
@@ -76,6 +88,7 @@ export function BlendRecipesTab() {
     setForm(emptyRecipeForm());
     setSpiritSources([emptySpiritLine()]);
     setIngredients([]);
+    setAbvConfirmed(false);
     setShowForm(true);
   };
 
@@ -110,12 +123,17 @@ export function BlendRecipesTab() {
         notes: ingredient.notes,
       })),
     );
+    setAbvConfirmed(false);
     setShowForm(true);
   };
 
   const handleSave = () => {
     if (!form.name.trim()) {
       alert('Recipe name is required.');
+      return;
+    }
+    if (calculatedRecipe.abv != null && !abvConfirmed) {
+      alert('Please confirm the calculated proof (ABV) before saving this recipe.');
       return;
     }
     try {
@@ -547,10 +565,32 @@ export function BlendRecipesTab() {
                 );
               })}
             </div>
+
+            <BlendAbvConfirmation
+              calculatedAbv={calculatedRecipe.abv}
+              calculatedVolumeGal={calculatedRecipe.volumeGal}
+              targetAbv={form.target_abv}
+              confirmed={abvConfirmed}
+              onConfirmChange={setAbvConfirmed}
+              onApplyCalculatedTarget={() => setForm({
+                ...form,
+                target_abv: calculatedRecipe.abv != null
+                  ? Math.round(calculatedRecipe.abv * 10) / 10
+                  : null,
+              })}
+            />
           </div>
           <div className="modal-actions">
             <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
-            <button type="button" className="btn btn-primary" onClick={handleSave} disabled={!form.name.trim()}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={handleSave}
+              disabled={
+                !form.name.trim()
+                || (calculatedRecipe.abv != null && !abvConfirmed)
+              }
+            >
               Save Recipe
             </button>
           </div>
