@@ -18,6 +18,7 @@ import {
   generateBatchNumber,
   useRefreshKey,
 } from '../db/queries';
+import { AbvTemperatureInput, correctedAbvFromInputs } from '../components/AbvTemperatureInput';
 import { BlendAbvConfirmation } from '../components/BlendAbvConfirmation';
 import { BlendProductionWorksheet } from '../components/BlendProductionWorksheet';
 import { AssigneeCell, AssigneeSelect } from '../components/AssigneeSelect';
@@ -281,11 +282,20 @@ export function Blending() {
   const [ingredients, setIngredients] = useState<BlendIngredientInput[]>([]);
   const [showInventoryDetails, setShowInventoryDetails] = useState(false);
   const [correctionProof, setCorrectionProof] = useState(80);
-  const [measuredForCorrection, setMeasuredForCorrection] = useState<{ abv: string; volume: string; brix: string; weight: string }>({
+  const [observedAbvInput, setObservedAbvInput] = useState('');
+  const [sampleTempF, setSampleTempF] = useState('60');
+  const [measuredForCorrection, setMeasuredForCorrection] = useState<{
+    abv: string;
+    volume: string;
+    brix: string;
+    weight: string;
+    tempF: string;
+  }>({
     abv: '',
     volume: '',
     brix: '',
     weight: '',
+    tempF: '60',
   });
   const [verifyMeasureMode, setVerifyMeasureMode] = useState<MeasureMode>('volume');
   const [selectedRecipeId, setSelectedRecipeId] = useState<number | null>(null);
@@ -421,9 +431,8 @@ export function Blending() {
     : formulation.theoretical.volumeGal;
 
   const verifyAbv = form.actual_abv ?? form.final_abv ?? formulation.theoretical.abv ?? 0;
-  const correctionAbv = measuredForCorrection.abv
-    ? parseFloat(measuredForCorrection.abv)
-    : form.actual_abv;
+  const correctionAbv = correctedAbvFromInputs(measuredForCorrection.abv, measuredForCorrection.tempF)
+    ?? form.actual_abv;
   const correctionVolume = (() => {
     const abvForWeight = verifyAbv || correctionAbv || 40;
     if (wizardStep === 9 && verifyMeasureMode === 'weight' && measuredForCorrection.weight) {
@@ -443,6 +452,16 @@ export function Blending() {
       spiritProofAbv: correctionProof,
     });
   }, [correctionVolume, correctionAbv, form.target_abv, form.target_brix, form.actual_brix, measuredForCorrection.brix, correctionProof, verifyMeasureMode, wizardStep, measuredForCorrection.weight, form.actual_weight_lbs, verifyAbv]);
+
+  const syncObservedAbvToForm = (abvStr: string, tempStr: string) => {
+    setObservedAbvInput(abvStr);
+    setSampleTempF(tempStr);
+    const corrected = correctedAbvFromInputs(abvStr, tempStr);
+    setForm((f) => ({ ...f, actual_abv: corrected }));
+    if (corrected != null) {
+      setMeasuredForCorrection((m) => ({ ...m, abv: abvStr, tempF: tempStr }));
+    }
+  };
 
   const applyScaledRecipeAmounts = (
     template: RecipeTemplate,
@@ -514,7 +533,9 @@ export function Blending() {
     } else {
       setTargetYieldInput('');
     }
-    setMeasuredForCorrection({ abv: '', volume: '', brix: '', weight: '' });
+    setObservedAbvInput('');
+    setSampleTempF('60');
+    setMeasuredForCorrection({ abv: '', volume: '', brix: '', weight: '', tempF: '60' });
     setVerifyMeasureMode('volume');
     setWaterAdjustmentNote(null);
     setAbvConfirmed(false);
@@ -534,7 +555,9 @@ export function Blending() {
     setSpiritSources([emptySpiritSource()]);
     setIngredients([]);
     setWizardStep(1);
-    setMeasuredForCorrection({ abv: '', volume: '', brix: '', weight: '' });
+    setObservedAbvInput('');
+    setSampleTempF('60');
+    setMeasuredForCorrection({ abv: '', volume: '', brix: '', weight: '', tempF: '60' });
     setVerifyMeasureMode('volume');
     setWaterAdjustmentNote(null);
     setAbvConfirmed(false);
@@ -659,11 +682,14 @@ export function Blending() {
         notes: i.notes,
       })),
     );
+    setObservedAbvInput(blend.actual_abv?.toString() ?? '');
+    setSampleTempF('60');
     setMeasuredForCorrection({
       abv: blend.actual_abv?.toString() ?? '',
       volume: blend.actual_volume_gal?.toString() ?? '',
       brix: blend.actual_brix?.toString() ?? '',
       weight: blend.actual_weight_lbs?.toString() ?? '',
+      tempF: '60',
     });
     setVerifyMeasureMode(blend.actual_weight_lbs != null ? 'weight' : 'volume');
     setAbvConfirmed(resumeStep(blend) > 5 && blend.theoretical_abv != null);
@@ -951,7 +977,9 @@ export function Blending() {
       status: 'trial',
       notes: `${f.notes}\n[Correction applied] ${batchCorrection.headline}`.trim(),
     }));
-    setMeasuredForCorrection({ abv: '', volume: '', brix: '', weight: '' });
+    setObservedAbvInput('');
+    setSampleTempF('60');
+    setMeasuredForCorrection({ abv: '', volume: '', brix: '', weight: '', tempF: '60' });
     alert('Correction added to your recipe. Mix, re-test, and continue when ready.');
     setWizardStep(5);
   };
@@ -1013,16 +1041,13 @@ export function Blending() {
         </div>
       )}
       <div className="correct-batch-inputs">
-        <label>
-          Measured proof (ABV %)
-          <input
-            type="number"
-            step="0.1"
-            placeholder={form.actual_abv?.toString() ?? 'e.g. 41.2'}
-            value={measuredForCorrection.abv}
-            onChange={(e) => setMeasuredForCorrection({ ...measuredForCorrection, abv: e.target.value })}
-          />
-        </label>
+        <AbvTemperatureInput
+          abvValue={measuredForCorrection.abv}
+          temperatureValue={measuredForCorrection.tempF}
+          abvPlaceholder={form.actual_abv?.toString() ?? 'e.g. 41.2'}
+          onAbvChange={(value) => setMeasuredForCorrection({ ...measuredForCorrection, abv: value })}
+          onTemperatureChange={(value) => setMeasuredForCorrection({ ...measuredForCorrection, tempF: value })}
+        />
         {options?.allowWeight && verifyMeasureMode === 'weight' ? (
           <label>
             Batch weight (lbs on scale)
@@ -1519,20 +1544,13 @@ export function Blending() {
       case 6:
         return (
           <>
+            <AbvTemperatureInput
+              abvValue={observedAbvInput}
+              temperatureValue={sampleTempF}
+              onAbvChange={(value) => syncObservedAbvToForm(value, sampleTempF)}
+              onTemperatureChange={(value) => syncObservedAbvToForm(observedAbvInput, value)}
+            />
             <div className="wizard-lab-inputs">
-              <label>
-                Measured proof (ABV %)
-                <input
-                  type="number"
-                  step="0.1"
-                  value={form.actual_abv ?? ''}
-                  onChange={(e) => {
-                    const v = e.target.value ? parseFloat(e.target.value) : null;
-                    setForm({ ...form, actual_abv: v });
-                    setMeasuredForCorrection({ ...measuredForCorrection, abv: e.target.value });
-                  }}
-                />
-              </label>
               <label>
                 Measured volume (gallons)
                 <input
@@ -1733,28 +1751,44 @@ export function Blending() {
                   </button>
                 </div>
               </div>
+              <AbvTemperatureInput
+                abvLabel="Final observed proof (ABV % at sample temp)"
+                abvValue={observedAbvInput}
+                temperatureValue={sampleTempF}
+                onAbvChange={(value) => {
+                  syncObservedAbvToForm(value, sampleTempF);
+                  const corrected = correctedAbvFromInputs(value, sampleTempF) ?? verifyAbv;
+                  let nextVolume = form.actual_volume_gal;
+                  let nextWeight = form.actual_weight_lbs;
+                  if (verifyMeasureMode === 'weight' && form.actual_weight_lbs != null) {
+                    nextVolume = spiritVolumeGalFromAmount(form.actual_weight_lbs, 'lbs', corrected);
+                  } else if (verifyMeasureMode === 'volume' && form.actual_volume_gal != null) {
+                    nextWeight = spiritWeightLbsFromVolumeGal(form.actual_volume_gal, corrected);
+                  }
+                  setForm((f) => ({
+                    ...f,
+                    actual_volume_gal: nextVolume,
+                    actual_weight_lbs: nextWeight,
+                  }));
+                }}
+                onTemperatureChange={(value) => {
+                  syncObservedAbvToForm(observedAbvInput, value);
+                  const corrected = correctedAbvFromInputs(observedAbvInput, value) ?? verifyAbv;
+                  let nextVolume = form.actual_volume_gal;
+                  let nextWeight = form.actual_weight_lbs;
+                  if (verifyMeasureMode === 'weight' && form.actual_weight_lbs != null) {
+                    nextVolume = spiritVolumeGalFromAmount(form.actual_weight_lbs, 'lbs', corrected);
+                  } else if (verifyMeasureMode === 'volume' && form.actual_volume_gal != null) {
+                    nextWeight = spiritWeightLbsFromVolumeGal(form.actual_volume_gal, corrected);
+                  }
+                  setForm((f) => ({
+                    ...f,
+                    actual_volume_gal: nextVolume,
+                    actual_weight_lbs: nextWeight,
+                  }));
+                }}
+              />
               <div className="wizard-lab-inputs">
-                <label>
-                  Final proof (ABV %)
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={form.actual_abv ?? ''}
-                    onChange={(e) => {
-                      const v = e.target.value ? parseFloat(e.target.value) : null;
-                      const abv = v ?? verifyAbv;
-                      let nextVolume = form.actual_volume_gal;
-                      let nextWeight = form.actual_weight_lbs;
-                      if (v != null && verifyMeasureMode === 'weight' && form.actual_weight_lbs != null) {
-                        nextVolume = spiritVolumeGalFromAmount(form.actual_weight_lbs, 'lbs', abv);
-                      } else if (v != null && verifyMeasureMode === 'volume' && form.actual_volume_gal != null) {
-                        nextWeight = spiritWeightLbsFromVolumeGal(form.actual_volume_gal, abv);
-                      }
-                      setForm({ ...form, actual_abv: v, actual_volume_gal: nextVolume, actual_weight_lbs: nextWeight });
-                      setMeasuredForCorrection({ ...measuredForCorrection, abv: e.target.value });
-                    }}
-                  />
-                </label>
                 {verifyMeasureMode === 'volume' ? (
                   <label>
                     Final volume (gallons)
