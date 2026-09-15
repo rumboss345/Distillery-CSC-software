@@ -258,7 +258,7 @@ export function ProcessEquipmentCanvas({
               return (
                 <div
                   key={item.id}
-                  className={`process-equipment-node${isDragging ? ' process-equipment-node--dragging' : ''}${selectedId === item.id ? ' process-equipment-node--selected' : ''}`}
+                  className={`process-equipment-node${isDragging ? ' process-equipment-node--dragging' : ''}${selectedId === item.id ? ' process-equipment-node--selected' : ''}${visual.isFermenting ? ' process-equipment-node--fermenting' : ''}`}
                   style={{ left: pos.x, top: pos.y }}
                   onPointerDown={(e) => onEquipmentPointerDown(e, item)}
                   onClick={(e) => e.stopPropagation()}

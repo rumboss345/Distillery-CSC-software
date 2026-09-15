@@ -109,6 +109,17 @@
   z-index: 5;
 }
 
+.process-equipment-node--fermenting .equipment-visual-svg-wrap {
+  filter: drop-shadow(0 0 8px rgba(111, 217, 138, 0.5));
+}
+
+.process-equipment-status--fermenting {
+  color: #6fd98a;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 .process-equipment-node .equipment-visual,
 .process-equipment-node .tank-visual {
   pointer-events: none;
