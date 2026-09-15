@@ -383,17 +383,21 @@ function runMigrations(): void {
   `);
   db.run(`
     UPDATE floor_equipment
-    SET name = 'Legacy wash tank (demo)',
-        notes = 'Superseded by Groen wash tank on CSC floor plan'
-    WHERE name = 'Wash Tank' AND equipment_type = 'mash_tun'
-      AND EXISTS (SELECT 1 FROM floor_equipment WHERE name = 'Groen kettle')
+    SET name = 'Groen kettle',
+        equipment_type = 'mash_tun',
+        capacity_gal = 100,
+        notes = 'Groen wash kettle'
+    WHERE equipment_type = 'mash_tun'
+      AND name IN ('Wash tank', 'Groen kettle')
+      AND capacity_gal < 200
   `);
   db.run(`
     UPDATE floor_equipment
     SET name = 'Wash tank',
-        equipment_type = 'mash_tun',
-        notes = 'Groen wash kettle'
-    WHERE name = 'Groen kettle'
+        capacity_gal = 2000,
+        notes = 'Primary wash tank'
+    WHERE equipment_type = 'mash_tun'
+      AND name IN ('Legacy wash tank (demo)', 'Wash Tank')
   `);
   db.run(`UPDATE floor_equipment SET capacity_gal = 1000 WHERE equipment_type = 'fermenter'`);
   const hasProcessPos = queryOne<{ name: string }>(
