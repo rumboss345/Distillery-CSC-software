@@ -260,64 +260,11 @@ export function FloorPlanPage() {
             onLayoutChange={refresh}
           />
           {selected && (
-            <div className="card process-detail-sidebar" style={{ marginTop: '1rem' }}>
-              <h3 className="floor-sidebar-title">{selected.name}</h3>
-              <dl className="floor-detail-list">
-                <dt>Page</dt>
-                <dd>{selectedPlan.name}</dd>
-                <dt>Type</dt>
-                <dd>{equipmentTypeLabel(selected.equipment_type)}</dd>
-                <dt>Status</dt>
-                <dd><StatusBadge status={selected.status.replace('_', ' ')} /></dd>
-                {selected.capacity_gal > 0 && (
-                  <>
-                    <dt>Capacity</dt>
-                    <dd>{selected.capacity_gal} gal</dd>
-                  </>
-                )}
-                {selected.active_batch_number && (
-                  <>
-                    <dt>Active Batch</dt>
-                    <dd>
-                      {selected.active_batch_number}
-                      {selected.active_volume_gal ? ` · ${selected.active_volume_gal} gal` : ''}
-                    </dd>
-                  </>
-                )}
-                {selected.equipment_type === 'holding_tank' && selected.active_volume_gal != null && selected.active_volume_gal > 0 && (
-                  <>
-                    <dt>Contents</dt>
-                    <dd>
-                      {selected.active_volume_gal.toFixed(1)} gal
-                      {selected.active_abv != null ? ` @ ${selected.active_abv.toFixed(1)}% ABV` : ''}
-                    </dd>
-                  </>
-                )}
-                {selected.notes && (
-                  <>
-                    <dt>Notes</dt>
-                    <dd>{selected.notes}</dd>
-                  </>
-                )}
-              </dl>
-              {selected.equipment_type === 'holding_tank' && (
-                <HoldingTankIntakeHistory
-                  tankId={selected.id}
-                  selectedKey={selectedIntakeKey}
-                  title="Where it came from"
-                  emptyMessage="No cuts or transfers into this tank yet."
-                  onSelect={(entry) => {
-                    setSelectedIntakeKey(
-                      selectedIntakeKey === holdingTankIntakeKey(entry)
-                        ? null
-                        : holdingTankIntakeKey(entry),
-                    );
-                  }}
-                />
-              )}
+            <div className="card process-detail-sidebar process-detail-sidebar--actions" style={{ marginTop: '1rem' }}>
+              <p className="field-hint">Equipment details appear in the process sidebar when you click a tank on the canvas.</p>
               <div className="floor-sidebar-actions">
-                <button className="btn btn-sm btn-secondary" onClick={() => openEdit(selected)}>Edit</button>
-                <button className="btn btn-sm btn-danger" onClick={() => handleDelete(selected.id)}>Remove</button>
+                <button type="button" className="btn btn-sm btn-secondary" onClick={() => openEdit(selected)}>Edit {selected.name}</button>
+                <button type="button" className="btn btn-sm btn-danger" onClick={() => handleDelete(selected.id)}>Remove</button>
               </div>
             </div>
           )}

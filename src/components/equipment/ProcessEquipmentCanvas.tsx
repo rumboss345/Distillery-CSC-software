@@ -18,6 +18,7 @@ import {
 } from './process-layout';
 import { groupEquipmentByStage } from './process-stages';
 import { EquipmentVisual } from './EquipmentVisual';
+import { ProcessEquipmentDetailPanel } from './ProcessEquipmentDetailPanel';
 import { TankLevelsPanel } from './TankLevelsPanel';
 import type { EquipmentVisualData } from './equipment-visual.types';
 import type { FloorEquipmentView } from '../../types';
@@ -101,6 +102,12 @@ export function ProcessEquipmentCanvas({
   const summary = getProductionSummary();
   const offlineCount = allEquipment.filter((e) => e.status === 'offline').length;
 
+  const selectedEquipment = selectedId != null
+    ? allEquipment.find((e) => e.id === selectedId) ?? null
+    : null;
+  const selectedVisual = selectedId != null ? visualById.get(selectedId) ?? null : null;
+  const selectedPlanName = selectedEquipment?.plan_name ?? '';
+
   const getCanvasPoint = useCallback(
     (clientX: number, clientY: number) => {
       const viewport = viewportRef.current;
@@ -142,10 +149,14 @@ export function ProcessEquipmentCanvas({
     };
 
     const onUp = () => {
-      if (livePosRef.current && dragging) {
-        const snapped = snapProcessPosition(livePosRef.current);
-        updateEquipmentProcessPosition(dragging.id, snapped.x, snapped.y);
-        onLayoutChange?.();
+      if (dragging) {
+        if (!dragMovedRef.current) {
+          onSelect(dragging.id);
+        } else if (livePosRef.current) {
+          const snapped = snapProcessPosition(livePosRef.current);
+          updateEquipmentProcessPosition(dragging.id, snapped.x, snapped.y);
+          onLayoutChange?.();
+        }
       }
       livePosRef.current = null;
       setDragging(null);
@@ -158,7 +169,7 @@ export function ProcessEquipmentCanvas({
       window.removeEventListener('pointermove', onMovePointer);
       window.removeEventListener('pointerup', onUp);
     };
-  }, [dragging, getCanvasPoint, onLayoutChange]);
+  }, [dragging, getCanvasPoint, onLayoutChange, onSelect]);
 
   const onViewportPointerDown = (e: React.PointerEvent) => {
     if ((e.target as HTMLElement).closest('.process-equipment-node')) return;
@@ -287,6 +298,12 @@ export function ProcessEquipmentCanvas({
               <dt>Equipment offline</dt><dd>{offlineCount}</dd>
             </dl>
           </div>
+
+          <ProcessEquipmentDetailPanel
+            equipment={selectedEquipment}
+            visual={selectedVisual}
+            planName={selectedPlanName}
+          />
 
           <TankLevelsPanel
             tanks={tanks}

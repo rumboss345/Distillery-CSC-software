@@ -501,6 +501,34 @@
   margin-top: 0.75rem;
 }
 
+.process-panel--detail {
+  border-color: var(--accent, #c8956c);
+}
+
+.process-equipment-detail-code {
+  margin: 0 0 0.65rem;
+  font-size: 0.85rem;
+  color: var(--text-muted, #64748b);
+}
+
+.process-equipment-detail-list {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.35rem 0.75rem;
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.process-equipment-detail-list dt {
+  margin: 0;
+  color: var(--text-muted, #64748b);
+  font-weight: 500;
+}
+
+.process-equipment-detail-list dd {
+  margin: 0;
+}
+
 .floor-view-toggle {
   display: flex;
   gap: 0.35rem;
