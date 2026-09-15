@@ -104,6 +104,8 @@ interface SpiritSourceRow extends BlendSpiritSourceInput {
   amount: number;
   unit: string;
   recipe_abv: number;
+  observed_abv: string;
+  sample_temp_f: string;
 }
 
 const emptySpiritSource = (): SpiritSourceRow => ({
@@ -113,7 +115,17 @@ const emptySpiritSource = (): SpiritSourceRow => ({
   recipe_abv: 0,
   amount: 0,
   unit: 'gal',
+  observed_abv: '',
+  sample_temp_f: '60',
 });
+
+function spiritRowWithObservedAbv(row: Omit<SpiritSourceRow, 'observed_abv' | 'sample_temp_f'>): SpiritSourceRow {
+  return {
+    ...row,
+    observed_abv: row.abv > 0 ? row.abv.toString() : '',
+    sample_temp_f: '60',
+  };
+}
 
 function syncSpiritVolume(row: SpiritSourceRow): SpiritSourceRow {
   return {
@@ -468,7 +480,9 @@ export function Blending() {
     factor: number,
     preserveTankIds: number[] = [],
   ) => {
-    setSpiritSources(scaleSpiritSources(template.spirit_sources, factor, preserveTankIds));
+    setSpiritSources(
+      scaleSpiritSources(template.spirit_sources, factor, preserveTankIds).map(spiritRowWithObservedAbv),
+    );
     setIngredients(scaleIngredients(template.ingredients, factor));
   };
 
@@ -652,7 +666,7 @@ export function Blending() {
       : undefined;
     setSpiritSources(
       sources.length > 0
-        ? sources.map((s, index) => ({
+        ? sources.map((s, index) => spiritRowWithObservedAbv({
           holding_tank_equipment_id: s.holding_tank_equipment_id,
           volume_gal: s.volume_gal,
           abv: s.abv,
@@ -660,14 +674,14 @@ export function Blending() {
           amount: s.volume_gal,
           unit: 'gal',
         }))
-        : [{
+        : [spiritRowWithObservedAbv({
           holding_tank_equipment_id: blend.source_holding_tank_equipment_id,
           volume_gal: blend.base_spirit_volume_gal,
           abv: blend.base_spirit_abv,
           recipe_abv: templateSources?.[0]?.abv ?? blend.base_spirit_abv,
           amount: blend.base_spirit_volume_gal,
           unit: 'gal',
-        }],
+        })],
     );
     const ings = getBlendIngredients(blend.id);
     setIngredients(
@@ -712,13 +726,22 @@ export function Blending() {
       let next = { ...src, ...patch, recipe_abv: patch.recipe_abv ?? src.recipe_abv };
       if (patch.holding_tank_equipment_id) {
         const chargeable = chargeableTanks.find((t) => t.id === patch.holding_tank_equipment_id);
-        if (chargeable) {
-          next.abv = chargeable.available_abv;
-        } else {
-          next.abv = getHoldingTankContents(patch.holding_tank_equipment_id, undefined, editId).abv;
-        }
+        const tankAbv = chargeable
+          ? chargeable.available_abv
+          : getHoldingTankContents(patch.holding_tank_equipment_id, undefined, editId).abv;
+        next.abv = tankAbv;
+        next.observed_abv = tankAbv > 0 ? tankAbv.toString() : '';
+        next.sample_temp_f = '60';
       }
-      if (patch.abv != null && patch.abv !== src.abv && !patch.amount) {
+      if (patch.observed_abv !== undefined || patch.sample_temp_f !== undefined) {
+        const observed = patch.observed_abv ?? next.observed_abv;
+        const tempF = patch.sample_temp_f ?? next.sample_temp_f;
+        const corrected = correctedAbvFromInputs(observed, tempF);
+        next.observed_abv = observed;
+        next.sample_temp_f = tempF;
+        if (corrected != null) next.abv = corrected;
+      }
+      if (next.abv !== src.abv && !patch.amount) {
         // Re-sync volume when ABV changes and user is weighing spirit
         next = syncSpiritVolume(next);
       }
@@ -1304,16 +1327,15 @@ export function Blending() {
                         ))}
                       </select>
                     </div>
-                    <div className="form-group">
-                      <label>Proof (ABV %)</label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={src.abv || ''}
-                        onChange={(e) => updateSpiritSource(index, { abv: parseFloat(e.target.value) || 0 })}
-                      />
-                    </div>
                   </div>
+                  <AbvTemperatureInput
+                    abvLabel="Observed proof (ABV % at sample temp)"
+                    abvValue={src.observed_abv}
+                    temperatureValue={src.sample_temp_f}
+                    onAbvChange={(value) => updateSpiritSource(index, { observed_abv: value })}
+                    onTemperatureChange={(value) => updateSpiritSource(index, { sample_temp_f: value })}
+                    abvPlaceholder={src.abv > 0 ? src.abv.toFixed(1) : undefined}
+                  />
                   {synced.volume_gal > 0 && (
                     <p className="measure-alt">
                       Tank ledger will record <strong>{synced.volume_gal.toFixed(2)} gal</strong>

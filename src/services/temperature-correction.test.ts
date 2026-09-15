@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  blendVolumeWeightedAbv,
   correctAbvTo60F,
   correctProofTo60F,
   applyAbvTemperatureCorrection,
@@ -33,5 +34,9 @@ describe('temperature-correction', () => {
     expect(result).not.toBeNull();
     expect(result!.applied).toBe(true);
     expect(result!.correctedAbv).toBeLessThan(result!.observedAbv);
+  });
+
+  it('blends volume-weighted ABV on 60 °F basis', () => {
+    expect(blendVolumeWeightedAbv(100, 40, 50, 80)).toBeCloseTo(53.33, 1);
   });
 });

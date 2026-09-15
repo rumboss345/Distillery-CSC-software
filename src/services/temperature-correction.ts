@@ -52,6 +52,19 @@ export interface AbvTemperatureCorrectionResult {
   applied: boolean;
 }
 
+/** Volume-weighted blend ABV (both ABVs should be on the same 60 °F basis). */
+export function blendVolumeWeightedAbv(
+  existingVolumeGal: number,
+  existingAbv: number,
+  addedVolumeGal: number,
+  addedAbv: number,
+): number | null {
+  const totalVolume = existingVolumeGal + addedVolumeGal;
+  if (totalVolume <= 0 || addedAbv <= 0) return null;
+  const pureAlcohol = existingVolumeGal * existingAbv / 100 + addedVolumeGal * addedAbv / 100;
+  return roundAbv((pureAlcohol / totalVolume) * 100);
+}
+
 export function applyAbvTemperatureCorrection(
   observedAbv: number | null | undefined,
   temperatureF: number | null | undefined,
