@@ -10,12 +10,16 @@ interface ProcessEquipmentDetailPanelProps {
   equipment: FloorEquipmentView | null;
   visual: EquipmentVisualData | null;
   planName: string;
+  onEdit?: () => void;
+  onRemove?: () => void;
 }
 
 export function ProcessEquipmentDetailPanel({
   equipment,
   visual,
   planName,
+  onEdit,
+  onRemove,
 }: ProcessEquipmentDetailPanelProps) {
   const [selectedIntakeKey, setSelectedIntakeKey] = useState<string | null>(null);
 
@@ -111,6 +115,20 @@ export function ProcessEquipmentDetailPanel({
             );
           }}
         />
+      )}
+      {(onEdit || onRemove) && (
+        <div className="process-detail-actions">
+          {onEdit && (
+            <button type="button" className="btn btn-sm btn-secondary" onClick={onEdit}>
+              Edit equipment
+            </button>
+          )}
+          {onRemove && (
+            <button type="button" className="btn btn-sm btn-danger" onClick={onRemove}>
+              Remove
+            </button>
+          )}
+        </div>
       )}
     </div>
   );

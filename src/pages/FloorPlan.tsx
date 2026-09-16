@@ -258,16 +258,9 @@ export function FloorPlanPage() {
             onSelect={selectEquipment}
             refreshKey={key}
             onLayoutChange={refresh}
+            onEditEquipment={selected ? () => openEdit(selected) : undefined}
+            onRemoveEquipment={selected ? () => handleDelete(selected.id) : undefined}
           />
-          {selected && (
-            <div className="card process-detail-sidebar process-detail-sidebar--actions" style={{ marginTop: '1rem' }}>
-              <p className="field-hint">Equipment details appear in the process sidebar when you click a tank on the canvas.</p>
-              <div className="floor-sidebar-actions">
-                <button type="button" className="btn btn-sm btn-secondary" onClick={() => openEdit(selected)}>Edit {selected.name}</button>
-                <button type="button" className="btn btn-sm btn-danger" onClick={() => handleDelete(selected.id)}>Remove</button>
-              </div>
-            </div>
-          )}
         </>
       )}
 

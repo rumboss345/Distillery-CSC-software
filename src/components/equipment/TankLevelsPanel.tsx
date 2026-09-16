@@ -11,8 +11,8 @@ export function TankLevelsPanel({ tanks, selectedId, onSelect }: TankLevelsPanel
   const active = tanks.filter((t) => t.currentVolumeGal > 0 || t.capacityGal > 0);
 
   return (
-    <div className="process-panel card">
-      <h4 className="process-panel-title">Tank Levels</h4>
+    <div className="process-panel card process-panel--tanks">
+      <h4 className="process-panel-title">Holding tanks ({active.length})</h4>
       {active.length === 0 ? (
         <p className="process-panel-empty">No holding tanks configured.</p>
       ) : (
