@@ -2202,6 +2202,64 @@ export function executeBlendProduct(id: number, outputTankId: number): void {
   syncHoldingTankStatuses();
 }
 
+/**
+ * Reverse an executed blend (admin). Restores inventory and barrel pulls and removes
+ * the finished batch from the output-tank ledger by returning status to approved.
+ */
+export function undoBlendProduction(id: number): void {
+  const product = queryOne<BlendProduct>('SELECT * FROM blend_products WHERE id = ?', [id]);
+  if (!product) throw new Error('Blend formula not found.');
+  if (product.status !== 'executed') {
+    throw new Error('Only executed batches can be undone. Bottled or blended batches cannot be reversed here.');
+  }
+
+  const outputTankId = product.output_holding_tank_equipment_id;
+  if (outputTankId && product.final_volume_gal > 0.001) {
+    const outputContents = getHoldingTankContents(outputTankId);
+    if (outputContents.volume_gal + 0.01 < product.final_volume_gal) {
+      const tank = queryOne<{ name: string }>(
+        'SELECT name FROM floor_equipment WHERE id = ?',
+        [outputTankId],
+      );
+      throw new Error(
+        `${tank?.name ?? 'Output tank'} holds ${outputContents.volume_gal.toFixed(1)} gal; `
+        + `this batch added ${product.final_volume_gal.toFixed(1)} gal. `
+        + 'Transfer or adjust spirit before undoing production.',
+      );
+    }
+  }
+
+  const spiritSources = getBlendSpiritSources(id);
+  for (const source of spiritSources) {
+    if (!source.barrel_id || source.volume_gal <= 0) continue;
+    const barrel = queryOne<{ current_volume_gal: number }>(
+      'SELECT current_volume_gal FROM barrels WHERE id = ?',
+      [source.barrel_id],
+    );
+    if (!barrel) continue;
+    const restored = barrel.current_volume_gal + source.volume_gal;
+    const nextStatus = restored > 0.01 ? 'aging' : 'empty';
+    runQuery(
+      'UPDATE barrels SET current_volume_gal = ?, status = ? WHERE id = ?',
+      [restored, nextStatus, source.barrel_id],
+    );
+  }
+
+  const ingredients = getBlendIngredients(id);
+  for (const ing of ingredients) {
+    if (ing.inventory_item_id && ing.amount > 0) {
+      adjustInventory(ing.inventory_item_id, ing.amount);
+    }
+  }
+
+  runQuery(
+    `UPDATE blend_products SET status = 'approved', executed_at = NULL WHERE id = ?`,
+    [id],
+  );
+
+  syncHoldingTankStatuses();
+}
+
 /** Save post-production lab measurements on an executed batch. */
 export function saveBlendVerification(
   id: number,

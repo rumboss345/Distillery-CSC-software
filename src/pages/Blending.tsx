@@ -4,6 +4,7 @@ import {
   computeBlendFormulation,
   defaultBlendingOutputTankId,
   executeBlendProduct,
+  undoBlendProduction,
   getBarrelsForBlend,
   getBlendIngredients,
   getBlendProducts,
@@ -93,7 +94,7 @@ const STEP_HINTS: Record<number, string> = {
   5: 'Confirm the calculated proof matches your expectations before saving or running a lab trial.',
   6: 'Enter what the lab actually measured. If it is off, use Correct This Batch below.',
   7: 'Once you are satisfied with the lab results, approve the recipe for production.',
-  8: 'Choose where the finished batch goes, then produce. Spirit is pulled from source tanks and ingredients are deducted. Cannot be undone.',
+  8: 'Choose where the finished batch goes, then produce. Spirit is pulled from source tanks and ingredients are deducted. Admins can undo production afterward to restore tanks and inventory.',
   9: 'Weigh or measure the finished batch, then save. Use weight on a scale if that is how you verify yield.',
 };
 
@@ -293,6 +294,7 @@ function buildSavePayload(
 
 export function Blending() {
   const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const [searchParams] = useSearchParams();
   const { key, refresh } = useRefreshKey();
   const blends = getBlendProducts();
@@ -1087,6 +1089,41 @@ export function Blending() {
       refresh();
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Production failed.');
+    }
+  };
+
+  const confirmUndoProduce = (batchLabel: string) => confirm(
+    `Undo production for "${batchLabel}"?\n\n`
+    + 'Spirit will return to source tanks (and barrels if used), ingredients go back to inventory, '
+    + 'and the finished batch will be removed from the output tank ledger. '
+    + 'The batch returns to approved so you can fix or re-check before producing again.',
+  );
+
+  const handleUndoProduce = () => {
+    if (!editId || !isAdmin) return;
+    if (!confirmUndoProduce(form.product_name)) return;
+    try {
+      undoBlendProduction(editId);
+      setForm((f) => ({ ...f, status: 'approved' }));
+      setWizardStep(8);
+      refresh();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Could not undo production.');
+    }
+  };
+
+  const handleUndoProduceFromList = (blend: (typeof blends)[number]) => {
+    if (!isAdmin) return;
+    if (!confirmUndoProduce(blend.product_name)) return;
+    try {
+      undoBlendProduction(blend.id);
+      refresh();
+      if (showWizard && editId === blend.id) {
+        setForm((f) => ({ ...f, status: 'approved' }));
+        setWizardStep(8);
+      }
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Could not undo production.');
     }
   };
 
@@ -1923,6 +1960,16 @@ export function Blending() {
                   {getHoldingTanks().find((t) => t.id === form.output_holding_tank_equipment_id)?.name ?? 'holding tank'}.
                 </p>
               ) : null}
+              {isAdmin && form.status === 'executed' && (
+                <div className="wizard-admin-actions no-print">
+                  <button type="button" className="btn btn-secondary" onClick={handleUndoProduce}>
+                    Undo production (admin)
+                  </button>
+                  <p className="field-hint">
+                    Restores source tanks and ingredient stock; removes this batch from the output tank ledger.
+                  </p>
+                </div>
+              )}
               <div className="measure-mode-toggle">
                 <span className="measure-mode-label">How are you verifying yield?</span>
                 <div className="measure-mode-buttons">
@@ -2087,6 +2134,15 @@ export function Blending() {
                     <button className="btn btn-sm btn-primary" onClick={() => openContinue(b)}>
                       {b.status === 'executed' || b.status === 'bottled' || b.status === 'blended' ? 'View' : 'Continue'}
                     </button>
+                    {isAdmin && b.status === 'executed' && (
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-secondary"
+                        onClick={() => handleUndoProduceFromList(b)}
+                      >
+                        Undo produce
+                      </button>
+                    )}
                     {b.status !== 'executed' && b.status !== 'bottled' && b.status !== 'blended' && (
                       <button className="btn btn-sm btn-ghost" onClick={() => handleDelete(b.id)}>Delete</button>
                     )}
