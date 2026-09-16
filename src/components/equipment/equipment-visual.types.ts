@@ -26,8 +26,6 @@ export interface EquipmentVisualProps {
   data: EquipmentVisualData;
   selected?: boolean;
   size?: 'sm' | 'md' | 'lg';
-  /** Multiplier on top of size preset (process view uses this for tank vs still sizing). */
-  scaleMultiplier?: number;
   labelStyle?: 'default' | 'process';
   onClick?: () => void;
   className?: string;

@@ -29,7 +29,6 @@ export interface TankVisualProps {
   tank: TankVisualData;
   selected?: boolean;
   size?: 'sm' | 'md' | 'lg';
-  scaleMultiplier?: number;
   labelStyle?: 'default' | 'process';
   onClick?: () => void;
   className?: string;
