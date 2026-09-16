@@ -31,12 +31,13 @@ export function TankVisual({
   tank,
   selected = false,
   size = 'md',
+  scaleMultiplier = 1,
   labelStyle = 'default',
   onClick,
   className = '',
 }: TankVisualProps) {
   const uid = useId().replace(/:/g, '');
-  const scale = SIZE_MAP[size];
+  const scale = SIZE_MAP[size] * scaleMultiplier;
   const liquid = LIQUID_COLORS[tank.status];
   const isProcess = labelStyle === 'process';
 
