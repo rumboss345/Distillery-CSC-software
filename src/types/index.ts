@@ -212,6 +212,17 @@ export interface HoldingTankTransferView extends HoldingTankTransfer {
   dest_tank_name?: string;
 }
 
+export interface BarrelFill {
+  id: number;
+  barrel_id: number;
+  source_holding_tank_equipment_id: number;
+  volume_gal: number;
+  abv: number;
+  fill_date: string;
+  notes: string;
+  created_at: string;
+}
+
 export interface Barrel {
   id: number;
   barrel_number: string;
