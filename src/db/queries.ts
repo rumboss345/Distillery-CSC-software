@@ -1,4 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
+import {
+  additionalPackagingNeeded,
+  packagingBottleCountsBySku,
+  packagingInventoryAdjustments,
+} from '../lib/bottling-lines';
 import { isFermenterSourcedRun, isTankSourcedRun, runUsesDestHoldingTank } from '../lib/distillation-run-types';
 import { chargeExceedsStillCapacity, stillChargeCapacityMessage } from '../lib/still-charge';
 import { initDatabase, clearAllData } from './database';
@@ -183,6 +188,40 @@ function applyInventoryDelta(category: InventoryItem['category'], name: string, 
   const item = findInventoryItem(category, name);
   if (!item) return;
   adjustInventory(item.id, delta);
+}
+
+function assertPackagingInventoryAvailable(needBySku: Record<string, number>): void {
+  for (const [name, need] of Object.entries(needBySku)) {
+    if (need <= 0) continue;
+    const item = findInventoryItem('packaging', name);
+    if (!item) continue;
+    if (item.quantity + 1e-9 < need) {
+      throw new Error(
+        `Not enough ${name} in packaging inventory (on hand ${item.quantity}, need ${need} more for this bottling run).`,
+      );
+    }
+  }
+}
+
+function syncBottlingPackagingInventory(
+  previousLines: BottlingRunLineInput[],
+  nextLines: BottlingRunLineInput[],
+): void {
+  const prev = packagingBottleCountsBySku(previousLines);
+  const next = packagingBottleCountsBySku(nextLines);
+  assertPackagingInventoryAvailable(additionalPackagingNeeded(prev, next));
+  const adjustments = packagingInventoryAdjustments(prev, next);
+  for (const [sku, delta] of Object.entries(adjustments)) {
+    applyInventoryDelta('packaging', sku, delta);
+  }
+}
+
+function bottlingLinesToInventoryInput(lines: BottlingRunLine[]): BottlingRunLineInput[] {
+  return lines.map((line) => ({
+    packaging_bottle: line.packaging_bottle,
+    bottle_size_ml: line.bottle_size_ml,
+    bottle_count: line.bottle_count,
+  }));
 }
 
 export function saveInventoryItem(item: Omit<InventoryItem, 'id' | 'created_at' | 'updated_at'>, id?: number): void {
@@ -1505,8 +1544,8 @@ export function saveBottlingRun(
   lines: BottlingRunLineInput[],
   id?: number,
 ): void {
-  // Rum bottling runs record size + count only; packaging inventory is never adjusted here.
   const activeLines = lines.filter((line) => line.bottle_count > 0 && line.bottle_size_ml > 0);
+  const previousLines = id ? bottlingLinesToInventoryInput(getBottlingRunLines(id)) : [];
   const fromTank = run.source_holding_tank_equipment_id != null;
   const sourceBarrelId = fromTank ? null : run.source_barrel_id;
   const sourceTankId = fromTank ? run.source_holding_tank_equipment_id : null;
@@ -1536,23 +1575,27 @@ export function saveBottlingRun(
     source_volume_gal: sourceVolumeGal,
   };
 
-  if (id) {
+  let runId = id;
+  if (runId) {
     runQuery(
       `UPDATE bottling_runs SET batch_number=?, source_barrel_id=?, source_holding_tank_equipment_id=?, source_volume_gal=?, source_run_id=?, bottling_date=?, packaging_bottle=?, bottle_size_ml=?, bottle_count=?, final_abv=?, product_name=?, lot_number=?, notes=? WHERE id=?`,
-      [header.batch_number, sourceBarrelId, sourceTankId, header.source_volume_gal, header.source_run_id, header.bottling_date, header.packaging_bottle, header.bottle_size_ml, header.bottle_count, header.final_abv, header.product_name, header.lot_number, header.notes, id],
+      [header.batch_number, sourceBarrelId, sourceTankId, header.source_volume_gal, header.source_run_id, header.bottling_date, header.packaging_bottle, header.bottle_size_ml, header.bottle_count, header.final_abv, header.product_name, header.lot_number, header.notes, runId],
     );
-    persistBottlingRunLines(id, activeLines);
+    persistBottlingRunLines(runId, activeLines);
   } else {
-    id = insertRow(
+    runId = insertRow(
       `INSERT INTO bottling_runs (batch_number, source_barrel_id, source_holding_tank_equipment_id, source_volume_gal, source_run_id, bottling_date, packaging_bottle, bottle_size_ml, bottle_count, final_abv, product_name, lot_number, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [header.batch_number, sourceBarrelId, sourceTankId, header.source_volume_gal, header.source_run_id, header.bottling_date, header.packaging_bottle, header.bottle_size_ml, header.bottle_count, header.final_abv, header.product_name, header.lot_number, header.notes],
     );
-    persistBottlingRunLines(id, activeLines);
+    persistBottlingRunLines(runId, activeLines);
   }
+  syncBottlingPackagingInventory(previousLines, activeLines);
   syncHoldingTankStatuses();
 }
 
 export function deleteBottlingRun(id: number): void {
+  const previousLines = bottlingLinesToInventoryInput(getBottlingRunLines(id));
+  syncBottlingPackagingInventory(previousLines, []);
   runQuery('DELETE FROM bottling_runs WHERE id = ?', [id]);
   syncHoldingTankStatuses();
 }

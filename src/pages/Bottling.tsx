@@ -379,10 +379,10 @@ export function Bottling() {
               <input value={form.product_name} onChange={(e) => setForm({ ...form, product_name: e.target.value })} />
               {isRumBottling ? (
                 <span className="field-hint">
-                  Rum product — pick bottle styles from the list, set size (ml), and enter counts. Packaging on-hand inventory is not used or deducted.
+                  Rum product — pick bottle styles from the list, set size (ml), and enter counts. Matching packaging inventory is reduced when you save.
                 </span>
               ) : (
-                <span className="field-hint">Include &quot;Rum&quot; in the name to bottle without packaging inventory tracking.</span>
+                <span className="field-hint">Include &quot;Rum&quot; in the name for rum bottling (bottle dropdown + size). Inventory is reduced for selected SKUs on save.</span>
               )}
             </div>
             <div className="form-group">
@@ -463,8 +463,8 @@ export function Bottling() {
               </div>
               <p className="field-hint">
                 {isRumBottling
-                  ? 'Select each bottle style, confirm size (ml), and enter how many you bottled.'
-                  : 'Bottle different sizes from the same tank in one run.'}
+                  ? 'Select each bottle style, confirm size (ml), and enter how many you bottled (packaging stock is deducted on save).'
+                  : 'Bottle different sizes from the same tank in one run. Packaging inventory is deducted on save.'}
               </p>
               {lines.map((line, index) => {
                 const lineGal = lineVolumeGal(line);
