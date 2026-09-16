@@ -104,6 +104,7 @@ CREATE TABLE IF NOT EXISTS barrels (
   fill_date TEXT NOT NULL,
   spirit_type TEXT NOT NULL DEFAULT '',
   source_run_id INTEGER REFERENCES distillation_runs(id),
+  source_holding_tank_equipment_id INTEGER REFERENCES floor_equipment(id),
   initial_abv REAL NOT NULL DEFAULT 0,
   current_volume_gal REAL NOT NULL DEFAULT 0,
   warehouse_location TEXT NOT NULL DEFAULT '',

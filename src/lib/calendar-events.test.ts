@@ -227,6 +227,7 @@ describe('buildCalendarEventsFromData', () => {
         fill_date: '2026-06-01',
         spirit_type: 'Rum',
         source_run_id: 1,
+        source_holding_tank_equipment_id: null,
         initial_abv: 60,
         current_volume_gal: 53,
         warehouse_location: 'A1',

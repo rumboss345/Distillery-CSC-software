@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { format, differenceInDays } from 'date-fns';
 import {
+  createBarrelFromHoldingTank,
   fillBarrelFromHoldingTank,
   getBarrels,
   getHoldingTanksWithContents,
@@ -23,6 +24,7 @@ const emptyBarrel = (): Omit<Barrel, 'id' | 'created_at'> => ({
   fill_date: new Date().toISOString().slice(0, 10),
   spirit_type: '',
   source_run_id: null,
+  source_holding_tank_equipment_id: null,
   initial_abv: 0,
   current_volume_gal: 0,
   warehouse_location: '',
@@ -47,7 +49,8 @@ export function Barrels() {
     notes: '',
   });
 
-  const tanksWithSpirit = getHoldingTanksWithContents().filter((t) => t.volume_gal > 0);
+  const holdingTanks = getHoldingTanksWithContents();
+  const tanksWithSpirit = holdingTanks.filter((t) => t.volume_gal > 0);
   const fillableBarrels = barrels.filter((b) => b.status !== 'dumped' && b.current_volume_gal < b.capacity_gal - 0.01);
 
   void key;
@@ -62,23 +65,71 @@ export function Barrels() {
     ? selectedFillBarrel.capacity_gal - selectedFillBarrel.current_volume_gal
     : 0;
 
+  const selectedNewSourceTank = form.source_holding_tank_equipment_id
+    ? holdingTanks.find((t) => t.id === form.source_holding_tank_equipment_id)
+    : undefined;
+  const newBarrelMaxFill = selectedNewSourceTank
+    ? Math.min(selectedNewSourceTank.volume_gal, form.capacity_gal)
+    : form.capacity_gal;
+
   const openNew = () => {
     setEditId(undefined);
     const num = String(barrels.length + 1).padStart(3, '0');
-    setForm({ ...emptyBarrel(), barrel_number: `B-${num}` });
+    const firstTank = tanksWithSpirit[0];
+    setForm({
+      ...emptyBarrel(),
+      barrel_number: `B-${num}`,
+      source_holding_tank_equipment_id: firstTank?.id ?? null,
+      initial_abv: firstTank?.abv ?? 0,
+      current_volume_gal: firstTank
+        ? Math.min(firstTank.volume_gal, 53)
+        : 0,
+    });
     setShowForm(true);
   };
 
   const openEdit = (barrel: Barrel) => {
     setEditId(barrel.id);
-    setForm({ ...barrel });
+    setForm({ ...barrel, source_holding_tank_equipment_id: barrel.source_holding_tank_equipment_id ?? null });
     setShowForm(true);
   };
 
   const handleSave = () => {
-    saveBarrel(form, editId);
-    setShowForm(false);
-    refresh();
+    try {
+      if (!editId) {
+        const tankId = form.source_holding_tank_equipment_id;
+        const volumeGal = form.current_volume_gal;
+        if (tankId && volumeGal > 0) {
+          createBarrelFromHoldingTank(
+            {
+              barrel_number: form.barrel_number,
+              wood_type: form.wood_type,
+              capacity_gal: form.capacity_gal,
+              fill_date: form.fill_date,
+              spirit_type: form.spirit_type,
+              source_run_id: null,
+              source_holding_tank_equipment_id: tankId,
+              warehouse_location: form.warehouse_location,
+              status: form.status,
+              notes: form.notes,
+            },
+            tankId,
+            volumeGal,
+          );
+        } else if (tankId && volumeGal <= 0) {
+          alert('Enter initial fill volume when filling from a holding tank.');
+          return;
+        } else {
+          saveBarrel(form, undefined);
+        }
+      } else {
+        saveBarrel(form, editId);
+      }
+      setShowForm(false);
+      refresh();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Could not save barrel.');
+    }
   };
 
   const handleDelete = (id: number) => {
@@ -188,10 +239,14 @@ export function Barrels() {
               {barrels.map((b) => {
                 const age = differenceInDays(new Date(), new Date(b.fill_date));
                 const run = runs.find((r) => r.id === b.source_run_id);
+                const sourceTank = b.source_holding_tank_equipment_id
+                  ? holdingTanks.find((t) => t.id === b.source_holding_tank_equipment_id)
+                  : undefined;
+                const sourceLabel = sourceTank?.name ?? (run ? run.batch_number : '');
                 return (
                   <tr key={b.id}>
                     <td><strong>{b.barrel_number}</strong></td>
-                    <td>{b.spirit_type}{run ? ` (${run.batch_number})` : ''}</td>
+                    <td>{b.spirit_type}{sourceLabel ? ` (${sourceLabel})` : ''}</td>
                     <td>{b.wood_type}</td>
                     <td>{format(new Date(b.fill_date), 'MMM d, yyyy')}</td>
                     <td>{age}</td>
@@ -356,23 +411,70 @@ export function Barrels() {
                 onChange={(fill_date) => setForm({ ...form, fill_date })}
               />
             </div>
-            <div className="form-group">
-              <label>Source Run</label>
+            <div className="form-group full-width">
+              <label>Source holding tank</label>
               <select
-                value={form.source_run_id ?? ''}
-                onChange={(e) => setForm({ ...form, source_run_id: e.target.value ? parseInt(e.target.value) : null })}
+                value={form.source_holding_tank_equipment_id ?? ''}
+                onChange={(e) => {
+                  const source_holding_tank_equipment_id = e.target.value
+                    ? parseInt(e.target.value, 10)
+                    : null;
+                  const tank = source_holding_tank_equipment_id
+                    ? holdingTanks.find((t) => t.id === source_holding_tank_equipment_id)
+                    : undefined;
+                  setForm((prev) => ({
+                    ...prev,
+                    source_holding_tank_equipment_id,
+                    source_run_id: null,
+                    initial_abv: tank?.abv ?? prev.initial_abv,
+                    current_volume_gal: tank && !editId
+                      ? Math.min(tank.volume_gal, prev.capacity_gal)
+                      : prev.current_volume_gal,
+                  }));
+                }}
               >
-                <option value="">— None —</option>
-                {runs.map((r) => <option key={r.id} value={r.id}>{r.batch_number}</option>)}
+                <option value="">— None (manual volume / ABV) —</option>
+                {tanksWithSpirit.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} — {t.volume_gal.toFixed(1)} gal @ {t.abv.toFixed(1)}% ABV
+                  </option>
+                ))}
               </select>
+              {editId && form.source_run_id ? (
+                <span className="field-hint">Legacy source run #{form.source_run_id} (distillation).</span>
+              ) : null}
+              {!editId && form.source_holding_tank_equipment_id ? (
+                <span className="field-hint">
+                  Initial fill is transferred from this tank and deducted from the tank ledger on save.
+                </span>
+              ) : null}
             </div>
             <div className="form-group">
               <label>Initial ABV (%)</label>
-              <input type="number" step="0.1" value={form.initial_abv || ''} onChange={(e) => setForm({ ...form, initial_abv: parseFloat(e.target.value) || 0 })} />
+              <input
+                type="number"
+                step="0.1"
+                value={form.initial_abv || ''}
+                disabled={Boolean(form.source_holding_tank_equipment_id && !editId)}
+                onChange={(e) => setForm({ ...form, initial_abv: parseFloat(e.target.value) || 0 })}
+              />
+              {form.source_holding_tank_equipment_id && !editId && selectedNewSourceTank ? (
+                <span className="field-hint">From tank at fill ({selectedNewSourceTank.abv.toFixed(1)}%).</span>
+              ) : null}
             </div>
             <div className="form-group">
-              <label>Current Volume (gal)</label>
-              <input type="number" step="0.1" value={form.current_volume_gal || ''} onChange={(e) => setForm({ ...form, current_volume_gal: parseFloat(e.target.value) || 0 })} />
+              <label>{editId ? 'Current volume (gal)' : 'Initial fill volume (gal)'}</label>
+              <input
+                type="number"
+                step="0.1"
+                value={form.current_volume_gal || ''}
+                onChange={(e) => setForm({ ...form, current_volume_gal: parseFloat(e.target.value) || 0 })}
+              />
+              {!editId && form.source_holding_tank_equipment_id && selectedNewSourceTank ? (
+                <span className="field-hint">
+                  Max {newBarrelMaxFill.toFixed(1)} gal (tank {selectedNewSourceTank.volume_gal.toFixed(1)} · capacity {form.capacity_gal}).
+                </span>
+              ) : null}
             </div>
             <div className="form-group">
               <label>Warehouse Location</label>
