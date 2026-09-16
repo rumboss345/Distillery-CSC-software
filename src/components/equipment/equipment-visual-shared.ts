@@ -60,6 +60,12 @@ const FERMENTER_LIQUID_HIGH_BRIX = {
 
 const FERMENTER_LIQUID_READY = LIQUID_COLORS.active;
 
+export const MASH_WASH_LIQUID = {
+  base: '#6b4423',
+  highlight: '#c9a06c',
+  edge: '#4a3020',
+};
+
 export function liquidColorsForFermenter(
   visualStatus: EquipmentVisualStatus,
   latestBrix: number | null | undefined,
@@ -81,6 +87,8 @@ export function buildEquipmentVisualData(
     ? Math.min(100, (currentVolumeGal / capacityGal) * 100)
     : (currentVolumeGal > 0 ? 100 : 0);
 
+  const isWashing = item.equipment_type === 'mash_tun' && item.active_mash_status === 'mashing';
+
   let liquidName = report?.detail || undefined;
   if (!liquidName && item.active_batch_number) {
     liquidName = `Wash ${item.active_batch_number}`;
@@ -88,6 +96,10 @@ export function buildEquipmentVisualData(
   if (item.equipment_type === 'holding_tank' && !liquidName && item.notes) {
     liquidName = item.notes;
   }
+
+  const visualFillPercent = isWashing && fillPercent <= 0
+    ? 78
+    : fillPercent;
 
   return {
     id: item.id,
@@ -97,11 +109,12 @@ export function buildEquipmentVisualData(
     typeLabel: equipmentTypeLabel(item.equipment_type),
     capacityGal,
     currentVolumeGal,
-    fillPercent,
+    fillPercent: visualFillPercent,
     liquidName: liquidName || undefined,
     abv: report?.abv ?? (item.active_abv != null && item.active_abv > 0 ? item.active_abv : undefined),
-    status: mapVisualStatus(item.status, fillPercent),
+    status: isWashing ? 'active' : mapVisualStatus(item.status, fillPercent),
     isFermenting: item.equipment_type === 'fermenter' && item.active_mash_status === 'fermenting',
+    isWashing,
     fermenterLatestBrix: item.equipment_type === 'fermenter' ? item.active_latest_brix : undefined,
     detail: report?.detail || item.notes || undefined,
     planName,

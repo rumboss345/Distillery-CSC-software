@@ -1168,6 +1168,59 @@ tr:hover td {
     animation: none;
     opacity: 0.35;
   }
+
+  .mash-tun-wash-fill,
+  .mash-tun-wash-surface,
+  .mash-tun-wash-bubble {
+    animation: none;
+  }
+}
+
+.mash-tun-wash-fill {
+  animation: mash-tun-wash-slosh 2.8s ease-in-out infinite alternate;
+}
+
+.mash-tun-wash-surface {
+  animation: mash-tun-wash-surface 2.2s ease-in-out infinite alternate;
+}
+
+.mash-tun-wash-bubble {
+  fill: rgba(255, 235, 210, 0.55);
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mash-tun-wash-bubble-rise 2.5s ease-in infinite;
+}
+
+@keyframes mash-tun-wash-slosh {
+  from { transform: scaleY(1) translateY(0); opacity: 0.88; }
+  to { transform: scaleY(1.03) translateY(-1px); opacity: 0.96; }
+}
+
+@keyframes mash-tun-wash-surface {
+  from { opacity: 0.45; }
+  to { opacity: 0.85; }
+}
+
+@keyframes mash-tun-wash-bubble-rise {
+  0% { transform: translateY(0) scale(1); opacity: 0.65; }
+  100% { transform: translateY(-70px) scale(0.5); opacity: 0; }
+}
+
+.wash-tank-form-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0.75rem 0 0.25rem;
+  padding: 0.75rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated, rgba(255, 255, 255, 0.03));
+}
+
+.wash-tank-form-preview .equipment-visual {
+  transform: scale(0.95);
+  transform-origin: center top;
 }
 
 .eq-pot-still {
