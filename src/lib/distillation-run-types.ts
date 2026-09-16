@@ -1,13 +1,13 @@
 import type { DistillationRunType } from '../types';
 
 export const RUN_TYPE_LABELS: Record<DistillationRunType, string> = {
-  wash: 'Low Wine Rum',
+  wash: 'Low Wine Run',
   low_wines: 'Spirit Run',
   heavy_rum: 'Heavy Rum',
 };
 
 export const RUN_TYPE_BUTTON_LABELS: Record<DistillationRunType, string> = {
-  wash: '+ Low Wine Rum',
+  wash: '+ Low Wine Run',
   low_wines: '+ Spirit Run',
   heavy_rum: '+ Heavy Rum',
 };

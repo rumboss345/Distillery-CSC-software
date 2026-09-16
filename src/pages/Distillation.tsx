@@ -839,7 +839,7 @@ export function Distillation() {
                 )}
                 {chargeableSourceTanks.length === 0 && !savedLowWineTankName && (
                   <p className="field-hint">
-                    No spirit in holding tanks yet — add cuts from a low wine rum run first.
+                    No spirit in holding tanks yet — add cuts from a low wine run first.
                   </p>
                 )}
                 {selectedLowWineAvailable && runForm.source_holding_tank_equipment_id && (
