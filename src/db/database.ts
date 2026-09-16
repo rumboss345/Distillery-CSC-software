@@ -444,6 +444,7 @@ function runMigrations(): void {
   migrateBottlingRunLines();
   migrateBlendRecipes();
   migrateBarrelBlendRecipes();
+  migrateBarrelFills();
   migrateFloorPlanPages();
   migrateAdvancedBlending();
   migrateAssignedEmployee();
@@ -697,6 +698,24 @@ function migrateBarrelBlendRecipes(): void {
   if (!hasBlendBarrel) {
     db.run(`ALTER TABLE blend_spirit_sources ADD COLUMN barrel_id INTEGER REFERENCES barrels(id)`);
   }
+}
+
+function migrateBarrelFills(): void {
+  if (!db) return;
+  db.run(`
+    CREATE TABLE IF NOT EXISTS barrel_fills (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      barrel_id INTEGER NOT NULL REFERENCES barrels(id) ON DELETE CASCADE,
+      source_holding_tank_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
+      volume_gal REAL NOT NULL,
+      abv REAL NOT NULL,
+      fill_date TEXT NOT NULL,
+      notes TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_barrel_fills_barrel ON barrel_fills(barrel_id)`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_barrel_fills_tank ON barrel_fills(source_holding_tank_equipment_id)`);
 }
 
 function migrateFloorPlanPages(): void {
