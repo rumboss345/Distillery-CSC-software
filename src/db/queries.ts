@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { BARREL_STOCK_CATEGORY, BARREL_STOCK_ITEM_NAME } from '../lib/barrel-inventory';
 import {
   additionalPackagingNeeded,
   packagingBottleCountsBySku,
@@ -188,6 +189,21 @@ function applyInventoryDelta(category: InventoryItem['category'], name: string, 
   const item = findInventoryItem(category, name);
   if (!item) return;
   adjustInventory(item.id, delta);
+}
+
+function deductOneBarrelFromInventory(): void {
+  const item = findInventoryItem(BARREL_STOCK_CATEGORY, BARREL_STOCK_ITEM_NAME);
+  if (!item) {
+    throw new Error(
+      `Inventory item "${BARREL_STOCK_ITEM_NAME}" was not found. Add it under the barrels category on Inventory.`,
+    );
+  }
+  if (item.quantity + 1e-9 < 1) {
+    throw new Error(
+      `Not enough empty barrels in inventory (${item.name}: ${item.quantity} on hand). Receive barrels on Inventory before adding a new barrel.`,
+    );
+  }
+  adjustInventory(item.id, -1);
 }
 
 function assertPackagingInventoryAvailable(needBySku: Record<string, number>): void {
@@ -1337,6 +1353,7 @@ export function saveBarrel(barrel: Omit<Barrel, 'id' | 'created_at'>, id?: numbe
     );
     return;
   }
+  deductOneBarrelFromInventory();
   return insertRow(
     `INSERT INTO barrels (barrel_number, wood_type, capacity_gal, fill_date, spirit_type, source_run_id, source_holding_tank_equipment_id, initial_abv, current_volume_gal, warehouse_location, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [

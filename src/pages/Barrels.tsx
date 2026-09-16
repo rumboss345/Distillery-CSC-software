@@ -12,6 +12,7 @@ import {
 import { DatePicker } from '../components/DatePicker';
 import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
+import { BARREL_STOCK_ITEM_NAME } from '../lib/barrel-inventory';
 import type { Barrel, BarrelStatus } from '../types';
 
 const STATUSES: BarrelStatus[] = ['aging', 'empty', 'dumped'];
@@ -201,6 +202,11 @@ export function Barrels() {
 
       {showForm && (
         <Modal title={editId ? 'Edit Barrel' : 'New Barrel'} onClose={() => setShowForm(false)}>
+          {!editId && (
+            <p className="field-hint" style={{ marginTop: 0 }}>
+              Saving a new barrel deducts 1 from inventory ({BARREL_STOCK_ITEM_NAME}).
+            </p>
+          )}
           <div className="form-grid">
             <div className="form-group">
               <label>Barrel Number</label>
