@@ -2731,15 +2731,15 @@ tr:hover td {
   }
 }
 
-/* Blending production worksheet */
+/* Blending production worksheet — light paper on dark UI; override global table/muted colors */
 .blend-worksheet-print-area {
   margin: 1.25rem 0;
   max-height: 420px;
   overflow: auto;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid #ccc;
   border-radius: var(--radius);
   background: #fff;
-  color: #111;
+  color: #1a1816;
 }
 
 .blend-worksheet-actions {
@@ -2753,6 +2753,18 @@ tr:hover td {
   padding: 1.25rem 1.5rem;
   font-size: 0.92rem;
   line-height: 1.45;
+  background: #fff;
+  color: #1a1816;
+}
+
+.blend-production-worksheet h1,
+.blend-production-worksheet h2,
+.blend-production-worksheet p,
+.blend-production-worksheet li,
+.blend-production-worksheet div,
+.blend-production-worksheet strong,
+.blend-production-worksheet small {
+  color: #1a1816;
 }
 
 .blend-worksheet-header {
@@ -2771,12 +2783,13 @@ tr:hover td {
 
 .blend-worksheet-subtitle {
   margin: 0.25rem 0 0;
-  color: #444;
+  color: #333;
 }
 
 .blend-worksheet-meta {
   text-align: right;
   font-size: 0.85rem;
+  color: #1a1816;
 }
 
 .blend-worksheet-section {
@@ -2788,6 +2801,7 @@ tr:hover td {
   font-size: 0.95rem;
   text-transform: uppercase;
   letter-spacing: 0.03em;
+  color: #1a1816;
 }
 
 .blend-worksheet-alert {
@@ -2795,11 +2809,21 @@ tr:hover td {
   background: #fff8e6;
   border: 1px solid #e6c200;
   border-radius: 4px;
+  color: #1a1816;
+}
+
+.blend-worksheet-alert p,
+.blend-worksheet-alert li {
+  color: #1a1816;
 }
 
 .blend-worksheet-table {
   width: 100%;
   border-collapse: collapse;
+}
+
+.blend-worksheet-table thead {
+  background: #f3f3f3;
 }
 
 .blend-worksheet-table th,
@@ -2808,11 +2832,20 @@ tr:hover td {
   padding: 0.45rem 0.55rem;
   text-align: left;
   vertical-align: top;
+  color: #1a1816;
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: inherit;
 }
 
 .blend-worksheet-table th {
   background: #f3f3f3;
   font-weight: 600;
+  color: #1a1816;
+}
+
+.blend-worksheet-table td small {
+  color: #333;
 }
 
 .blend-worksheet-check {
@@ -2889,11 +2922,23 @@ tr:hover td {
     padding: 0 !important;
   }
 
-  .blend-worksheet-print-area {
+  .blend-worksheet-print-area,
+  .blend-production-worksheet {
     max-height: none;
     overflow: visible;
     border: none;
     margin: 0;
+    background: #fff;
+    color: #1a1816;
+  }
+
+  .blend-production-worksheet th,
+  .blend-production-worksheet td,
+  .blend-production-worksheet p,
+  .blend-production-worksheet li,
+  .blend-production-worksheet h1,
+  .blend-production-worksheet h2 {
+    color: #1a1816 !important;
   }
 
   .wizard-produce-card > p:first-child {
