@@ -383,6 +383,24 @@ function runMigrations(): void {
   `);
   db.run(`
     UPDATE floor_equipment
+    SET equipment_type = 'collection_vessel',
+        notes = CASE name
+          WHEN 'Latina 500L' THEN '500L collection vessel'
+          WHEN 'Latina 300-1' THEN '300L collection vessel'
+          WHEN 'Latina 300-2' THEN '300L collection vessel'
+          WHEN 'Latina 300-3' THEN '300L collection vessel'
+          ELSE notes
+        END
+    WHERE name IN (
+      'Latina 500L',
+      'Latina 300-1',
+      'Latina 300-2',
+      'Latina 300-3',
+      'Low wines collection tank of Vendome'
+    )
+  `);
+  db.run(`
+    UPDATE floor_equipment
     SET name = 'Groen kettle',
         equipment_type = 'mash_tun',
         capacity_gal = 100,
