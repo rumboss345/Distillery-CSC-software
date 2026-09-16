@@ -20,7 +20,12 @@ import {
   generateBatchNumber,
   useRefreshKey,
 } from '../db/queries';
-import { formatBarrelInventoryOption, spiritLabelForBarrel } from '../lib/barrel-blending';
+import {
+  barrelsForBlendRow,
+  formatBarrelInventoryOption,
+  hasDuplicateBarrelSelections,
+  spiritLabelForBarrel,
+} from '../lib/barrel-blending';
 import { AbvTemperatureInput, correctedAbvFromInputs } from '../components/AbvTemperatureInput';
 import { BlendAbvConfirmation } from '../components/BlendAbvConfirmation';
 import { BlendProductionWorksheet } from '../components/BlendProductionWorksheet';
@@ -809,12 +814,25 @@ export function Blending() {
     }));
   };
 
+  const barrelOptionsForRow = (rowIndex: number) => barrelsForBlendRow(
+    barrelInventory,
+    spiritSources.map((s) => s.barrel_id),
+    rowIndex,
+  );
+
   const selectBarrelForSpirit = (index: number, rawId: string) => {
     if (!rawId) {
       updateSpiritSource(index, { barrel_id: null });
       return;
     }
     const barrelId = parseInt(rawId, 10);
+    const alreadyUsed = spiritSources.some(
+      (s, i) => i !== index && s.barrel_id === barrelId,
+    );
+    if (alreadyUsed) {
+      alert('That barrel is already selected for another pull. Choose a different barrel.');
+      return;
+    }
     const barrel = barrelInventory.find((b) => b.id === barrelId);
     if (!barrel) return;
     updateSpiritSource(index, {
@@ -943,6 +961,10 @@ export function Blending() {
       alert(isBarrelBlendWizard
         ? 'Please select at least one aging barrel and enter a pull volume.'
         : 'Please select at least one spirit tank and enter a volume.');
+      return false;
+    }
+    if (step === 2 && isBarrelBlendWizard && hasDuplicateBarrelSelections(spiritSources.map((s) => s.barrel_id))) {
+      alert('Each barrel can only be used once per blend. Select a different barrel for each pull.');
       return false;
     }
     if (step === 3 && form.target_abv == null) {
@@ -1394,7 +1416,7 @@ export function Blending() {
                           onChange={(e) => selectBarrelForSpirit(index, e.target.value)}
                         >
                           <option value="">— Choose a barrel —</option>
-                          {barrelInventory.map((barrel) => (
+                          {barrelOptionsForRow(index).map((barrel) => (
                             <option key={barrel.id} value={barrel.id}>
                               {formatBarrelInventoryOption(barrel)}
                             </option>
