@@ -1,8 +1,10 @@
 import {
   formatBlendRecipeAdditive,
   formatBlendRecipeSpiritPull,
+  formatSpiritPullWeightLbs,
   measureAlternate,
   spiritMeasureAlternate,
+  spiritWeightLbsFromVolumeGal,
 } from '../lib/blending';
 import type { SpiritAbvDelta } from '../lib/blend-formulation';
 import type { BlendIngredientInput } from '../types';
@@ -53,6 +55,14 @@ export function BlendProductionWorksheet({
   notes,
 }: BlendProductionWorksheetProps) {
   const additives = ingredients.filter((i) => i.amount > 0);
+  const expectedBatchWeightLabel = formatSpiritPullWeightLbs(expectedYieldGal, expectedAbv);
+  const totalSpiritWeightLbs = spiritLines.reduce(
+    (sum, line) => sum + spiritWeightLbsFromVolumeGal(line.volumeGal, line.abv),
+    0,
+  );
+  const totalSpiritWeightLabel = totalSpiritWeightLbs > 0
+    ? (totalSpiritWeightLbs >= 10 ? `${totalSpiritWeightLbs.toFixed(1)} lbs` : `${totalSpiritWeightLbs.toFixed(2)} lbs`)
+    : null;
 
   return (
     <div className="blend-production-worksheet">
@@ -85,6 +95,15 @@ export function BlendProductionWorksheet({
               <td>{expectedYieldGal.toFixed(1)} gal @ {expectedAbv.toFixed(1)}% ABV</td>
             </tr>
             <tr>
+              <th>Expected batch weight</th>
+              <td colSpan={3}>
+                {expectedBatchWeightLabel ?? '—'}
+                {expectedBatchWeightLabel ? (
+                  <span className="blend-worksheet-weight-hint"> (finished blend on scale, TTB Table 3)</span>
+                ) : null}
+              </td>
+            </tr>
+            <tr>
               <th>Output tank</th>
               <td colSpan={3}>{outputTankName ?? '—'}</td>
             </tr>
@@ -115,6 +134,7 @@ export function BlendProductionWorksheet({
               <th className="blend-worksheet-check">Done</th>
               <th>Source tank</th>
               <th>Pull amount</th>
+              <th>Expected weight</th>
               <th>ABV</th>
               <th>Notes</th>
             </tr>
@@ -127,6 +147,7 @@ export function BlendProductionWorksheet({
               const abvNote = line.recipeAbv != null && Math.abs(line.abv - line.recipeAbv) > 0.05
                 ? `Recipe ${line.recipeAbv.toFixed(1)}%`
                 : '';
+              const pullWeightLabel = formatSpiritPullWeightLbs(line.volumeGal, line.abv);
               return (
                 <tr key={index}>
                   <td className="blend-worksheet-check"><span className="blend-worksheet-box" /></td>
@@ -137,12 +158,21 @@ export function BlendProductionWorksheet({
                     <br />
                     <small>{formatBlendRecipeSpiritPull(line.label, line.volumeGal, line.abv)}</small>
                   </td>
+                  <td>{pullWeightLabel ?? '—'}</td>
                   <td>{line.abv.toFixed(1)}%</td>
                   <td>{abvNote}</td>
                 </tr>
               );
             })}
           </tbody>
+          {totalSpiritWeightLabel && (
+            <tfoot>
+              <tr>
+                <td colSpan={4}><strong>Total spirit pull weight</strong></td>
+                <td colSpan={2}><strong>{totalSpiritWeightLabel}</strong></td>
+              </tr>
+            </tfoot>
+          )}
         </table>
       </section>
 

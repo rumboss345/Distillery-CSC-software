@@ -2848,6 +2848,11 @@ tr:hover td {
   color: #333;
 }
 
+.blend-worksheet-weight-hint {
+  font-size: 0.85em;
+  color: #333;
+}
+
 .blend-worksheet-check {
   width: 2.5rem;
   text-align: center;
