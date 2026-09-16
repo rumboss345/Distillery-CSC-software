@@ -244,6 +244,57 @@
   to { opacity: 1; transform: scaleY(1.08); }
 }
 
+.column-still-liquid {
+  animation: column-still-heat-pulse 1.6s ease-in-out infinite alternate;
+}
+
+.column-still-liquid-surface {
+  animation: column-still-surface-shimmer 2.2s ease-in-out infinite alternate;
+}
+
+@keyframes column-still-heat-pulse {
+  from { opacity: 0.78; filter: brightness(0.95); }
+  to { opacity: 0.96; filter: brightness(1.08); }
+}
+
+@keyframes column-still-surface-shimmer {
+  from { opacity: 0.55; }
+  to { opacity: 0.9; }
+}
+
+.column-still-vapor-dot {
+  fill: rgba(255, 220, 200, 0.75);
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: column-still-vapor-rise 2.4s ease-in infinite;
+}
+
+@keyframes column-still-vapor-rise {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 0.75;
+  }
+  75% {
+    opacity: 0.25;
+  }
+  100% {
+    transform: translateY(-115px) scale(0.45);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .column-still-liquid,
+  .column-still-liquid-surface,
+  .column-still-vapor-dot {
+    animation: none;
+  }
+
+  .column-still-liquid {
+    opacity: 0.88;
+  }
+}
+
 .process-sidebar {
   display: flex;
   flex-direction: column;
