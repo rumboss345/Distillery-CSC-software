@@ -12,8 +12,7 @@ import { buildEquipmentVisualData } from './equipment-visual-shared';
 import {
   computeDefaultProcessPositions,
   computeProcessCanvasSize,
-  getStageZoneTop,
-  PROCESS_STAGE_HEIGHT,
+  computeStageBands,
   snapProcessPosition,
 } from './process-layout';
 import { groupEquipmentByStage } from './process-stages';
@@ -29,6 +28,8 @@ interface ProcessEquipmentCanvasProps {
   onSelect: (id: number | null) => void;
   refreshKey: number;
   onLayoutChange?: () => void;
+  onEditEquipment?: () => void;
+  onRemoveEquipment?: () => void;
 }
 
 type EquipmentItem = FloorEquipmentView & { plan_name: string };
@@ -38,6 +39,8 @@ export function ProcessEquipmentCanvas({
   onSelect,
   refreshKey,
   onLayoutChange,
+  onEditEquipment,
+  onRemoveEquipment,
 }: ProcessEquipmentCanvasProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
@@ -84,14 +87,15 @@ export function ProcessEquipmentCanvas({
   }, [allEquipment, volumeById]);
 
   const stages = useMemo(() => groupEquipmentByStage(allEquipment), [allEquipment]);
+  const stageBands = useMemo(() => computeStageBands(stages), [stages]);
   const defaultPositions = useMemo(
     () => computeDefaultProcessPositions(allEquipment),
     [allEquipment],
   );
 
   const canvasSize = useMemo(
-    () => computeProcessCanvasSize(defaultPositions, stages.length),
-    [defaultPositions, stages.length],
+    () => computeProcessCanvasSize(defaultPositions, stageBands),
+    [defaultPositions, stageBands],
   );
 
   const tanks = useMemo(
@@ -209,12 +213,19 @@ export function ProcessEquipmentCanvas({
   return (
     <div className="process-view">
       <div className="process-toolbar">
-        <span className="process-toolbar-title">Production</span>
-        <span className="process-toolbar-hint">Drag equipment to arrange (snaps to grid) · Pan empty space to move canvas</span>
+        <span className="process-toolbar-title">Production flow</span>
+        <span className="process-toolbar-hint">Drag to arrange · Pan background to scroll</span>
+        <nav className="process-toolbar-links" aria-label="Production shortcuts">
+          <Link to="/wash" className="process-toolbar-link">Wash</Link>
+          <Link to="/distillation" className="process-toolbar-link">Distill</Link>
+          <Link to="/blending" className="process-toolbar-link">Blend</Link>
+          <Link to="/bottling" className="process-toolbar-link">Bottle</Link>
+          <Link to="/barrels" className="process-toolbar-link">Barrels</Link>
+        </nav>
         <div className="process-toolbar-actions">
-          <button type="button" className="btn btn-sm btn-secondary" onClick={zoomOut}>−</button>
+          <button type="button" className="btn btn-sm btn-secondary" onClick={zoomOut} aria-label="Zoom out">−</button>
           <button type="button" className="btn btn-sm btn-secondary" onClick={fitScreen}>Fit</button>
-          <button type="button" className="btn btn-sm btn-secondary" onClick={zoomIn}>+</button>
+          <button type="button" className="btn btn-sm btn-secondary" onClick={zoomIn} aria-label="Zoom in">+</button>
         </div>
       </div>
 
@@ -238,21 +249,22 @@ export function ProcessEquipmentCanvas({
               transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`,
             }}
           >
-            {stages.map(({ stage }, idx) => (
+            {stages.map(({ stage, items }, idx) => (
               <div
                 key={stage.key}
-                className="process-stage-zone"
+                className={`process-stage-zone${idx % 2 === 0 ? ' process-stage-zone--alt' : ''}`}
                 style={{
-                  top: getStageZoneTop(idx),
-                  height: PROCESS_STAGE_HEIGHT,
+                  top: stageBands[idx]?.top ?? 0,
+                  height: stageBands[idx]?.height ?? 260,
                   width: canvasSize.width - 16,
                 }}
               >
                 <div className="process-stage-header">
                   <span className="process-stage-label">{stage.label}</span>
+                  <span className="process-stage-count">{items.length} unit{items.length === 1 ? '' : 's'}</span>
                   {assignmentsByStage[stage.key]?.length ? (
                     <span className="process-stage-assignees">
-                      — {assignmentsByStage[stage.key]
+                      {assignmentsByStage[stage.key]
                         .map((a) => a.name || a.email)
                         .join(', ')}
                     </span>
@@ -289,39 +301,45 @@ export function ProcessEquipmentCanvas({
         </div>
 
         <aside className="process-sidebar">
-          <div className="process-panel card process-panel--status">
-            <h4 className="process-panel-title">System Status</h4>
-            <dl className="process-status-list">
-              <dt>Active mashes</dt><dd>{summary.activeMashes}</dd>
-              <dt>Active runs</dt><dd>{summary.activeRuns}</dd>
-              <dt>Barrels aging</dt><dd>{summary.barrelsAging}</dd>
-              <dt>Equipment offline</dt><dd>{offlineCount}</dd>
-            </dl>
-          </div>
-
-          <ProcessEquipmentDetailPanel
-            equipment={selectedEquipment}
-            visual={selectedVisual}
-            planName={selectedPlanName}
-          />
-
-          <TankLevelsPanel
-            tanks={tanks}
-            selectedId={selectedId}
-            onSelect={onSelect}
-          />
-
-          <div className="process-panel card">
-            <h4 className="process-panel-title">Quick Actions</h4>
-            <div className="process-quick-actions">
-              <Link to="/wash" className="btn btn-sm btn-secondary">Wash Batch</Link>
-              <Link to="/distillation" className="btn btn-sm btn-secondary">Distillation</Link>
-              <Link to="/distillation" className="btn btn-sm btn-secondary">Record Transfer</Link>
-              <Link to="/inventory" className="btn btn-sm btn-secondary">Inventory</Link>
-              <Link to="/bottling" className="btn btn-sm btn-secondary">Bottling</Link>
-              <Link to="/barrels" className="btn btn-sm btn-secondary">Barrel Aging</Link>
+          <section className="process-sidebar-section">
+            <h4 className="process-sidebar-heading">Live summary</h4>
+            <div className="process-stat-grid">
+              <div className="process-stat">
+                <span className="process-stat-value">{summary.activeMashes}</span>
+                <span className="process-stat-label">Mashes</span>
+              </div>
+              <div className="process-stat">
+                <span className="process-stat-value">{summary.activeRuns}</span>
+                <span className="process-stat-label">Runs</span>
+              </div>
+              <div className="process-stat">
+                <span className="process-stat-value">{summary.barrelsAging}</span>
+                <span className="process-stat-label">Barrels</span>
+              </div>
+              <div className="process-stat">
+                <span className="process-stat-value">{offlineCount}</span>
+                <span className="process-stat-label">Offline</span>
+              </div>
             </div>
-          </div>
+          </section>
+
+          <section className="process-sidebar-section process-sidebar-section--detail">
+            <ProcessEquipmentDetailPanel
+              equipment={selectedEquipment}
+              visual={selectedVisual}
+              planName={selectedPlanName}
+              onEdit={onEditEquipment}
+              onRemove={onRemoveEquipment}
+            />
+          </section>
+
+          <section className="process-sidebar-section process-sidebar-section--tanks">
+            <TankLevelsPanel
+              tanks={tanks}
+              selectedId={selectedId}
+              onSelect={onSelect}
+            />
+          </section>
         </aside>
       </div>
     </div>
