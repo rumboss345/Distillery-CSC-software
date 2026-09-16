@@ -19,7 +19,6 @@ import { groupEquipmentByStage } from './process-stages';
 import { EquipmentVisual } from './EquipmentVisual';
 import { ProcessEquipmentDetailPanel } from './ProcessEquipmentDetailPanel';
 import { processEquipmentVisualScale } from './process-visual-scale';
-import { TankLevelsPanel } from './TankLevelsPanel';
 import type { EquipmentVisualData } from './equipment-visual.types';
 import type { FloorEquipmentView } from '../../types';
 import './process-view.css';
@@ -97,11 +96,6 @@ export function ProcessEquipmentCanvas({
   const canvasSize = useMemo(
     () => computeProcessCanvasSize(defaultPositions, stageBands),
     [defaultPositions, stageBands],
-  );
-
-  const tanks = useMemo(
-    () => [...visualById.values()].filter((v) => v.equipmentType === 'holding_tank'),
-    [visualById],
   );
 
   const summary = getProductionSummary();
@@ -332,14 +326,6 @@ export function ProcessEquipmentCanvas({
               planName={selectedPlanName}
               onEdit={onEditEquipment}
               onRemove={onRemoveEquipment}
-            />
-          </section>
-
-          <section className="process-sidebar-section process-sidebar-section--tanks">
-            <TankLevelsPanel
-              tanks={tanks}
-              selectedId={selectedId}
-              onSelect={onSelect}
             />
           </section>
         </aside>
