@@ -164,7 +164,10 @@ export function FloorCanvas({
                 {item.equipment_type === 'pot_still' && <div className="eq-shape eq-pot-still" />}
                 {item.equipment_type === 'column_still' && <div className="eq-shape eq-column-still" />}
                 {item.equipment_type === 'mash_tun' && <div className="eq-shape eq-mash-tun" />}
-                {(item.equipment_type === 'holding_tank' || item.equipment_type === 'boiler' || item.equipment_type === 'other') && (
+                {(item.equipment_type === 'holding_tank'
+                  || item.equipment_type === 'collection_vessel'
+                  || item.equipment_type === 'boiler'
+                  || item.equipment_type === 'other') && (
                   <div className="eq-shape eq-tank" />
                 )}
               </div>
@@ -172,10 +175,12 @@ export function FloorCanvas({
               {item.active_batch_number && (
                 <div className="floor-equipment-batch">{item.active_batch_number}</div>
               )}
-              {item.equipment_type === 'holding_tank' && item.active_abv != null && item.active_abv > 0 && (
+              {(item.equipment_type === 'holding_tank' || item.equipment_type === 'collection_vessel')
+                && item.active_abv != null && item.active_abv > 0 && (
                 <div className="floor-equipment-batch">{item.active_abv.toFixed(1)}% ABV</div>
               )}
-              {item.equipment_type === 'holding_tank' && item.active_run_count != null && item.active_run_count > 1 && (
+              {(item.equipment_type === 'holding_tank' || item.equipment_type === 'collection_vessel')
+                && item.active_run_count != null && item.active_run_count > 1 && (
                 <div className="floor-equipment-batch">{item.active_run_count} runs</div>
               )}
               <div className="floor-equipment-meta">

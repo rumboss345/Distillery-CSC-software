@@ -12,6 +12,7 @@ export function EquipmentVisual(props: EquipmentVisualProps) {
 
   switch (data.equipmentType) {
     case 'holding_tank':
+    case 'collection_vessel':
       return (
         <TankVisual
           tank={tankVisualDataFromVisualData(data)}

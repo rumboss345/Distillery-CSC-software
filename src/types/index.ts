@@ -23,6 +23,7 @@ export type EquipmentType =
   | 'column_still'
   | 'mash_tun'
   | 'holding_tank'
+  | 'collection_vessel'
   | 'boiler'
   | 'other';
 

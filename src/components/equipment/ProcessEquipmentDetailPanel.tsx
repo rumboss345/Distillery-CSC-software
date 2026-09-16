@@ -101,7 +101,7 @@ export function ProcessEquipmentDetailPanel({
           </>
         )}
       </dl>
-      {equipment.equipment_type === 'holding_tank' && (
+      {(equipment.equipment_type === 'holding_tank' || equipment.equipment_type === 'collection_vessel') && (
         <HoldingTankIntakeHistory
           tankId={equipment.id}
           selectedKey={selectedIntakeKey}
