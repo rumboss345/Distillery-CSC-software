@@ -7,6 +7,7 @@ export const EQUIPMENT_TYPES: { value: EquipmentType; label: string }[] = [
   { value: 'column_still', label: 'Column Still' },
   { value: 'mash_tun', label: 'Wash Tank' },
   { value: 'holding_tank', label: 'Holding Tank' },
+  { value: 'collection_vessel', label: 'Collection Vessels' },
   { value: 'boiler', label: 'Boiler' },
   { value: 'other', label: 'Other' },
 ];
@@ -21,6 +22,7 @@ export const TYPE_COLORS: Record<EquipmentType, string> = {
   column_still: '#d4a04a',
   mash_tun: '#8b7355',
   holding_tank: '#6a9ec9',
+  collection_vessel: '#7c8fd4',
   boiler: '#c96a6a',
   other: '#9a928a',
 };
@@ -50,7 +52,7 @@ export function getEquipmentDisplayColor(
       return getFermenterInUseDisplayColor(options?.fermenterLatestBrix);
     }
     if (type === 'pot_still' || type === 'column_still') return IN_USE_COLORS.still;
-    if (type === 'holding_tank') return IN_USE_COLORS.holding_tank;
+    if (type === 'holding_tank' || type === 'collection_vessel') return IN_USE_COLORS.holding_tank;
     return IN_USE_COLORS.default;
   }
   if (status === 'cleaning') return '#eab308';
@@ -64,10 +66,15 @@ export const TYPE_DEFAULTS: Record<EquipmentType, { width_ft: number; depth_ft: 
   column_still: { width_ft: 8, depth_ft: 20, capacity_gal: 300 },
   mash_tun: { width_ft: 14, depth_ft: 12, capacity_gal: 600 },
   holding_tank: { width_ft: 8, depth_ft: 6, capacity_gal: 100 },
+  collection_vessel: { width_ft: 7, depth_ft: 6, capacity_gal: 80 },
   boiler: { width_ft: 6, depth_ft: 8, capacity_gal: 0 },
   other: { width_ft: 8, depth_ft: 8, capacity_gal: 0 },
 };
 
 export function equipmentTypeLabel(type: EquipmentType): string {
   return EQUIPMENT_TYPES.find((t) => t.value === type)?.label ?? type;
+}
+
+export function isLiquidVesselEquipmentType(type: EquipmentType): boolean {
+  return type === 'holding_tank' || type === 'collection_vessel';
 }

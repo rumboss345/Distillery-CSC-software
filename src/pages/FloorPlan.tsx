@@ -24,6 +24,7 @@ import {
   EQUIPMENT_STATUSES,
   TYPE_DEFAULTS,
   equipmentTypeLabel,
+  isLiquidVesselEquipmentType,
 } from '../lib/equipment';
 import type { EquipmentStatus, EquipmentType, FloorEquipment } from '../types';
 
@@ -328,7 +329,7 @@ export function FloorPlanPage() {
                     </dd>
                   </>
                 )}
-                {selected.equipment_type === 'holding_tank' && selected.active_volume_gal != null && selected.active_volume_gal > 0 && (
+                {isLiquidVesselEquipmentType(selected.equipment_type) && selected.active_volume_gal != null && selected.active_volume_gal > 0 && (
                   <>
                     <dt>Contents</dt>
                     <dd>
@@ -350,7 +351,7 @@ export function FloorPlanPage() {
                   </>
                 )}
               </dl>
-              {selected.equipment_type === 'holding_tank' && (
+              {isLiquidVesselEquipmentType(selected.equipment_type) && (
                 <HoldingTankIntakeHistory
                   tankId={selected.id}
                   selectedKey={selectedIntakeKey}

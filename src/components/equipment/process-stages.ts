@@ -11,6 +11,7 @@ export const PROCESS_STAGES: ProcessStage[] = [
   { key: 'preparation', label: 'Mash / Cook', types: ['mash_tun'] },
   { key: 'fermentation', label: 'Fermenter', types: ['fermenter'] },
   { key: 'distillation', label: 'Distillation', types: ['pot_still', 'column_still', 'boiler'] },
+  { key: 'collection', label: 'Collection Vessels', types: ['collection_vessel'] },
   { key: 'storage', label: 'Holding Tanks', types: ['holding_tank'] },
   { key: 'other', label: 'Other Equipment', types: ['other'] },
 ];

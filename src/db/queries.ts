@@ -1597,7 +1597,7 @@ export function fillBarrelFromHoldingTank(input: FillBarrelFromTankInput): void 
   if (!(input.volumeGal > 0)) throw new Error('Fill volume must be greater than zero.');
 
   const tank = queryOne<FloorEquipment>(
-    `SELECT * FROM floor_equipment WHERE id = ? AND equipment_type = 'holding_tank'`,
+    `SELECT * FROM floor_equipment WHERE id = ? AND equipment_type IN ('holding_tank', 'collection_vessel')`,
     [input.sourceHoldingTankEquipmentId],
   );
   if (!tank) throw new Error('Holding tank not found.');
@@ -2560,7 +2560,7 @@ export function getAllFloorEquipmentWithContext(): FloorEquipmentView[] {
 export function getEquipmentVolumeReport(): EquipmentVolumeReport[] {
   const equipment = getAllFloorEquipmentWithContext();
   return equipment.map((eq) => {
-    if (eq.equipment_type === 'holding_tank') {
+    if (eq.equipment_type === 'holding_tank' || eq.equipment_type === 'collection_vessel') {
       const contents = getHoldingTankContents(eq.id);
       const detail = contents.run_count > 0
         ? `${contents.run_count} distillation run${contents.run_count === 1 ? '' : 's'} · ${contents.cut_count} cut${contents.cut_count === 1 ? '' : 's'}`
@@ -2699,7 +2699,7 @@ export function getFloorEquipmentWithContext(planId = 1): FloorEquipmentView[] {
   syncHoldingTankStatuses();
   const equipment = getFloorEquipment(planId);
   return equipment.map((eq) => {
-    if (eq.equipment_type === 'holding_tank') {
+    if (eq.equipment_type === 'holding_tank' || eq.equipment_type === 'collection_vessel') {
       const contents = getHoldingTankContents(eq.id);
       if (contents.volume_gal <= 0) return eq;
       return {
