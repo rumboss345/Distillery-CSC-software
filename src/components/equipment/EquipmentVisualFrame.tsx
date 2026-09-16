@@ -16,6 +16,7 @@ export function EquipmentVisualFrame({
   data,
   selected = false,
   size = 'md',
+  scaleMultiplier = 1,
   labelStyle = 'default',
   onClick,
   className = '',
@@ -24,7 +25,7 @@ export function EquipmentVisualFrame({
   svgHeight = 180,
   showVolume = true,
 }: FrameProps) {
-  const scale = SIZE_MAP[size];
+  const scale = SIZE_MAP[size] * scaleMultiplier;
   const tooltip = buildTooltip(data);
   const isProcess = labelStyle === 'process';
 

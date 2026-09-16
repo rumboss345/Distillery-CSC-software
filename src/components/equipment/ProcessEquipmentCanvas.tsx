@@ -18,6 +18,7 @@ import {
 import { groupEquipmentByStage } from './process-stages';
 import { EquipmentVisual } from './EquipmentVisual';
 import { ProcessEquipmentDetailPanel } from './ProcessEquipmentDetailPanel';
+import { processEquipmentVisualScale } from './process-visual-scale';
 import { TankLevelsPanel } from './TankLevelsPanel';
 import type { EquipmentVisualData } from './equipment-visual.types';
 import type { FloorEquipmentView } from '../../types';
@@ -290,6 +291,7 @@ export function ProcessEquipmentCanvas({
                     data={visual}
                     selected={selectedId === item.id}
                     labelStyle="process"
+                    scaleMultiplier={processEquipmentVisualScale(item.equipment_type)}
                     onClick={() => {
                       if (!dragMovedRef.current) onSelect(item.id);
                     }}
