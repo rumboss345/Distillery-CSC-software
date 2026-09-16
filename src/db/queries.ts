@@ -4,6 +4,7 @@ import { chargeExceedsStillCapacity, stillChargeCapacityMessage } from '../lib/s
 import { initDatabase, clearAllData } from './database';
 import type {
   Barrel,
+  BarrelFill,
   BlendFormulaVersion,
   BlendIngredient,
   BlendIngredientInput,
@@ -477,6 +478,14 @@ export function getHoldingTankContents(
       AND (? IS NULL OR id != ?)
   `, [tankId, excludeBottlingRunId ?? null, excludeBottlingRunId ?? -1]);
 
+  const barrelFillOuts = queryOne<{ volume_gal: number; gpa: number }>(`
+    SELECT
+      COALESCE(SUM(volume_gal), 0) as volume_gal,
+      COALESCE(SUM(volume_gal * abv / 100), 0) as gpa
+    FROM barrel_fills
+    WHERE source_holding_tank_equipment_id = ?
+  `, [tankId]);
+
   const transferIns = queryOne<{ volume_gal: number; gpa: number }>(`
     SELECT
       COALESCE(SUM(volume_gal), 0) as volume_gal,
@@ -505,10 +514,10 @@ export function getHoldingTankContents(
 
   const volumeIn = (ins?.volume_gal ?? 0) + (transferIns?.volume_gal ?? 0) + (blendIns?.volume_gal ?? 0);
   const volumeOut = (runOuts?.volume_gal ?? 0) + (blendOuts?.volume_gal ?? 0)
-    + (bottlingOuts?.volume_gal ?? 0) + (transferOuts?.volume_gal ?? 0);
+    + (bottlingOuts?.volume_gal ?? 0) + (barrelFillOuts?.volume_gal ?? 0) + (transferOuts?.volume_gal ?? 0);
   const gpaIn = (ins?.gpa ?? 0) + (transferIns?.gpa ?? 0) + (blendIns?.gpa ?? 0);
   const gpaOut = (runOuts?.gpa ?? 0) + (blendOuts?.gpa ?? 0)
-    + (bottlingOuts?.gpa ?? 0) + (transferOuts?.gpa ?? 0);
+    + (bottlingOuts?.gpa ?? 0) + (barrelFillOuts?.gpa ?? 0) + (transferOuts?.gpa ?? 0);
   const volume_gal = Math.max(0, volumeIn - volumeOut);
   const gpaRemaining = Math.max(0, gpaIn - gpaOut);
   const abv = volume_gal > 0 ? (gpaRemaining / volume_gal) * 100 : 0;
@@ -1283,6 +1292,92 @@ export function saveBarrel(barrel: Omit<Barrel, 'id' | 'created_at'>, id?: numbe
 
 export function deleteBarrel(id: number): void {
   runQuery('DELETE FROM barrels WHERE id = ?', [id]);
+}
+
+export function getBarrelFills(barrelId: number): BarrelFill[] {
+  return queryAll<BarrelFill>(
+    'SELECT * FROM barrel_fills WHERE barrel_id = ? ORDER BY fill_date DESC, id DESC',
+    [barrelId],
+  );
+}
+
+export interface FillBarrelFromTankInput {
+  barrelId: number;
+  sourceHoldingTankEquipmentId: number;
+  volumeGal: number;
+  fillDate: string;
+  spiritType?: string;
+  notes?: string;
+}
+
+/** Transfer spirit from a holding tank into a barrel; deducts from tank ledger. */
+export function fillBarrelFromHoldingTank(input: FillBarrelFromTankInput): void {
+  const barrel = queryOne<Barrel>('SELECT * FROM barrels WHERE id = ?', [input.barrelId]);
+  if (!barrel) throw new Error('Barrel not found.');
+  if (barrel.status === 'dumped') throw new Error('Cannot fill a dumped barrel.');
+  if (!(input.volumeGal > 0)) throw new Error('Fill volume must be greater than zero.');
+
+  const tank = queryOne<FloorEquipment>(
+    `SELECT * FROM floor_equipment WHERE id = ? AND equipment_type = 'holding_tank'`,
+    [input.sourceHoldingTankEquipmentId],
+  );
+  if (!tank) throw new Error('Holding tank not found.');
+
+  const available = getHoldingTankContents(input.sourceHoldingTankEquipmentId);
+  if (input.volumeGal > available.volume_gal + 0.01) {
+    throw new Error(
+      `Only ${available.volume_gal.toFixed(1)} gal available in ${tank.name}; requested ${input.volumeGal.toFixed(1)} gal.`,
+    );
+  }
+
+  const headroom = barrel.capacity_gal - barrel.current_volume_gal;
+  if (input.volumeGal > headroom + 0.01) {
+    throw new Error(
+      `Barrel ${barrel.barrel_number} has ${headroom.toFixed(1)} gal headroom (${barrel.capacity_gal} gal capacity).`,
+    );
+  }
+
+  const fillAbv = available.abv;
+  const newVolume = Math.round((barrel.current_volume_gal + input.volumeGal) * 1000) / 1000;
+  const wasEmpty = barrel.current_volume_gal <= 0.01;
+  let newAbv = fillAbv;
+  if (!wasEmpty && newVolume > 0) {
+    newAbv = ((barrel.current_volume_gal * barrel.initial_abv) + (input.volumeGal * fillAbv)) / newVolume;
+    newAbv = Math.round(newAbv * 1000) / 1000;
+  }
+
+  insertRow(
+    `INSERT INTO barrel_fills (barrel_id, source_holding_tank_equipment_id, volume_gal, abv, fill_date, notes)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [
+      input.barrelId,
+      input.sourceHoldingTankEquipmentId,
+      input.volumeGal,
+      fillAbv,
+      input.fillDate,
+      input.notes?.trim() ?? '',
+    ],
+  );
+
+  const spiritType = input.spiritType?.trim() || barrel.spirit_type;
+  const fillDate = wasEmpty ? input.fillDate : barrel.fill_date;
+  const notes = input.notes?.trim()
+    ? `${barrel.notes ? `${barrel.notes}\n` : ''}${input.notes.trim()}`
+    : barrel.notes;
+
+  runQuery(
+    `UPDATE barrels SET
+      current_volume_gal = ?,
+      initial_abv = ?,
+      status = 'aging',
+      fill_date = ?,
+      spirit_type = ?,
+      notes = ?
+     WHERE id = ?`,
+    [newVolume, newAbv, fillDate, spiritType, notes, input.barrelId],
+  );
+
+  syncHoldingTankStatuses();
 }
 
 // ── Bottling ───────────────────────────────────────────────
