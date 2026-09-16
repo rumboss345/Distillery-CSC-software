@@ -1276,18 +1276,69 @@ export function getBarrelsForBlend(): Barrel[] {
   return getBarrels().filter((b) => b.status === 'aging' && b.current_volume_gal > 0);
 }
 
-export function saveBarrel(barrel: Omit<Barrel, 'id' | 'created_at'>, id?: number): void {
+export function saveBarrel(barrel: Omit<Barrel, 'id' | 'created_at'>, id?: number): number | void {
   if (id) {
     runQuery(
-      `UPDATE barrels SET barrel_number=?, wood_type=?, capacity_gal=?, fill_date=?, spirit_type=?, source_run_id=?, initial_abv=?, current_volume_gal=?, warehouse_location=?, status=?, notes=? WHERE id=?`,
-      [barrel.barrel_number, barrel.wood_type, barrel.capacity_gal, barrel.fill_date, barrel.spirit_type, barrel.source_run_id, barrel.initial_abv, barrel.current_volume_gal, barrel.warehouse_location, barrel.status, barrel.notes, id],
+      `UPDATE barrels SET barrel_number=?, wood_type=?, capacity_gal=?, fill_date=?, spirit_type=?, source_run_id=?, source_holding_tank_equipment_id=?, initial_abv=?, current_volume_gal=?, warehouse_location=?, status=?, notes=? WHERE id=?`,
+      [
+        barrel.barrel_number,
+        barrel.wood_type,
+        barrel.capacity_gal,
+        barrel.fill_date,
+        barrel.spirit_type,
+        barrel.source_run_id,
+        barrel.source_holding_tank_equipment_id,
+        barrel.initial_abv,
+        barrel.current_volume_gal,
+        barrel.warehouse_location,
+        barrel.status,
+        barrel.notes,
+        id,
+      ],
     );
-  } else {
-    insertRow(
-      `INSERT INTO barrels (barrel_number, wood_type, capacity_gal, fill_date, spirit_type, source_run_id, initial_abv, current_volume_gal, warehouse_location, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [barrel.barrel_number, barrel.wood_type, barrel.capacity_gal, barrel.fill_date, barrel.spirit_type, barrel.source_run_id, barrel.initial_abv, barrel.current_volume_gal, barrel.warehouse_location, barrel.status, barrel.notes],
-    );
+    return;
   }
+  return insertRow(
+    `INSERT INTO barrels (barrel_number, wood_type, capacity_gal, fill_date, spirit_type, source_run_id, source_holding_tank_equipment_id, initial_abv, current_volume_gal, warehouse_location, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      barrel.barrel_number,
+      barrel.wood_type,
+      barrel.capacity_gal,
+      barrel.fill_date,
+      barrel.spirit_type,
+      barrel.source_run_id,
+      barrel.source_holding_tank_equipment_id,
+      barrel.initial_abv,
+      barrel.current_volume_gal,
+      barrel.warehouse_location,
+      barrel.status,
+      barrel.notes,
+    ],
+  );
+}
+
+/** Register a new barrel and transfer the initial fill from a holding tank (ledger + barrel_fills). */
+export function createBarrelFromHoldingTank(
+  barrel: Omit<Barrel, 'id' | 'created_at' | 'current_volume_gal' | 'initial_abv'>,
+  sourceHoldingTankEquipmentId: number,
+  volumeGal: number,
+): number {
+  if (!(volumeGal > 0)) throw new Error('Initial fill volume must be greater than zero.');
+  const id = saveBarrel({
+    ...barrel,
+    source_holding_tank_equipment_id: sourceHoldingTankEquipmentId,
+    source_run_id: null,
+    current_volume_gal: 0,
+    initial_abv: 0,
+  }) as number;
+  fillBarrelFromHoldingTank({
+    barrelId: id,
+    sourceHoldingTankEquipmentId,
+    volumeGal,
+    fillDate: barrel.fill_date,
+    spiritType: barrel.spirit_type,
+  });
+  return id;
 }
 
 export function deleteBarrel(id: number): void {
@@ -1372,9 +1423,18 @@ export function fillBarrelFromHoldingTank(input: FillBarrelFromTankInput): void 
       status = 'aging',
       fill_date = ?,
       spirit_type = ?,
-      notes = ?
+      notes = ?,
+      source_holding_tank_equipment_id = COALESCE(source_holding_tank_equipment_id, ?)
      WHERE id = ?`,
-    [newVolume, newAbv, fillDate, spiritType, notes, input.barrelId],
+    [
+      newVolume,
+      newAbv,
+      fillDate,
+      spiritType,
+      notes,
+      input.sourceHoldingTankEquipmentId,
+      input.barrelId,
+    ],
   );
 
   syncHoldingTankStatuses();

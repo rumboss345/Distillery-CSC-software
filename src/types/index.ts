@@ -231,6 +231,7 @@ export interface Barrel {
   fill_date: string;
   spirit_type: string;
   source_run_id: number | null;
+  source_holding_tank_equipment_id: number | null;
   initial_abv: number;
   current_volume_gal: number;
   warehouse_location: string;

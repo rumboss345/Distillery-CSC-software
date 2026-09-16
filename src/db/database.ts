@@ -445,6 +445,7 @@ function runMigrations(): void {
   migrateBlendRecipes();
   migrateBarrelBlendRecipes();
   migrateBarrelFills();
+  migrateBarrelSourceHoldingTank();
   migrateFloorPlanPages();
   migrateAdvancedBlending();
   migrateAssignedEmployee();
@@ -716,6 +717,19 @@ function migrateBarrelFills(): void {
   `);
   db.run(`CREATE INDEX IF NOT EXISTS idx_barrel_fills_barrel ON barrel_fills(barrel_id)`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_barrel_fills_tank ON barrel_fills(source_holding_tank_equipment_id)`);
+}
+
+function migrateBarrelSourceHoldingTank(): void {
+  if (!db) return;
+  const hasColumn = queryOne<{ name: string }>(
+    "SELECT name FROM pragma_table_info('barrels') WHERE name='source_holding_tank_equipment_id'",
+  );
+  if (!hasColumn) {
+    db.run(
+      `ALTER TABLE barrels ADD COLUMN source_holding_tank_equipment_id INTEGER REFERENCES floor_equipment(id)`,
+    );
+    persistDb();
+  }
 }
 
 function migrateFloorPlanPages(): void {
