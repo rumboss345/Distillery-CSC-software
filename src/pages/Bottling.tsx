@@ -108,20 +108,33 @@ export function Bottling() {
   const remainingGal = selectedTankAvailable != null
     ? Math.max(0, selectedTankAvailable.volume_gal - plannedDrawGal)
     : null;
+  const isRumBottling = isRumBottlingProduct(form.product_name);
 
   const remainingBySku = useMemo(() => {
-    if (remainingGal == null || remainingGal <= 0) return [];
+    if (remainingGal == null || remainingGal <= 0 || isRumBottlingProduct(form.product_name)) return [];
     return PACKAGING_BOTTLES
       .map((bottle) => ({
         ...bottle,
         maxCount: maxBottlesFromGallons(remainingGal, bottle.sizeMl),
       }))
       .filter((entry) => entry.maxCount > 0);
-  }, [remainingGal]);
+  }, [remainingGal, form.product_name]);
+
+  const remainingByLineSize = useMemo(() => {
+    if (remainingGal == null || remainingGal <= 0 || !isRumBottling) return [];
+    const sizes = [...new Set(
+      lines.map((line) => line.bottle_size_ml).filter((ml) => ml > 0),
+    )].sort((a, b) => b - a);
+    return sizes
+      .map((sizeMl) => ({
+        sizeMl,
+        maxCount: maxBottlesFromGallons(remainingGal, sizeMl),
+      }))
+      .filter((entry) => entry.maxCount > 0);
+  }, [remainingGal, isRumBottling, lines]);
 
   const totalBottles = runs.reduce((sum, run) => sum + totalBottleCount(run.lines), 0);
   const totalVolume = runs.reduce((sum, run) => sum + totalVolumeGal(run.lines), 0);
-  const isRumBottling = isRumBottlingProduct(form.product_name);
 
   const openNew = () => {
     setEditId(undefined);
@@ -361,9 +374,14 @@ export function Bottling() {
               <label>Batch Number</label>
               <input value={form.batch_number} onChange={(e) => setForm({ ...form, batch_number: e.target.value })} />
             </div>
-            <div className="form-group">
+            <div className="form-group full-width">
               <label>Product Name</label>
               <input value={form.product_name} onChange={(e) => setForm({ ...form, product_name: e.target.value })} />
+              {isRumBottling ? (
+                <span className="field-hint">Rum product — enter bottle size (ml) and count below; packaging inventory SKUs are not used.</span>
+              ) : (
+                <span className="field-hint">Include &quot;Rum&quot; in the name to bottle by size and count only (no packaging inventory).</span>
+              )}
             </div>
             <div className="form-group">
               <label>Lot Number</label>
@@ -521,6 +539,22 @@ export function Bottling() {
                   ))}
                 </ul>
                 <p className="field-hint">Add another packaging line above to include a different bottle size.</p>
+              </div>
+            )}
+
+            {sourceType === 'tank' && remainingGal != null && remainingGal > 0 && remainingByLineSize.length > 0 && (
+              <div className="form-group full-width bottling-remaining-panel">
+                <p className="bottling-remaining-title">
+                  Still available from tank ({remainingGal.toFixed(2)} gal remaining)
+                </p>
+                <ul className="bottling-remaining-list">
+                  {remainingByLineSize.map((entry) => (
+                    <li key={entry.sizeMl}>
+                      <strong>{entry.sizeMl} ml</strong>: up to {entry.maxCount.toLocaleString()} more bottles at this size
+                    </li>
+                  ))}
+                </ul>
+                <p className="field-hint">Enter another bottle size on a new line to plan a different format.</p>
               </div>
             )}
 
