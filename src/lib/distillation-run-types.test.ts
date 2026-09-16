@@ -6,7 +6,7 @@ import {
 } from './distillation-run-types';
 
 describe('distillation-run-types', () => {
-  it('uses fermenters for low wine rum and heavy rum runs', () => {
+  it('uses fermenters for low wine run and heavy rum runs', () => {
     expect(isFermenterSourcedRun('wash')).toBe(true);
     expect(isFermenterSourcedRun('heavy_rum')).toBe(true);
     expect(isFermenterSourcedRun('low_wines')).toBe(false);

@@ -833,7 +833,7 @@ export function getHoldingTankIntakeHistory(
   `, [tankId]);
 
   const runTypeLabels: Record<string, string> = {
-    wash: 'low wine rum run',
+    wash: 'low wine run',
     low_wines: 'spirit run',
     heavy_rum: 'heavy rum run',
   };
