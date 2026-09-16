@@ -16,6 +16,8 @@ export interface EquipmentVisualData {
   abv?: number;
   status: EquipmentVisualStatus;
   isFermenting?: boolean;
+  /** Wash tank (mash tun) actively mashing / washing. */
+  isWashing?: boolean;
   /** When set on in-use fermenters, drives red vs green liquid fill from Brix. */
   fermenterLatestBrix?: number | null;
   detail?: string;

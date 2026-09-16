@@ -45,6 +45,7 @@ import type {
   FloorPlan,
   InventoryItem,
   MashBatch,
+  MashStatus,
   Recipe,
   ProductionSummary,
   EquipmentVolumeReport,
@@ -1064,6 +1065,39 @@ export function saveMashFermenterAssignments(
   syncFermenterAndStillStatuses();
 }
 
+function getPrimaryWashTank(): FloorEquipment | undefined {
+  const named = queryOne<FloorEquipment>(
+    `SELECT * FROM floor_equipment WHERE equipment_type = 'mash_tun' AND name LIKE '%wash%' COLLATE NOCASE ORDER BY id LIMIT 1`,
+  );
+  return named ?? queryOne<FloorEquipment>(
+    `SELECT * FROM floor_equipment WHERE equipment_type = 'mash_tun' ORDER BY id LIMIT 1`,
+  ) ?? undefined;
+}
+
+function releaseWashTankForMashBatch(mashBatchId: number): void {
+  runQuery(
+    `UPDATE floor_equipment SET status='empty', linked_mash_batch_id=NULL
+     WHERE equipment_type='mash_tun' AND linked_mash_batch_id=?`,
+    [mashBatchId],
+  );
+}
+
+function syncWashTankForMashBatch(mashBatchId: number, status: MashStatus): void {
+  releaseWashTankForMashBatch(mashBatchId);
+  if (status !== 'mashing') return;
+  const tun = getPrimaryWashTank();
+  if (!tun) return;
+  runQuery(
+    `UPDATE floor_equipment SET status='in_use', linked_mash_batch_id=? WHERE id=?`,
+    [mashBatchId, tun.id],
+  );
+}
+
+/** Primary wash tank (mash tun) for UI previews and capacity hints. */
+export function getPrimaryWashTankEquipment(): FloorEquipment | undefined {
+  return getPrimaryWashTank() ?? undefined;
+}
+
 export function saveMashBatchWithFermenters(
   batch: Omit<MashBatch, 'id' | 'created_at'>,
   assignments: FermenterAssignmentInput[],
@@ -1073,6 +1107,7 @@ export function saveMashBatchWithFermenters(
   const mashId = saveMashBatch(batch, id);
   saveMashFermenterAssignments(mashId, assignments);
   applyMashInventoryUsage(batch, previous);
+  syncWashTankForMashBatch(mashId, batch.status);
   return mashId;
 }
 
@@ -1202,6 +1237,7 @@ function maybeCompleteMashAfterCharge(mashBatchId: number): void {
 }
 
 export function deleteMashBatch(id: number): void {
+  releaseWashTankForMashBatch(id);
   releaseFermentersForMash(id);
   runQuery('DELETE FROM mash_batches WHERE id = ?', [id]);
 }
@@ -2672,6 +2708,20 @@ export function getFloorEquipmentWithContext(planId = 1): FloorEquipmentView[] {
         active_abv: contents.abv,
         active_run_count: contents.run_count,
       };
+    }
+    if (eq.equipment_type === 'mash_tun' && eq.linked_mash_batch_id) {
+      const wash = queryOne<{ batch_number: string; water_gal: number; status: string }>(
+        'SELECT batch_number, water_gal, status FROM mash_batches WHERE id = ?',
+        [eq.linked_mash_batch_id],
+      );
+      if (wash?.status === 'mashing') {
+        return {
+          ...eq,
+          active_batch_number: wash.batch_number,
+          active_volume_gal: wash.water_gal,
+          active_mash_status: 'mashing',
+        };
+      }
     }
     if (eq.status !== 'in_use' || eq.equipment_type !== 'fermenter') return eq;
     const info = queryOne<{

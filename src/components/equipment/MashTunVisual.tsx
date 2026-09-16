@@ -1,12 +1,34 @@
-import { useId } from 'react';
+import { useId, useMemo } from 'react';
 import type { EquipmentVisualProps } from './equipment-visual.types';
 import { EquipmentVisualFrame } from './EquipmentVisualFrame';
-import { LiquidFill } from './LiquidFill';
+import { LIQUID_COLORS, MASH_WASH_LIQUID } from './equipment-visual-shared';
+
+const WASH_BUBBLES = [
+  { cx: 52, r: 2.2, delay: 0 },
+  { cx: 68, r: 1.8, delay: 0.5 },
+  { cx: 82, r: 2.1, delay: 1 },
+  { cx: 58, r: 1.5, delay: 1.45 },
+  { cx: 88, r: 1.7, delay: 1.95 },
+] as const;
 
 /** Stainless mash/cook tank with domed lid — matches production floor reference style. */
 export function MashTunVisual(props: EquipmentVisualProps) {
   const { data } = props;
   const uid = useId().replace(/:/g, '');
+  const isWashing = !!data.isWashing;
+  const liquid = isWashing ? MASH_WASH_LIQUID : LIQUID_COLORS[data.status];
+
+  const innerHeight = 95;
+  const bottomY = 153;
+  const fillH = (data.fillPercent / 100) * innerHeight;
+  const surfaceY = bottomY - fillH;
+
+  const showFill = data.fillPercent > 0;
+
+  const slosh = useMemo(
+    () => (isWashing ? ' mash-tun-wash-fill' : ''),
+    [isWashing],
+  );
 
   return (
     <EquipmentVisualFrame {...props} svgWidth={150} svgHeight={190}>
@@ -23,6 +45,16 @@ export function MashTunVisual(props: EquipmentVisualProps) {
             <stop offset="40%" stopColor="#2a3038" />
             <stop offset="100%" stopColor="#0d1117" />
           </linearGradient>
+          <linearGradient id={`${uid}-liq`} x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor={liquid.edge} />
+            <stop offset="35%" stopColor={liquid.base} />
+            <stop offset="55%" stopColor={liquid.highlight} stopOpacity="0.88" />
+            <stop offset="100%" stopColor={liquid.edge} />
+          </linearGradient>
+          <linearGradient id={`${uid}-surf`} x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#ffffff" stopOpacity={isWashing ? 0.22 : 0.4} />
+            <stop offset="100%" stopColor={liquid.base} stopOpacity="0" />
+          </linearGradient>
           <clipPath id={`${uid}-clip`}>
             <rect x="30" y="58" width="90" height="95" rx="6" />
           </clipPath>
@@ -31,25 +63,50 @@ export function MashTunVisual(props: EquipmentVisualProps) {
         <rect x="34" y="150" width="8" height="18" fill="#3a424c" />
         <rect x="108" y="150" width="8" height="18" fill="#3a424c" />
 
-        {/* Body */}
         <rect x="28" y="56" width="94" height="98" rx="8" fill={`url(#${uid}-steel)`} stroke="#1a1f26" strokeWidth="1.2" />
 
-        {/* Black domed lid */}
         <ellipse cx="75" cy="56" rx="48" ry="14" fill={`url(#${uid}-dome)`} stroke="#1a1f26" strokeWidth="1" />
         <rect x="68" y="44" width="14" height="8" rx="3" fill="#5a6270" stroke="#2a3038" />
 
         <g clipPath={`url(#${uid}-clip)`}>
-          <LiquidFill
-            x={30}
-            y={0}
-            width={90}
-            height={0}
-            fillPercent={data.fillPercent}
-            status={data.status}
-            innerHeight={95}
-            bottomY={153}
-            rx={6}
-          />
+          {showFill && (
+            <>
+              <rect
+                className={`equipment-liquid-fill${slosh}`}
+                x="30"
+                y={surfaceY}
+                width="90"
+                height={fillH}
+                rx="6"
+                fill={`url(#${uid}-liq)`}
+                opacity="0.92"
+              />
+              {data.fillPercent > 4 && (
+                <ellipse
+                  className={`equipment-liquid-surface${isWashing ? ' mash-tun-wash-surface' : ''}`}
+                  cx="75"
+                  cy={surfaceY}
+                  rx="42"
+                  ry="4"
+                  fill={`url(#${uid}-surf)`}
+                />
+              )}
+              {isWashing && (
+                <g className="mash-tun-wash-bubbles">
+                  {WASH_BUBBLES.map((bubble, index) => (
+                    <circle
+                      key={index}
+                      className="mash-tun-wash-bubble"
+                      cx={bubble.cx}
+                      cy={bottomY - 8}
+                      r={bubble.r}
+                      style={{ animationDelay: `${bubble.delay}s` }}
+                    />
+                  ))}
+                </g>
+              )}
+            </>
+          )}
         </g>
 
         <rect x="32" y="62" width="10" height="85" rx="4" fill="#fff" opacity="0.08" />
