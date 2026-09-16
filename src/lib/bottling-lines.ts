@@ -1,5 +1,10 @@
 import { mlToGallons } from '../types';
 
+/** Rum bottling runs skip packaging-inventory SKUs (size + count only). */
+export function isRumBottlingProduct(productName: string): boolean {
+  return /\brum\b/i.test(productName.trim());
+}
+
 export interface BottlingLineAmount {
   bottle_count: number;
   bottle_size_ml: number;

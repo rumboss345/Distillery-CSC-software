@@ -1,12 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import {
   formatLinesSummary,
+  isRumBottlingProduct,
   lineVolumeGal,
   maxBottlesFromGallons,
   totalVolumeGal,
 } from './bottling-lines';
 
 describe('bottling-lines', () => {
+  it('detects rum products for packaging-inventory bypass', () => {
+    expect(isRumBottlingProduct('Island Reserve Rum')).toBe(true);
+    expect(isRumBottlingProduct('Spiced Rum 750')).toBe(true);
+    expect(isRumBottlingProduct('CSC Gin')).toBe(false);
+  });
+
   it('computes line volume from count and size', () => {
     expect(lineVolumeGal({ bottle_count: 100, bottle_size_ml: 750 })).toBeCloseTo(19.81, 1);
   });
