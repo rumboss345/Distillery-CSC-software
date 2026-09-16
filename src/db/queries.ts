@@ -1505,6 +1505,7 @@ export function saveBottlingRun(
   lines: BottlingRunLineInput[],
   id?: number,
 ): void {
+  // Rum bottling runs record size + count only; packaging inventory is never adjusted here.
   const activeLines = lines.filter((line) => line.bottle_count > 0 && line.bottle_size_ml > 0);
   const fromTank = run.source_holding_tank_equipment_id != null;
   const sourceBarrelId = fromTank ? null : run.source_barrel_id;
