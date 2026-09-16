@@ -3,9 +3,9 @@ import type { EquipmentType } from '../../types';
 /** Process canvas scale relative to default equipment visuals. */
 const PROCESS_VISUAL_SCALE: Partial<Record<EquipmentType, number>> = {
   holding_tank: 0.5,
-  fermenter: 2,
-  pot_still: 2,
-  column_still: 2,
+  fermenter: 1,
+  pot_still: 1,
+  column_still: 1,
 };
 
 export function processEquipmentVisualScale(type: EquipmentType): number {
