@@ -451,17 +451,42 @@ export function getChargeableFermentersForMash(
 ): (MashFermenterAssignment & { equipment_name: string })[] {
   const assignments = getMashFermenterAssignments(mashBatchId);
   return assignments.filter((a) => {
-    const alreadyCharged = queryOne<{ id: number }>(
+    if (a.volume_gal <= 0.01) return false;
+    const washRunUsingFermenter = queryOne<{ id: number }>(
       `SELECT id FROM distillation_runs
        WHERE source_mash_batch_id = ?
          AND source_fermenter_equipment_id = ?
+         AND run_type = 'wash'
          AND status IN ('planned', 'running', 'complete')
          AND (? IS NULL OR id != ?)
        LIMIT 1`,
       [mashBatchId, a.floor_equipment_id, excludeRunId ?? null, excludeRunId ?? -1],
     );
-    return !alreadyCharged;
+    return !washRunUsingFermenter;
   });
+}
+
+/** Wash left in fermenter assignment, plus charge already on an edited heavy rum run. */
+export function getFermenterChargeCapacityGal(
+  mashBatchId: number,
+  equipmentId: number,
+  excludeRunId?: number,
+): number {
+  const assignment = queryOne<{ volume_gal: number }>(
+    'SELECT volume_gal FROM mash_fermenter_assignments WHERE mash_batch_id = ? AND floor_equipment_id = ?',
+    [mashBatchId, equipmentId],
+  );
+  let available = assignment?.volume_gal ?? 0;
+  if (excludeRunId) {
+    const run = queryOne<{ charge_volume_gal: number; run_type: string }>(
+      'SELECT charge_volume_gal, run_type FROM distillation_runs WHERE id = ?',
+      [excludeRunId],
+    );
+    if (run?.run_type === 'heavy_rum') {
+      available += run.charge_volume_gal ?? 0;
+    }
+  }
+  return available;
 }
 
 export function getAvailableFermenters(forMashBatchId?: number): FloorEquipment[] {
@@ -1068,7 +1093,97 @@ export function releaseFermenterForMash(mashBatchId: number, equipmentId: number
   syncFermenterAndStillStatuses();
 }
 
-function chargeFermenterForDistillation(mashBatchId: number, equipmentId: number): void {
+function chargeHeavyRumFromFermenter(
+  mashBatchId: number,
+  equipmentId: number,
+  chargeVolumeGal: number,
+  runId?: number,
+): void {
+  if (!(chargeVolumeGal > 0)) {
+    throw new Error('Charge volume must be greater than zero for heavy rum runs.');
+  }
+
+  const assignment = queryOne<{ id: number; volume_gal: number }>(
+    'SELECT id, volume_gal FROM mash_fermenter_assignments WHERE mash_batch_id = ? AND floor_equipment_id = ?',
+    [mashBatchId, equipmentId],
+  );
+  if (!assignment) {
+    throw new Error('Fermenter assignment not found for this wash batch.');
+  }
+
+  let previousCharge = 0;
+  if (runId) {
+    const prev = queryOne<{ charge_volume_gal: number; run_type: string }>(
+      'SELECT charge_volume_gal, run_type FROM distillation_runs WHERE id = ?',
+      [runId],
+    );
+    if (prev?.run_type === 'heavy_rum') {
+      previousCharge = prev.charge_volume_gal ?? 0;
+    }
+  }
+
+  const delta = chargeVolumeGal - previousCharge;
+  if (Math.abs(delta) < 0.001) return;
+
+  const maxAvailable = assignment.volume_gal + previousCharge;
+  if (chargeVolumeGal > maxAvailable + 0.01) {
+    throw new Error(
+      `Only ${maxAvailable.toFixed(1)} gal available in fermenter; charge is ${chargeVolumeGal.toFixed(1)} gal.`,
+    );
+  }
+
+  const remaining = assignment.volume_gal - delta;
+  if (remaining <= 0.01) {
+    releaseFermenterForMash(mashBatchId, equipmentId);
+  } else {
+    runQuery(
+      'UPDATE mash_fermenter_assignments SET volume_gal = ? WHERE id = ?',
+      [remaining, assignment.id],
+    );
+    syncFermenterAndStillStatuses();
+  }
+}
+
+function restoreHeavyRumChargeToFermenter(
+  mashBatchId: number,
+  equipmentId: number,
+  volumeGal: number,
+): void {
+  if (!(volumeGal > 0)) return;
+  const assignment = queryOne<{ id: number; volume_gal: number }>(
+    'SELECT id, volume_gal FROM mash_fermenter_assignments WHERE mash_batch_id = ? AND floor_equipment_id = ?',
+    [mashBatchId, equipmentId],
+  );
+  if (assignment) {
+    runQuery(
+      'UPDATE mash_fermenter_assignments SET volume_gal = ? WHERE id = ?',
+      [assignment.volume_gal + volumeGal, assignment.id],
+    );
+  } else {
+    insertRow(
+      'INSERT INTO mash_fermenter_assignments (mash_batch_id, floor_equipment_id, volume_gal) VALUES (?, ?, ?)',
+      [mashBatchId, equipmentId, volumeGal],
+    );
+    runQuery(
+      `UPDATE floor_equipment SET status='in_use', linked_mash_batch_id=? WHERE id=?`,
+      [mashBatchId, equipmentId],
+    );
+  }
+  syncFermenterAndStillStatuses();
+}
+
+function chargeFermenterForDistillation(
+  mashBatchId: number,
+  equipmentId: number,
+  runType: DistillationRunType,
+  chargeVolumeGal: number,
+  runId?: number,
+): void {
+  if (runType === 'heavy_rum') {
+    chargeHeavyRumFromFermenter(mashBatchId, equipmentId, chargeVolumeGal, runId);
+    maybeCompleteMashAfterCharge(mashBatchId);
+    return;
+  }
   releaseFermenterForMash(mashBatchId, equipmentId);
   maybeCompleteMashAfterCharge(mashBatchId);
 }
@@ -1237,7 +1352,13 @@ export function saveDistillationRun(run: Omit<DistillationRun, 'id' | 'created_a
   }
 
   if (isFermenterSourcedRun(runType) && run.source_mash_batch_id && run.source_fermenter_equipment_id) {
-    chargeFermenterForDistillation(run.source_mash_batch_id, run.source_fermenter_equipment_id);
+    chargeFermenterForDistillation(
+      run.source_mash_batch_id,
+      run.source_fermenter_equipment_id,
+      runType,
+      run.charge_volume_gal,
+      id,
+    );
   } else if (isFermenterSourcedRun(runType) && run.source_mash_batch_id && (run.status === 'running' || run.status === 'complete')) {
     releaseFermentersForMash(run.source_mash_batch_id);
     maybeCompleteMashAfterCharge(run.source_mash_batch_id);
@@ -1248,8 +1369,23 @@ export function saveDistillationRun(run: Omit<DistillationRun, 'id' | 'created_a
 }
 
 export function deleteDistillationRun(id: number): void {
+  const run = queryOne<DistillationRun>('SELECT * FROM distillation_runs WHERE id = ?', [id]);
+  if (
+    run
+    && run.run_type === 'heavy_rum'
+    && run.source_mash_batch_id
+    && run.source_fermenter_equipment_id
+    && run.charge_volume_gal > 0
+  ) {
+    restoreHeavyRumChargeToFermenter(
+      run.source_mash_batch_id,
+      run.source_fermenter_equipment_id,
+      run.charge_volume_gal,
+    );
+  }
   runQuery('DELETE FROM distillation_runs WHERE id = ?', [id]);
   syncHoldingTankStatuses();
+  syncFermenterAndStillStatuses();
 }
 
 export function getDistillationCuts(runId: number): DistillationCutView[] {

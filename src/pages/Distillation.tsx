@@ -15,6 +15,7 @@ import {
   getPotStills,
   getFloorEquipment,
   getChargeableFermentersForMash,
+  getFermenterChargeCapacityGal,
   getLatestFermentationBrix,
   getChargeableHoldingTanks,
   getHighWinesDestinationTanks,
@@ -298,6 +299,25 @@ export function Distillation() {
       if (runForm.run_type === 'heavy_rum' && !runForm.dest_holding_tank_equipment_id) {
         alert('Select the heavy rum storage tank.');
         return;
+      }
+      if (
+        runForm.run_type === 'heavy_rum'
+        && runForm.source_mash_batch_id
+        && runForm.source_fermenter_equipment_id
+      ) {
+        if (runForm.charge_volume_gal <= 0) {
+          alert('Enter the charge volume drawn from the fermenter.');
+          return;
+        }
+        const fermenterAvailable = getFermenterChargeCapacityGal(
+          runForm.source_mash_batch_id,
+          runForm.source_fermenter_equipment_id,
+          editRunId,
+        );
+        if (runForm.charge_volume_gal > fermenterAvailable + 0.01) {
+          alert(`Only ${fermenterAvailable.toFixed(1)} gal available in that fermenter.`);
+          return;
+        }
       }
       try {
         saveDistillationRun(runForm, editRunId);
@@ -928,10 +948,16 @@ export function Distillation() {
             {isFermenterSourcedRun(runForm.run_type) ? (
               <>
                 Charge fermenters when logs show Brix below {FERMENTATION_READY_MAX_BRIX}° (recommended).
-                Saving with a source fermenter selected marks that tank <strong>empty</strong> on the floor plan
-                {chargeableFermenters.length > 1 ? ' (other fermenters stay in use until charged in a separate run)' : ''}.
-                {runForm.run_type === 'heavy_rum' && (
-                  <> Hearts cuts go into the <strong>Heavy Rum Storage Tank</strong> you select.</>
+                {runForm.run_type === 'heavy_rum' ? (
+                  <>
+                    {' '}Heavy rum runs deduct only the <strong>charge volume</strong> you record; remaining wash stays in the fermenter for later runs.
+                    Hearts cuts go into the <strong>Heavy Rum Storage Tank</strong> you select.
+                  </>
+                ) : (
+                  <>
+                    {' '}Saving with a source fermenter selected marks that tank <strong>empty</strong> on the floor plan
+                    {chargeableFermenters.length > 1 ? ' (other fermenters stay in use until charged in a separate run)' : ''}.
+                  </>
                 )}
               </>
             ) : (
