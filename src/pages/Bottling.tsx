@@ -218,7 +218,7 @@ export function Bottling() {
       });
     if (activeLines.length === 0) {
       alert(isRumBottlingProduct(form.product_name)
-        ? 'Add at least one bottle line with size (ml) and count.'
+        ? 'Add at least one bottle line: select a bottle, confirm size (ml), and enter count.'
         : 'Add at least one packaging line with bottle count.');
       return;
     }
@@ -378,9 +378,11 @@ export function Bottling() {
               <label>Product Name</label>
               <input value={form.product_name} onChange={(e) => setForm({ ...form, product_name: e.target.value })} />
               {isRumBottling ? (
-                <span className="field-hint">Rum product — enter bottle size (ml) and count below; packaging inventory SKUs are not used.</span>
+                <span className="field-hint">
+                  Rum product — pick bottle styles from the list, set size (ml), and enter counts. Packaging on-hand inventory is not used or deducted.
+                </span>
               ) : (
-                <span className="field-hint">Include &quot;Rum&quot; in the name to bottle by size and count only (no packaging inventory).</span>
+                <span className="field-hint">Include &quot;Rum&quot; in the name to bottle without packaging inventory tracking.</span>
               )}
             </div>
             <div className="form-group">
@@ -461,43 +463,31 @@ export function Bottling() {
               </div>
               <p className="field-hint">
                 {isRumBottling
-                  ? 'Rum bottling: enter bottle size and count only (packaging inventory is not used).'
+                  ? 'Select each bottle style, confirm size (ml), and enter how many you bottled.'
                   : 'Bottle different sizes from the same tank in one run.'}
               </p>
               {lines.map((line, index) => {
                 const lineGal = lineVolumeGal(line);
                 return (
                   <div key={index} className="bottling-line-row">
-                    {!isRumBottling && (
-                      <div className="form-group">
-                        <label>Packaging bottle</label>
-                        <select
-                          value={line.packaging_bottle}
-                          onChange={(e) => handleLinePackagingSelect(index, e.target.value)}
-                        >
-                          <option value="">— Select —</option>
-                          {PACKAGING_BOTTLES.map((b) => (
-                            <option key={b.name} value={b.name}>{b.name} ({b.sizeMl} ml)</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                    {isRumBottling && (
-                      <div className="form-group">
-                        <label>Label (optional)</label>
-                        <input
-                          value={line.packaging_bottle}
-                          onChange={(e) => updateLine(index, { packaging_bottle: e.target.value })}
-                          placeholder="e.g. 750 ml export"
-                        />
-                      </div>
-                    )}
                     <div className="form-group">
-                      <label>Size (ml)</label>
+                      <label>{isRumBottling ? 'Bottle' : 'Packaging bottle'}</label>
+                      <select
+                        value={line.packaging_bottle}
+                        onChange={(e) => handleLinePackagingSelect(index, e.target.value)}
+                      >
+                        <option value="">— Select —</option>
+                        {PACKAGING_BOTTLES.map((b) => (
+                          <option key={b.name} value={b.name}>{b.name} ({b.sizeMl} ml)</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label>Bottle size (ml)</label>
                       <input
                         type="number"
                         value={line.bottle_size_ml || ''}
-                        onChange={(e) => updateLine(index, { bottle_size_ml: parseInt(e.target.value) || 0 })}
+                        onChange={(e) => updateLine(index, { bottle_size_ml: parseInt(e.target.value, 10) || 0 })}
                       />
                     </div>
                     <div className="form-group">
@@ -526,7 +516,7 @@ export function Bottling() {
               )}
             </div>
 
-            {sourceType === 'tank' && remainingGal != null && remainingGal > 0 && remainingBySku.length > 0 && (
+            {sourceType === 'tank' && remainingGal != null && remainingGal > 0 && !isRumBottling && remainingBySku.length > 0 && (
               <div className="form-group full-width bottling-remaining-panel">
                 <p className="bottling-remaining-title">
                   Still available from tank ({remainingGal.toFixed(2)} gal remaining)
@@ -542,7 +532,7 @@ export function Bottling() {
               </div>
             )}
 
-            {sourceType === 'tank' && remainingGal != null && remainingGal > 0 && remainingByLineSize.length > 0 && (
+            {sourceType === 'tank' && remainingGal != null && remainingGal > 0 && isRumBottling && remainingByLineSize.length > 0 && (
               <div className="form-group full-width bottling-remaining-panel">
                 <p className="bottling-remaining-title">
                   Still available from tank ({remainingGal.toFixed(2)} gal remaining)
