@@ -16,6 +16,7 @@ import { DatePicker } from '../components/DatePicker';
 import { Modal } from '../components/Modal';
 import {
   formatLinesSummary,
+  isRumBottlingProduct,
   lineVolumeGal,
   maxBottlesFromGallons,
   totalBottleCount,
@@ -120,6 +121,7 @@ export function Bottling() {
 
   const totalBottles = runs.reduce((sum, run) => sum + totalBottleCount(run.lines), 0);
   const totalVolume = runs.reduce((sum, run) => sum + totalVolumeGal(run.lines), 0);
+  const isRumBottling = isRumBottlingProduct(form.product_name);
 
   const openNew = () => {
     setEditId(undefined);
@@ -193,9 +195,18 @@ export function Bottling() {
   };
 
   const handleSave = () => {
-    const activeLines = lines.filter((line) => line.bottle_count > 0 && line.bottle_size_ml > 0);
+    const activeLines = lines
+      .filter((line) => line.bottle_count > 0 && line.bottle_size_ml > 0)
+      .map((line) => {
+        if (!isRumBottlingProduct(form.product_name)) return line;
+        const packaging_bottle = line.packaging_bottle.trim()
+          || `${line.bottle_size_ml} ml bottle`;
+        return { ...line, packaging_bottle };
+      });
     if (activeLines.length === 0) {
-      alert('Add at least one packaging line with bottle count.');
+      alert(isRumBottlingProduct(form.product_name)
+        ? 'Add at least one bottle line with size (ml) and count.'
+        : 'Add at least one packaging line with bottle count.');
       return;
     }
     if (sourceType === 'tank' && !form.source_holding_tank_equipment_id) {
@@ -247,39 +258,41 @@ export function Bottling() {
         </div>
       </div>
 
-      <div className="card" style={{ marginBottom: '1.25rem' }}>
-        <h3 className="section-title" style={{ marginTop: 0 }}>Packaging Bottles</h3>
-        <p className="text-muted" style={{ marginBottom: '0.75rem' }}>
-          Standard bottle SKUs tracked in inventory under Packaging.
-        </p>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Bottle</th>
-                <th>Size</th>
-                <th>On Hand</th>
-                <th>Reorder At</th>
-              </tr>
-            </thead>
-            <tbody>
-              {PACKAGING_BOTTLES.map((bottle) => {
-                const inv = packagingInventory.find(
-                  (i) => i.name.toLowerCase() === bottle.name.toLowerCase(),
-                );
-                return (
-                  <tr key={bottle.name}>
-                    <td><strong>{bottle.name}</strong></td>
-                    <td>{bottle.sizeMl} ml</td>
-                    <td>{inv ? `${inv.quantity.toLocaleString()} ${inv.unit}` : '—'}</td>
-                    <td>{inv ? inv.reorder_level.toLocaleString() : '—'}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      {!(showForm && isRumBottling) && (
+        <div className="card" style={{ marginBottom: '1.25rem' }}>
+          <h3 className="section-title" style={{ marginTop: 0 }}>Packaging Bottles</h3>
+          <p className="text-muted" style={{ marginBottom: '0.75rem' }}>
+            Standard bottle SKUs tracked in inventory under Packaging.
+          </p>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Bottle</th>
+                  <th>Size</th>
+                  <th>On Hand</th>
+                  <th>Reorder At</th>
+                </tr>
+              </thead>
+              <tbody>
+                {PACKAGING_BOTTLES.map((bottle) => {
+                  const inv = packagingInventory.find(
+                    (i) => i.name.toLowerCase() === bottle.name.toLowerCase(),
+                  );
+                  return (
+                    <tr key={bottle.name}>
+                      <td><strong>{bottle.name}</strong></td>
+                      <td>{bottle.sizeMl} ml</td>
+                      <td>{inv ? `${inv.quantity.toLocaleString()} ${inv.unit}` : '—'}</td>
+                      <td>{inv ? inv.reorder_level.toLocaleString() : '—'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="card-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
         <div className="stat-card">
@@ -425,26 +438,42 @@ export function Bottling() {
 
             <div className="form-group full-width bottling-lines-section">
               <div className="bottling-lines-header">
-                <label>Packaging lines</label>
+                <label>{isRumBottling ? 'Bottle lines' : 'Packaging lines'}</label>
                 <button type="button" className="btn btn-sm btn-secondary" onClick={addLine}>+ Add bottle size</button>
               </div>
-              <p className="field-hint">Bottle different sizes from the same tank in one run.</p>
+              <p className="field-hint">
+                {isRumBottling
+                  ? 'Rum bottling: enter bottle size and count only (packaging inventory is not used).'
+                  : 'Bottle different sizes from the same tank in one run.'}
+              </p>
               {lines.map((line, index) => {
                 const lineGal = lineVolumeGal(line);
                 return (
                   <div key={index} className="bottling-line-row">
-                    <div className="form-group">
-                      <label>Packaging bottle</label>
-                      <select
-                        value={line.packaging_bottle}
-                        onChange={(e) => handleLinePackagingSelect(index, e.target.value)}
-                      >
-                        <option value="">— Select —</option>
-                        {PACKAGING_BOTTLES.map((b) => (
-                          <option key={b.name} value={b.name}>{b.name} ({b.sizeMl} ml)</option>
-                        ))}
-                      </select>
-                    </div>
+                    {!isRumBottling && (
+                      <div className="form-group">
+                        <label>Packaging bottle</label>
+                        <select
+                          value={line.packaging_bottle}
+                          onChange={(e) => handleLinePackagingSelect(index, e.target.value)}
+                        >
+                          <option value="">— Select —</option>
+                          {PACKAGING_BOTTLES.map((b) => (
+                            <option key={b.name} value={b.name}>{b.name} ({b.sizeMl} ml)</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    {isRumBottling && (
+                      <div className="form-group">
+                        <label>Label (optional)</label>
+                        <input
+                          value={line.packaging_bottle}
+                          onChange={(e) => updateLine(index, { packaging_bottle: e.target.value })}
+                          placeholder="e.g. 750 ml export"
+                        />
+                      </div>
+                    )}
                     <div className="form-group">
                       <label>Size (ml)</label>
                       <input
