@@ -21,6 +21,7 @@ import {
   getHighWinesDestinationTanks,
   defaultDestTankIdForRunType,
   defaultTankForCutType,
+  getCollectionVessels,
   getHoldingTanks,
   getHoldingTankContents,
   getHoldingTanksWithContents,
@@ -95,6 +96,7 @@ export function Distillation() {
   const mashes = getMashBatches();
   const stills = getPotStills();
   const holdingTanks = getHoldingTanks();
+  const collectionVessels = getCollectionVessels();
   const tanksWithContents = getHoldingTanksWithContents();
   const tankTransfers = getHoldingTankTransfers();
   const equipment = getFloorEquipment();
@@ -451,11 +453,12 @@ export function Distillation() {
     }
     const tankId = cutForm.holding_tank_equipment_id;
     if (cutForm.volume_gal > 0 && !tankId && cutForm.cut_type !== 'heads') {
-      alert(`Select a holding tank to collect ${cutForm.cut_type}.`);
+      alert(`Select a collection vessel to collect ${cutForm.cut_type}.`);
       return;
     }
     if (tankId && cutForm.volume_gal > 0) {
-      const tank = holdingTanks.find((t) => t.id === tankId);
+      const tank = collectionVessels.find((t) => t.id === tankId)
+        ?? equipment.find((t) => t.id === tankId);
       const contents = getHoldingTankContents(tankId);
       const newTotal = contents.volume_gal + cutForm.volume_gal;
       if (tank && tank.capacity_gal > 0 && newTotal > tank.capacity_gal) {
@@ -499,7 +502,7 @@ export function Distillation() {
     ? getHoldingTankContents(cutForm.holding_tank_equipment_id)
     : null;
 
-  const holdingTankLabel = (tank: typeof holdingTanks[0]) => {
+  const tankOptionLabel = (tank: { id: number; name: string; capacity_gal: number }) => {
     const contents = getHoldingTankContents(tank.id);
     if (contents.volume_gal <= 0) {
       return `${tank.name} (empty · ${tank.capacity_gal} gal cap)`;
@@ -514,7 +517,7 @@ export function Distillation() {
     }
   };
 
-  const cutDestinationTanks = holdingTanks;
+  const cutDestinationTanks = collectionVessels;
 
   const heartsTotal = cuts.filter((c) => c.cut_type === 'hearts').reduce((s, c) => s + c.volume_gal, 0);
   const gpa = cuts.filter((c) => c.cut_type === 'hearts').reduce((s, c) => s + c.volume_gal * c.abv / 100, 0);
@@ -811,7 +814,7 @@ export function Distillation() {
                       <option value="">— Select tank —</option>
                       {destTanks.map((t) => (
                         <option key={t.id} value={t.id}>
-                          {holdingTankLabel(t)}
+                          {tankOptionLabel(t)}
                         </option>
                       ))}
                     </select>
@@ -858,7 +861,7 @@ export function Distillation() {
                     <option value="">— Select tank —</option>
                     {destTanks.map((t) => (
                       <option key={t.id} value={t.id}>
-                        {holdingTankLabel(t)}
+                        {tankOptionLabel(t)}
                       </option>
                     ))}
                   </select>
@@ -1191,16 +1194,11 @@ export function Distillation() {
               >
                 <option value="">{cutForm.cut_type === 'heads' ? '— Discarded / no tank —' : '— Select tank —'}</option>
                 {cutDestinationTanks.map((t) => (
-                  <option key={t.id} value={t.id}>{holdingTankLabel(t)}</option>
+                  <option key={t.id} value={t.id}>{tankOptionLabel(t)}</option>
                 ))}
               </select>
-              {selectedRun && isTankSourcedRun(selectedRun.run_type ?? 'wash')
-                && cutForm.cut_type === 'hearts'
-                && selectedRun.dest_holding_tank_equipment_id
-                && cutForm.holding_tank_equipment_id === selectedRun.dest_holding_tank_equipment_id && (
-                <p className="field-hint">
-                  Default high wines tank from this run — choose another tank if needed.
-                </p>
+              {cutDestinationTanks.length === 0 && (
+                <p className="field-hint">Add collection vessels on the floor plan to receive cuts.</p>
               )}
               {cutForm.cut_type === 'heads' && (
                 <p className="field-hint">Leave empty if heads are discarded rather than stored.</p>
@@ -1248,8 +1246,8 @@ export function Distillation() {
             </div>
           </div>
           <p className="form-hint">
-            Each cut can go to a different holding tank — e.g. heads to stillage, hearts to high wines,
-            tails to low wines storage. Volume accumulates in the tank you choose.
+            Hearts and tails must go to a collection vessel. Heads may be discarded (no tank) or stored in a collection vessel.
+            Transfer from collection vessels to holding tanks when ready.
           </p>
           <div className="form-actions">
             <button className="btn btn-secondary" onClick={() => setShowCutForm(false)}>Cancel</button>
