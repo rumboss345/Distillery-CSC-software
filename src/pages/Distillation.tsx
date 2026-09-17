@@ -22,7 +22,6 @@ import {
   defaultDestTankIdForRunType,
   defaultTankForCutType,
   getCollectionVessels,
-  getHoldingTanks,
   getHoldingTankContents,
   getSpiritTransferVessels,
   getSpiritTransferVesselsWithContents,
@@ -96,7 +95,6 @@ export function Distillation() {
   const runs = getDistillationRuns();
   const mashes = getMashBatches();
   const stills = getPotStills();
-  const holdingTanks = getHoldingTanks();
   const collectionVessels = getCollectionVessels();
   const spiritTransferVessels = getSpiritTransferVessels();
   const tanksWithContents = getSpiritTransferVesselsWithContents();
