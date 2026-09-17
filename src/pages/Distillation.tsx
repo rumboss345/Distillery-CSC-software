@@ -24,7 +24,8 @@ import {
   getCollectionVessels,
   getHoldingTanks,
   getHoldingTankContents,
-  getHoldingTanksWithContents,
+  getSpiritTransferVessels,
+  getSpiritTransferVesselsWithContents,
   getHoldingTankTransfers,
   saveHoldingTankTransfer,
   deleteHoldingTankTransfer,
@@ -97,7 +98,8 @@ export function Distillation() {
   const stills = getPotStills();
   const holdingTanks = getHoldingTanks();
   const collectionVessels = getCollectionVessels();
-  const tanksWithContents = getHoldingTanksWithContents();
+  const spiritTransferVessels = getSpiritTransferVessels();
+  const tanksWithContents = getSpiritTransferVesselsWithContents();
   const tankTransfers = getHoldingTankTransfers();
   const equipment = getFloorEquipment();
   const [showRunForm, setShowRunForm] = useState(false);
@@ -523,13 +525,13 @@ export function Distillation() {
   const gpa = cuts.filter((c) => c.cut_type === 'hearts').reduce((s, c) => s + c.volume_gal * c.abv / 100, 0);
 
   const sourceTanksForTransfer = tanksWithContents.filter((t) => t.volume_gal > 0);
-  const destTanksForTransfer = holdingTanks.filter(
+  const destTanksForTransfer = spiritTransferVessels.filter(
     (t) => t.id !== transferForm.source_tank_equipment_id,
   );
   const transferSourceContents = transferForm.source_tank_equipment_id
     ? getHoldingTankContents(transferForm.source_tank_equipment_id)
     : null;
-  const transferDestTank = holdingTanks.find((t) => t.id === transferForm.dest_tank_equipment_id);
+  const transferDestTank = spiritTransferVessels.find((t) => t.id === transferForm.dest_tank_equipment_id);
   const transferDestContents = transferForm.dest_tank_equipment_id
     ? getHoldingTankContents(transferForm.dest_tank_equipment_id)
     : null;
@@ -1086,7 +1088,7 @@ export function Distillation() {
                 ))}
               </select>
               {sourceTanksForTransfer.length === 0 && (
-                <p className="field-hint">No tanks with spirit available — add distillation cuts first.</p>
+                <p className="field-hint">No holding tanks or collection vessels with spirit — add distillation cuts first.</p>
               )}
               {transferSourceContents && transferForm.source_tank_equipment_id > 0 && (
                 <p className="field-hint">
@@ -1160,7 +1162,7 @@ export function Distillation() {
             </div>
           </div>
           <p className="form-hint">
-            Move low wines or high wines between holding tanks. Source volume is reduced and destination volume increases.
+            Move spirit between any holding tank and collection vessel. Source volume is reduced and destination volume increases.
           </p>
           <div className="form-actions">
             <button className="btn btn-secondary" onClick={() => setShowTransferForm(false)}>Cancel</button>

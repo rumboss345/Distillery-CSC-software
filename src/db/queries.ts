@@ -523,6 +523,34 @@ export function getCollectionVessels(): FloorEquipment[] {
   return getFloorEquipment().filter((e) => e.equipment_type === 'collection_vessel');
 }
 
+/** Holding tanks and collection vessels — equipment that uses the spirit ledger for transfers. */
+export function getSpiritTransferVessels(): FloorEquipment[] {
+  syncHoldingTankStatuses();
+  return getFloorEquipment().filter(
+    (e) => e.equipment_type === 'holding_tank' || e.equipment_type === 'collection_vessel',
+  );
+}
+
+export function getSpiritTransferVesselsWithContents(): (FloorEquipment & HoldingTankContents)[] {
+  return getSpiritTransferVessels().map((tank) => ({
+    ...tank,
+    ...getHoldingTankContents(tank.id),
+  }));
+}
+
+function assertSpiritTransferVessel(equipmentId: number, role: 'source' | 'destination'): void {
+  const row = queryOne<{ equipment_type: string; name: string }>(
+    'SELECT equipment_type, name FROM floor_equipment WHERE id = ?',
+    [equipmentId],
+  );
+  if (!row) {
+    throw new Error(`${role === 'source' ? 'Source' : 'Destination'} tank not found.`);
+  }
+  if (row.equipment_type !== 'holding_tank' && row.equipment_type !== 'collection_vessel') {
+    throw new Error(`${row.name} cannot be used for spirit transfers — choose a holding tank or collection vessel.`);
+  }
+}
+
 export function getHoldingTankContents(
   tankId: number,
   excludeRunId?: number,
@@ -939,6 +967,8 @@ export function saveHoldingTankTransfer(
   if (transfer.volume_gal <= 0) {
     throw new Error('Transfer volume must be greater than zero.');
   }
+  assertSpiritTransferVessel(transfer.source_tank_equipment_id, 'source');
+  assertSpiritTransferVessel(transfer.dest_tank_equipment_id, 'destination');
   const available = getHoldingTankContents(transfer.source_tank_equipment_id);
   if (transfer.volume_gal > available.volume_gal + 0.01) {
     throw new Error(`Only ${available.volume_gal.toFixed(1)} gal available in the source tank.`);
