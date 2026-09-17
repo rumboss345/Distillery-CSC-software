@@ -518,6 +518,11 @@ export function getHoldingTanks(): FloorEquipment[] {
   return getFloorEquipment().filter((e) => e.equipment_type === 'holding_tank');
 }
 
+export function getCollectionVessels(): FloorEquipment[] {
+  syncHoldingTankStatuses();
+  return getFloorEquipment().filter((e) => e.equipment_type === 'collection_vessel');
+}
+
 export function getHoldingTankContents(
   tankId: number,
   excludeRunId?: number,
@@ -717,6 +722,23 @@ function findTankByKeywords(keywords: string[], excludeTankId?: number | null): 
   return match?.id ?? null;
 }
 
+function findCollectionVesselByKeywords(keywords: string[], excludeTankId?: number | null): number | null {
+  const vessels = getCollectionVessels().filter((t) => t.id !== excludeTankId);
+  const match = vessels.find((t) => {
+    const name = t.name.toLowerCase();
+    return keywords.some((k) => name.includes(k));
+  });
+  return match?.id ?? null;
+}
+
+function isCollectionVesselEquipmentId(equipmentId: number): boolean {
+  const row = queryOne<{ equipment_type: string }>(
+    'SELECT equipment_type FROM floor_equipment WHERE id = ?',
+    [equipmentId],
+  );
+  return row?.equipment_type === 'collection_vessel';
+}
+
 /** Suggested holding tank for a cut type; reuses tank from an earlier cut of the same type on this run. */
 export function defaultTankForCutType(
   cutType: CutType,
@@ -730,7 +752,10 @@ export function defaultTankForCutType(
   const priorSameType = existingCuts?.find(
     (c) => c.cut_type === cutType && c.holding_tank_equipment_id,
   );
-  if (priorSameType?.holding_tank_equipment_id) {
+  if (
+    priorSameType?.holding_tank_equipment_id
+    && isCollectionVesselEquipmentId(priorSameType.holding_tank_equipment_id)
+  ) {
     return priorSameType.holding_tank_equipment_id;
   }
 
@@ -739,17 +764,18 @@ export function defaultTankForCutType(
       return null;
     case 'hearts':
       if (
-        (run?.run_type === 'low_wines' || run?.run_type === 'heavy_rum')
-        && run.dest_holding_tank_equipment_id
+        run?.dest_holding_tank_equipment_id
+        && isCollectionVesselEquipmentId(run.dest_holding_tank_equipment_id)
       ) {
         return run.dest_holding_tank_equipment_id;
       }
-      return findTankByKeywords(
-        ['high proof', 'spirit safe', 'hearts', 'vodka high', 'cane spirits', 'gold rum'],
-        excludeTankId,
-      ) ?? defaultHighWinesTankId(excludeTankId);
+      return findCollectionVesselByKeywords(['latina', 'vendome', 'collection'], excludeTankId)
+        ?? getCollectionVessels()[0]?.id
+        ?? null;
     case 'tails':
-      return findTankByKeywords(['tails', 'low wine', 'low wines'], excludeTankId);
+      return findCollectionVesselByKeywords(['latina', 'low wine', 'vendome', 'collection'], excludeTankId)
+        ?? getCollectionVessels()[0]?.id
+        ?? null;
     default:
       return null;
   }
@@ -993,7 +1019,7 @@ export function emptyAllHoldingTanks(): {
 
 export function syncHoldingTankStatuses(): void {
   const tanks = queryAll<FloorEquipment>(
-    "SELECT * FROM floor_equipment WHERE equipment_type = 'holding_tank'",
+    "SELECT * FROM floor_equipment WHERE equipment_type IN ('holding_tank', 'collection_vessel')",
   );
   for (const tank of tanks) {
     const contents = getHoldingTankContents(tank.id);
@@ -1451,6 +1477,11 @@ export function saveDistillationCut(cut: Omit<DistillationCut, 'id'>, id?: numbe
     );
     if (existingHeads) {
       throw new Error('Heads can only be recorded once per run.');
+    }
+  }
+  if (cut.holding_tank_equipment_id != null && cut.volume_gal > 0) {
+    if (!isCollectionVesselEquipmentId(cut.holding_tank_equipment_id)) {
+      throw new Error('Distillation cuts must be collected into a collection vessel (or leave heads empty to discard).');
     }
   }
   if (id) {
