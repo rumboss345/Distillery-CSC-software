@@ -418,6 +418,30 @@ function runMigrations(): void {
       AND name IN ('Legacy wash tank (demo)', 'Wash Tank')
   `);
   db.run(`UPDATE floor_equipment SET capacity_gal = 1000 WHERE equipment_type = 'fermenter'`);
+  db.run(`
+    UPDATE floor_equipment
+    SET capacity_gal = CASE name
+      WHEN 'Blending tank for bulk Spirits' THEN 250
+      WHEN 'Canning blending tank' THEN 250
+      WHEN 'Dunder tank' THEN 1000
+      WHEN 'Low wines storage Tank 5' THEN 2000
+      WHEN 'Stillage Storage tank' THEN 5000
+      WHEN 'Storage for Heavy rum tank' THEN 250
+      WHEN 'Storage tank of tails runs' THEN 250
+      WHEN 'Vodka high proof storage' THEN 250
+      ELSE capacity_gal
+    END
+    WHERE name IN (
+      'Blending tank for bulk Spirits',
+      'Canning blending tank',
+      'Dunder tank',
+      'Low wines storage Tank 5',
+      'Stillage Storage tank',
+      'Storage for Heavy rum tank',
+      'Storage tank of tails runs',
+      'Vodka high proof storage'
+    )
+  `);
   const hasProcessPos = queryOne<{ name: string }>(
     "SELECT name FROM pragma_table_info('floor_equipment') WHERE name='process_pos_x'",
   );
