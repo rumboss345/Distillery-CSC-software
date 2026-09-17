@@ -10,10 +10,10 @@ import {
 } from '../../db/queries';
 import { buildEquipmentVisualData } from './equipment-visual-shared';
 import {
+  clampEquipmentProcessPosition,
   computeDefaultProcessPositions,
   computeProcessCanvasSize,
   computeStageBands,
-  snapProcessPosition,
 } from './process-layout';
 import { groupEquipmentByStage } from './process-stages';
 import { EquipmentVisual } from './EquipmentVisual';
@@ -98,6 +98,12 @@ export function ProcessEquipmentCanvas({
     [defaultPositions, stageBands],
   );
 
+  const clampToEquipmentStage = useCallback(
+    (equipmentId: number, pos: { x: number; y: number }) =>
+      clampEquipmentProcessPosition(equipmentId, pos, stages, stageBands, canvasSize.width),
+    [stages, stageBands, canvasSize.width],
+  );
+
   const summary = getProductionSummary();
   const offlineCount = allEquipment.filter((e) => e.status === 'offline').length;
 
@@ -123,12 +129,13 @@ export function ProcessEquipmentCanvas({
   const resolvePosition = useCallback(
     (item: EquipmentItem) => {
       if (dragging?.id === item.id && livePos) return livePos;
-      if (item.process_pos_x != null && item.process_pos_y != null) {
-        return { x: item.process_pos_x, y: item.process_pos_y };
-      }
-      return defaultPositions.get(item.id) ?? { x: 40, y: 40 };
+      const raw =
+        item.process_pos_x != null && item.process_pos_y != null
+          ? { x: item.process_pos_x, y: item.process_pos_y }
+          : (defaultPositions.get(item.id) ?? { x: 40, y: 40 });
+      return clampToEquipmentStage(item.id, raw);
     },
-    [dragging, livePos, defaultPositions],
+    [dragging, livePos, defaultPositions, clampToEquipmentStage],
   );
 
   useEffect(() => {
@@ -139,7 +146,7 @@ export function ProcessEquipmentCanvas({
         dragMovedRef.current = true;
       }
       const pt = getCanvasPoint(e.clientX, e.clientY);
-      const next = snapProcessPosition({
+      const next = clampToEquipmentStage(dragging.id, {
         x: pt.x - dragging.offsetX,
         y: pt.y - dragging.offsetY,
       });
@@ -152,8 +159,8 @@ export function ProcessEquipmentCanvas({
         if (!dragMovedRef.current) {
           onSelect(dragging.id);
         } else if (livePosRef.current) {
-          const snapped = snapProcessPosition(livePosRef.current);
-          updateEquipmentProcessPosition(dragging.id, snapped.x, snapped.y);
+          const finalPos = clampToEquipmentStage(dragging.id, livePosRef.current);
+          updateEquipmentProcessPosition(dragging.id, finalPos.x, finalPos.y);
           onLayoutChange?.();
         }
       }
@@ -168,7 +175,7 @@ export function ProcessEquipmentCanvas({
       window.removeEventListener('pointermove', onMovePointer);
       window.removeEventListener('pointerup', onUp);
     };
-  }, [dragging, getCanvasPoint, onLayoutChange, onSelect]);
+  }, [dragging, getCanvasPoint, clampToEquipmentStage, onLayoutChange, onSelect]);
 
   const onViewportPointerDown = (e: React.PointerEvent) => {
     if ((e.target as HTMLElement).closest('.process-equipment-node')) return;
@@ -205,11 +212,20 @@ export function ProcessEquipmentCanvas({
   const zoomIn = () => setScale((s) => Math.min(1.8, s * 1.12));
   const zoomOut = () => setScale((s) => Math.max(0.45, s / 1.12));
 
+  const autoArrangeSections = () => {
+    for (const item of allEquipment) {
+      const pos = defaultPositions.get(item.id);
+      if (!pos) continue;
+      updateEquipmentProcessPosition(item.id, pos.x, pos.y);
+    }
+    onLayoutChange?.();
+  };
+
   return (
     <div className="process-view">
       <div className="process-toolbar">
         <span className="process-toolbar-title">Production flow</span>
-        <span className="process-toolbar-hint">Drag to arrange · Pan background to scroll</span>
+        <span className="process-toolbar-hint">Drag within each equipment section · Pan background to scroll</span>
         <nav className="process-toolbar-links" aria-label="Production shortcuts">
           <Link to="/wash" className="process-toolbar-link">Wash</Link>
           <Link to="/distillation" className="process-toolbar-link">Distill</Link>
@@ -218,6 +234,9 @@ export function ProcessEquipmentCanvas({
           <Link to="/barrels" className="process-toolbar-link">Barrels</Link>
         </nav>
         <div className="process-toolbar-actions">
+          <button type="button" className="btn btn-sm btn-secondary" onClick={autoArrangeSections}>
+            Auto-arrange
+          </button>
           <button type="button" className="btn btn-sm btn-secondary" onClick={zoomOut} aria-label="Zoom out">−</button>
           <button type="button" className="btn btn-sm btn-secondary" onClick={fitScreen}>Fit</button>
           <button type="button" className="btn btn-sm btn-secondary" onClick={zoomIn} aria-label="Zoom in">+</button>
