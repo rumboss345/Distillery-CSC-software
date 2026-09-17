@@ -731,6 +731,24 @@ function findCollectionVesselByKeywords(keywords: string[], excludeTankId?: numb
   return match?.id ?? null;
 }
 
+function findCollectionVesselMatchingAllKeywords(
+  keywords: string[],
+  excludeTankId?: number | null,
+): number | null {
+  const vessels = getCollectionVessels().filter((t) => t.id !== excludeTankId);
+  const match = vessels.find((t) => {
+    const name = t.name.toLowerCase();
+    return keywords.every((k) => name.includes(k));
+  });
+  return match?.id ?? null;
+}
+
+/** Collection vessel for hearts on Vendome spirit (low wines) runs. */
+export function defaultVendomeLowWinesCollectionVesselId(excludeTankId?: number | null): number | null {
+  return findCollectionVesselMatchingAllKeywords(['vendome', 'low wine'], excludeTankId)
+    ?? findCollectionVesselMatchingAllKeywords(['low wines collection', 'vendome'], excludeTankId);
+}
+
 function isCollectionVesselEquipmentId(equipmentId: number): boolean {
   const row = queryOne<{ equipment_type: string }>(
     'SELECT equipment_type FROM floor_equipment WHERE id = ?',
@@ -743,7 +761,10 @@ function isCollectionVesselEquipmentId(equipmentId: number): boolean {
 export function defaultTankForCutType(
   cutType: CutType,
   options?: {
-    run?: Pick<DistillationRun, 'run_type' | 'dest_holding_tank_equipment_id' | 'source_holding_tank_equipment_id'>;
+    run?: Pick<
+      DistillationRun,
+      'run_type' | 'dest_holding_tank_equipment_id' | 'source_holding_tank_equipment_id' | 'still_name'
+    >;
     existingCuts?: Pick<DistillationCut, 'cut_type' | 'holding_tank_equipment_id'>[];
     excludeTankId?: number | null;
   },
@@ -763,6 +784,13 @@ export function defaultTankForCutType(
     case 'heads':
       return null;
     case 'hearts':
+      if (
+        run?.run_type === 'low_wines'
+        && run.still_name?.toLowerCase().includes('vendome')
+      ) {
+        const vendomeLowWines = defaultVendomeLowWinesCollectionVesselId(excludeTankId);
+        if (vendomeLowWines) return vendomeLowWines;
+      }
       if (
         run?.dest_holding_tank_equipment_id
         && isCollectionVesselEquipmentId(run.dest_holding_tank_equipment_id)
