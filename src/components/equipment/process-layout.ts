@@ -44,6 +44,46 @@ export function computeStageBands(
   });
 }
 
+/** Approximate node height for clamping drags within a stage band. */
+export const PROCESS_NODE_HEIGHT = 220;
+
+export function stageIndexForEquipmentId(
+  equipmentId: number,
+  stages: { items: { id: number }[] }[],
+): number {
+  const idx = stages.findIndex((stage) => stage.items.some((item) => item.id === equipmentId));
+  return idx >= 0 ? idx : 0;
+}
+
+export function clampProcessPositionToStage(
+  pos: { x: number; y: number },
+  band: { top: number; height: number },
+  canvasWidth: number,
+): { x: number; y: number } {
+  const minY = band.top + PROCESS_STAGE_HEADER;
+  const maxY = Math.max(minY, band.top + band.height - PROCESS_NODE_HEIGHT);
+  const minX = PROCESS_CANVAS_PAD;
+  const maxX = Math.max(minX, canvasWidth - PROCESS_ITEM_WIDTH - PROCESS_CANVAS_PAD);
+
+  return {
+    x: Math.min(Math.max(pos.x, minX), maxX),
+    y: Math.min(Math.max(pos.y, minY), maxY),
+  };
+}
+
+export function clampEquipmentProcessPosition(
+  equipmentId: number,
+  pos: { x: number; y: number },
+  stages: { items: { id: number }[] }[],
+  stageBands: { top: number; height: number }[],
+  canvasWidth: number,
+): { x: number; y: number } {
+  const stageIdx = stageIndexForEquipmentId(equipmentId, stages);
+  const band = stageBands[stageIdx];
+  if (!band) return snapProcessPosition(pos);
+  return clampProcessPositionToStage(snapProcessPosition(pos), band, canvasWidth);
+}
+
 export function computeDefaultProcessPositions(
   items: (FloorEquipmentView & { plan_name?: string })[],
 ): Map<number, { x: number; y: number }> {
@@ -53,7 +93,10 @@ export function computeDefaultProcessPositions(
 
   stages.forEach((group, stageIdx) => {
     const baseY = bands[stageIdx]?.top ?? PROCESS_CANVAS_PAD;
-    group.items.forEach((item, itemIdx) => {
+    const sortedItems = [...group.items].sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+    );
+    sortedItems.forEach((item, itemIdx) => {
       const row = Math.floor(itemIdx / PROCESS_ITEMS_PER_ROW);
       const col = itemIdx % PROCESS_ITEMS_PER_ROW;
       positions.set(item.id, {
