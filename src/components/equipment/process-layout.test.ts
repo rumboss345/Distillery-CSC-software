@@ -3,11 +3,16 @@ import {
   PROCESS_GRID_SIZE,
   clampEquipmentProcessPosition,
   clampProcessPositionToStage,
+  computeProcessLayoutPlan,
   computeStageBands,
+  findNearestEmptySlot,
+  positionToSlot,
+  slotKey,
   stageBandHeight,
   snapProcessPosition,
   snapToProcessGrid,
 } from './process-layout';
+import type { FloorEquipmentView } from '../../types';
 
 describe('snapToProcessGrid', () => {
   it('snaps to nearest grid line', () => {
@@ -58,5 +63,30 @@ describe('clampEquipmentProcessPosition', () => {
     const clamped = clampEquipmentProcessPosition(2, { x: 10, y: 10 }, stages, bands, 900);
     expect(clamped.y).toBeGreaterThanOrEqual(bands[1].top + 44);
     expect(clamped.y).toBeLessThanOrEqual(bands[1].top + bands[1].height);
+  });
+});
+
+describe('process slot layout', () => {
+  it('finds the nearest empty slot when target is taken', () => {
+    const occupied = new Set([slotKey(0, 0)]);
+    const slot = findNearestEmptySlot({ col: 0, row: 0 }, 4, 2, occupied);
+    expect(occupied.has(slotKey(slot.col, slot.row))).toBe(false);
+  });
+
+  it('assigns unique grid slots per item in a stage', () => {
+    const items = [
+      { id: 1, name: 'A', equipment_type: 'fermenter' },
+      { id: 2, name: 'B', equipment_type: 'fermenter' },
+      { id: 3, name: 'C', equipment_type: 'fermenter' },
+    ] as FloorEquipmentView[];
+
+    const plan = computeProcessLayoutPlan(items, 6);
+    const band = plan.stageBands[0];
+    const slots = items.map((item) => {
+      const pos = plan.positions.get(item.id)!;
+      return positionToSlot(pos, band);
+    });
+    const keys = slots.map((s) => slotKey(s.col, s.row));
+    expect(new Set(keys).size).toBe(items.length);
   });
 });

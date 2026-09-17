@@ -10,12 +10,11 @@ import {
 } from '../../db/queries';
 import { buildEquipmentVisualData } from './equipment-visual-shared';
 import {
-  clampEquipmentProcessPosition,
-  computeDefaultProcessPositions,
-  computeProcessCanvasSize,
-  computeStageBands,
+  computeFitToViewportTransform,
+  computeMaxColumnsForViewport,
+  computeProcessLayoutPlan,
+  resolveDropSlotPosition,
 } from './process-layout';
-import { groupEquipmentByStage } from './process-stages';
 import { EquipmentVisual } from './EquipmentVisual';
 import { ProcessEquipmentDetailPanel } from './ProcessEquipmentDetailPanel';
 import { processEquipmentVisualScale } from './process-visual-scale';
@@ -43,6 +42,7 @@ export function ProcessEquipmentCanvas({
   onRemoveEquipment,
 }: ProcessEquipmentCanvasProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
+  const [viewportSize, setViewportSize] = useState({ width: 800, height: 520 });
   const [scale, setScale] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [panning, setPanning] = useState(false);
@@ -56,6 +56,24 @@ export function ProcessEquipmentCanvas({
   const [assignmentsByStage, setAssignmentsByStage] = useState<
     Record<string, ProcessAssignmentEntry[]>
   >({});
+
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el) return undefined;
+
+    const updateSize = () => {
+      const rect = el.getBoundingClientRect();
+      setViewportSize({
+        width: Math.max(1, Math.round(rect.width)),
+        height: Math.max(1, Math.round(rect.height)),
+      });
+    };
+
+    updateSize();
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     fetchProcessAssignments()
@@ -86,23 +104,27 @@ export function ProcessEquipmentCanvas({
     return map;
   }, [allEquipment, volumeById]);
 
-  const stages = useMemo(() => groupEquipmentByStage(allEquipment), [allEquipment]);
-  const stageBands = useMemo(() => computeStageBands(stages), [stages]);
-  const defaultPositions = useMemo(
-    () => computeDefaultProcessPositions(allEquipment),
-    [allEquipment],
+  const maxColumns = useMemo(
+    () => computeMaxColumnsForViewport(viewportSize.width),
+    [viewportSize.width],
   );
 
-  const canvasSize = useMemo(
-    () => computeProcessCanvasSize(defaultPositions, stageBands),
-    [defaultPositions, stageBands],
+  const layoutPlan = useMemo(
+    () => computeProcessLayoutPlan(allEquipment, maxColumns),
+    [allEquipment, maxColumns],
   );
 
-  const clampToEquipmentStage = useCallback(
-    (equipmentId: number, pos: { x: number; y: number }) =>
-      clampEquipmentProcessPosition(equipmentId, pos, stages, stageBands, canvasSize.width),
-    [stages, stageBands, canvasSize.width],
-  );
+  const { stages, stageBands, canvasSize, positions: layoutPositions } = layoutPlan;
+
+  const applyFitToViewport = useCallback(() => {
+    const fit = computeFitToViewportTransform(canvasSize, viewportSize);
+    setScale(fit.scale);
+    setPan(fit.pan);
+  }, [canvasSize, viewportSize]);
+
+  useEffect(() => {
+    applyFitToViewport();
+  }, [applyFitToViewport, refreshKey]);
 
   const summary = getProductionSummary();
   const offlineCount = allEquipment.filter((e) => e.status === 'offline').length;
@@ -129,13 +151,9 @@ export function ProcessEquipmentCanvas({
   const resolvePosition = useCallback(
     (item: EquipmentItem) => {
       if (dragging?.id === item.id && livePos) return livePos;
-      const raw =
-        item.process_pos_x != null && item.process_pos_y != null
-          ? { x: item.process_pos_x, y: item.process_pos_y }
-          : (defaultPositions.get(item.id) ?? { x: 40, y: 40 });
-      return clampToEquipmentStage(item.id, raw);
+      return layoutPositions.get(item.id) ?? { x: 40, y: 40 };
     },
-    [dragging, livePos, defaultPositions, clampToEquipmentStage],
+    [dragging, livePos, layoutPositions],
   );
 
   useEffect(() => {
@@ -146,10 +164,14 @@ export function ProcessEquipmentCanvas({
         dragMovedRef.current = true;
       }
       const pt = getCanvasPoint(e.clientX, e.clientY);
-      const next = clampToEquipmentStage(dragging.id, {
-        x: pt.x - dragging.offsetX,
-        y: pt.y - dragging.offsetY,
-      });
+      const next = resolveDropSlotPosition(
+        dragging.id,
+        {
+          x: pt.x - dragging.offsetX,
+          y: pt.y - dragging.offsetY,
+        },
+        layoutPlan,
+      );
       livePosRef.current = next;
       setLivePos(next);
     };
@@ -159,7 +181,7 @@ export function ProcessEquipmentCanvas({
         if (!dragMovedRef.current) {
           onSelect(dragging.id);
         } else if (livePosRef.current) {
-          const finalPos = clampToEquipmentStage(dragging.id, livePosRef.current);
+          const finalPos = resolveDropSlotPosition(dragging.id, livePosRef.current, layoutPlan);
           updateEquipmentProcessPosition(dragging.id, finalPos.x, finalPos.y);
           onLayoutChange?.();
         }
@@ -175,7 +197,7 @@ export function ProcessEquipmentCanvas({
       window.removeEventListener('pointermove', onMovePointer);
       window.removeEventListener('pointerup', onUp);
     };
-  }, [dragging, getCanvasPoint, clampToEquipmentStage, onLayoutChange, onSelect]);
+  }, [dragging, getCanvasPoint, layoutPlan, onLayoutChange, onSelect]);
 
   const onViewportPointerDown = (e: React.PointerEvent) => {
     if ((e.target as HTMLElement).closest('.process-equipment-node')) return;
@@ -208,13 +230,16 @@ export function ProcessEquipmentCanvas({
     });
   };
 
-  const fitScreen = () => { setScale(1); setPan({ x: 0, y: 0 }); };
+  const fitScreen = () => applyFitToViewport();
   const zoomIn = () => setScale((s) => Math.min(1.8, s * 1.12));
-  const zoomOut = () => setScale((s) => Math.max(0.45, s / 1.12));
+  const zoomOut = () => setScale((s) => Math.max(0.12, s / 1.12));
 
   const autoArrangeSections = () => {
+    const arranged = computeProcessLayoutPlan(allEquipment, maxColumns, {
+      ignoreSavedPositions: true,
+    });
     for (const item of allEquipment) {
-      const pos = defaultPositions.get(item.id);
+      const pos = arranged.positions.get(item.id);
       if (!pos) continue;
       updateEquipmentProcessPosition(item.id, pos.x, pos.y);
     }
@@ -225,7 +250,9 @@ export function ProcessEquipmentCanvas({
     <div className="process-view">
       <div className="process-toolbar">
         <span className="process-toolbar-title">Production flow</span>
-        <span className="process-toolbar-hint">Drag within each equipment section · Pan background to scroll</span>
+        <span className="process-toolbar-hint">
+          Drag within each section · items snap to grid · view auto-fits
+        </span>
         <nav className="process-toolbar-links" aria-label="Production shortcuts">
           <Link to="/wash" className="process-toolbar-link">Wash</Link>
           <Link to="/distillation" className="process-toolbar-link">Distill</Link>
