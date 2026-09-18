@@ -222,6 +222,16 @@ export function MashFermentation() {
     (f) => f.id !== fermenterForm.fermenter1Id,
   );
 
+  const canAssignFermenters = form.status === 'mashing' || form.status === 'fermenting';
+  const fermenterControlsDisabled = !canAssignFermenters;
+
+  const handleStatusChange = (status: MashStatus) => {
+    setForm({ ...form, status });
+    if (!editId && status !== 'mashing' && status !== 'fermenting') {
+      setFermenterForm(emptyFermenterForm());
+    }
+  };
+
   useEffect(() => {
     if (fermenterForm.split && form.water_gal > 0) {
       const half = Math.round((form.water_gal / 2) * 10) / 10;
@@ -326,7 +336,8 @@ export function MashFermentation() {
       return;
     }
 
-    saveMashBatchWithFermenters(form, buildAssignments(), editId);
+    const assignments = !editId && !canAssignFermenters ? [] : buildAssignments();
+    saveMashBatchWithFermenters(form, assignments, editId);
     setShowForm(false);
     refresh();
   };
@@ -604,7 +615,7 @@ export function MashFermentation() {
             </div>
             <div className="form-group">
               <label>Status</label>
-              <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as MashStatus })}>
+              <select value={form.status} onChange={(e) => handleStatusChange(e.target.value as MashStatus)}>
                 {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
               </select>
             </div>
@@ -620,10 +631,21 @@ export function MashFermentation() {
 
             <div className="form-group full-width fermenter-section">
               <label>Fermenter Assignment</label>
+              {fermenterControlsDisabled && !editId && (
+                <p className="field-hint">
+                  Set status to <strong>washing</strong> or <strong>fermenting</strong> before choosing fermenters.
+                </p>
+              )}
+              {fermenterControlsDisabled && editId && (
+                <p className="field-hint">
+                  Fermenters can only be changed while status is washing or fermenting.
+                </p>
+              )}
               <label className="checkbox-label">
                 <input
                   type="checkbox"
                   checked={fermenterForm.split}
+                  disabled={fermenterControlsDisabled}
                   onChange={(e) => setFermenterForm({
                     ...fermenterForm,
                     split: e.target.checked,
@@ -639,6 +661,7 @@ export function MashFermentation() {
               <label>{fermenterForm.split ? 'Fermenter 1' : 'Fermenter'}</label>
               <select
                 value={fermenterForm.fermenter1Id}
+                disabled={fermenterControlsDisabled}
                 onChange={(e) => setFermenterForm({
                   ...fermenterForm,
                   fermenter1Id: e.target.value ? parseInt(e.target.value) : '',
@@ -659,6 +682,7 @@ export function MashFermentation() {
                   <input
                     type="number"
                     step="0.1"
+                    disabled={fermenterControlsDisabled}
                     value={fermenterForm.volume1 || ''}
                     onChange={(e) => setFermenterForm({ ...fermenterForm, volume1: parseFloat(e.target.value) || 0 })}
                   />
@@ -667,6 +691,7 @@ export function MashFermentation() {
                   <label>Fermenter 2</label>
                   <select
                     value={fermenterForm.fermenter2Id}
+                    disabled={fermenterControlsDisabled}
                     onChange={(e) => setFermenterForm({
                       ...fermenterForm,
                       fermenter2Id: e.target.value ? parseInt(e.target.value) : '',
@@ -683,6 +708,7 @@ export function MashFermentation() {
                   <input
                     type="number"
                     step="0.1"
+                    disabled={fermenterControlsDisabled}
                     value={fermenterForm.volume2 || ''}
                     onChange={(e) => setFermenterForm({ ...fermenterForm, volume2: parseFloat(e.target.value) || 0 })}
                   />
