@@ -23,6 +23,7 @@ import {
 } from '../db/queries';
 import { MashTunVisual } from '../components/equipment/MashTunVisual';
 import type { EquipmentVisualData } from '../components/equipment/equipment-visual.types';
+import { AdminCredentialConfirmModal } from '../components/AdminCredentialConfirmModal';
 import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
 import { estimateAbvFromBrix, estimateSugarWash, formatAbvEstimate } from '../lib/fermentation';
@@ -223,6 +224,7 @@ export function MashFermentation() {
   const [form, setForm] = useState(emptyBatch());
   const [fermenterForm, setFermenterForm] = useState(emptyFermenterForm());
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [adminDeleteBatchId, setAdminDeleteBatchId] = useState<number | null>(null);
 
   void key;
 
@@ -367,13 +369,25 @@ export function MashFermentation() {
     refresh();
   };
 
-  const handleDelete = (id: number) => {
-    if (confirm('Delete this wash batch?')) {
-      deleteMashBatch(id);
-      if (selectedId === id) setSelectedId(null);
-      refresh();
+  const performDelete = (id: number) => {
+    deleteMashBatch(id);
+    if (selectedId === id) setSelectedId(null);
+    refresh();
+  };
+
+  const handleDelete = (batch: MashBatch) => {
+    if (batch.status === 'complete') {
+      setAdminDeleteBatchId(batch.id);
+      return;
+    }
+    if (confirm(`Delete wash batch ${batch.batch_number}?`)) {
+      performDelete(batch.id);
     }
   };
+
+  const adminDeleteBatch = adminDeleteBatchId != null
+    ? batches.find((b) => b.id === adminDeleteBatchId)
+    : undefined;
 
   const getBatchFermenters = (mashId: number) =>
     allAssignments.filter((a) => a.mash_batch_id === mashId);
@@ -512,7 +526,13 @@ export function MashFermentation() {
                               Logs
                             </button>
                             <button className="btn btn-sm btn-ghost" onClick={() => openEdit(b)}>Edit</button>
-                            <button className="btn btn-sm btn-ghost" onClick={() => handleDelete(b.id)}>Delete</button>
+                            <button
+                              className="btn btn-sm btn-ghost"
+                              title={b.status === 'complete' ? 'Completed batches require administrator approval to delete' : undefined}
+                              onClick={() => handleDelete(b)}
+                            >
+                              Delete
+                            </button>
                           </td>
                         </tr>
                       );
@@ -523,6 +543,20 @@ export function MashFermentation() {
             </section>
           ))}
         </div>
+      )}
+
+      {adminDeleteBatch && (
+        <AdminCredentialConfirmModal
+          title="Delete completed fermentation"
+          message={`Wash batch ${adminDeleteBatch.batch_number} is complete. Enter an administrator email and password to permanently delete it.`}
+          confirmLabel="Delete batch"
+          onClose={() => setAdminDeleteBatchId(null)}
+          onConfirmed={() => {
+            const id = adminDeleteBatch.id;
+            setAdminDeleteBatchId(null);
+            performDelete(id);
+          }}
+        />
       )}
 
       {selectedId && selectedBatch && canLogSelectedBatch && (
