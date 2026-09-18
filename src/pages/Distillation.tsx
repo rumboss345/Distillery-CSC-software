@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import { AssigneeCell, AssigneeSelect } from '../components/AssigneeSelect';
@@ -56,6 +56,13 @@ import type {
 } from '../types';
 
 const RUN_STATUSES: RunStatus[] = ['planned', 'running', 'complete'];
+
+const RUN_STATUS_GROUP_HEADINGS: Record<RunStatus, string> = {
+  planned: 'Planned',
+  running: 'Running',
+  complete: 'Complete',
+};
+
 const CUT_TYPES: CutType[] = ['heads', 'hearts', 'tails'];
 
 const SPIRIT_TYPE_LABELS: Record<SpiritTransferType, string> = {
@@ -407,6 +414,18 @@ export function Distillation() {
     return mash?.batch_number ?? '—';
   };
 
+  const runsByStatus = useMemo(() => {
+    const byStatus = Object.fromEntries(
+      RUN_STATUSES.map((status) => [status, [] as DistillationRun[]]),
+    ) as Record<RunStatus, DistillationRun[]>;
+    for (const run of runs) {
+      byStatus[run.status].push(run);
+    }
+    return RUN_STATUSES
+      .map((status) => ({ status, items: byStatus[status] }))
+      .filter((group) => group.items.length > 0);
+  }, [runs]);
+
   const selectedRun = runs.find((r) => r.id === selectedRunId);
   const selectedRunIsComplete = selectedRun?.status === 'complete';
   const cuts = selectedRunId ? getDistillationCuts(selectedRunId) : [];
@@ -669,49 +688,60 @@ export function Distillation() {
           </button>
         </div>
       ) : (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Run #</th>
-                <th>Type</th>
-                <th>Source</th>
-                <th>Still</th>
-                <th>Date</th>
-                <th>Assigned to</th>
-                <th>Charge</th>
-                <th>Status</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {runs.map((r) => {
-                const runType = r.run_type ?? 'wash';
-                return (
-                  <tr key={r.id}>
-                    <td><strong>{r.batch_number}</strong></td>
-                    <td>{runTypeLabel(runType)}</td>
-                    <td>{runSourceSummary(r)}</td>
-                    <td>{r.still_name}</td>
-                    <td>{format(new Date(r.run_date), 'MMM d, yyyy')}</td>
-                    <td><AssigneeCell name={r.assigned_user_name} /></td>
-                    <td>
-                      {r.charge_volume_gal} gal
-                      {isTankSourcedRun(runType) && r.charge_abv != null ? ` @ ${r.charge_abv.toFixed(1)}%` : ''}
-                    </td>
-                    <td><StatusBadge status={r.status} /></td>
-                    <td className="td-actions">
-                      <button className="btn btn-sm btn-secondary" onClick={() => setSelectedRunId(r.id === selectedRunId ? null : r.id)}>
-                        Cuts
-                      </button>
-                      <button className="btn btn-sm btn-ghost" onClick={() => openEditRun(r)}>Edit</button>
-                      <button className="btn btn-sm btn-ghost" onClick={() => handleDeleteRun(r.id)}>Delete</button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className="wash-status-groups">
+          {runsByStatus.map(({ status, items }) => (
+            <section key={status} className="card wash-status-group">
+              <header className="wash-status-group-header">
+                <h3 className="wash-status-group-title">{RUN_STATUS_GROUP_HEADINGS[status]}</h3>
+                <StatusBadge status={status} />
+                <span className="text-muted wash-status-group-count">
+                  {items.length} {items.length === 1 ? 'run' : 'runs'}
+                </span>
+              </header>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Run #</th>
+                      <th>Type</th>
+                      <th>Source</th>
+                      <th>Still</th>
+                      <th>Date</th>
+                      <th>Assigned to</th>
+                      <th>Charge</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map((r) => {
+                      const runType = r.run_type ?? 'wash';
+                      return (
+                        <tr key={r.id}>
+                          <td><strong>{r.batch_number}</strong></td>
+                          <td>{runTypeLabel(runType)}</td>
+                          <td>{runSourceSummary(r)}</td>
+                          <td>{r.still_name}</td>
+                          <td>{format(new Date(r.run_date), 'MMM d, yyyy')}</td>
+                          <td><AssigneeCell name={r.assigned_user_name} /></td>
+                          <td>
+                            {r.charge_volume_gal} gal
+                            {isTankSourcedRun(runType) && r.charge_abv != null ? ` @ ${r.charge_abv.toFixed(1)}%` : ''}
+                          </td>
+                          <td className="td-actions">
+                            <button className="btn btn-sm btn-secondary" onClick={() => setSelectedRunId(r.id === selectedRunId ? null : r.id)}>
+                              Cuts
+                            </button>
+                            <button className="btn btn-sm btn-ghost" onClick={() => openEditRun(r)}>Edit</button>
+                            <button className="btn btn-sm btn-ghost" onClick={() => handleDeleteRun(r.id)}>Delete</button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          ))}
         </div>
       )}
 
