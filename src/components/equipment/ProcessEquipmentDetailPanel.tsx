@@ -62,7 +62,13 @@ export function ProcessEquipmentDetailPanel({
             <dd>{visual.liquidName}</dd>
           </>
         )}
-        {visual.abv != null && visual.abv > 0 && (
+        {visual.estimatedAbv !== undefined && (
+          <>
+            <dt>Est. ABV</dt>
+            <dd>{visual.estimatedAbv != null ? `${visual.estimatedAbv.toFixed(1)}%` : '—'}</dd>
+          </>
+        )}
+        {visual.estimatedAbv === undefined && visual.abv != null && visual.abv > 0 && (
           <>
             <dt>Proof</dt>
             <dd>{visual.abv.toFixed(1)}% ABV</dd>

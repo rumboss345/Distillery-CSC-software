@@ -70,6 +70,8 @@ export interface FloorEquipmentView extends FloorEquipment {
   active_mash_status?: MashStatus;
   /** Latest fermentation log Brix for this fermenter, or mash starting Brix if no logs yet. */
   active_latest_brix?: number | null;
+  /** Wash starting gravity (actual or target Brix) for est. ABV on process view. */
+  active_start_brix?: number | null;
 }
 
 export interface InventoryItem {

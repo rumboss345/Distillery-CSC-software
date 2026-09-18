@@ -2,7 +2,7 @@ import type { EquipmentStatus, EquipmentType } from '../../types';
 import { equipmentTypeLabel } from '../../lib/equipment';
 import type { EquipmentVolumeReport } from '../../types';
 import type { FloorEquipmentView } from '../../types';
-import { fermenterLiquidBrixPhase } from '../../lib/fermentation';
+import { estimateAbvFromBrix, fermenterLiquidBrixPhase } from '../../lib/fermentation';
 import type { EquipmentVisualData, EquipmentVisualStatus } from './equipment-visual.types';
 
 export function formatGal(value: number): string {
@@ -102,6 +102,15 @@ export function buildEquipmentVisualData(
     ? 78
     : fillPercent;
 
+  let estimatedAbv: number | null | undefined;
+  if (item.equipment_type === 'fermenter' && item.active_batch_number) {
+    const startBrix = item.active_start_brix ?? null;
+    const currentBrix = item.active_latest_brix ?? null;
+    estimatedAbv = startBrix != null && currentBrix != null
+      ? estimateAbvFromBrix(startBrix, currentBrix)
+      : null;
+  }
+
   return {
     id: item.id,
     code: equipmentCode(item.equipment_type, item.id),
@@ -117,6 +126,7 @@ export function buildEquipmentVisualData(
     isFermenting: item.equipment_type === 'fermenter' && item.active_mash_status === 'fermenting',
     isWashing,
     fermenterLatestBrix: item.equipment_type === 'fermenter' ? item.active_latest_brix : undefined,
+    estimatedAbv,
     detail: report?.detail || item.notes || undefined,
     planName,
   };
