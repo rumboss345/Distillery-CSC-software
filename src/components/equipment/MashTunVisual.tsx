@@ -11,6 +11,12 @@ const WASH_BUBBLES = [
   { cx: 88, r: 1.7, delay: 1.95 },
 ] as const;
 
+/** Single curved fan paddle (+X from hub); pair at 180° for a two-blade impeller. */
+const FAN_BLADE_PATH =
+  'M 5 0 C 14 -7 34 -10 46 -3 L 48 0 L 46 3 C 34 10 14 7 5 0 Z';
+
+const FAN_BLADE_ANGLES = [0, 180] as const;
+
 /** Stainless mash/cook tank with domed lid — matches production floor reference style. */
 export function MashTunVisual(props: EquipmentVisualProps) {
   const { data } = props;
@@ -58,6 +64,15 @@ export function MashTunVisual(props: EquipmentVisualProps) {
           <clipPath id={`${uid}-clip`}>
             <rect x="30" y="58" width="90" height="95" rx="6" />
           </clipPath>
+          <linearGradient id={`${uid}-blade`} x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#71717a" />
+            <stop offset="45%" stopColor="#d4d4d8" />
+            <stop offset="100%" stopColor="#9ca3af" />
+          </linearGradient>
+          <radialGradient id={`${uid}-hub`} cx="35%" cy="35%" r="65%">
+            <stop offset="0%" stopColor="#e4e4e7" />
+            <stop offset="100%" stopColor="#71717a" />
+          </radialGradient>
         </defs>
 
         <rect x="34" y="150" width="8" height="18" fill="#3a424c" />
@@ -106,6 +121,35 @@ export function MashTunVisual(props: EquipmentVisualProps) {
                 </g>
               )}
             </>
+          )}
+          {isWashing && (
+            <g aria-hidden>
+              <line
+                x1="75"
+                y1="58"
+                x2="75"
+                y2="138"
+                stroke="#52525b"
+                strokeWidth="3.2"
+                strokeLinecap="round"
+              />
+              <g transform="translate(75 118)">
+                <g className="mash-tun-mixing-blade">
+                  {FAN_BLADE_ANGLES.map((angle) => (
+                    <path
+                      key={angle}
+                      d={FAN_BLADE_PATH}
+                      fill={`url(#${uid}-blade)`}
+                      stroke="#52525b"
+                      strokeWidth="0.55"
+                      transform={`rotate(${angle})`}
+                    />
+                  ))}
+                  <circle r="6" fill={`url(#${uid}-hub)`} stroke="#3f3f46" strokeWidth="0.85" />
+                  <circle r="2.2" fill="#52525b" />
+                </g>
+              </g>
+            </g>
           )}
         </g>
 
