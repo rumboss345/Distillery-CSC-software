@@ -246,7 +246,12 @@ export interface BottlingRun {
   batch_number: string;
   source_barrel_id: number | null;
   source_holding_tank_equipment_id: number | null;
+  /** Gallons drawn from source tank (empties tank on save when from tank). */
   source_volume_gal: number | null;
+  /** Sum of bottled line volumes (gal). */
+  bottled_volume_gal: number | null;
+  /** bottled_volume_gal − source_volume_gal when bottling from a tank. */
+  volume_variance_gal: number | null;
   source_run_id: number | null;
   bottling_date: string;
   packaging_bottle: string;

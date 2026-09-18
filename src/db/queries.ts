@@ -1800,9 +1800,16 @@ export function saveBottlingRun(
   const sourceBarrelId = fromTank ? null : run.source_barrel_id;
   const sourceTankId = fromTank ? run.source_holding_tank_equipment_id : null;
   const totalCount = activeLines.reduce((sum, line) => sum + line.bottle_count, 0);
-  const sourceVolumeGal = fromTank && totalCount > 0
+  const bottledVolumeGal = totalCount > 0
     ? activeLines.reduce((sum, line) => sum + mlToGallons(line.bottle_count * line.bottle_size_ml), 0)
     : null;
+  let sourceVolumeGal: number | null = null;
+  let volumeVarianceGal: number | null = null;
+  if (fromTank && sourceTankId && bottledVolumeGal != null && bottledVolumeGal > 0) {
+    const available = getHoldingTankContents(sourceTankId, undefined, undefined, id);
+    sourceVolumeGal = available.volume_gal;
+    volumeVarianceGal = bottledVolumeGal - sourceVolumeGal;
+  }
   const packagingSummary = activeLines.length === 1
     ? activeLines[0].packaging_bottle
     : activeLines.length > 1
@@ -1810,32 +1817,27 @@ export function saveBottlingRun(
       : '';
   const headerSizeMl = activeLines.length === 1 ? activeLines[0].bottle_size_ml : 0;
 
-  if (fromTank && sourceTankId && sourceVolumeGal != null && sourceVolumeGal > 0) {
-    const available = getHoldingTankContents(sourceTankId, undefined, undefined, id);
-    if (sourceVolumeGal > available.volume_gal + 0.01) {
-      throw new Error(`Only ${available.volume_gal.toFixed(1)} gal available in that tank.`);
-    }
-  }
-
   const header = {
     ...run,
     packaging_bottle: packagingSummary,
     bottle_size_ml: headerSizeMl,
     bottle_count: totalCount,
     source_volume_gal: sourceVolumeGal,
+    bottled_volume_gal: fromTank ? bottledVolumeGal : null,
+    volume_variance_gal: fromTank ? volumeVarianceGal : null,
   };
 
   let runId = id;
   if (runId) {
     runQuery(
-      `UPDATE bottling_runs SET batch_number=?, source_barrel_id=?, source_holding_tank_equipment_id=?, source_volume_gal=?, source_run_id=?, bottling_date=?, packaging_bottle=?, bottle_size_ml=?, bottle_count=?, final_abv=?, product_name=?, lot_number=?, notes=? WHERE id=?`,
-      [header.batch_number, sourceBarrelId, sourceTankId, header.source_volume_gal, header.source_run_id, header.bottling_date, header.packaging_bottle, header.bottle_size_ml, header.bottle_count, header.final_abv, header.product_name, header.lot_number, header.notes, runId],
+      `UPDATE bottling_runs SET batch_number=?, source_barrel_id=?, source_holding_tank_equipment_id=?, source_volume_gal=?, bottled_volume_gal=?, volume_variance_gal=?, source_run_id=?, bottling_date=?, packaging_bottle=?, bottle_size_ml=?, bottle_count=?, final_abv=?, product_name=?, lot_number=?, notes=? WHERE id=?`,
+      [header.batch_number, sourceBarrelId, sourceTankId, header.source_volume_gal, header.bottled_volume_gal, header.volume_variance_gal, header.source_run_id, header.bottling_date, header.packaging_bottle, header.bottle_size_ml, header.bottle_count, header.final_abv, header.product_name, header.lot_number, header.notes, runId],
     );
     persistBottlingRunLines(runId, activeLines);
   } else {
     runId = insertRow(
-      `INSERT INTO bottling_runs (batch_number, source_barrel_id, source_holding_tank_equipment_id, source_volume_gal, source_run_id, bottling_date, packaging_bottle, bottle_size_ml, bottle_count, final_abv, product_name, lot_number, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [header.batch_number, sourceBarrelId, sourceTankId, header.source_volume_gal, header.source_run_id, header.bottling_date, header.packaging_bottle, header.bottle_size_ml, header.bottle_count, header.final_abv, header.product_name, header.lot_number, header.notes],
+      `INSERT INTO bottling_runs (batch_number, source_barrel_id, source_holding_tank_equipment_id, source_volume_gal, bottled_volume_gal, volume_variance_gal, source_run_id, bottling_date, packaging_bottle, bottle_size_ml, bottle_count, final_abv, product_name, lot_number, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [header.batch_number, sourceBarrelId, sourceTankId, header.source_volume_gal, header.bottled_volume_gal, header.volume_variance_gal, header.source_run_id, header.bottling_date, header.packaging_bottle, header.bottle_size_ml, header.bottle_count, header.final_abv, header.product_name, header.lot_number, header.notes],
     );
     persistBottlingRunLines(runId, activeLines);
   }

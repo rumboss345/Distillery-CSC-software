@@ -154,6 +154,8 @@ describe('buildCalendarEventsFromData', () => {
         source_barrel_id: null,
         source_holding_tank_equipment_id: null,
         source_volume_gal: null,
+        bottled_volume_gal: null,
+        volume_variance_gal: null,
         source_run_id: null,
         bottling_date: '2026-05-01',
         packaging_bottle: '750mL',
