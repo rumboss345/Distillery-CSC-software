@@ -699,6 +699,15 @@ tr:hover td {
   max-width: 920px;
 }
 
+.cuts-modal-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
 .blend-recipe-form {
   display: flex;
   flex-direction: column;

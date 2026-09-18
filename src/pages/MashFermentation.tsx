@@ -521,7 +521,7 @@ export function MashFermentation() {
                               className="btn btn-sm btn-secondary"
                               disabled={b.status !== 'fermenting'}
                               title={b.status !== 'fermenting' ? 'Set status to fermenting to log readings' : undefined}
-                              onClick={() => setSelectedId(b.id === selectedId ? null : b.id)}
+                              onClick={() => setSelectedId(b.id)}
                             >
                               Logs
                             </button>
@@ -560,8 +560,11 @@ export function MashFermentation() {
       )}
 
       {selectedId && selectedBatch && canLogSelectedBatch && (
-        <div className="detail-panel">
-          <h4>Fermentation Logs — {selectedBatch.batch_number}</h4>
+        <Modal
+          wide
+          title={`Fermentation Logs — ${selectedBatch.batch_number}`}
+          onClose={() => setSelectedId(null)}
+        >
           {selectedAssignments.length > 1 ? (
             <div className="fermenter-log-stack">
               {selectedAssignments.map((a) => (
@@ -588,7 +591,7 @@ export function MashFermentation() {
               onAdded={refresh}
             />
           )}
-        </div>
+        </Modal>
       )}
 
       {showForm && (
