@@ -35,6 +35,7 @@ import {
 } from '../db/queries';
 import { AbvVolumeTemperatureFields } from '../components/AbvVolumeTemperatureFields';
 import { AbvTemperatureInput, correctedAbvFromInputs } from '../components/AbvTemperatureInput';
+import { AdminCredentialConfirmModal } from '../components/AdminCredentialConfirmModal';
 import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
 import {
@@ -119,6 +120,7 @@ export function Distillation() {
   const [editRunId, setEditRunId] = useState<number | undefined>();
   const [runForm, setRunForm] = useState(emptyRun());
   const [selectedRunId, setSelectedRunId] = useState<number | null>(null);
+  const [adminDeleteRunId, setAdminDeleteRunId] = useState<number | null>(null);
   const [cutForm, setCutForm] = useState({
     cut_type: 'heads' as CutType,
     holding_tank_equipment_id: null as number | null,
@@ -495,13 +497,25 @@ export function Distillation() {
   const fermenterLabel = (equipmentId: number | null) =>
     equipmentId ? equipment.find((e) => e.id === equipmentId)?.name ?? '—' : '—';
 
-  const handleDeleteRun = (id: number) => {
-    if (confirm('Delete this distillation run and all its cuts?')) {
-      deleteDistillationRun(id);
-      if (selectedRunId === id) setSelectedRunId(null);
-      refresh();
+  const performDeleteRun = (id: number) => {
+    deleteDistillationRun(id);
+    if (selectedRunId === id) setSelectedRunId(null);
+    refresh();
+  };
+
+  const handleDeleteRun = (run: DistillationRun) => {
+    if (run.status === 'complete') {
+      setAdminDeleteRunId(run.id);
+      return;
+    }
+    if (confirm(`Delete distillation run ${run.batch_number} and all its cuts?`)) {
+      performDeleteRun(run.id);
     }
   };
+
+  const adminDeleteRun = adminDeleteRunId != null
+    ? runs.find((r) => r.id === adminDeleteRunId)
+    : undefined;
 
   const cutCorrectedAbv = correctedAbvFromInputs(cutForm.observed_abv, cutForm.sample_temp_f);
   const cutFormHasVolumeAndAbv =
@@ -762,7 +776,14 @@ export function Distillation() {
                               Cuts
                             </button>
                             <button className="btn btn-sm btn-ghost" onClick={() => openEditRun(r)}>Edit</button>
-                            <button className="btn btn-sm btn-ghost" onClick={() => handleDeleteRun(r.id)}>Delete</button>
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-ghost"
+                              title={r.status === 'complete' ? 'Completed runs require administrator approval to delete' : undefined}
+                              onClick={() => handleDeleteRun(r)}
+                            >
+                              Delete
+                            </button>
                           </td>
                         </tr>
                       );
@@ -830,6 +851,20 @@ export function Distillation() {
             </div>
           )}
         </Modal>
+      )}
+
+      {adminDeleteRun && (
+        <AdminCredentialConfirmModal
+          title="Delete completed distillation run"
+          message={`Run ${adminDeleteRun.batch_number} is complete. Enter an administrator email and password to permanently delete it and all recorded cuts.`}
+          confirmLabel="Delete run"
+          onClose={() => setAdminDeleteRunId(null)}
+          onConfirmed={() => {
+            const id = adminDeleteRun.id;
+            setAdminDeleteRunId(null);
+            performDeleteRun(id);
+          }}
+        />
       )}
 
       {showRunForm && (
