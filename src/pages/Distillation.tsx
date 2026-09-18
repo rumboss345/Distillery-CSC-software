@@ -48,6 +48,7 @@ import {
 import { FERMENTATION_READY_MAX_BRIX, isBrixReadyForDistillation } from '../lib/fermentation';
 import { chargeExceedsStillCapacity } from '../lib/still-charge';
 import type {
+  DistillationCutView,
   DistillationRun,
   DistillationRunType,
   RunStatus,
@@ -113,6 +114,7 @@ export function Distillation() {
   const equipment = getFloorEquipment();
   const [showRunForm, setShowRunForm] = useState(false);
   const [showCutForm, setShowCutForm] = useState(false);
+  const [editCutId, setEditCutId] = useState<number | undefined>();
   const [showTransferForm, setShowTransferForm] = useState(false);
   const [editRunId, setEditRunId] = useState<number | undefined>();
   const [runForm, setRunForm] = useState(emptyRun());
@@ -437,6 +439,11 @@ export function Distillation() {
   const suggestCutTank = (cutType: CutType, run?: DistillationRun, runCuts = cuts) =>
     defaultTankForCutType(cutType, { run, existingCuts: runCuts });
 
+  const closeCutForm = () => {
+    setShowCutForm(false);
+    setEditCutId(undefined);
+  };
+
   const openAddCutForm = () => {
     if (selectedRunIsComplete) {
       alert('This run is complete — cuts cannot be added.');
@@ -444,6 +451,7 @@ export function Distillation() {
     }
     const run = runs.find((r) => r.id === selectedRunId);
     const initialCutType: CutType = hasHeadsCut ? 'hearts' : 'heads';
+    setEditCutId(undefined);
     setCutForm({
       cut_type: initialCutType,
       holding_tank_equipment_id: suggestCutTank(initialCutType, run),
@@ -453,6 +461,25 @@ export function Distillation() {
       observed_abv: '',
       sample_temp_f: '60',
       notes: '',
+    });
+    setShowCutForm(true);
+  };
+
+  const openEditCutForm = (cut: DistillationCutView) => {
+    if (selectedRunIsComplete) {
+      alert('This run is complete — cuts cannot be edited.');
+      return;
+    }
+    setEditCutId(cut.id);
+    setCutForm({
+      cut_type: cut.cut_type,
+      holding_tank_equipment_id: cut.holding_tank_equipment_id,
+      start_time: cut.start_time.slice(0, 16),
+      end_time: cut.end_time ? cut.end_time.slice(0, 16) : '',
+      volume_gal: cut.volume_gal,
+      observed_abv: cut.abv.toString(),
+      sample_temp_f: '60',
+      notes: cut.notes,
     });
     setShowCutForm(true);
   };
@@ -481,21 +508,29 @@ export function Distillation() {
     cutForm.volume_gal > 0 && Number.isFinite(cutForm.volume_gal)
     && cutCorrectedAbv != null && cutCorrectedAbv > 0;
 
-  const handleAddCut = () => {
+  const hasOtherHeadsCut = cuts.some(
+    (c) => c.cut_type === 'heads' && c.id !== editCutId,
+  );
+
+  const cutTypesForForm = editCutId
+    ? CUT_TYPES.filter((t) => t !== 'heads' || !hasOtherHeadsCut)
+    : availableCutTypes;
+
+  const handleSaveCut = () => {
     if (!selectedRunId) return;
     if (selectedRunIsComplete) {
-      alert('This run is complete — cuts cannot be added.');
+      alert('This run is complete — cuts cannot be changed.');
       return;
     }
     if (cutForm.volume_gal <= 0 || !Number.isFinite(cutForm.volume_gal)) {
-      alert('Enter the cut volume (gal) before adding a cut.');
+      alert('Enter the cut volume (gal) before saving.');
       return;
     }
     if (cutCorrectedAbv == null || cutCorrectedAbv <= 0) {
-      alert('Enter the cut ABV (%) before adding a cut.');
+      alert('Enter the cut ABV (%) before saving.');
       return;
     }
-    if (cutForm.cut_type === 'heads' && hasHeadsCut) {
+    if (cutForm.cut_type === 'heads' && hasOtherHeadsCut) {
       alert('Heads can only be recorded once per run.');
       return;
     }
@@ -504,11 +539,16 @@ export function Distillation() {
       alert(`Select a collection vessel to collect ${cutForm.cut_type}.`);
       return;
     }
+    const editingCut = editCutId ? cuts.find((c) => c.id === editCutId) : undefined;
     if (tankId && cutForm.volume_gal > 0) {
       const tank = collectionVessels.find((t) => t.id === tankId)
         ?? equipment.find((t) => t.id === tankId);
       const contents = getHoldingTankContents(tankId);
-      const newTotal = contents.volume_gal + cutForm.volume_gal;
+      let baseVolume = contents.volume_gal;
+      if (editingCut?.holding_tank_equipment_id === tankId) {
+        baseVolume = Math.max(0, baseVolume - editingCut.volume_gal);
+      }
+      const newTotal = baseVolume + cutForm.volume_gal;
       if (tank && tank.capacity_gal > 0 && newTotal > tank.capacity_gal) {
         if (!confirm(
           `This will put ${newTotal.toFixed(1)} gal in ${tank.name} (capacity ${tank.capacity_gal} gal). Continue?`,
@@ -527,22 +567,12 @@ export function Distillation() {
         volume_gal: cutForm.volume_gal,
         abv: cutCorrectedAbv,
         notes: cutForm.notes,
-      });
+      }, editCutId);
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Could not save cut.');
       return;
     }
-    setShowCutForm(false);
-    setCutForm({
-      cut_type: 'heads',
-      holding_tank_equipment_id: null,
-      start_time: new Date().toISOString().slice(0, 16),
-      end_time: '',
-      volume_gal: 0,
-      observed_abv: '',
-      sample_temp_f: '60',
-      notes: '',
-    });
+    closeCutForm();
     refresh();
   };
 
@@ -785,7 +815,14 @@ export function Distillation() {
                       <td>{c.abv}%</td>
                       <td>{(c.volume_gal * c.abv / 100).toFixed(2)} gal</td>
                       <td>{c.notes}</td>
-                      <td><button className="btn btn-sm btn-ghost" onClick={() => handleDeleteCut(c.id)}>Delete</button></td>
+                      <td className="td-actions">
+                        {!selectedRunIsComplete && (
+                          <button type="button" className="btn btn-sm btn-ghost" onClick={() => openEditCutForm(c)}>
+                            Edit
+                          </button>
+                        )}
+                        <button type="button" className="btn btn-sm btn-ghost" onClick={() => handleDeleteCut(c.id)}>Delete</button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -1232,14 +1269,14 @@ export function Distillation() {
       )}
 
       {showCutForm && (
-        <Modal title="Add Cut" onClose={() => setShowCutForm(false)}>
+        <Modal title={editCutId ? 'Edit Cut' : 'Add Cut'} onClose={closeCutForm}>
           <div className="form-grid">
             <div className="form-group">
               <label>Cut Type</label>
               <select value={cutForm.cut_type} onChange={(e) => handleCutTypeChange(e.target.value as CutType)}>
-                {availableCutTypes.map((t) => <option key={t} value={t}>{t}</option>)}
+                {cutTypesForForm.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
-              {hasHeadsCut && (
+              {hasOtherHeadsCut && cutForm.cut_type !== 'heads' && (
                 <p className="field-hint">Heads already recorded for this run.</p>
               )}
             </div>
@@ -1312,13 +1349,14 @@ export function Distillation() {
             Transfer from collection vessels to holding tanks when ready.
           </p>
           <div className="form-actions">
-            <button className="btn btn-secondary" onClick={() => setShowCutForm(false)}>Cancel</button>
+            <button type="button" className="btn btn-secondary" onClick={closeCutForm}>Cancel</button>
             <button
+              type="button"
               className="btn btn-primary"
-              onClick={handleAddCut}
+              onClick={handleSaveCut}
               disabled={!cutFormHasVolumeAndAbv}
             >
-              Add Cut
+              {editCutId ? 'Save Cut' : 'Add Cut'}
             </button>
           </div>
         </Modal>
