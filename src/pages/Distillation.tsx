@@ -728,7 +728,7 @@ export function Distillation() {
                             {isTankSourcedRun(runType) && r.charge_abv != null ? ` @ ${r.charge_abv.toFixed(1)}%` : ''}
                           </td>
                           <td className="td-actions">
-                            <button className="btn btn-sm btn-secondary" onClick={() => setSelectedRunId(r.id === selectedRunId ? null : r.id)}>
+                            <button className="btn btn-sm btn-secondary" onClick={() => setSelectedRunId(r.id)}>
                               Cuts
                             </button>
                             <button className="btn btn-sm btn-ghost" onClick={() => openEditRun(r)}>Edit</button>
@@ -746,23 +746,26 @@ export function Distillation() {
       )}
 
       {selectedRunId && (
-        <div className="detail-panel">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <h4>
-              Cuts — {runs.find((r) => r.id === selectedRunId)?.batch_number}
-              {heartsTotal > 0 && <span style={{ marginLeft: '1rem', fontWeight: 400, color: 'var(--text-muted)' }}>
+        <Modal
+          wide
+          title={`Cuts — ${runs.find((r) => r.id === selectedRunId)?.batch_number ?? ''}`}
+          onClose={() => setSelectedRunId(null)}
+        >
+          <div className="cuts-modal-toolbar">
+            {heartsTotal > 0 && (
+              <span className="text-muted">
                 Hearts: {heartsTotal.toFixed(1)} gal · GPA: {gpa.toFixed(2)} gal
-              </span>}
-            </h4>
+              </span>
+            )}
             {selectedRunIsComplete ? (
-              <span className="text-muted" style={{ fontSize: '0.85rem' }}>Run complete — cuts locked</span>
+              <span className="text-muted">Run complete — cuts locked</span>
             ) : (
               <button type="button" className="btn btn-primary btn-sm" onClick={openAddCutForm}>+ Add Cut</button>
             )}
           </div>
 
           {cuts.length === 0 ? (
-            <p style={{ color: 'var(--text-muted)' }}>
+            <p className="text-muted">
               {selectedRunIsComplete ? 'No cuts recorded for this completed run.' : 'No cuts recorded for this run.'}
             </p>
           ) : (
@@ -789,7 +792,7 @@ export function Distillation() {
               </table>
             </div>
           )}
-        </div>
+        </Modal>
       )}
 
       {showRunForm && (
