@@ -17,6 +17,24 @@ const COLUMN_VAPOR_DOTS = [
   { cx: 63, r: 1.8, delay: 2.05 },
 ] as const;
 
+/** Pot still + lyne arm + condenser silhouette (reference-style side view). */
+const POT_KETTLE =
+  'M 16 168 H 84 L 86 158 Q 90 128 78 108 Q 68 96 52 96 Q 36 96 26 108 Q 16 128 16 158 Z';
+
+const POT_HATCH = 'M 20 118 Q 14 118 14 124 Q 14 130 20 130 Q 26 130 26 124 Q 26 118 20 118 Z';
+
+const POT_ONION = 'M 38 96 Q 52 84 66 96 Q 72 104 66 112 Q 52 120 38 112 Q 32 104 38 96 Z';
+
+const POT_SWAN_NECK =
+  'M 62 92 Q 62 68 68 50 Q 78 36 98 34 Q 118 34 128 46 Q 134 54 134 54';
+
+const POT_LYNE_ARM =
+  'M 134 54 L 158 56';
+
+const POT_CONDENSER =
+  'M 158 44 H 182 V 88 Q 186 98 188 108 Q 192 128 174 136 Q 156 136 160 108 Q 162 98 158 88 Z';
+
+
 export function StillVisual(props: EquipmentVisualProps) {
   const { data } = props;
   const uid = useId().replace(/:/g, '');
@@ -37,14 +55,24 @@ export function StillVisual(props: EquipmentVisualProps) {
   }, [columnFillPercent]);
 
   return (
-    <EquipmentVisualFrame {...props} svgWidth={isColumn ? 120 : 150} svgHeight={200}>
-      <svg viewBox={`0 0 ${isColumn ? 120 : 150} 200`} width="100%" height="100%" aria-hidden>
+    <EquipmentVisualFrame {...props} svgWidth={isColumn ? 120 : 220} svgHeight={200}>
+      <svg viewBox={`0 0 ${isColumn ? 120 : 220} 200`} width="100%" height="100%" aria-hidden>
         <defs>
           <linearGradient id={`${uid}-copper`} x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" stopColor="#5a3010" />
-            <stop offset="30%" stopColor="#b87333" />
-            <stop offset="50%" stopColor="#e8a862" />
+            <stop offset="28%" stopColor="#b87333" />
+            <stop offset="52%" stopColor="#e8a862" />
             <stop offset="100%" stopColor="#6b3a12" />
+          </linearGradient>
+          <linearGradient id={`${uid}-copper-v`} x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#f0c080" />
+            <stop offset="45%" stopColor="#c87937" />
+            <stop offset="100%" stopColor="#5a3010" />
+          </linearGradient>
+          <linearGradient id={`${uid}-copper-shine`} x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#fff8ee" stopOpacity="0.55" />
+            <stop offset="35%" stopColor="#ffd9a8" stopOpacity="0.15" />
+            <stop offset="100%" stopColor="#fff8ee" stopOpacity="0" />
           </linearGradient>
           <linearGradient id={`${uid}-column`} x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" stopColor="#2a3038" />
@@ -54,7 +82,7 @@ export function StillVisual(props: EquipmentVisualProps) {
           </linearGradient>
           {!isColumn && (
             <clipPath id={`${uid}-pot-clip`}>
-              <ellipse cx="75" cy="130" rx="38" ry="28" />
+              <path d="M 22 166 H 78 Q 86 156 84 132 Q 80 112 52 108 Q 24 112 22 132 Q 20 152 22 166 Z" />
             </clipPath>
           )}
           {isColumn && (
@@ -124,25 +152,62 @@ export function StillVisual(props: EquipmentVisualProps) {
           <g>
             {isRunning && (
               <g className="still-flame">
-                <ellipse cx="75" cy="192" rx="16" ry="6" fill="#ff6600" opacity="0.25" />
-                <path d="M 68 192 Q 75 168 82 192 Q 75 180 68 192" fill="#ff8800" opacity="0.9" />
-                <path d="M 72 192 Q 75 176 78 192 Q 75 184 72 192" fill="#ffcc00" opacity="0.85" />
+                <ellipse cx="50" cy="192" rx="16" ry="6" fill="#ff6600" opacity="0.25" />
+                <path d="M 43 192 Q 50 168 57 192 Q 50 180 43 192" fill="#ff8800" opacity="0.9" />
+                <path d="M 47 192 Q 50 176 53 192 Q 50 184 47 192" fill="#ffcc00" opacity="0.85" />
               </g>
             )}
-            <ellipse cx="75" cy="130" rx="42" ry="32" fill={`url(#${uid}-copper)`} stroke="#3a2010" strokeWidth="1.2" />
+            <path d={POT_KETTLE} fill={`url(#${uid}-copper-v)`} stroke="#3a2010" strokeWidth="1.1" strokeLinejoin="round" />
+            <path d={POT_HATCH} fill="#8b4518" stroke="#3a2010" strokeWidth="0.7" />
+            <path d={POT_ONION} fill={`url(#${uid}-copper)`} stroke="#3a2010" strokeWidth="0.9" />
+            <path
+              d={POT_SWAN_NECK}
+              fill="none"
+              stroke={`url(#${uid}-copper)`}
+              strokeWidth="9"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <path
+              d={POT_LYNE_ARM}
+              fill="none"
+              stroke={`url(#${uid}-copper)`}
+              strokeWidth="7"
+              strokeLinecap="round"
+            />
+            <path d={POT_CONDENSER} fill={`url(#${uid}-copper-v)`} stroke="#3a2010" strokeWidth="1.1" strokeLinejoin="round" />
+            <rect x="186" y="118" width="18" height="8" rx="2" fill={`url(#${uid}-copper)`} stroke="#3a2010" strokeWidth="0.8" />
             <g clipPath={`url(#${uid}-pot-clip)`}>
-              <LiquidFill x={37} y={0} width={76} height={0} fillPercent={data.fillPercent} status={data.status} innerHeight={56} bottomY={158} rx={8} />
+              <LiquidFill x={18} y={0} width={68} height={0} fillPercent={data.fillPercent} status={data.status} innerHeight={52} bottomY={164} rx={6} />
             </g>
-            <path d="M 62 98 Q 75 72 88 98 L 85 102 L 65 102 Z" fill={`url(#${uid}-column)`} stroke="#1a1f26" strokeWidth="0.8" />
-            <rect x="70" y="55" width="10" height="45" fill={`url(#${uid}-column)`} stroke="#1a1f26" strokeWidth="0.6" />
-            {[62, 78, 92].map((y) => (
-              <line key={y} x1="68" y1={y} x2="82" y2={y} stroke="#1a1f26" strokeWidth="1" opacity="0.4" />
-            ))}
-            <ellipse cx="75" cy="55" rx="18" ry="8" fill="#6b7380" stroke="#1a1f26" />
-            <rect x="71" y="162" width="8" height="14" fill="#3a424c" />
+            <path
+              d="M 24 130 Q 22 108 30 102"
+              fill="none"
+              stroke={`url(#${uid}-copper-shine)`}
+              strokeWidth="3"
+              strokeLinecap="round"
+              opacity="0.85"
+            />
+            <path
+              d="M 164 52 V 118"
+              fill="none"
+              stroke={`url(#${uid}-copper-shine)`}
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              opacity="0.7"
+            />
+            <path
+              d={POT_SWAN_NECK}
+              fill="none"
+              stroke="#fff8ee"
+              strokeWidth="1.2"
+              strokeLinecap="round"
+              opacity="0.35"
+            />
+            <rect x="18" y="168" width="68" height="4" rx="1" fill="#3a2010" opacity="0.35" />
           </g>
         )}
-        <circle cx={isColumn ? 95 : 118} cy="42" r="4.5" className={`equipment-status-dot equipment-status-dot--${data.status}`} />
+        <circle cx={isColumn ? 95 : 205} cy="42" r="4.5" className={`equipment-status-dot equipment-status-dot--${data.status}`} />
       </svg>
     </EquipmentVisualFrame>
   );
