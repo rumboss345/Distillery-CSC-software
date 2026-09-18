@@ -11,11 +11,11 @@ const WASH_BUBBLES = [
   { cx: 88, r: 1.7, delay: 1.95 },
 ] as const;
 
-/** One fan blade pointing +X from the hub; rotated for a propeller-style impeller. */
+/** Single curved fan paddle (+X from hub); pair at 180° for a two-blade impeller. */
 const FAN_BLADE_PATH =
-  'M 6 0 C 12 -1.2 28 -4.8 41 -4.2 L 43.5 0 C 28 5.2 12 1.2 6 0 Z';
+  'M 5 0 C 14 -7 34 -10 46 -3 L 48 0 L 46 3 C 34 10 14 7 5 0 Z';
 
-const FAN_BLADE_ANGLES = [0, 72, 144, 216, 288] as const;
+const FAN_BLADE_ANGLES = [0, 180] as const;
 
 /** Stainless mash/cook tank with domed lid — matches production floor reference style. */
 export function MashTunVisual(props: EquipmentVisualProps) {
