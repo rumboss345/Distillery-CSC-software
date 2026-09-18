@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import { AssigneeCell, AssigneeSelect } from '../components/AssigneeSelect';
 import { DatePicker, DateTimePicker } from '../components/DatePicker';
 import { useAuth } from '../context/AuthContext';
 import { defaultAssignee } from '../lib/assignee';
+import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
 import {
   getDistillationRuns,
   saveDistillationRun,
@@ -91,6 +93,8 @@ const emptyRun = (runType: DistillationRunType = 'wash'): Omit<DistillationRun, 
 
 export function Distillation() {
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const calendarPlanHandled = useRef(false);
   const { key, refresh } = useRefreshKey();
   const runs = getDistillationRuns();
   const mashes = getMashBatches();
@@ -244,13 +248,38 @@ export function Distillation() {
     setRunForm({ ...runForm, still_name: still?.name ?? '' });
   };
 
-  const openNewRun = (runType: DistillationRunType = 'wash') => {
+  const openNewRun = (runType: DistillationRunType = 'wash', planDate?: string) => {
     setEditRunId(undefined);
-    setRunForm({ ...emptyRun(runType), ...defaultAssignee(user) });
+    setRunForm({
+      ...emptyRun(runType),
+      ...defaultAssignee(user),
+      run_date: planDate ?? emptyRun(runType).run_date,
+    });
     setChargeAbvObserved('');
     setChargeTempF('60');
     setShowRunForm(true);
   };
+
+  const openTransferFormForPlan = (planDate?: string) => {
+    setTransferForm({
+      ...emptyTransferForm(),
+      transfer_date: planDate ?? emptyTransferForm().transfer_date,
+    });
+    setShowTransferForm(true);
+  };
+
+  useEffect(() => {
+    if (calendarPlanHandled.current) return;
+    const plan = readCalendarPlanQuery(searchParams);
+    if (!plan) return;
+    calendarPlanHandled.current = true;
+    if (plan.transfer) {
+      openTransferFormForPlan(plan.date ?? undefined);
+    } else {
+      openNewRun('wash', plan.date ?? undefined);
+    }
+    setSearchParams(stripCalendarPlanQuery(searchParams), { replace: true });
+  }, [searchParams, setSearchParams, user]);
 
   const openEditRun = (run: DistillationRun) => {
     setEditRunId(run.id);

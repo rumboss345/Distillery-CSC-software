@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { format, differenceInDays } from 'date-fns';
 import {
   createBarrelFromHoldingTank,
@@ -13,6 +14,7 @@ import { DatePicker } from '../components/DatePicker';
 import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
 import { BARREL_STOCK_ITEM_NAME } from '../lib/barrel-inventory';
+import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
 import type { Barrel, BarrelStatus } from '../types';
 
 const STATUSES: BarrelStatus[] = ['aging', 'empty', 'dumped'];
@@ -33,6 +35,8 @@ const emptyBarrel = (): Omit<Barrel, 'id' | 'created_at'> => ({
 });
 
 export function Barrels() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const calendarPlanHandled = useRef(false);
   const { key, refresh } = useRefreshKey();
   const barrels = getBarrels();
   const runs = getDistillationRuns();
@@ -52,13 +56,14 @@ export function Barrels() {
     ? Math.min(selectedNewSourceTank.volume_gal, form.capacity_gal)
     : form.capacity_gal;
 
-  const openNew = () => {
+  const openNew = (planDate?: string) => {
     setEditId(undefined);
     const num = String(barrels.length + 1).padStart(3, '0');
     const firstTank = tanksWithSpirit[0];
     setForm({
       ...emptyBarrel(),
       barrel_number: `B-${num}`,
+      fill_date: planDate ?? emptyBarrel().fill_date,
       source_holding_tank_equipment_id: firstTank?.id ?? null,
       initial_abv: firstTank?.abv ?? 0,
       current_volume_gal: firstTank
@@ -67,6 +72,15 @@ export function Barrels() {
     });
     setShowForm(true);
   };
+
+  useEffect(() => {
+    if (calendarPlanHandled.current) return;
+    const plan = readCalendarPlanQuery(searchParams);
+    if (!plan || plan.transfer) return;
+    calendarPlanHandled.current = true;
+    openNew(plan.date ?? undefined);
+    setSearchParams(stripCalendarPlanQuery(searchParams), { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const openEdit = (barrel: Barrel) => {
     setEditId(barrel.id);
@@ -128,7 +142,7 @@ export function Barrels() {
         <h2>Barrel Aging</h2>
         <p>Track spirit maturation in warehouse</p>
         <div className="page-actions">
-          <button type="button" className="btn btn-primary" onClick={openNew}>+ New Barrel</button>
+          <button type="button" className="btn btn-primary" onClick={() => openNew()}>+ New Barrel</button>
         </div>
       </div>
 
@@ -150,7 +164,7 @@ export function Barrels() {
       {barrels.length === 0 ? (
         <div className="empty-state">
           <p>No barrels registered yet.</p>
-          <button className="btn btn-primary" onClick={openNew} style={{ marginTop: '1rem' }}>Register first barrel</button>
+          <button className="btn btn-primary" onClick={() => openNew()} style={{ marginTop: '1rem' }}>Register first barrel</button>
         </div>
       ) : (
         <div className="table-wrap">

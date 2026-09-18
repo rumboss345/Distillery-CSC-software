@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { DatePicker } from '../components/DatePicker';
 import {
   addDays,
@@ -36,6 +37,11 @@ import {
   type CalendarEvent,
   type CalendarStatusCategory,
 } from '../lib/calendar-events';
+import {
+  CALENDAR_PLAN_ACTIVITY_KINDS,
+  CALENDAR_PLAN_PERMISSION,
+  calendarPlanPath,
+} from '../lib/calendar-planning';
 
 type CalendarViewMode = 'month' | 'week' | 'day';
 
@@ -46,6 +52,7 @@ function dateKey(date: Date): string {
 }
 
 export function Calendar() {
+  const { hasPermission } = useAuth();
   const [viewMode, setViewMode] = useState<CalendarViewMode>('month');
   const [anchorDate, setAnchorDate] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState<string>(() => dateKey(new Date()));
@@ -153,7 +160,7 @@ export function Calendar() {
     <div>
       <div className="page-header">
         <h2>Production Calendar</h2>
-        <p>View wash, distillation, barrel, bottling, and blend activity by date and status</p>
+        <p>View production activity by date, filter by status, and plan new batches on a selected day</p>
       </div>
 
       <div className="calendar-toolbar">
@@ -286,6 +293,30 @@ export function Calendar() {
                 <CalendarDetailItem key={event.id} event={event} />
               ))}
             </ul>
+          )}
+
+          {CALENDAR_PLAN_ACTIVITY_KINDS.some((kind) => hasPermission(CALENDAR_PLAN_PERMISSION[kind])) && (
+            <div className="calendar-plan-section">
+              <h4 className="calendar-plan-title">Plan production</h4>
+              <p className="text-muted calendar-plan-hint">
+                Start a planned record dated {format(parseISO(selectedDate), 'MMM d, yyyy')}. You can fill in recipes, volumes, and assignments on the next screen.
+              </p>
+              <div className="calendar-plan-actions">
+                {CALENDAR_PLAN_ACTIVITY_KINDS.map((kind) => {
+                  const permission = CALENDAR_PLAN_PERMISSION[kind];
+                  if (!hasPermission(permission)) return null;
+                  return (
+                    <Link
+                      key={kind}
+                      to={calendarPlanPath(kind, selectedDate)}
+                      className={`btn btn-sm btn-secondary calendar-plan-btn calendar-kind-${kind}`}
+                    >
+                      + {CALENDAR_KIND_LABELS[kind]}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
           )}
         </aside>
       </div>

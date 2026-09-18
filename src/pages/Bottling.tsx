@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import {
   getBottlingRuns,
@@ -23,6 +24,7 @@ import {
   totalVolumeGal,
 } from '../lib/bottling-lines';
 import { PACKAGING_BOTTLES, packagingBottleByName } from '../lib/packaging-bottles';
+import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
 import type { BottlingRunLineInput, BottlingRunView } from '../types';
 
 type BottlingSourceType = 'none' | 'barrel' | 'tank';
@@ -71,6 +73,8 @@ function linesFromRun(run: BottlingRunView): BottlingRunLineInput[] {
 }
 
 export function Bottling() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const calendarPlanHandled = useRef(false);
   const { key, refresh } = useRefreshKey();
   const runs = getBottlingRuns();
   const barrels = getBarrels().filter((b) => b.status === 'aging' || b.status === 'empty');
@@ -144,13 +148,25 @@ export function Bottling() {
   const totalBottles = runs.reduce((sum, run) => sum + totalBottleCount(run.lines), 0);
   const totalVolume = runs.reduce((sum, run) => sum + totalVolumeGal(run.lines), 0);
 
-  const openNew = () => {
+  const openNew = (planDate?: string) => {
     setEditId(undefined);
-    setForm(emptyRun());
+    setForm({
+      ...emptyRun(),
+      bottling_date: planDate ?? emptyRun().bottling_date,
+    });
     setLines([emptyLine()]);
     setSourceType('none');
     setShowForm(true);
   };
+
+  useEffect(() => {
+    if (calendarPlanHandled.current) return;
+    const plan = readCalendarPlanQuery(searchParams);
+    if (!plan || plan.transfer) return;
+    calendarPlanHandled.current = true;
+    openNew(plan.date ?? undefined);
+    setSearchParams(stripCalendarPlanQuery(searchParams), { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const openEdit = (run: BottlingRunView) => {
     setEditId(run.id);
@@ -296,7 +312,7 @@ export function Bottling() {
         <h2>Bottling</h2>
         <p>Record finished goods from barrels or holding tanks</p>
         <div className="page-actions">
-          <button type="button" className="btn btn-primary" onClick={openNew}>+ New Bottling Run</button>
+          <button type="button" className="btn btn-primary" onClick={() => openNew()}>+ New Bottling Run</button>
         </div>
       </div>
 
@@ -354,7 +370,7 @@ export function Bottling() {
       {runs.length === 0 ? (
         <div className="empty-state">
           <p>No bottling runs recorded yet.</p>
-          <button type="button" className="btn btn-primary" onClick={openNew} style={{ marginTop: '1rem' }}>Record first bottling</button>
+          <button type="button" className="btn btn-primary" onClick={() => openNew()} style={{ marginTop: '1rem' }}>Record first bottling</button>
         </div>
       ) : (
         <div className="table-wrap">

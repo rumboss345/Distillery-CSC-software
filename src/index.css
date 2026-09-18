@@ -2602,6 +2602,35 @@ tr:hover td {
   border-bottom: none;
 }
 
+.calendar-plan-section {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.calendar-plan-title {
+  margin: 0 0 0.35rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.calendar-plan-hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.calendar-plan-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.calendar-plan-btn {
+  justify-content: flex-start;
+  text-align: left;
+}
+
 .calendar-detail-header {
   display: flex;
   align-items: center;
