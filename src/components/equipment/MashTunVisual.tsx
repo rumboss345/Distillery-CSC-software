@@ -107,6 +107,29 @@ export function MashTunVisual(props: EquipmentVisualProps) {
               )}
             </>
           )}
+          {isWashing && (
+            <g aria-hidden>
+              <line
+                x1="75"
+                y1="58"
+                x2="75"
+                y2="138"
+                stroke="#52525b"
+                strokeWidth="3.2"
+                strokeLinecap="round"
+              />
+              <g className="mash-tun-mixing-blade">
+                <g transform="translate(75 118)">
+                  <rect x="-24" y="-3.5" width="48" height="7" rx="2" fill="#a1a1aa" stroke="#52525b" strokeWidth="0.7" />
+                  <rect x="-3.5" y="-24" width="7" height="48" rx="2" fill="#a1a1aa" stroke="#52525b" strokeWidth="0.7" />
+                  <g transform="translate(0 -26)">
+                    <rect x="-18" y="-2.5" width="36" height="5" rx="1.5" fill="#9ca3af" stroke="#52525b" strokeWidth="0.6" opacity="0.92" />
+                    <rect x="-2.5" y="-18" width="5" height="36" rx="1.5" fill="#9ca3af" stroke="#52525b" strokeWidth="0.6" opacity="0.92" />
+                  </g>
+                </g>
+              </g>
+            </g>
+          )}
         </g>
 
         <rect x="32" y="62" width="10" height="85" rx="4" fill="#fff" opacity="0.08" />

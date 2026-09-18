@@ -296,7 +296,8 @@
 
   .mash-tun-wash-fill,
   .mash-tun-wash-surface,
-  .mash-tun-wash-bubble {
+  .mash-tun-wash-bubble,
+  .mash-tun-mixing-blade {
     animation: none;
   }
 }
@@ -329,6 +330,17 @@
 @keyframes mash-tun-wash-bubble-rise {
   0% { transform: translateY(0) scale(1); opacity: 0.65; }
   100% { transform: translateY(-70px) scale(0.5); opacity: 0; }
+}
+
+.mash-tun-mixing-blade {
+  transform-box: fill-box;
+  transform-origin: 75px 118px;
+  animation: mash-tun-mixing-blade-spin 1.35s linear infinite;
+}
+
+@keyframes mash-tun-mixing-blade-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .process-sidebar {
