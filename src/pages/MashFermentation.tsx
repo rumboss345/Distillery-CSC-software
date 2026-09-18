@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import { AssigneeCell, AssigneeSelect } from '../components/AssigneeSelect';
 import { DatePicker } from '../components/DatePicker';
@@ -25,6 +26,7 @@ import type { EquipmentVisualData } from '../components/equipment/equipment-visu
 import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
 import { estimateAbvFromBrix, estimateSugarWash, formatAbvEstimate } from '../lib/fermentation';
+import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
 import type { MashBatch, MashStatus } from '../types';
 
 const STATUSES: MashStatus[] = ['planned', 'mashing', 'fermenting', 'complete', 'discarded'];
@@ -203,6 +205,8 @@ const emptyFermenterForm = () => ({
 
 export function MashFermentation() {
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const calendarPlanHandled = useRef(false);
   const { key, refresh } = useRefreshKey();
   const batches = getMashBatches();
   const allAssignments = getAllMashFermenterAssignments();
@@ -274,12 +278,25 @@ export function MashFermentation() {
     }
   };
 
-  const openNew = () => {
+  const openNew = (planDate?: string) => {
     setEditId(undefined);
-    setForm({ ...emptyBatch(), ...defaultAssignee(user) });
+    setForm({
+      ...emptyBatch(),
+      ...defaultAssignee(user),
+      start_date: planDate ?? emptyBatch().start_date,
+    });
     loadFermenterForm();
     setShowForm(true);
   };
+
+  useEffect(() => {
+    if (calendarPlanHandled.current) return;
+    const plan = readCalendarPlanQuery(searchParams);
+    if (!plan || plan.transfer) return;
+    calendarPlanHandled.current = true;
+    openNew(plan.date ?? undefined);
+    setSearchParams(stripCalendarPlanQuery(searchParams), { replace: true });
+  }, [searchParams, setSearchParams, user]);
 
   const openEdit = (batch: MashBatch) => {
     setEditId(batch.id);
@@ -396,14 +413,14 @@ export function MashFermentation() {
         <h2>Wash & Fermentation</h2>
         <p>Sugar type in lbs, wash in gallons, fermentation temperature in °F</p>
         <div className="page-actions">
-          <button className="btn btn-primary" onClick={openNew}>+ New Wash Batch</button>
+          <button className="btn btn-primary" onClick={() => openNew()}>+ New Wash Batch</button>
         </div>
       </div>
 
       {batches.length === 0 ? (
         <div className="empty-state">
           <p>No wash batches recorded yet.</p>
-          <button className="btn btn-primary" onClick={openNew} style={{ marginTop: '1rem' }}>
+          <button className="btn btn-primary" onClick={() => openNew()} style={{ marginTop: '1rem' }}>
             Create your first batch
           </button>
         </div>

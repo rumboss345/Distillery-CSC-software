@@ -35,6 +35,7 @@ import { DatePicker } from '../components/DatePicker';
 import { Modal } from '../components/Modal';
 import { useAuth } from '../context/AuthContext';
 import { defaultAssignee } from '../lib/assignee';
+import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
 import { downloadWorksheetPdf, worksheetPdfFilename } from '../lib/download-worksheet-pdf';
 import { StatusBadge } from '../components/StatusBadge';
 import {
@@ -295,7 +296,7 @@ function buildSavePayload(
 export function Blending() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { key, refresh } = useRefreshKey();
   const blends = getBlendProducts();
   const blendRecipes = getBlendRecipes();
@@ -582,12 +583,16 @@ export function Blending() {
     setWizardStep(1);
   };
 
-  const resetWizardForNewBatch = () => {
+  const resetWizardForNewBatch = (planDate?: string) => {
     setEditId(undefined);
     setSelectedRecipeId(null);
     setRecipeTemplate(null);
     setTargetYieldInput('');
-    setForm({ ...emptyProduct(), ...defaultAssignee(user) });
+    setForm({
+      ...emptyProduct(),
+      ...defaultAssignee(user),
+      blend_date: planDate ?? emptyProduct().blend_date,
+    });
     setSpiritSources([emptySpiritSource()]);
     setIngredients([]);
     setWizardStep(1);
@@ -617,6 +622,19 @@ export function Blending() {
 
   useEffect(() => {
     if (deepLinkHandled.current) return;
+    const plan = readCalendarPlanQuery(searchParams);
+    if (plan && !plan.transfer) {
+      deepLinkHandled.current = true;
+      const tankRecipes = blendRecipes.filter((recipe) => (recipe.source_type ?? 'tank') !== 'barrel');
+      if (tankRecipes.length === 0) {
+        alert('Create a tank blend recipe on the Recipes page before starting a batch.');
+      } else {
+        setWizardSpiritSource('tank');
+        resetWizardForNewBatch(plan.date ?? undefined);
+      }
+      setSearchParams(stripCalendarPlanQuery(searchParams), { replace: true });
+      return;
+    }
     deepLinkHandled.current = true;
     if (searchParams.get('source') === 'barrel') {
       openBarrelBlending();
@@ -630,7 +648,7 @@ export function Blending() {
       }
       applyBlendRecipe(recipeId, 1);
     }
-  }, [searchParams]);
+  }, [searchParams, setSearchParams, blendRecipes, user]);
 
   const openContinue = (blend: BlendProduct) => {
     setEditId(blend.id);
