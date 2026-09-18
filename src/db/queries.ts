@@ -2803,12 +2803,14 @@ export function getFloorEquipmentWithContext(planId = 1): FloorEquipmentView[] {
     `, [eq.id]);
     if (!info) return eq;
     const logBrix = getLatestFermentationBrix(info.mash_batch_id, eq.id);
+    const active_start_brix = info.actual_brix ?? info.target_brix ?? null;
     const active_latest_brix = logBrix ?? info.actual_brix ?? info.target_brix ?? null;
     return {
       ...eq,
       active_batch_number: info.batch_number,
       active_volume_gal: info.volume_gal,
       active_mash_status: info.status as FloorEquipmentView['active_mash_status'],
+      active_start_brix,
       active_latest_brix,
     };
   });

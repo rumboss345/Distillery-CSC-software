@@ -20,6 +20,8 @@ export interface EquipmentVisualData {
   isWashing?: boolean;
   /** When set on in-use fermenters, drives red vs green liquid fill from Brix. */
   fermenterLatestBrix?: number | null;
+  /** Fermenter wash est. ABV from start vs latest Brix (process labels). */
+  estimatedAbv?: number | null;
   detail?: string;
   planName?: string;
 }

@@ -4,7 +4,14 @@ import type { TankVisualData } from './tank-visual.types';
 
 type LabelData = Pick<
   EquipmentVisualData,
-  'name' | 'capacityGal' | 'currentVolumeGal' | 'fillPercent' | 'liquidName' | 'abv' | 'isFermenting'
+  | 'name'
+  | 'capacityGal'
+  | 'currentVolumeGal'
+  | 'fillPercent'
+  | 'liquidName'
+  | 'abv'
+  | 'isFermenting'
+  | 'estimatedAbv'
 >;
 
 export function ProcessEquipmentLabels({ data }: { data: LabelData | TankVisualData }) {
@@ -23,7 +30,12 @@ export function ProcessEquipmentLabels({ data }: { data: LabelData | TankVisualD
       {isFermenting && !isEmpty && (
         <div className="process-equipment-abv">{volumeText}</div>
       )}
-      {!isEmpty && (
+      {!isEmpty && 'estimatedAbv' in data && data.estimatedAbv !== undefined && (
+        <div className="process-equipment-abv">
+          Est. {data.estimatedAbv != null ? `${data.estimatedAbv.toFixed(1)}%` : '—'} ABV
+        </div>
+      )}
+      {!isEmpty && (!('estimatedAbv' in data) || data.estimatedAbv === undefined) && (
         <div className="process-equipment-abv">
           {data.abv != null && data.abv > 0 ? `${data.abv.toFixed(1)}% ABV` : '—'}
         </div>
