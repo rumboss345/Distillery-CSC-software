@@ -61,6 +61,13 @@ export async function fetchMe() {
   return apiFetch<{ user: AuthUser }>('/api/auth/me');
 }
 
+export async function verifyAdminCredentials(email: string, password: string) {
+  return apiFetch<{ ok: true; email: string }>('/api/auth/verify-admin', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  });
+}
+
 export async function approveByToken(token: string) {
   return apiFetch<{ message: string; user: AuthUser }>('/api/auth/approve', {
     method: 'POST',

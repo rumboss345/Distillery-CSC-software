@@ -220,6 +220,25 @@ app.get('/api/auth/me', authMiddleware, (req, res) => {
   res.json({ user: publicUser(req.user!) });
 });
 
+/** Re-verify an administrator before sensitive actions (e.g. deleting completed fermentations). */
+app.post('/api/auth/verify-admin', authMiddleware, (req, res) => {
+  const email = String(req.body.email ?? '').trim().toLowerCase();
+  const password = String(req.body.password ?? '');
+
+  if (!email || !password) {
+    res.status(400).json({ error: 'Administrator email and password are required' });
+    return;
+  }
+
+  const user = getUserByEmail(email);
+  if (!user || user.role !== 'admin' || !bcrypt.compareSync(password, user.password_hash)) {
+    res.status(401).json({ error: 'Invalid administrator credentials' });
+    return;
+  }
+
+  res.json({ ok: true, email: user.email });
+});
+
 app.post('/api/auth/approve', (req, res) => {
   const token = String(req.body.token ?? req.query.token ?? '').trim();
   if (!token) {
