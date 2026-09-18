@@ -133,6 +133,8 @@ CREATE TABLE IF NOT EXISTS bottling_runs (
   source_barrel_id INTEGER REFERENCES barrels(id),
   source_holding_tank_equipment_id INTEGER REFERENCES floor_equipment(id),
   source_volume_gal REAL,
+  bottled_volume_gal REAL,
+  volume_variance_gal REAL,
   source_run_id INTEGER REFERENCES distillation_runs(id),
   bottling_date TEXT NOT NULL,
   packaging_bottle TEXT NOT NULL DEFAULT '',

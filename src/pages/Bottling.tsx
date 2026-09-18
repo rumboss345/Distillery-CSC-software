@@ -40,6 +40,8 @@ const emptyRun = (): RunHeaderForm => ({
   source_barrel_id: null,
   source_holding_tank_equipment_id: null,
   source_volume_gal: null,
+  bottled_volume_gal: null,
+  volume_variance_gal: null,
   source_run_id: null,
   bottling_date: new Date().toISOString().slice(0, 10),
   packaging_bottle: '',
@@ -105,33 +107,39 @@ export function Bottling() {
     : null;
 
   const plannedDrawGal = totalVolumeGal(lines);
-  const remainingGal = selectedTankAvailable != null
-    ? Math.max(0, selectedTankAvailable.volume_gal - plannedDrawGal)
+  const tankVolumeGal = selectedTankAvailable?.volume_gal ?? null;
+  const bottlingVarianceGal = tankVolumeGal != null && plannedDrawGal > 0
+    ? plannedDrawGal - tankVolumeGal
+    : null;
+  const unbottledInTankGal = tankVolumeGal != null
+    ? Math.max(0, tankVolumeGal - plannedDrawGal)
     : null;
   const isRumBottling = isRumBottlingProduct(form.product_name);
 
   const remainingBySku = useMemo(() => {
-    if (remainingGal == null || remainingGal <= 0 || isRumBottlingProduct(form.product_name)) return [];
+    if (unbottledInTankGal == null || unbottledInTankGal <= 0 || isRumBottlingProduct(form.product_name)) {
+      return [];
+    }
     return PACKAGING_BOTTLES
       .map((bottle) => ({
         ...bottle,
-        maxCount: maxBottlesFromGallons(remainingGal, bottle.sizeMl),
+        maxCount: maxBottlesFromGallons(unbottledInTankGal, bottle.sizeMl),
       }))
       .filter((entry) => entry.maxCount > 0);
-  }, [remainingGal, form.product_name]);
+  }, [unbottledInTankGal, form.product_name]);
 
   const remainingByLineSize = useMemo(() => {
-    if (remainingGal == null || remainingGal <= 0 || !isRumBottling) return [];
+    if (unbottledInTankGal == null || unbottledInTankGal <= 0 || !isRumBottling) return [];
     const sizes = [...new Set(
       lines.map((line) => line.bottle_size_ml).filter((ml) => ml > 0),
     )].sort((a, b) => b - a);
     return sizes
       .map((sizeMl) => ({
         sizeMl,
-        maxCount: maxBottlesFromGallons(remainingGal, sizeMl),
+        maxCount: maxBottlesFromGallons(unbottledInTankGal, sizeMl),
       }))
       .filter((entry) => entry.maxCount > 0);
-  }, [remainingGal, isRumBottling, lines]);
+  }, [unbottledInTankGal, isRumBottling, lines]);
 
   const totalBottles = runs.reduce((sum, run) => sum + totalBottleCount(run.lines), 0);
   const totalVolume = runs.reduce((sum, run) => sum + totalVolumeGal(run.lines), 0);
@@ -151,6 +159,8 @@ export function Bottling() {
       source_barrel_id: run.source_barrel_id,
       source_holding_tank_equipment_id: run.source_holding_tank_equipment_id,
       source_volume_gal: run.source_volume_gal,
+      bottled_volume_gal: run.bottled_volume_gal,
+      volume_variance_gal: run.volume_variance_gal,
       source_run_id: run.source_run_id,
       bottling_date: run.bottling_date,
       packaging_bottle: run.packaging_bottle,
@@ -226,9 +236,22 @@ export function Bottling() {
       alert('Select the holding tank to bottle from.');
       return;
     }
-    if (sourceType === 'tank' && selectedTankAvailable && plannedDrawGal > selectedTankAvailable.volume_gal + 0.01) {
-      alert(`Only ${selectedTankAvailable.volume_gal.toFixed(1)} gal available in that tank.`);
-      return;
+    if (
+      sourceType === 'tank'
+      && selectedTankAvailable
+      && plannedDrawGal > 0
+      && Math.abs(plannedDrawGal - selectedTankAvailable.volume_gal) > 0.01
+    ) {
+      const variance = plannedDrawGal - selectedTankAvailable.volume_gal;
+      const varianceNote = variance > 0
+        ? `${variance.toFixed(2)} gal over the ${selectedTankAvailable.volume_gal.toFixed(1)} gal in the tank`
+        : `${Math.abs(variance).toFixed(2)} gal left in the tank after bottling (recorded as variance)`;
+      if (!confirm(
+        `The source tank will be emptied (${selectedTankAvailable.volume_gal.toFixed(1)} gal drawn). `
+        + `Bottled total is ${plannedDrawGal.toFixed(2)} gal — ${varianceNote}. Continue?`,
+      )) {
+        return;
+      }
     }
     try {
       saveBottlingRun({
@@ -251,11 +274,17 @@ export function Bottling() {
     }
   };
 
+  const formatVariance = (variance: number | null | undefined) => {
+    if (variance == null || Math.abs(variance) < 0.01) return '—';
+    const sign = variance > 0 ? '+' : '';
+    return `${sign}${variance.toFixed(2)} gal`;
+  };
+
   const sourceLabel = (run: BottlingRunView) => {
     if (run.source_holding_tank_equipment_id) {
       const tank = holdingTanks.find((t) => t.id === run.source_holding_tank_equipment_id);
-      const vol = run.source_volume_gal != null ? ` (${run.source_volume_gal.toFixed(1)} gal)` : '';
-      return tank ? `${tank.name}${vol}` : 'Holding tank';
+      const draw = run.source_volume_gal != null ? ` emptied ${run.source_volume_gal.toFixed(1)} gal` : '';
+      return tank ? `${tank.name}${draw}` : 'Holding tank';
     }
     const barrel = barrels.find((b) => b.id === run.source_barrel_id);
     return barrel?.barrel_number ?? '—';
@@ -339,6 +368,8 @@ export function Bottling() {
                 <th>Date</th>
                 <th>Bottles</th>
                 <th>Volume</th>
+                <th>Tank draw</th>
+                <th>Variance</th>
                 <th>ABV</th>
                 <th>Source</th>
                 <th></th>
@@ -354,6 +385,12 @@ export function Bottling() {
                   <td>{format(new Date(r.bottling_date), 'MMM d, yyyy')}</td>
                   <td>{totalBottleCount(r.lines).toLocaleString()}</td>
                   <td>{totalVolumeGal(r.lines).toFixed(2)} gal</td>
+                  <td>
+                    {r.source_holding_tank_equipment_id && r.source_volume_gal != null
+                      ? `${r.source_volume_gal.toFixed(2)} gal`
+                      : '—'}
+                  </td>
+                  <td>{formatVariance(r.volume_variance_gal)}</td>
                   <td>{r.final_abv}%</td>
                   <td>{sourceLabel(r)}</td>
                   <td className="td-actions">
@@ -444,12 +481,13 @@ export function Bottling() {
                 )}
                 {selectedTankAvailable && form.source_holding_tank_equipment_id && (
                   <p className="field-hint">
-                    Available: {selectedTankAvailable.volume_gal.toFixed(1)} gal @ {selectedTankAvailable.abv.toFixed(1)}% ABV
+                    In tank: {selectedTankAvailable.volume_gal.toFixed(1)} gal @ {selectedTankAvailable.abv.toFixed(1)}% ABV.
+                    {' '}Saving empties the tank (draws {selectedTankAvailable.volume_gal.toFixed(1)} gal).
                     {plannedDrawGal > 0 && (
-                      <> · This run will draw {plannedDrawGal.toFixed(2)} gal</>
+                      <> Bottled total: {plannedDrawGal.toFixed(2)} gal.</>
                     )}
-                    {remainingGal != null && plannedDrawGal > 0 && (
-                      <> · {remainingGal.toFixed(2)} gal left in tank</>
+                    {bottlingVarianceGal != null && Math.abs(bottlingVarianceGal) >= 0.01 && (
+                      <> Variance vs tank: {formatVariance(bottlingVarianceGal)} (shown on Reports).</>
                     )}
                   </p>
                 )}
@@ -516,10 +554,10 @@ export function Bottling() {
               )}
             </div>
 
-            {sourceType === 'tank' && remainingGal != null && remainingGal > 0 && !isRumBottling && remainingBySku.length > 0 && (
+            {sourceType === 'tank' && unbottledInTankGal != null && unbottledInTankGal > 0 && !isRumBottling && remainingBySku.length > 0 && (
               <div className="form-group full-width bottling-remaining-panel">
                 <p className="bottling-remaining-title">
-                  Still available from tank ({remainingGal.toFixed(2)} gal remaining)
+                  Not yet assigned to bottles ({unbottledInTankGal.toFixed(2)} gal — variance if saved as-is)
                 </p>
                 <ul className="bottling-remaining-list">
                   {remainingBySku.map((entry) => (
@@ -532,10 +570,10 @@ export function Bottling() {
               </div>
             )}
 
-            {sourceType === 'tank' && remainingGal != null && remainingGal > 0 && isRumBottling && remainingByLineSize.length > 0 && (
+            {sourceType === 'tank' && unbottledInTankGal != null && unbottledInTankGal > 0 && isRumBottling && remainingByLineSize.length > 0 && (
               <div className="form-group full-width bottling-remaining-panel">
                 <p className="bottling-remaining-title">
-                  Still available from tank ({remainingGal.toFixed(2)} gal remaining)
+                  Not yet assigned to bottles ({unbottledInTankGal.toFixed(2)} gal — variance if saved as-is)
                 </p>
                 <ul className="bottling-remaining-list">
                   {remainingByLineSize.map((entry) => (
