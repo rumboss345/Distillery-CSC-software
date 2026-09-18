@@ -2159,6 +2159,34 @@ tr:hover td {
   width: auto;
 }
 
+.wash-status-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.wash-status-group {
+  padding: 1rem 1.15rem;
+}
+
+.wash-status-group-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 0.85rem;
+}
+
+.wash-status-group-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.wash-status-group-count {
+  font-size: 0.875rem;
+}
+
 .fermenter-section {
   border-top: 1px solid var(--border-subtle);
   padding-top: 1rem;

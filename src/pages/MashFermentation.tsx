@@ -39,6 +39,14 @@ const STATUS_LABELS: Record<MashStatus, string> = {
   discarded: 'discarded',
 };
 
+const STATUS_GROUP_HEADINGS: Record<MashStatus, string> = {
+  planned: 'Planned',
+  mashing: 'Washing',
+  fermenting: 'Fermenting',
+  complete: 'Complete',
+  discarded: 'Discarded',
+};
+
 type LogFormState = { temperature_f: string; brix: string; ph: string; notes: string };
 
 const emptyLogForm = (): LogFormState => ({
@@ -370,6 +378,18 @@ export function MashFermentation() {
   const getBatchFermenters = (mashId: number) =>
     allAssignments.filter((a) => a.mash_batch_id === mashId);
 
+  const batchesByStatus = useMemo(() => {
+    const byStatus = Object.fromEntries(
+      STATUSES.map((status) => [status, [] as MashBatch[]]),
+    ) as Record<MashStatus, MashBatch[]>;
+    for (const batch of batches) {
+      byStatus[batch.status].push(batch);
+    }
+    return STATUSES
+      .map((status) => ({ status, items: byStatus[status] }))
+      .filter((group) => group.items.length > 0);
+  }, [batches]);
+
   const selectedAssignments = selectedId ? getMashFermenterAssignments(selectedId) : [];
   const selectedBatch = batches.find((b) => b.id === selectedId);
   const canLogSelectedBatch = selectedBatch?.status === 'fermenting';
@@ -425,72 +445,83 @@ export function MashFermentation() {
           </button>
         </div>
       ) : (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Batch #</th>
-                <th>Recipe</th>
-                <th>Sugar (lbs)</th>
-                <th>Batch Size</th>
-                <th>Fermenter(s)</th>
-                <th>Start → Current Brix</th>
-                <th>Est. ABV</th>
-                <th>Started</th>
-                <th>Assigned to</th>
-                <th>Status</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {batches.map((b) => {
-                const fermenters = getBatchFermenters(b.id);
-                const startBrix = b.actual_brix ?? b.target_brix;
-                const currentBrix = getLatestFermentationBrix(b.id) ?? b.actual_final_brix;
-                const estAbv = startBrix != null && currentBrix != null
-                  ? estimateAbvFromBrix(startBrix, currentBrix)
-                  : null;
-                return (
-                  <tr key={b.id}>
-                    <td><strong>{b.batch_number}</strong></td>
-                    <td>{b.recipe_name}</td>
-                    <td>{b.grain_lbs} lbs</td>
-                    <td>{b.water_gal} gal</td>
-                    <td>
-                      {fermenters.length === 0 ? (
-                        <span style={{ color: 'var(--text-muted)' }}>—</span>
-                      ) : (
-                        fermenters.map((f) => (
-                          <span key={f.id} className="fermenter-tag">
-                            {f.equipment_name}{f.volume_gal > 0 ? ` (${f.volume_gal} gal)` : ''}
-                          </span>
-                        ))
-                      )}
-                    </td>
-                    <td>
-                      {startBrix ?? '—'} → {currentBrix ?? b.target_final_brix ?? '—'}
-                    </td>
-                    <td>{formatAbvEstimate(estAbv)}</td>
-                    <td>{format(new Date(b.start_date), 'MMM d, yyyy')}</td>
-                    <td><AssigneeCell name={b.assigned_user_name} /></td>
-                    <td><StatusBadge status={STATUS_LABELS[b.status] ?? b.status} /></td>
-                    <td className="td-actions">
-                      <button
-                        className="btn btn-sm btn-secondary"
-                        disabled={b.status !== 'fermenting'}
-                        title={b.status !== 'fermenting' ? 'Set status to fermenting to log readings' : undefined}
-                        onClick={() => setSelectedId(b.id === selectedId ? null : b.id)}
-                      >
-                        Logs
-                      </button>
-                      <button className="btn btn-sm btn-ghost" onClick={() => openEdit(b)}>Edit</button>
-                      <button className="btn btn-sm btn-ghost" onClick={() => handleDelete(b.id)}>Delete</button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className="wash-status-groups">
+          {batchesByStatus.map(({ status, items }) => (
+            <section key={status} className="card wash-status-group">
+              <header className="wash-status-group-header">
+                <h3 className="wash-status-group-title">{STATUS_GROUP_HEADINGS[status]}</h3>
+                <StatusBadge status={STATUS_LABELS[status]} />
+                <span className="text-muted wash-status-group-count">
+                  {items.length} {items.length === 1 ? 'batch' : 'batches'}
+                </span>
+              </header>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Batch #</th>
+                      <th>Recipe</th>
+                      <th>Sugar (lbs)</th>
+                      <th>Batch Size</th>
+                      <th>Fermenter(s)</th>
+                      <th>Start → Current Brix</th>
+                      <th>Est. ABV</th>
+                      <th>Started</th>
+                      <th>Assigned to</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map((b) => {
+                      const fermenters = getBatchFermenters(b.id);
+                      const startBrix = b.actual_brix ?? b.target_brix;
+                      const currentBrix = getLatestFermentationBrix(b.id) ?? b.actual_final_brix;
+                      const estAbv = startBrix != null && currentBrix != null
+                        ? estimateAbvFromBrix(startBrix, currentBrix)
+                        : null;
+                      return (
+                        <tr key={b.id}>
+                          <td><strong>{b.batch_number}</strong></td>
+                          <td>{b.recipe_name}</td>
+                          <td>{b.grain_lbs} lbs</td>
+                          <td>{b.water_gal} gal</td>
+                          <td>
+                            {fermenters.length === 0 ? (
+                              <span style={{ color: 'var(--text-muted)' }}>—</span>
+                            ) : (
+                              fermenters.map((f) => (
+                                <span key={f.id} className="fermenter-tag">
+                                  {f.equipment_name}{f.volume_gal > 0 ? ` (${f.volume_gal} gal)` : ''}
+                                </span>
+                              ))
+                            )}
+                          </td>
+                          <td>
+                            {startBrix ?? '—'} → {currentBrix ?? b.target_final_brix ?? '—'}
+                          </td>
+                          <td>{formatAbvEstimate(estAbv)}</td>
+                          <td>{format(new Date(b.start_date), 'MMM d, yyyy')}</td>
+                          <td><AssigneeCell name={b.assigned_user_name} /></td>
+                          <td className="td-actions">
+                            <button
+                              className="btn btn-sm btn-secondary"
+                              disabled={b.status !== 'fermenting'}
+                              title={b.status !== 'fermenting' ? 'Set status to fermenting to log readings' : undefined}
+                              onClick={() => setSelectedId(b.id === selectedId ? null : b.id)}
+                            >
+                              Logs
+                            </button>
+                            <button className="btn btn-sm btn-ghost" onClick={() => openEdit(b)}>Edit</button>
+                            <button className="btn btn-sm btn-ghost" onClick={() => handleDelete(b.id)}>Delete</button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          ))}
         </div>
       )}
 
