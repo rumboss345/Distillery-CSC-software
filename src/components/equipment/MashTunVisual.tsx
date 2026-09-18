@@ -11,6 +11,12 @@ const WASH_BUBBLES = [
   { cx: 88, r: 1.7, delay: 1.95 },
 ] as const;
 
+/** One fan blade pointing +X from the hub; rotated for a propeller-style impeller. */
+const FAN_BLADE_PATH =
+  'M 6 0 C 12 -1.2 28 -4.8 41 -4.2 L 43.5 0 C 28 5.2 12 1.2 6 0 Z';
+
+const FAN_BLADE_ANGLES = [0, 72, 144, 216, 288] as const;
+
 /** Stainless mash/cook tank with domed lid — matches production floor reference style. */
 export function MashTunVisual(props: EquipmentVisualProps) {
   const { data } = props;
@@ -58,6 +64,15 @@ export function MashTunVisual(props: EquipmentVisualProps) {
           <clipPath id={`${uid}-clip`}>
             <rect x="30" y="58" width="90" height="95" rx="6" />
           </clipPath>
+          <linearGradient id={`${uid}-blade`} x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#71717a" />
+            <stop offset="45%" stopColor="#d4d4d8" />
+            <stop offset="100%" stopColor="#9ca3af" />
+          </linearGradient>
+          <radialGradient id={`${uid}-hub`} cx="35%" cy="35%" r="65%">
+            <stop offset="0%" stopColor="#e4e4e7" />
+            <stop offset="100%" stopColor="#71717a" />
+          </radialGradient>
         </defs>
 
         <rect x="34" y="150" width="8" height="18" fill="#3a424c" />
@@ -118,14 +133,20 @@ export function MashTunVisual(props: EquipmentVisualProps) {
                 strokeWidth="3.2"
                 strokeLinecap="round"
               />
-              <g className="mash-tun-mixing-blade">
-                <g transform="translate(75 118)">
-                  <rect x="-24" y="-3.5" width="48" height="7" rx="2" fill="#a1a1aa" stroke="#52525b" strokeWidth="0.7" />
-                  <rect x="-3.5" y="-24" width="7" height="48" rx="2" fill="#a1a1aa" stroke="#52525b" strokeWidth="0.7" />
-                  <g transform="translate(0 -26)">
-                    <rect x="-18" y="-2.5" width="36" height="5" rx="1.5" fill="#9ca3af" stroke="#52525b" strokeWidth="0.6" opacity="0.92" />
-                    <rect x="-2.5" y="-18" width="5" height="36" rx="1.5" fill="#9ca3af" stroke="#52525b" strokeWidth="0.6" opacity="0.92" />
-                  </g>
+              <g transform="translate(75 118)">
+                <g className="mash-tun-mixing-blade">
+                  {FAN_BLADE_ANGLES.map((angle) => (
+                    <path
+                      key={angle}
+                      d={FAN_BLADE_PATH}
+                      fill={`url(#${uid}-blade)`}
+                      stroke="#52525b"
+                      strokeWidth="0.55"
+                      transform={`rotate(${angle})`}
+                    />
+                  ))}
+                  <circle r="6" fill={`url(#${uid}-hub)`} stroke="#3f3f46" strokeWidth="0.85" />
+                  <circle r="2.2" fill="#52525b" />
                 </g>
               </g>
             </g>

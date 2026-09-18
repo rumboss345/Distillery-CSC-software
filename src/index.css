@@ -1209,8 +1209,8 @@ tr:hover td {
 
 .mash-tun-mixing-blade {
   transform-box: fill-box;
-  transform-origin: 75px 118px;
-  animation: mash-tun-mixing-blade-spin 1.35s linear infinite;
+  transform-origin: center;
+  animation: mash-tun-mixing-blade-spin 1.1s linear infinite;
 }
 
 @keyframes mash-tun-mixing-blade-spin {
