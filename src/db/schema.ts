@@ -314,6 +314,8 @@ CREATE TABLE IF NOT EXISTS floor_equipment (
   status TEXT NOT NULL DEFAULT 'empty',
   linked_mash_batch_id INTEGER REFERENCES mash_batches(id),
   notes TEXT NOT NULL DEFAULT '',
+  maintenance_status TEXT,
+  maintenance_notes TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

@@ -14,6 +14,7 @@ const navItems: { to: string; label: string; icon: string; permission: Permissio
   { to: '/bottling', label: 'Bottling', icon: '◇', permission: 'bottling' },
   { to: '/inventory', label: 'Inventory', icon: '☰', permission: 'inventory' },
   { to: '/recipes', label: 'Recipes', icon: '◎', permission: 'wash' },
+  { to: '/equipment-maintenance', label: 'Equipment Maintenance', icon: '🔧', permission: 'equipment' },
   { to: '/reports', label: 'Reports', icon: '▤', permission: 'reports' },
 ];
 

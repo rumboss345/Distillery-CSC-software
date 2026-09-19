@@ -20,6 +20,7 @@ import { ProcessEquipmentDetailPanel } from './ProcessEquipmentDetailPanel';
 import { processEquipmentVisualScale } from './process-visual-scale';
 import type { EquipmentVisualData } from './equipment-visual.types';
 import type { FloorEquipmentView } from '../../types';
+import { equipmentBlocksProduction } from '../../lib/equipment-maintenance';
 import './process-view.css';
 
 interface ProcessEquipmentCanvasProps {
@@ -127,7 +128,9 @@ export function ProcessEquipmentCanvas({
   }, [applyFitToViewport, refreshKey]);
 
   const summary = getProductionSummary();
-  const offlineCount = allEquipment.filter((e) => e.status === 'offline').length;
+  const offlineCount = allEquipment.filter(
+    (e) => e.status === 'offline' || equipmentBlocksProduction(e),
+  ).length;
 
   const selectedEquipment = selectedId != null
     ? allEquipment.find((e) => e.id === selectedId) ?? null
@@ -318,11 +321,12 @@ export function ProcessEquipmentCanvas({
               const visual = visualById.get(item.id)!;
               const pos = resolvePosition(item);
               const isDragging = dragging?.id === item.id;
+              const outOfService = equipmentBlocksProduction(item);
 
               return (
                 <div
                   key={item.id}
-                  className={`process-equipment-node${isDragging ? ' process-equipment-node--dragging' : ''}${selectedId === item.id ? ' process-equipment-node--selected' : ''}${visual.isFermenting ? ' process-equipment-node--fermenting' : ''}`}
+                  className={`process-equipment-node${isDragging ? ' process-equipment-node--dragging' : ''}${selectedId === item.id ? ' process-equipment-node--selected' : ''}${visual.isFermenting ? ' process-equipment-node--fermenting' : ''}${outOfService ? ' process-equipment-node--out-of-service' : ''}`}
                   style={{ left: pos.x, top: pos.y }}
                   onPointerDown={(e) => onEquipmentPointerDown(e, item)}
                   onClick={(e) => e.stopPropagation()}
@@ -336,6 +340,14 @@ export function ProcessEquipmentCanvas({
                       if (!dragMovedRef.current) onSelect(item.id);
                     }}
                   />
+                  {outOfService && (
+                    <div className="process-equipment-out-of-service" aria-hidden="true">
+                      <svg viewBox="0 0 100 100" className="process-equipment-out-of-service-icon">
+                        <line x1="18" y1="18" x2="82" y2="82" />
+                        <line x1="82" y1="18" x2="18" y2="82" />
+                      </svg>
+                    </div>
+                  )}
                 </div>
               );
             })}

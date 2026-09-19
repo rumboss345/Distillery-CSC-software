@@ -5,6 +5,10 @@ import { holdingTankIntakeKey } from '../../db/queries';
 import { STATUS_LABELS, formatGal } from './equipment-visual-shared';
 import type { EquipmentVisualData } from './equipment-visual.types';
 import type { FloorEquipmentView } from '../../types';
+import {
+  equipmentBlocksProduction,
+  maintenanceStatusLabel,
+} from '../../lib/equipment-maintenance';
 
 interface ProcessEquipmentDetailPanelProps {
   equipment: FloorEquipmentView | null;
@@ -45,6 +49,21 @@ export function ProcessEquipmentDetailPanel({
       <dl className="process-equipment-detail-list">
         <dt>Status</dt>
         <dd><StatusBadge status={statusLabel} /></dd>
+        {equipment.maintenance_status && (
+          <>
+            <dt>Maintenance</dt>
+            <dd>
+              {maintenanceStatusLabel(equipment.maintenance_status)}
+              {equipmentBlocksProduction(equipment) ? ' — not available for production' : ''}
+            </dd>
+          </>
+        )}
+        {equipment.maintenance_notes && (
+          <>
+            <dt>Repair notes</dt>
+            <dd>{equipment.maintenance_notes}</dd>
+          </>
+        )}
         <dt>Page</dt>
         <dd>{planName || '—'}</dd>
         {visual.capacityGal > 0 && (
