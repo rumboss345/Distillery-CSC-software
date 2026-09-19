@@ -33,7 +33,6 @@ export const ROUTE_PERMISSIONS: Record<string, PermissionKey> = {
   '/equipment-maintenance': 'equipment',
   '/distillation': 'distillation',
   '/blending': 'blending',
-  '/tools': 'blending',
   '/tools/spirit-calculator': 'blending',
   '/barrels': 'barrels',
   '/bottling': 'bottling',
@@ -77,26 +76,12 @@ export function permissionForPath(pathname: string): PermissionKey | null {
   return ROUTE_PERMISSIONS[full] ?? null;
 }
 
-const PRODUCTION_TOOLS_PERMISSIONS: PermissionKey[] = [
-  'wash',
-  'distillation',
-  'blending',
-  'bottling',
-];
-
-export function canAccessProductionTools(hasPermission: (key: PermissionKey) => boolean): boolean {
-  return PRODUCTION_TOOLS_PERMISSIONS.some((key) => hasPermission(key));
-}
-
 export function canAccessPath(
   pathname: string,
   hasPermission: (key: PermissionKey) => boolean,
 ): boolean {
   if (pathname.startsWith('/recipes')) {
     return hasPermission('wash') || hasPermission('blending');
-  }
-  if (pathname.startsWith('/tools')) {
-    return canAccessProductionTools(hasPermission);
   }
   const required = permissionForPath(pathname);
   if (!required) return true;

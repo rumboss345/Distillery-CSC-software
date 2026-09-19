@@ -18,7 +18,6 @@ import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { ApproveUser } from './pages/ApproveUser';
 import { AdminUsers } from './pages/AdminUsers';
-import { ProductionTools } from './pages/ProductionTools';
 import { SpiritWeightCalculator } from './pages/SpiritWeightCalculator';
 import { useDatabaseReady } from './db/queries';
 
@@ -58,7 +57,6 @@ function AppContent() {
             <Route path="/equipment-maintenance" element={<EquipmentMaintenance />} />
             <Route path="/distillation" element={<Distillation />} />
             <Route path="/blending" element={<Blending />} />
-            <Route path="/tools" element={<ProductionTools />} />
             <Route path="/tools/spirit-calculator" element={<SpiritWeightCalculator />} />
             <Route path="/barrels" element={<Barrels />} />
             <Route path="/bottling" element={<Bottling />} />
