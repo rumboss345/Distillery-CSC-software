@@ -1235,6 +1235,21 @@ function syncWashTankForMashBatch(mashBatchId: number, status: MashStatus): void
   );
 }
 
+/** Fail fast before writing mash_batches when equipment is out of service. */
+function assertMashBatchEquipmentUsable(
+  batch: Pick<MashBatch, 'status'>,
+  assignments: FermenterAssignmentInput[],
+): void {
+  for (const a of assignments) {
+    if (a.equipmentId <= 0) continue;
+    assertEquipmentUsableForProduction(a.equipmentId, 'Fermenter');
+  }
+  if (batch.status === 'mashing') {
+    const tun = getPrimaryWashTank();
+    if (tun) assertEquipmentUsableForProduction(tun.id, 'Wash tank');
+  }
+}
+
 /** Primary wash tank (mash tun) for UI previews and capacity hints. */
 export function getPrimaryWashTankEquipment(): FloorEquipment | undefined {
   return getPrimaryWashTank() ?? undefined;
@@ -1246,10 +1261,18 @@ export function saveMashBatchWithFermenters(
   id?: number,
 ): number {
   const previous = id ? getMashBatch(id) : undefined;
+  assertMashBatchEquipmentUsable(batch, assignments);
   const mashId = saveMashBatch(batch, id);
-  saveMashFermenterAssignments(mashId, assignments);
-  applyMashInventoryUsage(batch, previous);
-  syncWashTankForMashBatch(mashId, batch.status);
+  try {
+    saveMashFermenterAssignments(mashId, assignments);
+    applyMashInventoryUsage(batch, previous);
+    syncWashTankForMashBatch(mashId, batch.status);
+  } catch (err) {
+    if (!id) {
+      runQuery('DELETE FROM mash_batches WHERE id = ?', [mashId]);
+    }
+    throw err;
+  }
   return mashId;
 }
 
