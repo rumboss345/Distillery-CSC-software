@@ -11,6 +11,7 @@ import {
   equipmentBlocksProduction,
   maintenanceStatusLabel,
 } from '../lib/equipment-maintenance';
+import { fermenterShowsAssignedWash } from '../lib/mash-fermenter-fill';
 import type { EquipmentMaintenanceStatus } from '../types';
 import { initDatabase, clearAllData } from './database';
 import type {
@@ -1158,7 +1159,7 @@ export function syncFermenterAndStillStatuses(): void {
       LIMIT 1
     `, [f.id]);
 
-    const shouldBeInUse = !!row && !['complete', 'discarded'].includes(row.status);
+    const shouldBeInUse = !!row && fermenterShowsAssignedWash(row.status as MashStatus);
 
     if (shouldBeInUse) {
       runQuery(
@@ -1363,10 +1364,6 @@ function restoreHeavyRumChargeToFermenter(
     insertRow(
       'INSERT INTO mash_fermenter_assignments (mash_batch_id, floor_equipment_id, volume_gal) VALUES (?, ?, ?)',
       [mashBatchId, equipmentId, volumeGal],
-    );
-    runQuery(
-      `UPDATE floor_equipment SET status='in_use', linked_mash_batch_id=? WHERE id=?`,
-      [mashBatchId, equipmentId],
     );
   }
   syncFermenterAndStillStatuses();
@@ -2938,7 +2935,7 @@ export function getFloorEquipmentWithContext(planId = 1): FloorEquipmentView[] {
       WHERE a.floor_equipment_id = ?
       LIMIT 1
     `, [eq.id]);
-    if (!info) return eq;
+    if (!info || !fermenterShowsAssignedWash(info.status as MashStatus)) return eq;
     const logBrix = getLatestFermentationBrix(info.mash_batch_id, eq.id);
     const active_start_brix = info.actual_brix ?? info.target_brix ?? null;
     const active_latest_brix = logBrix ?? info.actual_brix ?? info.target_brix ?? null;

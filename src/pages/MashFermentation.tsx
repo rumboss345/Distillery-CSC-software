@@ -237,13 +237,15 @@ export function MashFermentation() {
     (f) => f.id !== fermenterForm.fermenter1Id,
   );
 
-  const canAssignFermenters = form.status === 'mashing' || form.status === 'fermenting';
+  const canAssignFermenters = form.status === 'fermenting';
   const fermenterControlsDisabled = !canAssignFermenters;
 
   const handleStatusChange = (status: MashStatus) => {
     setForm({ ...form, status });
-    if (!editId && status !== 'mashing' && status !== 'fermenting') {
-      setFermenterForm(emptyFermenterForm());
+    if (status !== 'fermenting') {
+      if (!editId) {
+        setFermenterForm(emptyFermenterForm());
+      }
     }
   };
 
@@ -364,7 +366,15 @@ export function MashFermentation() {
       return;
     }
 
-    const assignments = canAssignFermenters ? buildAssignments() : [];
+    const assignments =
+      form.status === 'fermenting'
+        ? buildAssignments()
+        : editId && form.status === 'mashing'
+          ? getMashFermenterAssignments(editId).map((a) => ({
+            equipmentId: a.floor_equipment_id,
+            volumeGal: a.volume_gal,
+          }))
+          : [];
     try {
       saveMashBatchWithFermenters(form, assignments, editId);
       setShowForm(false);
@@ -736,14 +746,9 @@ export function MashFermentation() {
 
             <div className="form-group full-width fermenter-section">
               <label>Fermenter Assignment</label>
-              {fermenterControlsDisabled && !editId && (
+              {fermenterControlsDisabled && (
                 <p className="field-hint">
-                  Set status to <strong>washing</strong> or <strong>fermenting</strong> before choosing fermenters.
-                </p>
-              )}
-              {fermenterControlsDisabled && editId && (
-                <p className="field-hint">
-                  Fermenters can only be changed while status is washing or fermenting.
+                  Set status to <strong>fermenting</strong> before assigning fermenters. While washing, wash stays in the wash tank only.
                 </p>
               )}
               <label className="checkbox-label">
@@ -864,7 +869,7 @@ export function MashFermentation() {
               <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
             </div>
           </div>
-          <p className="form-hint">Saving deducts sugar and yeast from inventory. Assigned fermenters show as <strong>in use</strong> on the floor plan until this wash is charged to a still.</p>
+          <p className="form-hint">Saving deducts sugar and yeast from inventory. Fermenters fill on the floor plan only after status is <strong>fermenting</strong> and assignments are saved.</p>
           <div className="form-actions">
             <button className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
             <button className="btn btn-primary" onClick={handleSave}>Save Batch</button>
