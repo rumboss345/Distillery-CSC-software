@@ -477,6 +477,57 @@ export function isFermenterAvailable(equipmentId: number, forMashBatchId?: numbe
   return forMashBatchId !== undefined && active.mash_batch_id === forMashBatchId;
 }
 
+export interface HeavyRumSourceFermenterOption extends MashFermenterAssignment {
+  equipment_name: string;
+  batch_number: string;
+  recipe_name: string;
+}
+
+/** Fermenters currently holding fermenting wash — primary source picker for heavy rum runs. */
+export function getHeavyRumSourceFermenters(
+  excludeRunId?: number,
+): HeavyRumSourceFermenterOption[] {
+  const rows = queryAll<{
+    id: number;
+    mash_batch_id: number;
+    floor_equipment_id: number;
+    volume_gal: number;
+    equipment_name: string;
+    batch_number: string;
+    recipe_name: string;
+  }>(`
+    SELECT a.id, a.mash_batch_id, a.floor_equipment_id, a.volume_gal,
+           fe.name as equipment_name, m.batch_number, m.recipe_name
+    FROM mash_fermenter_assignments a
+    JOIN mash_batches m ON m.id = a.mash_batch_id
+    JOIN floor_equipment fe ON fe.id = a.floor_equipment_id
+    WHERE a.volume_gal > 0.01
+      AND m.status = 'fermenting'
+      AND fe.equipment_type = 'fermenter'
+    ORDER BY fe.name COLLATE NOCASE, m.batch_number COLLATE NOCASE
+  `);
+
+  const options: HeavyRumSourceFermenterOption[] = [];
+  const seen = new Set<string>();
+  for (const row of rows) {
+    const chargeable = getChargeableFermentersForMash(row.mash_batch_id, excludeRunId);
+    if (!chargeable.some((c) => c.floor_equipment_id === row.floor_equipment_id)) continue;
+    const key = `${row.mash_batch_id}:${row.floor_equipment_id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    options.push({
+      id: row.id,
+      mash_batch_id: row.mash_batch_id,
+      floor_equipment_id: row.floor_equipment_id,
+      volume_gal: row.volume_gal,
+      equipment_name: row.equipment_name,
+      batch_number: row.batch_number,
+      recipe_name: row.recipe_name,
+    });
+  }
+  return options;
+}
+
 export function getChargeableFermentersForMash(
   mashBatchId: number,
   excludeRunId?: number,
