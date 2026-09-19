@@ -23,7 +23,9 @@ import {
   getHighWinesDestinationTanks,
   defaultDestTankIdForRunType,
   defaultTankForCutType,
+  getCollectionVesselStoredCutType,
   getCollectionVessels,
+  getCollectionVesselsForCutType,
   getHoldingTankContents,
   getSpiritTransferVessels,
   getSpiritTransferVesselsWithContents,
@@ -439,7 +441,7 @@ export function Distillation() {
     : CUT_TYPES;
 
   const suggestCutTank = (cutType: CutType, run?: DistillationRun, runCuts = cuts) =>
-    defaultTankForCutType(cutType, { run, existingCuts: runCuts });
+    defaultTankForCutType(cutType, { run, existingCuts: runCuts, excludeCutId: editCutId });
 
   const closeCutForm = () => {
     setShowCutForm(false);
@@ -487,10 +489,15 @@ export function Distillation() {
   };
 
   const handleCutTypeChange = (cutType: CutType) => {
+    const allowed = getCollectionVesselsForCutType(cutType, editCutId);
+    let tankId = cutForm.holding_tank_equipment_id;
+    if (!tankId || !allowed.some((t) => t.id === tankId)) {
+      tankId = suggestCutTank(cutType, selectedRun);
+    }
     setCutForm({
       ...cutForm,
       cut_type: cutType,
-      holding_tank_equipment_id: suggestCutTank(cutType, selectedRun),
+      holding_tank_equipment_id: tankId,
     });
   };
 
@@ -596,10 +603,12 @@ export function Distillation() {
 
   const tankOptionLabel = (tank: { id: number; name: string; capacity_gal: number }) => {
     const contents = getHoldingTankContents(tank.id);
+    const storedCut = getCollectionVesselStoredCutType(tank.id, editCutId);
+    const cutNote = storedCut ? ` · ${storedCut} only` : '';
     if (contents.volume_gal <= 0) {
-      return `${tank.name} (empty · ${tank.capacity_gal} gal cap)`;
+      return `${tank.name} (empty · ${tank.capacity_gal} gal cap${cutNote})`;
     }
-    return `${tank.name} (${contents.volume_gal.toFixed(1)} gal @ ${contents.abv.toFixed(1)}% · ${contents.run_count} run${contents.run_count === 1 ? '' : 's'})`;
+    return `${tank.name} (${contents.volume_gal.toFixed(1)} gal @ ${contents.abv.toFixed(1)}% · ${contents.run_count} run${contents.run_count === 1 ? '' : 's'}${cutNote})`;
   };
 
   const handleDeleteCut = (id: number) => {
@@ -609,7 +618,7 @@ export function Distillation() {
     }
   };
 
-  const cutDestinationTanks = collectionVessels;
+  const cutDestinationTanks = getCollectionVesselsForCutType(cutForm.cut_type, editCutId);
 
   const heartsTotal = cuts.filter((c) => c.cut_type === 'hearts').reduce((s, c) => s + c.volume_gal, 0);
   const gpa = cuts.filter((c) => c.cut_type === 'hearts').reduce((s, c) => s + c.volume_gal * c.abv / 100, 0);
@@ -1381,6 +1390,7 @@ export function Distillation() {
           </div>
           <p className="form-hint">
             Hearts and tails must go to a collection vessel. Heads may be discarded (no tank) or stored in a collection vessel.
+            Each collection vessel may hold only one cut type at a time (heads, hearts, or tails).
             Transfer from collection vessels to holding tanks when ready.
           </p>
           <div className="form-actions">
