@@ -7,6 +7,11 @@ import {
 } from '../lib/bottling-lines';
 import { isFermenterSourcedRun, isTankSourcedRun, runUsesDestHoldingTank } from '../lib/distillation-run-types';
 import { chargeExceedsStillCapacity, stillChargeCapacityMessage } from '../lib/still-charge';
+import {
+  equipmentBlocksProduction,
+  maintenanceStatusLabel,
+} from '../lib/equipment-maintenance';
+import type { EquipmentMaintenanceStatus } from '../types';
 import { initDatabase, clearAllData } from './database';
 import type {
   Barrel,
@@ -67,6 +72,31 @@ import {
 
 /** Statuses that draw spirit from holding tanks (formula saves do not). */
 const BLEND_LEDGER_STATUSES_SQL = "('executed', 'bottled', 'blended')";
+
+function onlyProductionUsable<T extends FloorEquipment>(items: T[]): T[] {
+  return items.filter((e) => !equipmentBlocksProduction(e));
+}
+
+function assertEquipmentUsableForProduction(equipmentId: number, role = 'Equipment'): void {
+  const eq = queryOne<FloorEquipment>('SELECT * FROM floor_equipment WHERE id = ?', [equipmentId]);
+  if (!eq) throw new Error(`${role} not found.`);
+  if (equipmentBlocksProduction(eq)) {
+    throw new Error(
+      `${eq.name} is ${maintenanceStatusLabel(eq.maintenance_status).toLowerCase()} and cannot be used until returned to service.`,
+    );
+  }
+}
+
+function assertStillUsableByName(stillName: string): void {
+  const trimmed = stillName.trim();
+  if (!trimmed) return;
+  const eq = queryOne<FloorEquipment>(
+    `SELECT * FROM floor_equipment
+     WHERE name = ? AND equipment_type IN ('pot_still', 'column_still')`,
+    [trimmed],
+  );
+  if (eq) assertEquipmentUsableForProduction(eq.id, 'Still');
+}
 
 function blendTankDrawsSql(tankParam: string, excludeBlendParam: string): string {
   return `
@@ -491,15 +521,15 @@ export function getFermenterChargeCapacityGal(
 }
 
 export function getAvailableFermenters(forMashBatchId?: number): FloorEquipment[] {
-  return getFloorEquipment().filter(
+  return onlyProductionUsable(getFloorEquipment().filter(
     (e) => e.equipment_type === 'fermenter' && isFermenterAvailable(e.id, forMashBatchId),
-  );
+  ));
 }
 
 export function getPotStills(): FloorEquipment[] {
-  return getFloorEquipment().filter(
+  return onlyProductionUsable(getFloorEquipment().filter(
     (e) => e.equipment_type === 'pot_still' || e.equipment_type === 'column_still',
-  );
+  ));
 }
 
 export function getStillCapacityByName(stillName: string): number | null {
@@ -515,12 +545,12 @@ export function getStillCapacityByName(stillName: string): number | null {
 
 export function getHoldingTanks(): FloorEquipment[] {
   syncHoldingTankStatuses();
-  return getFloorEquipment().filter((e) => e.equipment_type === 'holding_tank');
+  return onlyProductionUsable(getFloorEquipment().filter((e) => e.equipment_type === 'holding_tank'));
 }
 
 export function getCollectionVessels(): FloorEquipment[] {
   syncHoldingTankStatuses();
-  return getFloorEquipment().filter((e) => e.equipment_type === 'collection_vessel');
+  return onlyProductionUsable(getFloorEquipment().filter((e) => e.equipment_type === 'collection_vessel'));
 }
 
 /** Cut type already stored in a collection vessel (from distillation cuts with volume). */
@@ -561,9 +591,9 @@ export function getCollectionVesselsForCutType(
 /** Holding tanks and collection vessels — equipment that uses the spirit ledger for transfers. */
 export function getSpiritTransferVessels(): FloorEquipment[] {
   syncHoldingTankStatuses();
-  return getFloorEquipment().filter(
+  return onlyProductionUsable(getFloorEquipment().filter(
     (e) => e.equipment_type === 'holding_tank' || e.equipment_type === 'collection_vessel',
-  );
+  ));
 }
 
 export function getSpiritTransferVesselsWithContents(): (FloorEquipment & HoldingTankContents)[] {
@@ -1021,6 +1051,8 @@ export function saveHoldingTankTransfer(
   }
   assertSpiritTransferVessel(transfer.source_tank_equipment_id, 'source');
   assertSpiritTransferVessel(transfer.dest_tank_equipment_id, 'destination');
+  assertEquipmentUsableForProduction(transfer.source_tank_equipment_id, 'Source tank');
+  assertEquipmentUsableForProduction(transfer.dest_tank_equipment_id, 'Destination tank');
   const available = getHoldingTankContents(transfer.source_tank_equipment_id);
   if (transfer.volume_gal > available.volume_gal + 0.01) {
     throw new Error(`Only ${available.volume_gal.toFixed(1)} gal available in the source tank.`);
@@ -1165,6 +1197,7 @@ export function saveMashFermenterAssignments(
   runQuery('DELETE FROM mash_fermenter_assignments WHERE mash_batch_id = ?', [mashBatchId]);
   for (const a of assignments) {
     if (a.equipmentId <= 0) continue;
+    assertEquipmentUsableForProduction(a.equipmentId, 'Fermenter');
     insertRow(
       `INSERT INTO mash_fermenter_assignments (mash_batch_id, floor_equipment_id, volume_gal) VALUES (?, ?, ?)`,
       [mashBatchId, a.equipmentId, a.volumeGal],
@@ -1195,6 +1228,7 @@ function syncWashTankForMashBatch(mashBatchId: number, status: MashStatus): void
   if (status !== 'mashing') return;
   const tun = getPrimaryWashTank();
   if (!tun) return;
+  assertEquipmentUsableForProduction(tun.id, 'Wash tank');
   runQuery(
     `UPDATE floor_equipment SET status='in_use', linked_mash_batch_id=? WHERE id=?`,
     [mashBatchId, tun.id],
@@ -1446,6 +1480,16 @@ export function getDistillationRuns(): DistillationRunView[] {
 
 export function saveDistillationRun(run: Omit<DistillationRun, 'id' | 'created_at'>, id?: number): void {
   const runType = (run.run_type ?? 'wash') as DistillationRunType;
+  assertStillUsableByName(run.still_name);
+  if (isFermenterSourcedRun(runType) && run.source_fermenter_equipment_id) {
+    assertEquipmentUsableForProduction(run.source_fermenter_equipment_id, 'Fermenter');
+  }
+  if (isTankSourcedRun(runType) && run.source_holding_tank_equipment_id) {
+    assertEquipmentUsableForProduction(run.source_holding_tank_equipment_id, 'Source tank');
+  }
+  if (runUsesDestHoldingTank(runType) && run.dest_holding_tank_equipment_id) {
+    assertEquipmentUsableForProduction(run.dest_holding_tank_equipment_id, 'Destination tank');
+  }
   const stillCapacity = getStillCapacityByName(run.still_name);
   if (chargeExceedsStillCapacity(run.charge_volume_gal, stillCapacity)) {
     throw new Error(
@@ -1565,6 +1609,7 @@ export function saveDistillationCut(cut: Omit<DistillationCut, 'id'>, id?: numbe
     if (!isCollectionVesselEquipmentId(cut.holding_tank_equipment_id)) {
       throw new Error('Distillation cuts must be collected into a collection vessel (or leave heads empty to discard).');
     }
+    assertEquipmentUsableForProduction(cut.holding_tank_equipment_id, 'Collection vessel');
     if (!collectionVesselAcceptsCutType(cut.holding_tank_equipment_id, cut.cut_type, id)) {
       const stored = getCollectionVesselStoredCutType(cut.holding_tank_equipment_id, id);
       throw new Error(
@@ -1859,6 +1904,9 @@ export function saveBottlingRun(
   const fromTank = run.source_holding_tank_equipment_id != null;
   const sourceBarrelId = fromTank ? null : run.source_barrel_id;
   const sourceTankId = fromTank ? run.source_holding_tank_equipment_id : null;
+  if (sourceTankId) {
+    assertEquipmentUsableForProduction(sourceTankId, 'Source tank');
+  }
   const totalCount = activeLines.reduce((sum, line) => sum + line.bottle_count, 0);
   const bottledVolumeGal = totalCount > 0
     ? activeLines.reduce((sum, line) => sum + mlToGallons(line.bottle_count * line.bottle_size_ml), 0)
@@ -2415,6 +2463,7 @@ export function executeBlendProduct(id: number, outputTankId: number): void {
     [outputTankId],
   );
   if (!outputTank) throw new Error('Output tank not found.');
+  assertEquipmentUsableForProduction(outputTankId, 'Output tank');
 
   const spiritSources = getBlendSpiritSources(id).map((s) => ({
     holding_tank_equipment_id: s.holding_tank_equipment_id,
@@ -2428,6 +2477,11 @@ export function executeBlendProduct(id: number, outputTankId: number): void {
   }
 
   assertSpiritAvailability(sources, id);
+  for (const source of sources) {
+    if (source.holding_tank_equipment_id > 0) {
+      assertEquipmentUsableForProduction(source.holding_tank_equipment_id, 'Spirit source tank');
+    }
+  }
 
   const sourceTankIds = new Set(
     sources.map((s) => s.holding_tank_equipment_id).filter((tankId) => tankId > 0),
@@ -2876,19 +2930,38 @@ export function getFloorEquipmentWithContext(planId = 1): FloorEquipmentView[] {
   });
 }
 
+export function getAllFloorEquipment(): FloorEquipment[] {
+  return queryAll<FloorEquipment>(
+    'SELECT * FROM floor_equipment ORDER BY equipment_type, name COLLATE NOCASE',
+  );
+}
+
+export function updateEquipmentMaintenance(
+  equipmentId: number,
+  maintenance_status: EquipmentMaintenanceStatus | null,
+  maintenance_notes: string,
+): void {
+  runQuery(
+    'UPDATE floor_equipment SET maintenance_status=?, maintenance_notes=? WHERE id=?',
+    [maintenance_status, maintenance_notes.trim(), equipmentId],
+  );
+}
+
 export function saveFloorEquipment(
   item: Omit<FloorEquipment, 'id' | 'created_at'>,
   id?: number,
 ): void {
+  const maintenanceStatus = item.maintenance_status ?? null;
+  const maintenanceNotes = item.maintenance_notes ?? '';
   if (id) {
     runQuery(
-      `UPDATE floor_equipment SET floor_plan_id=?, name=?, equipment_type=?, pos_x_ft=?, pos_y_ft=?, width_ft=?, depth_ft=?, capacity_gal=?, status=?, linked_mash_batch_id=?, notes=? WHERE id=?`,
-      [item.floor_plan_id, item.name, item.equipment_type, item.pos_x_ft, item.pos_y_ft, item.width_ft, item.depth_ft, item.capacity_gal, item.status, item.linked_mash_batch_id, item.notes, id],
+      `UPDATE floor_equipment SET floor_plan_id=?, name=?, equipment_type=?, pos_x_ft=?, pos_y_ft=?, width_ft=?, depth_ft=?, capacity_gal=?, status=?, linked_mash_batch_id=?, notes=?, maintenance_status=?, maintenance_notes=? WHERE id=?`,
+      [item.floor_plan_id, item.name, item.equipment_type, item.pos_x_ft, item.pos_y_ft, item.width_ft, item.depth_ft, item.capacity_gal, item.status, item.linked_mash_batch_id, item.notes, maintenanceStatus, maintenanceNotes, id],
     );
   } else {
     insertRow(
-      `INSERT INTO floor_equipment (floor_plan_id, name, equipment_type, pos_x_ft, pos_y_ft, width_ft, depth_ft, capacity_gal, status, linked_mash_batch_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [item.floor_plan_id, item.name, item.equipment_type, item.pos_x_ft, item.pos_y_ft, item.width_ft, item.depth_ft, item.capacity_gal, item.status, item.linked_mash_batch_id, item.notes],
+      `INSERT INTO floor_equipment (floor_plan_id, name, equipment_type, pos_x_ft, pos_y_ft, width_ft, depth_ft, capacity_gal, status, linked_mash_batch_id, notes, maintenance_status, maintenance_notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [item.floor_plan_id, item.name, item.equipment_type, item.pos_x_ft, item.pos_y_ft, item.width_ft, item.depth_ft, item.capacity_gal, item.status, item.linked_mash_batch_id, item.notes, maintenanceStatus, maintenanceNotes],
     );
   }
 }

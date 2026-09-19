@@ -18,6 +18,8 @@ function fermenterView(overrides: Partial<FloorEquipmentView> = {}): FloorEquipm
     status: 'in_use',
     linked_mash_batch_id: null,
     notes: '',
+    maintenance_status: null,
+    maintenance_notes: '',
     created_at: '',
     active_batch_number: 'W-2026-001',
     active_volume_gal: 400,

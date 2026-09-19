@@ -168,6 +168,129 @@
   pointer-events: none;
 }
 
+.process-equipment-node--out-of-service .equipment-visual-svg-wrap,
+.process-equipment-node--out-of-service .tank-visual-svg {
+  opacity: 0.55;
+  filter: grayscale(0.35);
+}
+
+.process-equipment-out-of-service {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.process-equipment-out-of-service-icon {
+  width: 72%;
+  height: 72%;
+  stroke: #dc2626;
+  stroke-width: 10;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.45));
+}
+
+.process-equipment-repair-badge {
+  position: absolute;
+  left: 2px;
+  bottom: 2px;
+  z-index: 4;
+  width: 1.35rem;
+  height: 1.35rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.88);
+  border: 1px solid #475569;
+  border-radius: 4px;
+  pointer-events: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+.process-equipment-repair-badge-icon {
+  width: 0.85rem;
+  height: 0.85rem;
+  fill: none;
+  stroke: #fbbf24;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.process-maintenance-popover-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  border: none;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  cursor: default;
+}
+
+.process-maintenance-popover {
+  position: fixed;
+  z-index: 201;
+  max-width: min(320px, calc(100vw - 24px));
+  padding: 0.75rem 0.85rem;
+  background: #1e293b;
+  border: 1px solid #475569;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  transform: translate(8px, 8px);
+}
+
+.process-maintenance-popover-title {
+  margin: 0 0 0.35rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.process-maintenance-popover-status {
+  margin: 0 0 0.5rem;
+  font-size: 0.78rem;
+  color: #cbd5e1;
+  line-height: 1.4;
+}
+
+.process-maintenance-popover-label {
+  display: block;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #94a3b8;
+  margin-bottom: 0.15rem;
+}
+
+.process-maintenance-popover-notes {
+  margin: 0 0 0.65rem;
+  font-size: 0.78rem;
+  color: #e2e8f0;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.process-maintenance-popover-notes--empty {
+  color: #64748b;
+  font-style: italic;
+}
+
+.process-maintenance-popover-link {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #38bdf8;
+  text-decoration: none;
+}
+
+.process-maintenance-popover-link:hover {
+  text-decoration: underline;
+}
+
 .process-equipment-labels {
   width: 100%;
   min-width: 130px;

@@ -44,6 +44,8 @@ const emptyEquipment = (planId: number, type: EquipmentType = 'fermenter'): Omit
     status: 'empty',
     linked_mash_batch_id: null,
     notes: '',
+    maintenance_status: null,
+    maintenance_notes: '',
   };
 };
 

@@ -1,4 +1,5 @@
 import type { EquipmentStatus, EquipmentType } from '../../types';
+import { equipmentBlocksProduction } from '../../lib/equipment-maintenance';
 import { equipmentTypeLabel } from '../../lib/equipment';
 import type { EquipmentVolumeReport } from '../../types';
 import type { FloorEquipmentView } from '../../types';
@@ -122,7 +123,11 @@ export function buildEquipmentVisualData(
     fillPercent: visualFillPercent,
     liquidName: liquidName || undefined,
     abv: report?.abv ?? (item.active_abv != null && item.active_abv > 0 ? item.active_abv : undefined),
-    status: isWashing ? 'active' : mapVisualStatus(item.status, fillPercent),
+    status: equipmentBlocksProduction(item)
+      ? 'offline'
+      : isWashing
+        ? 'active'
+        : mapVisualStatus(item.status, fillPercent),
     isFermenting: item.equipment_type === 'fermenter' && item.active_mash_status === 'fermenting',
     isWashing,
     fermenterLatestBrix: item.equipment_type === 'fermenter' ? item.active_latest_brix : undefined,

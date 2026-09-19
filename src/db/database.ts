@@ -451,6 +451,15 @@ function runMigrations(): void {
     persistDb();
   }
 
+  const hasMaintenanceStatus = queryOne<{ name: string }>(
+    "SELECT name FROM pragma_table_info('floor_equipment') WHERE name='maintenance_status'",
+  );
+  if (!hasMaintenanceStatus) {
+    db.run('ALTER TABLE floor_equipment ADD COLUMN maintenance_status TEXT');
+    db.run("ALTER TABLE floor_equipment ADD COLUMN maintenance_notes TEXT NOT NULL DEFAULT ''");
+    persistDb();
+  }
+
   const hasRecipes = queryOne<{ name: string }>(
     "SELECT name FROM sqlite_master WHERE type='table' AND name='recipes'",
   );

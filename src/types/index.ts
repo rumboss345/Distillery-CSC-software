@@ -29,6 +29,9 @@ export type EquipmentType =
 
 export type EquipmentStatus = 'empty' | 'in_use' | 'cleaning' | 'offline';
 
+/** Out-of-service tagging from Equipment Maintenance (repair_note does not block use). */
+export type EquipmentMaintenanceStatus = 'broken' | 'maintenance' | 'repair_note';
+
 export interface FloorPlan {
   id: number;
   name: string;
@@ -52,6 +55,8 @@ export interface FloorEquipment {
   status: EquipmentStatus;
   linked_mash_batch_id: number | null;
   notes: string;
+  maintenance_status: EquipmentMaintenanceStatus | null;
+  maintenance_notes: string;
   created_at: string;
 }
 
