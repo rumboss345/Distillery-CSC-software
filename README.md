@@ -44,6 +44,8 @@ Render sets `PORT` and `NODE_ENV=production` automatically. Pin Node **20** (`NO
 
 Optional: run `npm run reset-admin` locally to update the admin password without restarting.
 
+**Test employees:** run `npm run seed:test-employees` while the auth server has been started at least once (creates `server/data/auth.db`). This adds four approved users (`maria.santos@csc.test`, `james.cobb@csc.test`, `elena.park@csc.test`, `chris.dalton@csc.test`) for assignee dropdowns and login tests. Default password `TestEmployee1!` (override with `TEST_EMPLOYEE_PASSWORD`).
+
 ## Data storage
 
 Production data is stored in **SQLite** (sql.js) in each user's browser localStorage. It is not synced to the server.
