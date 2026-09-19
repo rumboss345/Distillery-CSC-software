@@ -28,6 +28,7 @@ import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
 import { estimateAbvFromBrix, estimateSugarWash, formatAbvEstimate } from '../lib/fermentation';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
+import { equipmentBlocksProduction } from '../lib/equipment-maintenance';
 import type { MashBatch, MashStatus } from '../types';
 
 const STATUSES: MashStatus[] = ['planned', 'mashing', 'fermenting', 'complete', 'discarded'];
@@ -363,10 +364,21 @@ export function MashFermentation() {
       return;
     }
 
-    const assignments = !editId && !canAssignFermenters ? [] : buildAssignments();
-    saveMashBatchWithFermenters(form, assignments, editId);
-    setShowForm(false);
-    refresh();
+    const assignments = canAssignFermenters ? buildAssignments() : [];
+    try {
+      saveMashBatchWithFermenters(form, assignments, editId);
+      setShowForm(false);
+      refresh();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not save wash batch.';
+      if (/UNIQUE constraint failed.*batch_number/i.test(message)) {
+        alert(
+          `${message}\n\nA batch with this number may already exist from a partial save. Change the batch number or delete the duplicate on the list.`,
+        );
+      } else {
+        alert(message);
+      }
+    }
   };
 
   const performDelete = (id: number) => {
@@ -419,6 +431,9 @@ export function MashFermentation() {
     : null;
   const sugarWash = estimateSugarWash(form.grain_lbs, form.water_gal);
   const washTank = useMemo(() => getPrimaryWashTankEquipment(), [key]);
+  const washTankBlocksSave = form.status === 'mashing'
+    && washTank != null
+    && equipmentBlocksProduction(washTank);
   const washTankPreview = useMemo((): EquipmentVisualData | null => {
     if (form.status !== 'mashing') return null;
     const capacityGal = washTank?.capacity_gal ?? 600;
@@ -703,6 +718,11 @@ export function MashFermentation() {
               <select value={form.status} onChange={(e) => handleStatusChange(e.target.value as MashStatus)}>
                 {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
               </select>
+              {washTankBlocksSave && (
+                <p className="field-hint" style={{ color: 'var(--danger, #dc2626)' }}>
+                  {washTank?.name} is marked out of service on Equipment Maintenance. Return it to service or save as planned until the wash tank is available.
+                </p>
+              )}
             </div>
 
             {washTankPreview && (
