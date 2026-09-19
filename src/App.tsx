@@ -11,7 +11,15 @@ import { Barrels } from './pages/Barrels';
 import { Bottling } from './pages/Bottling';
 import { Blending } from './pages/Blending';
 import { Inventory } from './pages/Inventory';
-import { Reports } from './pages/Reports';
+import { ReportsLayout } from './pages/reports/ReportsLayout';
+import { SummaryReport } from './pages/reports/SummaryReport';
+import { DistillationReport } from './pages/reports/DistillationReport';
+import { TankInventoryReport } from './pages/reports/TankInventoryReport';
+import { BlendingReport } from './pages/reports/BlendingReport';
+import { BottlingReportPage } from './pages/reports/BottlingReportPage';
+import { MovementsReport } from './pages/reports/MovementsReport';
+import { ExceptionsReport } from './pages/reports/ExceptionsReport';
+import { TraceabilityReport } from './pages/reports/TraceabilityReport';
 import { Calendar } from './pages/Calendar';
 import { FloorPlanPage } from './pages/FloorPlan';
 import { Login } from './pages/Login';
@@ -62,7 +70,16 @@ function AppContent() {
             <Route path="/bottling" element={<Bottling />} />
             <Route path="/inventory" element={<Inventory />} />
             <Route path="/floor-plan" element={<FloorPlanPage />} />
-            <Route path="/reports" element={<Reports />} />
+            <Route path="/reports" element={<ReportsLayout />}>
+              <Route index element={<SummaryReport />} />
+              <Route path="distillation" element={<DistillationReport />} />
+              <Route path="tanks" element={<TankInventoryReport />} />
+              <Route path="blending" element={<BlendingReport />} />
+              <Route path="bottling" element={<BottlingReportPage />} />
+              <Route path="movements" element={<MovementsReport />} />
+              <Route path="exceptions" element={<ExceptionsReport />} />
+              <Route path="traceability" element={<TraceabilityReport />} />
+            </Route>
             <Route path="/admin/users" element={<AdminUsers />} />
           </Route>
         </Route>
