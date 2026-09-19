@@ -17,6 +17,7 @@ import {
   getPotStills,
   getFloorEquipment,
   getChargeableFermentersForMash,
+  getHeavyRumSourceFermenters,
   getFermenterChargeCapacityGal,
   getLatestFermentationBrix,
   getChargeableHoldingTanks,
@@ -139,9 +140,46 @@ export function Distillation() {
 
   void key;
 
-  const chargeableFermenters = isFermenterSourcedRun(runForm.run_type) && runForm.source_mash_batch_id
-    ? getChargeableFermentersForMash(runForm.source_mash_batch_id, editRunId)
-    : [];
+  const heavyRumSourceFermenters = useMemo(() => {
+    if (runForm.run_type !== 'heavy_rum') return [];
+    const list = getHeavyRumSourceFermenters(editRunId);
+    if (
+      runForm.source_fermenter_equipment_id
+      && runForm.source_mash_batch_id
+      && !list.some((f) => f.floor_equipment_id === runForm.source_fermenter_equipment_id)
+    ) {
+      const mash = mashes.find((m) => m.id === runForm.source_mash_batch_id);
+      const name = equipment.find((e) => e.id === runForm.source_fermenter_equipment_id)?.name
+        ?? 'Fermenter';
+      list.push({
+        id: 0,
+        mash_batch_id: runForm.source_mash_batch_id,
+        floor_equipment_id: runForm.source_fermenter_equipment_id,
+        volume_gal: getFermenterChargeCapacityGal(
+          runForm.source_mash_batch_id,
+          runForm.source_fermenter_equipment_id,
+          editRunId,
+        ),
+        equipment_name: name,
+        batch_number: mash?.batch_number ?? `Wash #${runForm.source_mash_batch_id}`,
+        recipe_name: mash?.recipe_name ?? '',
+      });
+    }
+    return list;
+  }, [
+    runForm.run_type,
+    runForm.source_fermenter_equipment_id,
+    runForm.source_mash_batch_id,
+    editRunId,
+    mashes,
+    equipment,
+    key,
+  ]);
+
+  const chargeableFermenters =
+    runForm.run_type === 'wash' && runForm.source_mash_batch_id
+      ? getChargeableFermentersForMash(runForm.source_mash_batch_id, editRunId)
+      : [];
 
   const destTanks = runForm.run_type === 'low_wines'
     ? getHighWinesDestinationTanks(runForm.source_holding_tank_equipment_id)
@@ -191,6 +229,17 @@ export function Distillation() {
     return `${assignment.equipment_name} (${assignment.volume_gal} gal · ${brixNote}, ${readyNote})`;
   };
 
+  const heavyRumFermenterOptionLabel = (
+    row: (typeof heavyRumSourceFermenters)[number],
+  ) => {
+    const latestBrix = getLatestFermentationBrix(row.mash_batch_id, row.floor_equipment_id);
+    const brixNote = latestBrix != null ? `${latestBrix}° Brix` : 'no Brix logged';
+    const readyNote = isBrixReadyForDistillation(latestBrix)
+      ? 'ready'
+      : `below ${FERMENTATION_READY_MAX_BRIX}° recommended`;
+    return `${row.equipment_name} — ${row.batch_number} (${row.volume_gal.toFixed(1)} gal · ${brixNote}, ${readyNote})`;
+  };
+
   const handleRunTypeChange = (runType: DistillationRunType) => {
     setRunForm({
       ...emptyRun(runType),
@@ -220,6 +269,19 @@ export function Distillation() {
       ...runForm,
       source_fermenter_equipment_id: equipmentId,
       charge_volume_gal: assignment?.volume_gal ?? runForm.charge_volume_gal,
+    });
+  };
+
+  const handleHeavyRumSourceFermenterChange = (equipmentId: number | null) => {
+    const row = heavyRumSourceFermenters.find((f) => f.floor_equipment_id === equipmentId);
+    setRunForm({
+      ...runForm,
+      source_fermenter_equipment_id: equipmentId,
+      source_mash_batch_id: row?.mash_batch_id ?? null,
+      charge_volume_gal:
+        row && equipmentId
+          ? getFermenterChargeCapacityGal(row.mash_batch_id, equipmentId, editRunId)
+          : 0,
     });
   };
 
@@ -332,7 +394,12 @@ export function Distillation() {
     }
     if (!validateStillChargeVolume()) return;
     if (isFermenterSourcedRun(runForm.run_type)) {
-      if (
+      if (runForm.run_type === 'heavy_rum') {
+        if (!runForm.source_fermenter_equipment_id) {
+          alert('Select the fermenter to charge from.');
+          return;
+        }
+      } else if (
         runForm.source_mash_batch_id
         && chargeableFermenters.length > 0
         && !runForm.source_fermenter_equipment_id
@@ -901,67 +968,103 @@ export function Distillation() {
 
             {isFermenterSourcedRun(runForm.run_type) ? (
               <div className="form-group full-width">
-                <label>Source Wash Batch</label>
-                <select
-                  value={runForm.source_mash_batch_id ?? ''}
-                  onChange={(e) => handleMashChange(e.target.value ? parseInt(e.target.value) : null)}
-                >
-                  <option value="">— None —</option>
-                  {mashes.filter((m) => (
-                    m.status === 'complete'
-                    || m.status === 'fermenting'
-                    || m.id === runForm.source_mash_batch_id
-                  )).map((m) => (
-                    <option key={m.id} value={m.id}>{m.batch_number} — {m.recipe_name}</option>
-                  ))}
-                </select>
-                <p className="field-hint">
-                  Log fermentation below {FERMENTATION_READY_MAX_BRIX}° Brix before charging a fermenter (recommended, not required to save a run).
-                </p>
-                {chargeableFermenters.length === 1 && runForm.source_fermenter_equipment_id && (
-                  <p className="field-hint">
-                    Charging from {chargeableFermenters[0].equipment_name} ({chargeableFermenters[0].volume_gal} gal)
-                  </p>
-                )}
-                {showFermenterPicker && (
-                  <div className="form-group" style={{ marginTop: '0.5rem' }}>
+                {runForm.run_type === 'heavy_rum' ? (
+                  <>
                     <label>Source Fermenter</label>
                     <select
                       value={runForm.source_fermenter_equipment_id ?? ''}
-                      onChange={(e) => handleFermenterChange(e.target.value ? parseInt(e.target.value) : null)}
+                      onChange={(e) => handleHeavyRumSourceFermenterChange(
+                        e.target.value ? parseInt(e.target.value) : null,
+                      )}
                     >
                       <option value="">— Select fermenter —</option>
-                      {chargeableFermenters.map((a) => (
-                        <option key={a.floor_equipment_id} value={a.floor_equipment_id}>
-                          {fermenterOptionLabel(a)}
+                      {heavyRumSourceFermenters.map((f) => (
+                        <option key={f.floor_equipment_id} value={f.floor_equipment_id}>
+                          {heavyRumFermenterOptionLabel(f)}
                         </option>
                       ))}
                     </select>
-                  </div>
-                )}
-                {runForm.source_fermenter_equipment_id && !selectedFermenterAssignment && savedFermenterName && (
-                  <p className="field-hint">Previously charged from {savedFermenterName}</p>
-                )}
-                {chargeableFermenters.length === 0 && runForm.source_mash_batch_id && !savedFermenterName && (
-                  <p className="field-hint">
-                    No fermenter assignments for this wash — charge volume is manual. Assign fermenters on the wash batch to track tank charges.
-                  </p>
-                )}
-                {runForm.run_type === 'heavy_rum' && (
-                  <div className="form-group" style={{ marginTop: '0.75rem' }}>
-                    <label>Heavy Rum Storage Tank</label>
+                    <p className="field-hint">
+                      Lists fermenters currently in use with an active fermenting wash. Wash batch is set automatically from the fermenter you choose.
+                    </p>
+                    {runForm.source_mash_batch_id && (
+                      <p className="field-hint">
+                        Wash batch:{' '}
+                        <strong>
+                          {mashes.find((m) => m.id === runForm.source_mash_batch_id)?.batch_number
+                            ?? `#${runForm.source_mash_batch_id}`}
+                        </strong>
+                      </p>
+                    )}
+                    {heavyRumSourceFermenters.length === 0 && (
+                      <p className="field-hint">
+                        No fermenters in use with fermenting wash. Assign a wash to fermenters and set status to fermenting first.
+                      </p>
+                    )}
+                    <div className="form-group" style={{ marginTop: '0.75rem' }}>
+                      <label>Heavy Rum Storage Tank</label>
+                      <select
+                        value={runForm.dest_holding_tank_equipment_id ?? ''}
+                        onChange={(e) => handleDestTankChange(e.target.value ? parseInt(e.target.value) : null)}
+                      >
+                        <option value="">— Select tank —</option>
+                        {destTanks.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {tankOptionLabel(t)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <label>Source Wash Batch</label>
                     <select
-                      value={runForm.dest_holding_tank_equipment_id ?? ''}
-                      onChange={(e) => handleDestTankChange(e.target.value ? parseInt(e.target.value) : null)}
+                      value={runForm.source_mash_batch_id ?? ''}
+                      onChange={(e) => handleMashChange(e.target.value ? parseInt(e.target.value) : null)}
                     >
-                      <option value="">— Select tank —</option>
-                      {destTanks.map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {tankOptionLabel(t)}
-                        </option>
+                      <option value="">— None —</option>
+                      {mashes.filter((m) => (
+                        m.status === 'complete'
+                        || m.status === 'fermenting'
+                        || m.id === runForm.source_mash_batch_id
+                      )).map((m) => (
+                        <option key={m.id} value={m.id}>{m.batch_number} — {m.recipe_name}</option>
                       ))}
                     </select>
-                  </div>
+                    <p className="field-hint">
+                      Log fermentation below {FERMENTATION_READY_MAX_BRIX}° Brix before charging a fermenter (recommended, not required to save a run).
+                    </p>
+                    {chargeableFermenters.length === 1 && runForm.source_fermenter_equipment_id && (
+                      <p className="field-hint">
+                        Charging from {chargeableFermenters[0].equipment_name} ({chargeableFermenters[0].volume_gal} gal)
+                      </p>
+                    )}
+                    {showFermenterPicker && (
+                      <div className="form-group" style={{ marginTop: '0.5rem' }}>
+                        <label>Source Fermenter</label>
+                        <select
+                          value={runForm.source_fermenter_equipment_id ?? ''}
+                          onChange={(e) => handleFermenterChange(e.target.value ? parseInt(e.target.value) : null)}
+                        >
+                          <option value="">— Select fermenter —</option>
+                          {chargeableFermenters.map((a) => (
+                            <option key={a.floor_equipment_id} value={a.floor_equipment_id}>
+                              {fermenterOptionLabel(a)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    {runForm.source_fermenter_equipment_id && !selectedFermenterAssignment && savedFermenterName && (
+                      <p className="field-hint">Previously charged from {savedFermenterName}</p>
+                    )}
+                    {chargeableFermenters.length === 0 && runForm.source_mash_batch_id && !savedFermenterName && (
+                      <p className="field-hint">
+                        No fermenter assignments for this wash — charge volume is manual. Assign fermenters on the wash batch to track tank charges.
+                      </p>
+                    )}
+                  </>
                 )}
               </div>
             ) : (
