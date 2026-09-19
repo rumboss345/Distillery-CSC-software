@@ -3150,3 +3150,49 @@ tr:hover td {
     display: none;
   }
 }
+
+.production-tools-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.production-tools-panel {
+  margin-top: 0.5rem;
+}
+
+.production-tools-panel h3 {
+  margin-top: 0;
+}
+
+.production-tools-results {
+  margin-top: 1rem;
+}
+
+.production-tools-results-inline {
+  margin: 1rem 0 0;
+  font-size: 1.1rem;
+}
+
+.dashboard-assignments-card {
+  margin-bottom: 1rem;
+}
+
+.dashboard-assignments-title {
+  margin-top: 0;
+}
+
+.dashboard-assignments-stages {
+  margin: 0 0 0.75rem;
+}
+
+.dashboard-assignment-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.dashboard-assignment-link {
+  text-decoration: none;
+}

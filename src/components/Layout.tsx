@@ -1,6 +1,6 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import type { PermissionKey } from '../lib/permissions';
+import { canAccessProductionTools, type PermissionKey } from '../lib/permissions';
 
 const navItems: { to: string; label: string; icon: string; permission: PermissionKey }[] = [
   { to: '/', label: 'Dashboard', icon: '◈', permission: 'dashboard' },
@@ -9,7 +9,7 @@ const navItems: { to: string; label: string; icon: string; permission: Permissio
   { to: '/wash', label: 'Wash & Ferment', icon: '◉', permission: 'wash' },
   { to: '/distillation', label: 'Distillation', icon: '△', permission: 'distillation' },
   { to: '/blending', label: 'Blending', icon: '◆', permission: 'blending' },
-  { to: '/tools/spirit-calculator', label: 'Spirit Calculator', icon: '⚖', permission: 'blending' },
+  { to: '/tools', label: 'Production Tools', icon: '⚖', permission: 'blending' },
   { to: '/barrels', label: 'Barrel Aging', icon: '▣', permission: 'barrels' },
   { to: '/bottling', label: 'Bottling', icon: '◇', permission: 'bottling' },
   { to: '/inventory', label: 'Inventory', icon: '☰', permission: 'inventory' },
@@ -20,10 +20,14 @@ const navItems: { to: string; label: string; icon: string; permission: Permissio
 
 export function Layout() {
   const { user, logout, hasPermission } = useAuth();
+  const location = useLocation();
 
   const visibleNav = navItems.filter((item) => {
     if (item.to === '/recipes') {
       return hasPermission('wash') || hasPermission('blending');
+    }
+    if (item.to === '/tools') {
+      return canAccessProductionTools(hasPermission);
     }
     return hasPermission(item.permission);
   });
@@ -41,9 +45,10 @@ export function Layout() {
               key={item.to}
               to={item.to}
               end={item.to === '/'}
-              className={({ isActive }) =>
-                `nav-link${isActive ? ' active' : ''}`
-              }
+              className={({ isActive }) => {
+                const toolsActive = item.to === '/tools' && location.pathname.startsWith('/tools');
+                return `nav-link${isActive || toolsActive ? ' active' : ''}`;
+              }}
             >
               <span className="nav-icon">{item.icon}</span>
               {item.label}

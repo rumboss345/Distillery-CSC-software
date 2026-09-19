@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { AbvTemperatureInput, correctedAbvFromInputs } from '../components/AbvTemperatureInput';
 import {
   gaugeFromLiters,
@@ -139,6 +140,8 @@ export function SpiritWeightCalculator() {
           <h1>Spirit Weight Calculator</h1>
           <p className="page-subtitle">
             TTB Table No. 3 gauging — convert between weight, physical volume, and proof gallons. Enter observed ABV and sample temperature; values are corrected to 60 °F before lookup.
+            {' '}
+            <Link to="/tools">All production calculators</Link>
           </p>
         </div>
       </div>

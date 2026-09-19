@@ -1,14 +1,34 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { getProductionSummary, getMashBatches, getDistillationRuns, getBarrels, getInventoryItems, resetAllData } from '../db/queries';
 import { StatusBadge } from '../components/StatusBadge';
 import { format } from 'date-fns';
 import { useAuth } from '../context/AuthContext';
-import { PROCESS_STAGE_LABELS } from '../lib/permissions';
+import {
+  canAccessProductionTools,
+  type ProcessStageKey,
+} from '../lib/permissions';
+import {
+  shortcutsForAssignments,
+  stageHeading,
+} from '../lib/process-stage-shortcuts';
 
 export function Dashboard() {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+
+  const assignmentShortcuts = useMemo(() => {
+    if (!user?.processAssignments?.length) return [];
+    return shortcutsForAssignments(user.processAssignments, hasPermission);
+  }, [user?.processAssignments, hasPermission]);
+
+  const assignedStageLabels = useMemo(() => {
+    if (!user?.processAssignments?.length) return [];
+    const unique = new Set<ProcessStageKey>();
+    for (const key of user.processAssignments) unique.add(key);
+    return [...unique].map((key) => stageHeading(key));
+  }, [user?.processAssignments]);
   const summary = getProductionSummary();
   const recentMashes = getMashBatches().slice(0, 3);
   const recentRuns = getDistillationRuns().slice(0, 3);
@@ -32,14 +52,33 @@ export function Dashboard() {
         <p>Overview of your distillery operations</p>
       </div>
 
-      {mounted && user && user.role !== 'admin' && user.processAssignments.length > 0 && (
-        <div className="card" style={{ marginBottom: '1rem' }}>
-          <h3 className="section-title" style={{ marginTop: 0 }}>My process assignments</h3>
-          <ul style={{ margin: 0, paddingLeft: '1.25rem' }}>
-            {user.processAssignments.map((key) => (
-              <li key={key}>{PROCESS_STAGE_LABELS[key]}</li>
+      {mounted && user && user.processAssignments.length > 0 && (
+        <div className="card dashboard-assignments-card">
+          <h3 className="section-title dashboard-assignments-title">My process assignments</h3>
+          <p className="form-hint dashboard-assignments-stages">
+            {assignedStageLabels.join(' · ')}
+          </p>
+          <div className="dashboard-assignment-actions">
+            {assignmentShortcuts.map((shortcut) => (
+              <Link
+                key={shortcut.to}
+                to={shortcut.to}
+                className="btn btn-secondary btn-sm dashboard-assignment-link"
+              >
+                {shortcut.linkLabel}
+              </Link>
             ))}
-          </ul>
+            {canAccessProductionTools(hasPermission) && (
+              <Link to="/tools" className="btn btn-secondary btn-sm dashboard-assignment-link">
+                Production calculators
+              </Link>
+            )}
+            {hasPermission('dashboard') && (
+              <Link to="/calendar" className="btn btn-secondary btn-sm dashboard-assignment-link">
+                Production calendar
+              </Link>
+            )}
+          </div>
         </div>
       )}
 
