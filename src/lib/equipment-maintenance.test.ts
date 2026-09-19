@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { equipmentBlocksProduction, groupEquipmentByCategory } from './equipment-maintenance';
+import {
+  equipmentBlocksProduction,
+  equipmentHasMaintenanceTag,
+  equipmentShowsRepairNoteIndicator,
+  groupEquipmentByCategory,
+} from './equipment-maintenance';
 import type { FloorEquipment } from '../types';
 
 const base = (overrides: Partial<FloorEquipment>): FloorEquipment => ({
@@ -29,6 +34,13 @@ describe('equipment maintenance', () => {
     expect(equipmentBlocksProduction(base({ maintenance_status: 'repair_note' }))).toBe(false);
     expect(equipmentBlocksProduction(base({ maintenance_status: 'broken' }))).toBe(true);
     expect(equipmentBlocksProduction(base({ maintenance_status: 'maintenance' }))).toBe(true);
+  });
+
+  it('flags maintenance tags and repair note indicator', () => {
+    expect(equipmentHasMaintenanceTag(base({ maintenance_status: null }))).toBe(false);
+    expect(equipmentHasMaintenanceTag(base({ maintenance_status: 'broken' }))).toBe(true);
+    expect(equipmentShowsRepairNoteIndicator(base({ maintenance_status: 'repair_note' }))).toBe(true);
+    expect(equipmentShowsRepairNoteIndicator(base({ maintenance_status: 'broken' }))).toBe(false);
   });
 
   it('groups by equipment type in catalog order', () => {

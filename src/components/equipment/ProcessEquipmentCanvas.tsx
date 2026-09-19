@@ -20,7 +20,12 @@ import { ProcessEquipmentDetailPanel } from './ProcessEquipmentDetailPanel';
 import { processEquipmentVisualScale } from './process-visual-scale';
 import type { EquipmentVisualData } from './equipment-visual.types';
 import type { FloorEquipmentView } from '../../types';
-import { equipmentBlocksProduction } from '../../lib/equipment-maintenance';
+import {
+  equipmentBlocksProduction,
+  equipmentHasMaintenanceTag,
+  equipmentShowsRepairNoteIndicator,
+} from '../../lib/equipment-maintenance';
+import { ProcessEquipmentMaintenancePopover } from './ProcessEquipmentMaintenancePopover';
 import './process-view.css';
 
 interface ProcessEquipmentCanvasProps {
@@ -57,6 +62,11 @@ export function ProcessEquipmentCanvas({
   const [assignmentsByStage, setAssignmentsByStage] = useState<
     Record<string, ProcessAssignmentEntry[]>
   >({});
+  const [maintenancePopover, setMaintenancePopover] = useState<{
+    equipmentId: number;
+    x: number;
+    y: number;
+  } | null>(null);
 
   useEffect(() => {
     const el = viewportRef.current;
@@ -137,6 +147,9 @@ export function ProcessEquipmentCanvas({
     : null;
   const selectedVisual = selectedId != null ? visualById.get(selectedId) ?? null : null;
   const selectedPlanName = selectedEquipment?.plan_name ?? '';
+  const maintenancePopoverEquipment = maintenancePopover
+    ? allEquipment.find((e) => e.id === maintenancePopover.equipmentId) ?? null
+    : null;
 
   const getCanvasPoint = useCallback(
     (clientX: number, clientY: number) => {
@@ -219,9 +232,27 @@ export function ProcessEquipmentCanvas({
 
   const onViewportPointerUp = () => setPanning(false);
 
+  useEffect(() => {
+    if (!maintenancePopover) return undefined;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMaintenancePopover(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [maintenancePopover]);
+
+  const onEquipmentContextMenu = (e: React.MouseEvent, item: EquipmentItem) => {
+    if (!equipmentHasMaintenanceTag(item)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setMaintenancePopover({ equipmentId: item.id, x: e.clientX, y: e.clientY });
+    onSelect(item.id);
+  };
+
   const onEquipmentPointerDown = (e: React.PointerEvent, item: EquipmentItem) => {
     e.stopPropagation();
     e.preventDefault();
+    setMaintenancePopover(null);
     dragMovedRef.current = false;
     dragStartRef.current = { x: e.clientX, y: e.clientY };
     const pos = resolvePosition(item);
@@ -322,14 +353,18 @@ export function ProcessEquipmentCanvas({
               const pos = resolvePosition(item);
               const isDragging = dragging?.id === item.id;
               const outOfService = equipmentBlocksProduction(item);
+              const repairNote = equipmentShowsRepairNoteIndicator(item);
+              const hasMaintenanceTag = equipmentHasMaintenanceTag(item);
 
               return (
                 <div
                   key={item.id}
-                  className={`process-equipment-node${isDragging ? ' process-equipment-node--dragging' : ''}${selectedId === item.id ? ' process-equipment-node--selected' : ''}${visual.isFermenting ? ' process-equipment-node--fermenting' : ''}${outOfService ? ' process-equipment-node--out-of-service' : ''}`}
+                  className={`process-equipment-node${isDragging ? ' process-equipment-node--dragging' : ''}${selectedId === item.id ? ' process-equipment-node--selected' : ''}${visual.isFermenting ? ' process-equipment-node--fermenting' : ''}${outOfService ? ' process-equipment-node--out-of-service' : ''}${repairNote ? ' process-equipment-node--repair-note' : ''}${hasMaintenanceTag ? ' process-equipment-node--has-maintenance' : ''}`}
                   style={{ left: pos.x, top: pos.y }}
                   onPointerDown={(e) => onEquipmentPointerDown(e, item)}
+                  onContextMenu={(e) => onEquipmentContextMenu(e, item)}
                   onClick={(e) => e.stopPropagation()}
+                  title={hasMaintenanceTag ? 'Right-click to view maintenance' : undefined}
                 >
                   <EquipmentVisual
                     data={visual}
@@ -348,11 +383,27 @@ export function ProcessEquipmentCanvas({
                       </svg>
                     </div>
                   )}
+                  {repairNote && (
+                    <div className="process-equipment-repair-badge" aria-label="Suggested repairs">
+                      <svg viewBox="0 0 24 24" className="process-equipment-repair-badge-icon">
+                        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+                      </svg>
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
         </div>
+
+        {maintenancePopover && maintenancePopoverEquipment && (
+          <ProcessEquipmentMaintenancePopover
+            equipment={maintenancePopoverEquipment}
+            x={maintenancePopover.x}
+            y={maintenancePopover.y}
+            onClose={() => setMaintenancePopover(null)}
+          />
+        )}
 
         <aside className="process-sidebar">
           <section className="process-sidebar-section">

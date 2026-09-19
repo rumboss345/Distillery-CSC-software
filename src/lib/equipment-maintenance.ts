@@ -17,6 +17,18 @@ export function equipmentBlocksProduction(
   return item.maintenance_status === 'broken' || item.maintenance_status === 'maintenance';
 }
 
+export function equipmentHasMaintenanceTag(
+  item: Pick<FloorEquipment, 'maintenance_status'>,
+): boolean {
+  return item.maintenance_status != null;
+}
+
+export function equipmentShowsRepairNoteIndicator(
+  item: Pick<FloorEquipment, 'maintenance_status'>,
+): boolean {
+  return item.maintenance_status === 'repair_note';
+}
+
 export function maintenanceStatusLabel(status: EquipmentMaintenanceStatus | null | undefined): string {
   if (!status) return 'Operational';
   return MAINTENANCE_STATUS_OPTIONS.find((o) => o.value === status)?.label ?? status;
