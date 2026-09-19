@@ -57,7 +57,7 @@ export function EquipmentMaintenance() {
         <h2>Equipment Maintenance</h2>
         <p>
           Mark equipment broken or under maintenance to block production use and show a red X on the process view.
-          Suggested repairs show a wrench on the process view; right-click tagged equipment there to view details.
+          Suggested repairs show a wrench in the upper-left on the process view; right-click tagged equipment there to view details.
         </p>
       </div>
 
