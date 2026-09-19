@@ -99,6 +99,33 @@ export function clampEquipmentProcessPosition(
   return clampProcessPositionToStage(snapProcessPosition(pos), band, canvasWidth);
 }
 
+/** Holding and collection tanks are laid out by fill level (fullest first). */
+const VOLUME_ORDERED_STAGE_KEYS = new Set(['collection', 'storage']);
+
+function layoutVolumeGal(item: FloorEquipmentView): number {
+  return Math.max(0, item.active_volume_gal ?? 0);
+}
+
+export function sortStageItemsForProcessLayout(
+  stageKey: string,
+  items: FloorEquipmentView[],
+): FloorEquipmentView[] {
+  if (VOLUME_ORDERED_STAGE_KEYS.has(stageKey)) {
+    return [...items].sort((a, b) => {
+      const byVolume = layoutVolumeGal(b) - layoutVolumeGal(a);
+      if (byVolume !== 0) return byVolume;
+      return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+    });
+  }
+  return [...items].sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+  );
+}
+
+export function stageUsesVolumeFillOrder(stageKey: string): boolean {
+  return VOLUME_ORDERED_STAGE_KEYS.has(stageKey);
+}
+
 export function slotKey(col: number, row: number): string {
   return `${col},${row}`;
 }
@@ -183,15 +210,15 @@ export function computeProcessLayoutPlan(
     const columns = columnsPerStage[stageIdx];
     const maxRows = Math.max(1, Math.ceil(group.items.length / columns));
     const occupied = new Set<string>();
-    const sortedItems = [...group.items].sort((a, b) =>
-      a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
-    );
+    const volumeOrdered = stageUsesVolumeFillOrder(group.stage.key);
+    const sortedItems = sortStageItemsForProcessLayout(group.stage.key, group.items);
 
     for (const item of sortedItems) {
       let slot: { col: number; row: number } | null = null;
 
       if (
         !options?.ignoreSavedPositions
+        && !volumeOrdered
         && item.process_pos_x != null
         && item.process_pos_y != null
       ) {

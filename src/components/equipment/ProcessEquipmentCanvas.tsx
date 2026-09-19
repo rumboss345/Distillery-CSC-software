@@ -197,9 +197,14 @@ export function ProcessEquipmentCanvas({
         if (!dragMovedRef.current) {
           onSelect(dragging.id);
         } else if (livePosRef.current) {
-          const finalPos = resolveDropSlotPosition(dragging.id, livePosRef.current, layoutPlan);
-          updateEquipmentProcessPosition(dragging.id, finalPos.x, finalPos.y);
-          onLayoutChange?.();
+          const dragged = allEquipment.find((e) => e.id === dragging.id);
+          const volumeOrderedTank = dragged?.equipment_type === 'holding_tank'
+            || dragged?.equipment_type === 'collection_vessel';
+          if (!volumeOrderedTank) {
+            const finalPos = resolveDropSlotPosition(dragging.id, livePosRef.current, layoutPlan);
+            updateEquipmentProcessPosition(dragging.id, finalPos.x, finalPos.y);
+            onLayoutChange?.();
+          }
         }
       }
       livePosRef.current = null;
@@ -213,7 +218,7 @@ export function ProcessEquipmentCanvas({
       window.removeEventListener('pointermove', onMovePointer);
       window.removeEventListener('pointerup', onUp);
     };
-  }, [dragging, getCanvasPoint, layoutPlan, onLayoutChange, onSelect]);
+  }, [allEquipment, dragging, getCanvasPoint, layoutPlan, onLayoutChange, onSelect]);
 
   const onViewportPointerDown = (e: React.PointerEvent) => {
     if ((e.target as HTMLElement).closest('.process-equipment-node')) return;
