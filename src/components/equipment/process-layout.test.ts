@@ -8,6 +8,7 @@ import {
   findNearestEmptySlot,
   positionToSlot,
   slotKey,
+  sortStageItemsForProcessLayout,
   stageBandHeight,
   snapProcessPosition,
   snapToProcessGrid,
@@ -63,6 +64,33 @@ describe('clampEquipmentProcessPosition', () => {
     const clamped = clampEquipmentProcessPosition(2, { x: 10, y: 10 }, stages, bands, 900);
     expect(clamped.y).toBeGreaterThanOrEqual(bands[1].top + 44);
     expect(clamped.y).toBeLessThanOrEqual(bands[1].top + bands[1].height);
+  });
+});
+
+describe('tank volume order on process view', () => {
+  it('sorts holding and collection vessels fullest first', () => {
+    const items = [
+      { id: 1, name: 'T-A', equipment_type: 'holding_tank', active_volume_gal: 10 },
+      { id: 2, name: 'T-B', equipment_type: 'holding_tank', active_volume_gal: 50 },
+      { id: 3, name: 'T-C', equipment_type: 'holding_tank', active_volume_gal: 50 },
+    ] as FloorEquipmentView[];
+
+    const sorted = sortStageItemsForProcessLayout('storage', items);
+    expect(sorted.map((t) => t.id)).toEqual([2, 3, 1]);
+  });
+
+  it('places fullest tank in the first grid slot', () => {
+    const items = [
+      { id: 1, name: 'Low', equipment_type: 'collection_vessel', active_volume_gal: 5 },
+      { id: 2, name: 'High', equipment_type: 'collection_vessel', active_volume_gal: 90 },
+    ] as FloorEquipmentView[];
+
+    const plan = computeProcessLayoutPlan(items, 6);
+    const band = plan.stageBands[0];
+    const lowSlot = positionToSlot(plan.positions.get(1)!, band);
+    const highSlot = positionToSlot(plan.positions.get(2)!, band);
+    expect(highSlot).toEqual({ col: 0, row: 0 });
+    expect(lowSlot).toEqual({ col: 1, row: 0 });
   });
 });
 
