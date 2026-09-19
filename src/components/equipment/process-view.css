@@ -196,7 +196,7 @@
 .process-equipment-repair-badge {
   position: absolute;
   left: 2px;
-  bottom: 2px;
+  top: 2px;
   z-index: 4;
   width: 1.35rem;
   height: 1.35rem;
