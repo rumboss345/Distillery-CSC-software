@@ -523,6 +523,41 @@ export function getCollectionVessels(): FloorEquipment[] {
   return getFloorEquipment().filter((e) => e.equipment_type === 'collection_vessel');
 }
 
+/** Cut type already stored in a collection vessel (from distillation cuts with volume). */
+export function getCollectionVesselStoredCutType(
+  vesselId: number,
+  excludeCutId?: number,
+): CutType | null {
+  const row = queryOne<{ cut_type: CutType }>(
+    `SELECT cut_type FROM distillation_cuts
+     WHERE holding_tank_equipment_id = ?
+       AND volume_gal > 0
+       AND (? IS NULL OR id != ?)
+     LIMIT 1`,
+    [vesselId, excludeCutId ?? null, excludeCutId ?? 0],
+  );
+  return row?.cut_type ?? null;
+}
+
+export function collectionVesselAcceptsCutType(
+  vesselId: number,
+  cutType: CutType,
+  excludeCutId?: number,
+): boolean {
+  const stored = getCollectionVesselStoredCutType(vesselId, excludeCutId);
+  return stored == null || stored === cutType;
+}
+
+/** Collection vessels that are empty or already hold this cut type only. */
+export function getCollectionVesselsForCutType(
+  cutType: CutType,
+  excludeCutId?: number,
+): FloorEquipment[] {
+  return getCollectionVessels().filter((v) =>
+    collectionVesselAcceptsCutType(v.id, cutType, excludeCutId),
+  );
+}
+
 /** Holding tanks and collection vessels — equipment that uses the spirit ledger for transfers. */
 export function getSpiritTransferVessels(): FloorEquipment[] {
   syncHoldingTankStatuses();
@@ -750,13 +785,21 @@ function findTankByKeywords(keywords: string[], excludeTankId?: number | null): 
   return match?.id ?? null;
 }
 
-function findCollectionVesselByKeywords(keywords: string[], excludeTankId?: number | null): number | null {
-  const vessels = getCollectionVessels().filter((t) => t.id !== excludeTankId);
+function findCollectionVesselByKeywords(
+  keywords: string[],
+  excludeTankId?: number | null,
+  cutType?: CutType,
+  excludeCutId?: number,
+): number | null {
+  const vessels = (cutType != null
+    ? getCollectionVesselsForCutType(cutType, excludeCutId)
+    : getCollectionVessels()
+  ).filter((t) => t.id !== excludeTankId);
   const match = vessels.find((t) => {
     const name = t.name.toLowerCase();
     return keywords.some((k) => name.includes(k));
   });
-  return match?.id ?? null;
+  return match?.id ?? vessels[0]?.id ?? null;
 }
 
 function isCollectionVesselEquipmentId(equipmentId: number): boolean {
@@ -774,15 +817,17 @@ export function defaultTankForCutType(
     run?: Pick<DistillationRun, 'run_type' | 'dest_holding_tank_equipment_id' | 'source_holding_tank_equipment_id'>;
     existingCuts?: Pick<DistillationCut, 'cut_type' | 'holding_tank_equipment_id'>[];
     excludeTankId?: number | null;
+    excludeCutId?: number;
   },
 ): number | null {
-  const { run, existingCuts, excludeTankId } = options ?? {};
+  const { run, existingCuts, excludeTankId, excludeCutId } = options ?? {};
   const priorSameType = existingCuts?.find(
     (c) => c.cut_type === cutType && c.holding_tank_equipment_id,
   );
   if (
     priorSameType?.holding_tank_equipment_id
     && isCollectionVesselEquipmentId(priorSameType.holding_tank_equipment_id)
+    && collectionVesselAcceptsCutType(priorSameType.holding_tank_equipment_id, cutType, excludeCutId)
   ) {
     return priorSameType.holding_tank_equipment_id;
   }
@@ -794,16 +839,23 @@ export function defaultTankForCutType(
       if (
         run?.dest_holding_tank_equipment_id
         && isCollectionVesselEquipmentId(run.dest_holding_tank_equipment_id)
+        && collectionVesselAcceptsCutType(run.dest_holding_tank_equipment_id, cutType, excludeCutId)
       ) {
         return run.dest_holding_tank_equipment_id;
       }
-      return findCollectionVesselByKeywords(['latina', 'vendome', 'collection'], excludeTankId)
-        ?? getCollectionVessels()[0]?.id
-        ?? null;
+      return findCollectionVesselByKeywords(
+        ['latina', 'vendome', 'collection'],
+        excludeTankId,
+        cutType,
+        excludeCutId,
+      );
     case 'tails':
-      return findCollectionVesselByKeywords(['latina', 'low wine', 'vendome', 'collection'], excludeTankId)
-        ?? getCollectionVessels()[0]?.id
-        ?? null;
+      return findCollectionVesselByKeywords(
+        ['latina', 'low wine', 'vendome', 'collection'],
+        excludeTankId,
+        cutType,
+        excludeCutId,
+      );
     default:
       return null;
   }
@@ -1512,6 +1564,14 @@ export function saveDistillationCut(cut: Omit<DistillationCut, 'id'>, id?: numbe
   if (cut.holding_tank_equipment_id != null && cut.volume_gal > 0) {
     if (!isCollectionVesselEquipmentId(cut.holding_tank_equipment_id)) {
       throw new Error('Distillation cuts must be collected into a collection vessel (or leave heads empty to discard).');
+    }
+    if (!collectionVesselAcceptsCutType(cut.holding_tank_equipment_id, cut.cut_type, id)) {
+      const stored = getCollectionVesselStoredCutType(cut.holding_tank_equipment_id, id);
+      throw new Error(
+        stored
+          ? `This collection vessel already contains ${stored} cuts. Choose another vessel for ${cut.cut_type}.`
+          : `This collection vessel cannot accept ${cut.cut_type} cuts.`,
+      );
     }
   }
   if (id) {
