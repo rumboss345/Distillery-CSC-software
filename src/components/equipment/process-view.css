@@ -220,10 +220,6 @@
   stroke-linejoin: round;
 }
 
-.process-equipment-node--has-maintenance {
-  cursor: context-menu;
-}
-
 .process-maintenance-popover-backdrop {
   position: fixed;
   inset: 0;
