@@ -477,16 +477,19 @@ export function isFermenterAvailable(equipmentId: number, forMashBatchId?: numbe
   return forMashBatchId !== undefined && active.mash_batch_id === forMashBatchId;
 }
 
-export interface HeavyRumSourceFermenterOption extends MashFermenterAssignment {
+export interface FermenterWashSourceOption extends MashFermenterAssignment {
   equipment_name: string;
   batch_number: string;
   recipe_name: string;
 }
 
-/** Fermenters currently holding fermenting wash — primary source picker for heavy rum runs. */
-export function getHeavyRumSourceFermenters(
+/** @deprecated Use FermenterWashSourceOption */
+export type HeavyRumSourceFermenterOption = FermenterWashSourceOption;
+
+/** Fermenters in use with fermenting wash — source picker for low wine and heavy rum runs. */
+export function getFermenterWashSourceFermenters(
   excludeRunId?: number,
-): HeavyRumSourceFermenterOption[] {
+): FermenterWashSourceOption[] {
   const rows = queryAll<{
     id: number;
     mash_batch_id: number;
@@ -507,7 +510,7 @@ export function getHeavyRumSourceFermenters(
     ORDER BY fe.name COLLATE NOCASE, m.batch_number COLLATE NOCASE
   `);
 
-  const options: HeavyRumSourceFermenterOption[] = [];
+  const options: FermenterWashSourceOption[] = [];
   const seen = new Set<string>();
   for (const row of rows) {
     const chargeable = getChargeableFermentersForMash(row.mash_batch_id, excludeRunId);
@@ -526,6 +529,12 @@ export function getHeavyRumSourceFermenters(
     });
   }
   return options;
+}
+
+export function getHeavyRumSourceFermenters(
+  excludeRunId?: number,
+): FermenterWashSourceOption[] {
+  return getFermenterWashSourceFermenters(excludeRunId);
 }
 
 export function getChargeableFermentersForMash(
