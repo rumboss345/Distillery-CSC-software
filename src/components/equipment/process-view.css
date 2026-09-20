@@ -375,6 +375,15 @@
   animation: still-flame-flicker 1.2s ease-in-out infinite alternate;
 }
 
+.pot-still-visual path[stroke='#f0c080'] {
+  animation: pot-still-copper-gleam 2.8s ease-in-out infinite alternate;
+}
+
+@keyframes pot-still-copper-gleam {
+  from { opacity: 0.22; }
+  to { opacity: 0.45; }
+}
+
 @keyframes still-flame-flicker {
   from { opacity: 0.85; transform: scaleY(1); }
   to { opacity: 1; transform: scaleY(1.08); }

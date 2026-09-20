@@ -53,9 +53,21 @@ export function StillVisual(props: EquipmentVisualProps) {
             <stop offset="100%" stopColor="#3a424c" />
           </linearGradient>
           {!isColumn && (
-            <clipPath id={`${uid}-pot-clip`}>
-              <ellipse cx="75" cy="130" rx="38" ry="28" />
-            </clipPath>
+            <>
+              <linearGradient id={`${uid}-copper-v`} x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stopColor="#e8a862" />
+                <stop offset="45%" stopColor="#b87333" />
+                <stop offset="100%" stopColor="#5a3010" />
+              </linearGradient>
+              <linearGradient id={`${uid}-steel-neck`} x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="#4a525c" />
+                <stop offset="45%" stopColor="#9aa3b0" />
+                <stop offset="100%" stopColor="#2a3038" />
+              </linearGradient>
+              <clipPath id={`${uid}-pot-clip`}>
+                <path d="M 34 160 L 34 132 Q 34 114 58 108 Q 82 108 86 132 L 86 160 Q 82 174 58 176 Q 34 172 34 160 Z" />
+              </clipPath>
+            </>
           )}
           {isColumn && (
             <>
@@ -121,28 +133,86 @@ export function StillVisual(props: EquipmentVisualProps) {
             <rect x="54" y="168" width="12" height="10" rx="2" fill="#5a6270" />
           </g>
         ) : (
-          <g>
+          <g className="pot-still-visual">
+            {/* Stand & burner */}
+            <rect x="42" y="178" width="36" height="4" rx="1" fill="#2a3038" />
+            <rect x="48" y="174" width="6" height="8" fill="#3a424c" />
+            <rect x="66" y="174" width="6" height="8" fill="#3a424c" />
             {isRunning && (
               <g className="still-flame">
-                <ellipse cx="75" cy="192" rx="16" ry="6" fill="#ff6600" opacity="0.25" />
-                <path d="M 68 192 Q 75 168 82 192 Q 75 180 68 192" fill="#ff8800" opacity="0.9" />
-                <path d="M 72 192 Q 75 176 78 192 Q 75 184 72 192" fill="#ffcc00" opacity="0.85" />
+                <ellipse cx="60" cy="192" rx="18" ry="7" fill="#ff6600" opacity="0.28" />
+                <path d="M 52 192 Q 60 162 68 192 Q 60 178 52 192" fill="#ff8800" opacity="0.92" />
+                <path d="M 56 192 Q 60 170 64 192 Q 60 182 56 192" fill="#ffcc00" opacity="0.88" />
               </g>
             )}
-            <ellipse cx="75" cy="130" rx="42" ry="32" fill={`url(#${uid}-copper)`} stroke="#3a2010" strokeWidth="1.2" />
-            <g clipPath={`url(#${uid}-pot-clip)`}>
-              <LiquidFill x={37} y={0} width={76} height={0} fillPercent={data.fillPercent} status={data.status} innerHeight={56} bottomY={158} rx={8} />
-            </g>
-            <path d="M 62 98 Q 75 72 88 98 L 85 102 L 65 102 Z" fill={`url(#${uid}-column)`} stroke="#1a1f26" strokeWidth="0.8" />
-            <rect x="70" y="55" width="10" height="45" fill={`url(#${uid}-column)`} stroke="#1a1f26" strokeWidth="0.6" />
-            {[62, 78, 92].map((y) => (
-              <line key={y} x1="68" y1={y} x2="82" y2={y} stroke="#1a1f26" strokeWidth="1" opacity="0.4" />
+
+            {/* Pot belly */}
+            <path
+              d="M 30 160 L 30 132 Q 30 108 58 102 Q 86 108 90 132 L 90 160 Q 86 178 58 180 Q 30 176 30 160 Z"
+              fill={`url(#${uid}-copper-v)`}
+              stroke="#3a2010"
+              strokeWidth="1.3"
+            />
+            <path
+              d="M 36 118 Q 58 112 80 118"
+              fill="none"
+              stroke="#f0c080"
+              strokeWidth="1.2"
+              opacity="0.35"
+            />
+            {[44, 58, 72].map((x) => (
+              <circle key={x} cx={x} cy="148" r="1.2" fill="#3a2010" opacity="0.55" />
             ))}
-            <ellipse cx="75" cy="55" rx="18" ry="8" fill="#6b7380" stroke="#1a1f26" />
-            <rect x="71" y="162" width="8" height="14" fill="#3a424c" />
+
+            <g clipPath={`url(#${uid}-pot-clip)`}>
+              <LiquidFill
+                x={34}
+                y={0}
+                width={52}
+                height={0}
+                fillPercent={data.fillPercent}
+                status={data.status}
+                innerHeight={52}
+                bottomY={162}
+                rx={6}
+              />
+            </g>
+
+            {/* Onion head & collar */}
+            <ellipse cx="60" cy="102" rx="26" ry="11" fill={`url(#${uid}-copper)`} stroke="#3a2010" strokeWidth="1" />
+            <ellipse cx="60" cy="98" rx="18" ry="7" fill="#c98545" stroke="#3a2010" strokeWidth="0.8" opacity="0.95" />
+            <rect x="54" y="90" width="12" height="6" rx="2" fill={`url(#${uid}-steel-neck)`} stroke="#1a1f26" strokeWidth="0.5" />
+
+            {/* Swan neck & lyne arm */}
+            <path
+              d="M 72 96 Q 98 88 118 72 Q 132 58 136 44"
+              fill="none"
+              stroke={`url(#${uid}-steel-neck)`}
+              strokeWidth="7"
+              strokeLinecap="round"
+            />
+            <path
+              d="M 72 96 Q 98 88 118 72 Q 132 58 136 44"
+              fill="none"
+              stroke="#eef2f7"
+              strokeWidth="1.2"
+              opacity="0.35"
+            />
+
+            {/* Condenser / worm box */}
+            <rect x="112" y="36" width="32" height="16" rx="4" fill={`url(#${uid}-steel-neck)`} stroke="#1a1f26" strokeWidth="0.9" />
+            <rect x="116" y="40" width="24" height="8" rx="2" fill="#5a6270" opacity="0.5" />
+            <path d="M 144 44 L 148 44" stroke="#9aa3b0" strokeWidth="2" strokeLinecap="round" />
+
+            {/* Thermometer / sight glass */}
+            <rect x="78" y="118" width="4" height="22" rx="1" fill="#eef2f7" stroke="#1a1f26" strokeWidth="0.5" opacity="0.85" />
+            <rect x="78.5" y="128" width="3" height="8" fill="#6fd98a" opacity="0.7" />
+
+            {/* Outlet */}
+            <rect x="56" y="168" width="8" height="10" rx="2" fill="#3a424c" stroke="#1a1f26" strokeWidth="0.6" />
           </g>
         )}
-        <circle cx={isColumn ? 95 : 118} cy="42" r="4.5" className={`equipment-status-dot equipment-status-dot--${data.status}`} />
+        <circle cx={isColumn ? 95 : 132} cy="38" r="4.5" className={`equipment-status-dot equipment-status-dot--${data.status}`} />
       </svg>
     </EquipmentVisualFrame>
   );
