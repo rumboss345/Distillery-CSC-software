@@ -635,13 +635,18 @@ export function Distillation() {
   const gpa = cuts.filter((c) => c.cut_type === 'hearts').reduce((s, c) => s + c.volume_gal * c.abv / 100, 0);
 
   const sourceTanksForTransfer = tanksWithContents.filter((t) => t.volume_gal > 0);
-  const transferSourceTankOptionLabel = (t: { id: number; name: string; volume_gal: number; abv: number }) => {
+  const transferSourceInTankLine = (t: { id: number; volume_gal: number; abv: number }) => {
     const currentLabel = getHoldingTankIntakeHistory(t.id, 1)[0]?.summary;
     const cutType = getCollectionVesselStoredCutType(t.id);
-    const quantity = `${t.volume_gal.toFixed(1)} gal @ ${t.abv.toFixed(1)}%`;
-    const product = currentLabel ?? (cutType || null);
-    return product ? `${t.name} — ${quantity} — ${product}` : `${t.name} (${quantity})`;
+    const quantity = `${t.volume_gal.toFixed(1)} gal @ ${t.abv.toFixed(1)}% ABV`;
+    const product = currentLabel ?? cutType ?? null;
+    return product ? `In tank: ${quantity} — ${product}` : `In tank: ${quantity}`;
   };
+  const transferSourceTankOptionLabel = (t: { id: number; name: string; volume_gal: number; abv: number }) =>
+    `${t.name} — ${transferSourceInTankLine(t)}`;
+  const selectedTransferSourceTank = sourceTanksForTransfer.find(
+    (t) => t.id === transferForm.source_tank_equipment_id,
+  );
   const destTanksForTransfer = spiritTransferVessels.filter(
     (t) => t.id !== transferForm.source_tank_equipment_id,
   );
@@ -1236,6 +1241,9 @@ export function Distillation() {
               </select>
               {sourceTanksForTransfer.length === 0 && (
                 <p className="field-hint">No holding tanks or collection vessels with spirit — add distillation cuts first.</p>
+              )}
+              {selectedTransferSourceTank && (
+                <p className="field-hint">{transferSourceInTankLine(selectedTransferSourceTank)}</p>
               )}
             </div>
             <div className="form-group full-width">
