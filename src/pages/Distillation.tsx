@@ -38,6 +38,7 @@ import {
 import { AbvVolumeTemperatureFields } from '../components/AbvVolumeTemperatureFields';
 import { AbvTemperatureInput, correctedAbvFromInputs } from '../components/AbvTemperatureInput';
 import { AdminCredentialConfirmModal } from '../components/AdminCredentialConfirmModal';
+import { HoldingTankIntakeHistory } from '../components/HoldingTankIntakeHistory';
 import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
 import {
@@ -637,8 +638,14 @@ export function Distillation() {
   const destTanksForTransfer = spiritTransferVessels.filter(
     (t) => t.id !== transferForm.source_tank_equipment_id,
   );
+  const transferSourceTank = sourceTanksForTransfer.find(
+    (t) => t.id === transferForm.source_tank_equipment_id,
+  );
   const transferSourceContents = transferForm.source_tank_equipment_id
     ? getHoldingTankContents(transferForm.source_tank_equipment_id)
+    : null;
+  const transferSourceCutType = transferForm.source_tank_equipment_id
+    ? getCollectionVesselStoredCutType(transferForm.source_tank_equipment_id)
     : null;
   const transferDestTank = spiritTransferVessels.find((t) => t.id === transferForm.dest_tank_equipment_id);
   const transferDestContents = transferForm.dest_tank_equipment_id
@@ -1230,9 +1237,32 @@ export function Distillation() {
                 <p className="field-hint">No holding tanks or collection vessels with spirit — add distillation cuts first.</p>
               )}
               {transferSourceContents && transferForm.source_tank_equipment_id > 0 && (
-                <p className="field-hint">
-                  Available: {transferSourceContents.volume_gal.toFixed(1)} gal @ {transferSourceContents.abv.toFixed(1)}% ABV
-                </p>
+                <div className="tank-transfer-source-summary">
+                  <p className="field-hint" style={{ marginBottom: '0.35rem' }}>
+                    <strong>{transferSourceTank?.name ?? 'Source tank'}</strong>
+                    {' — '}
+                    {transferSourceContents.volume_gal.toFixed(1)} gal @ {transferSourceContents.abv.toFixed(1)}% ABV
+                    {transferSourceTank?.capacity_gal ? ` · ${transferSourceTank.capacity_gal} gal capacity` : ''}
+                    {transferSourceContents.run_count > 0 && (
+                      <>
+                        {' · '}
+                        {transferSourceContents.run_count} distillation run
+                        {transferSourceContents.run_count === 1 ? '' : 's'}
+                        {transferSourceContents.cut_count > 0 && (
+                          <> ({transferSourceContents.cut_count} cut{transferSourceContents.cut_count === 1 ? '' : 's'})</>
+                        )}
+                      </>
+                    )}
+                    {transferSourceCutType ? ` · ${transferSourceCutType} only` : ''}
+                  </p>
+                  <HoldingTankIntakeHistory
+                    tankId={transferForm.source_tank_equipment_id}
+                    limit={8}
+                    title="What's in this tank"
+                    hint={false}
+                    emptyMessage="No individual cuts or transfers on record — balance may be from blends or prior activity."
+                  />
+                </div>
               )}
             </div>
             <div className="form-group full-width">
