@@ -343,6 +343,19 @@
   border-color: transparent;
   background: transparent;
   box-shadow: none;
+  /* Scale SVG only — labels stay same size as fermenters (ProcessEquipmentLabels). */
+  transform: none;
+}
+
+.tank-visual--process .tank-visual-svg-wrap {
+  flex-shrink: 0;
+  line-height: 0;
+}
+
+.tank-visual--process .tank-visual-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
 .equipment-visual--process.equipment-visual--selected,

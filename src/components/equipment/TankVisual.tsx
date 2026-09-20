@@ -55,11 +55,14 @@ export function TankVisual({
     STATUS_LABELS[tank.status],
   ].filter(Boolean).join('\n');
 
+  const svgWidth = 160;
+  const svgHeight = 200;
+
   return (
     <button
       type="button"
       className={`tank-visual${selected ? ' tank-visual--selected' : ''}${onClick ? ' tank-visual--interactive' : ''}${isProcess ? ' tank-visual--process' : ''} ${className}`.trim()}
-      style={{ '--tank-scale': scale } as React.CSSProperties}
+      style={isProcess ? undefined : ({ '--tank-scale': scale } as React.CSSProperties)}
       onClick={onClick}
       title={tooltip}
       aria-label={`${tank.name}, ${Math.round(tank.fillPercent)} percent full`}
@@ -77,9 +80,11 @@ export function TankVisual({
       </div>
       )}
 
+      {(() => {
+        const svg = (
       <svg
         className="tank-visual-svg"
-        viewBox="0 0 160 200"
+        viewBox={`0 0 ${svgWidth} ${svgHeight}`}
         xmlns="http://www.w3.org/2000/svg"
         aria-hidden
       >
@@ -183,6 +188,19 @@ export function TankVisual({
           className={`tank-visual-status-dot tank-visual-status-dot--${tank.status}`}
         />
       </svg>
+        );
+        if (isProcess) {
+          return (
+            <div
+              className="tank-visual-svg-wrap equipment-visual-svg-wrap"
+              style={{ width: svgWidth * scale, height: svgHeight * scale }}
+            >
+              {svg}
+            </div>
+          );
+        }
+        return svg;
+      })()}
 
       {isProcess ? (
         <ProcessEquipmentLabels data={tank} />

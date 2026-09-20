@@ -37,6 +37,10 @@
   box-shadow: 0 0 32px rgba(26, 143, 184, 0.25);
 }
 
+.tank-visual--process {
+  transform: none;
+}
+
 .tank-visual-svg {
   width: 160px;
   height: 200px;
