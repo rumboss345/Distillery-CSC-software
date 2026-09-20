@@ -638,15 +638,15 @@ export function Distillation() {
   const destTanksForTransfer = spiritTransferVessels.filter(
     (t) => t.id !== transferForm.source_tank_equipment_id,
   );
-  const transferSourceTank = sourceTanksForTransfer.find(
-    (t) => t.id === transferForm.source_tank_equipment_id,
-  );
   const transferSourceContents = transferForm.source_tank_equipment_id
     ? getHoldingTankContents(transferForm.source_tank_equipment_id)
     : null;
-  const transferSourceLastIntake = transferForm.source_tank_equipment_id
-    ? getHoldingTankIntakeHistory(transferForm.source_tank_equipment_id, 1)[0]
+  const transferSourceCurrentLabel = transferForm.source_tank_equipment_id
+    ? getHoldingTankIntakeHistory(transferForm.source_tank_equipment_id, 1)[0]?.summary
     : undefined;
+  const transferSourceCutType = transferForm.source_tank_equipment_id
+    ? getCollectionVesselStoredCutType(transferForm.source_tank_equipment_id)
+    : null;
   const transferDestTank = spiritTransferVessels.find((t) => t.id === transferForm.dest_tank_equipment_id);
   const transferDestContents = transferForm.dest_tank_equipment_id
     ? getHoldingTankContents(transferForm.dest_tank_equipment_id)
@@ -1238,22 +1238,12 @@ export function Distillation() {
               )}
               {transferSourceContents && transferForm.source_tank_equipment_id > 0 && (
                 <p className="field-hint">
-                  <strong>{transferSourceTank?.name ?? 'Source tank'}</strong>
-                  {' — '}
-                  {transferSourceContents.volume_gal.toFixed(1)} gal @ {transferSourceContents.abv.toFixed(1)}% ABV available.
-                  {transferSourceLastIntake ? (
-                    <>
-                      {' '}
-                      Last in tank: {transferSourceLastIntake.summary}
-                      {' · '}
-                      {transferSourceLastIntake.volume_gal.toFixed(1)} gal @ {transferSourceLastIntake.abv.toFixed(1)}%
-                      {' · '}
-                      {format(new Date(transferSourceLastIntake.occurred_at), 'MMM d, yyyy')}
-                      {transferSourceLastIntake.detail ? ` · ${transferSourceLastIntake.detail}` : ''}
-                    </>
-                  ) : (
-                    ' No recent cut or transfer on record for this balance.'
-                  )}
+                  In tank: {transferSourceContents.volume_gal.toFixed(1)} gal @ {transferSourceContents.abv.toFixed(1)}% ABV
+                  {transferSourceCurrentLabel
+                    ? ` — ${transferSourceCurrentLabel}`
+                    : transferSourceCutType
+                      ? ` (${transferSourceCutType})`
+                      : ''}
                 </p>
               )}
             </div>
