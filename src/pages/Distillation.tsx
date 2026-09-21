@@ -25,7 +25,7 @@ import {
   defaultTankForCutType,
   getCollectionVesselStoredCutType,
   getCollectionVessels,
-  getCollectionVesselsForCutType,
+  getCutDestinationsForRun,
   getHoldingTankContents,
   getHoldingTankIntakeHistory,
   getSpiritTransferVessels,
@@ -92,7 +92,7 @@ const emptyRun = (runType: DistillationRunType = 'wash'): Omit<DistillationRun, 
   source_mash_batch_id: null,
   source_fermenter_equipment_id: null,
   source_holding_tank_equipment_id: null,
-  dest_holding_tank_equipment_id: defaultDestTankIdForRunType(runType),
+  dest_holding_tank_equipment_id: runType === 'low_wines' ? null : defaultDestTankIdForRunType(runType),
   still_name: '',
   run_date: new Date().toISOString().slice(0, 10),
   charge_volume_gal: 0,
@@ -176,11 +176,9 @@ export function Distillation() {
     key,
   ]);
 
-  const destTanks = runForm.run_type === 'low_wines'
-    ? getHighWinesDestinationTanks(runForm.source_holding_tank_equipment_id)
-    : runForm.run_type === 'heavy_rum'
-      ? getHighWinesDestinationTanks()
-      : [];
+  const destTanks = runForm.run_type === 'heavy_rum'
+    ? getHighWinesDestinationTanks()
+    : [];
 
   const chargeableSourceTanks = isTankSourcedRun(runForm.run_type)
     ? getChargeableHoldingTanks(editRunId)
@@ -237,16 +235,12 @@ export function Distillation() {
 
   const handleRunSourceTankChange = (tankId: number | null) => {
     const tank = chargeableSourceTanks.find((t) => t.id === tankId);
-    const destId = runForm.dest_holding_tank_equipment_id;
-    const destStillValid = destId != null && destId !== tankId;
     setRunForm({
       ...runForm,
       source_holding_tank_equipment_id: tankId,
       charge_volume_gal: tank?.available_gal ?? runForm.charge_volume_gal,
       charge_abv: tank ? tank.available_abv : null,
-      dest_holding_tank_equipment_id: destStillValid
-        ? destId
-        : defaultDestTankIdForRunType(runForm.run_type, tankId),
+      dest_holding_tank_equipment_id: null,
     });
     if (tank) {
       setChargeAbvObserved(tank.available_abv.toString());
@@ -312,7 +306,9 @@ export function Distillation() {
       ...run,
       run_type: run.run_type ?? 'wash',
       source_holding_tank_equipment_id: run.source_holding_tank_equipment_id ?? null,
-      dest_holding_tank_equipment_id: run.dest_holding_tank_equipment_id ?? null,
+      dest_holding_tank_equipment_id: (run.run_type ?? 'wash') === 'low_wines'
+        ? null
+        : run.dest_holding_tank_equipment_id ?? null,
       charge_abv: run.charge_abv ?? null,
     });
     setChargeAbvObserved(run.charge_abv?.toString() ?? '');
@@ -385,14 +381,6 @@ export function Distillation() {
     } else {
       if (!runForm.source_holding_tank_equipment_id) {
         alert('Select the low wines holding tank to charge from.');
-        return;
-      }
-      if (!runForm.dest_holding_tank_equipment_id) {
-        alert('Select the high wines storage tank.');
-        return;
-      }
-      if (runForm.dest_holding_tank_equipment_id === runForm.source_holding_tank_equipment_id) {
-        alert('High wines tank must be different from the low wines source tank.');
         return;
       }
       if (runForm.charge_volume_gal <= 0) {
@@ -500,7 +488,7 @@ export function Distillation() {
   };
 
   const handleCutTypeChange = (cutType: CutType) => {
-    const allowed = getCollectionVesselsForCutType(cutType, editCutId);
+    const allowed = getCutDestinationsForRun(cutType, selectedRun?.run_type, editCutId);
     let tankId = cutForm.holding_tank_equipment_id;
     if (!tankId || !allowed.some((t) => t.id === tankId)) {
       tankId = suggestCutTank(cutType, selectedRun);
@@ -568,7 +556,7 @@ export function Distillation() {
     }
     const tankId = cutForm.holding_tank_equipment_id;
     if (cutForm.volume_gal > 0 && !tankId && cutForm.cut_type !== 'heads') {
-      alert(`Select a collection vessel to collect ${cutForm.cut_type}.`);
+      alert(`Select a tank to collect ${cutForm.cut_type}.`);
       return;
     }
     const editingCut = editCutId ? cuts.find((c) => c.id === editCutId) : undefined;
@@ -629,7 +617,11 @@ export function Distillation() {
     }
   };
 
-  const cutDestinationTanks = getCollectionVesselsForCutType(cutForm.cut_type, editCutId);
+  const cutDestinationTanks = getCutDestinationsForRun(
+    cutForm.cut_type,
+    selectedRun?.run_type,
+    editCutId,
+  );
 
   const heartsTotal = cuts.filter((c) => c.cut_type === 'hearts').reduce((s, c) => s + c.volume_gal, 0);
   const gpa = cuts.filter((c) => c.cut_type === 'hearts').reduce((s, c) => s + c.volume_gal * c.abv / 100, 0);
@@ -1004,27 +996,6 @@ export function Distillation() {
                     Available: {selectedLowWineAvailable.volume_gal.toFixed(1)} gal @ {selectedLowWineAvailable.abv.toFixed(1)}% ABV
                   </p>
                 )}
-                <div className="form-group" style={{ marginTop: '0.75rem' }}>
-                  <label>
-                    {runForm.run_type === 'heavy_rum' ? 'Heavy Rum Storage Tank' : 'High Wines Storage Tank'}
-                  </label>
-                  <select
-                    value={runForm.dest_holding_tank_equipment_id ?? ''}
-                    onChange={(e) => handleDestTankChange(e.target.value ? parseInt(e.target.value) : null)}
-                  >
-                    <option value="">— Select tank —</option>
-                    {destTanks.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {tankOptionLabel(t)}
-                      </option>
-                    ))}
-                  </select>
-                  {runForm.dest_holding_tank_equipment_id && (
-                    <p className="field-hint">
-                      Default tank for hearts cuts — heads and tails can use other tanks when recording cuts.
-                    </p>
-                  )}
-                </div>
               </div>
             )}
 
@@ -1119,8 +1090,8 @@ export function Distillation() {
               </>
             ) : (
               <>
-                Charging draws spirit from the source tank. Hearts cuts go into the
-                {' '}<strong>High Wines Storage Tank</strong> you select.
+                Charging draws spirit from the source low wines tank. Choose
+                {' '}<strong>High Wines Storage Tank</strong> (or a collection vessel) when you record cuts.
               </>
             )}
             {' '}Setting status to <strong>planned</strong> or <strong>running</strong> marks the still as in use.
@@ -1398,9 +1369,18 @@ export function Distillation() {
             </div>
           </div>
           <p className="form-hint">
-            Hearts and tails must go to a collection vessel. Heads may be discarded (no tank) or stored in a collection vessel.
-            Each collection vessel may hold only one cut type at a time (heads, hearts, or tails).
-            Transfer from collection vessels to holding tanks when ready.
+            {selectedRun?.run_type === 'low_wines' ? (
+              <>
+                On spirit runs, hearts and tails may go to <strong>High Wines Storage Tank</strong> or a collection vessel.
+                Heads may be discarded (no tank) or stored in a collection vessel.
+              </>
+            ) : (
+              <>
+                Hearts and tails must go to a collection vessel. Heads may be discarded (no tank) or stored in a collection vessel.
+                Each collection vessel may hold only one cut type at a time (heads, hearts, or tails).
+              </>
+            )}
+            {' '}Transfer from collection vessels to holding tanks when ready.
           </p>
           <div className="form-actions">
             <button type="button" className="btn btn-secondary" onClick={closeCutForm}>Cancel</button>
