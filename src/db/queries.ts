@@ -790,6 +790,31 @@ export function getHighWinesDestinationTanks(excludeTankId?: number | null): Flo
   return getHoldingTanks().filter((t) => t.id !== excludeTankId);
 }
 
+/** Holding tanks that may receive hearts/tails on a spirit run (high wines / high-proof spirit storage). */
+export function getSpiritRunCutHoldingTanks(excludeTankId?: number | null): FloorEquipment[] {
+  return getHighWinesDestinationTanks(excludeTankId).filter((t) => {
+    const name = t.name.toLowerCase();
+    if (name.includes('blending') || name.includes('canning') || name.includes('low wine')) return false;
+    return name.includes('spirit') || name.includes('high wine') || name.includes('high wines storage');
+  });
+}
+
+export function isSpiritRunCutHoldingTank(equipmentId: number): boolean {
+  return getSpiritRunCutHoldingTanks().some((t) => t.id === equipmentId);
+}
+
+export function getCutDestinationsForRun(
+  cutType: CutType,
+  runType: string | undefined,
+  excludeCutId?: number,
+): FloorEquipment[] {
+  const vessels = getCollectionVesselsForCutType(cutType, excludeCutId);
+  if (runType !== 'low_wines' || cutType === 'heads') return vessels;
+  const holding = getSpiritRunCutHoldingTanks();
+  const seen = new Set(vessels.map((v) => v.id));
+  return [...vessels, ...holding.filter((h) => !seen.has(h.id))];
+}
+
 export function getChargeableHoldingTanksForBlend(excludeBlendId?: number): (FloorEquipment & {
   available_gal: number;
   available_abv: number;
@@ -949,8 +974,13 @@ export function defaultTankForCutType(
         const lowWineHearts = defaultLowWineRunHeartsCollectionVesselId(excludeTankId, excludeCutId);
         if (lowWineHearts) return lowWineHearts;
       }
+      if (run?.run_type === 'low_wines') {
+        const highWinesTank = defaultHighWinesTankId(excludeTankId);
+        if (highWinesTank) return highWinesTank;
+      }
       if (
-        run?.dest_holding_tank_equipment_id
+        run?.run_type === 'heavy_rum'
+        && run.dest_holding_tank_equipment_id
         && isCollectionVesselEquipmentId(run.dest_holding_tank_equipment_id)
         && collectionVesselAcceptsCutType(run.dest_holding_tank_equipment_id, cutType, excludeCutId)
       ) {
@@ -1708,11 +1738,24 @@ export function saveDistillationCut(cut: Omit<DistillationCut, 'id'>, id?: numbe
     }
   }
   if (cut.holding_tank_equipment_id != null && cut.volume_gal > 0) {
-    if (!isCollectionVesselEquipmentId(cut.holding_tank_equipment_id)) {
+    const runType = queryOne<{ run_type: string }>(
+      'SELECT run_type FROM distillation_runs WHERE id = ?',
+      [cut.distillation_run_id],
+    )?.run_type;
+    const spiritRunHolding = runType === 'low_wines'
+      && cut.cut_type !== 'heads'
+      && isSpiritRunCutHoldingTank(cut.holding_tank_equipment_id);
+    if (!isCollectionVesselEquipmentId(cut.holding_tank_equipment_id) && !spiritRunHolding) {
       throw new Error('Distillation cuts must be collected into a collection vessel (or leave heads empty to discard).');
     }
-    assertEquipmentUsableForProduction(cut.holding_tank_equipment_id, 'Collection vessel');
-    if (!collectionVesselAcceptsCutType(cut.holding_tank_equipment_id, cut.cut_type, id)) {
+    assertEquipmentUsableForProduction(
+      cut.holding_tank_equipment_id,
+      spiritRunHolding ? 'High wines storage tank' : 'Collection vessel',
+    );
+    if (
+      isCollectionVesselEquipmentId(cut.holding_tank_equipment_id)
+      && !collectionVesselAcceptsCutType(cut.holding_tank_equipment_id, cut.cut_type, id)
+    ) {
       const stored = getCollectionVesselStoredCutType(cut.holding_tank_equipment_id, id);
       throw new Error(
         stored
