@@ -19,6 +19,7 @@ import {
   getActiveDistillationRunOnStill,
   getFloorEquipment,
   getFermenterWashSourceFermenters,
+  getHeavyRumSourceFermenters,
   getFermenterChargeCapacityGal,
   getLatestFermentationBrix,
   getChargeableHoldingTanks,
@@ -118,7 +119,9 @@ export function Distillation() {
 
   const fermenterSourceOptions = useMemo(() => {
     if (runForm.run_type !== 'wash' && runForm.run_type !== 'heavy_rum') return [];
-    const list = getFermenterWashSourceFermenters(editRunId);
+    const list = runForm.run_type === 'heavy_rum'
+      ? getHeavyRumSourceFermenters(editRunId)
+      : getFermenterWashSourceFermenters(editRunId);
     if (
       runForm.source_fermenter_equipment_id
       && runForm.source_mash_batch_id
@@ -811,14 +814,27 @@ export function Distillation() {
                   >
                     <option value="">— Select fermenter —</option>
                     {fermenterSourceOptions.map((f) => (
-                      <option key={f.floor_equipment_id} value={f.floor_equipment_id}>
+                      <option
+                        key={`${f.mash_batch_id}:${f.floor_equipment_id}`}
+                        value={f.floor_equipment_id}
+                      >
                         {fermenterSourceOptionLabel(f)}
                       </option>
                     ))}
                   </select>
                   <p className="field-hint">
-                    Fermenters in use with an active fermenting wash. Wash batch is set automatically.
-                    Log Brix below {FERMENTATION_READY_MAX_BRIX}° before charging (recommended).
+                    {runForm.run_type === 'heavy_rum' ? (
+                      <>
+                        Fermenters with wash available to charge (including completed fermentations).
+                        Pick any fermenter; wash batch is set automatically. Log Brix below{' '}
+                        {FERMENTATION_READY_MAX_BRIX}° before charging (recommended).
+                      </>
+                    ) : (
+                      <>
+                        Fermenters in use with an active fermenting wash. Wash batch is set automatically.
+                        Log Brix below {FERMENTATION_READY_MAX_BRIX}° before charging (recommended).
+                      </>
+                    )}
                   </p>
                   {runForm.source_mash_batch_id && (
                     <p className="field-hint">
@@ -831,7 +847,9 @@ export function Distillation() {
                   )}
                   {fermenterSourceOptions.length === 0 && (
                     <p className="field-hint">
-                      No fermenters in use with fermenting wash. Assign a wash to fermenters and set status to fermenting first.
+                      {runForm.run_type === 'heavy_rum'
+                        ? 'No fermenters with chargeable wash. Assign wash to fermenters and complete fermentation, or finish low wine runs on individual fermenters first.'
+                        : 'No fermenters in use with fermenting wash. Assign a wash to fermenters and set status to fermenting first.'}
                     </p>
                   )}
                   {runForm.run_type === 'heavy_rum' && (

@@ -535,10 +535,55 @@ export function getFermenterWashSourceFermenters(
   return options;
 }
 
+/** Fermenters with chargeable wash — heavy rum may draw after fermentation is marked complete. */
 export function getHeavyRumSourceFermenters(
   excludeRunId?: number,
 ): FermenterWashSourceOption[] {
-  return getFermenterWashSourceFermenters(excludeRunId);
+  const rows = queryAll<{
+    id: number;
+    mash_batch_id: number;
+    floor_equipment_id: number;
+    volume_gal: number;
+    equipment_name: string;
+    batch_number: string;
+    recipe_name: string;
+  }>(`
+    SELECT a.id, a.mash_batch_id, a.floor_equipment_id, a.volume_gal,
+           fe.name as equipment_name, m.batch_number, m.recipe_name
+    FROM mash_fermenter_assignments a
+    JOIN mash_batches m ON m.id = a.mash_batch_id
+    JOIN floor_equipment fe ON fe.id = a.floor_equipment_id
+    WHERE a.volume_gal > 0.01
+      AND m.status IN ('fermenting', 'complete')
+      AND fe.equipment_type = 'fermenter'
+    ORDER BY fe.name COLLATE NOCASE, m.batch_number COLLATE NOCASE
+  `);
+
+  const options: FermenterWashSourceOption[] = [];
+  const seen = new Set<string>();
+  for (const row of rows) {
+    const chargeable = getChargeableFermentersForMash(row.mash_batch_id, excludeRunId);
+    if (!chargeable.some((c) => c.floor_equipment_id === row.floor_equipment_id)) continue;
+    const available = getFermenterChargeCapacityGal(
+      row.mash_batch_id,
+      row.floor_equipment_id,
+      excludeRunId,
+    );
+    if (available <= 0.01) continue;
+    const key = `${row.mash_batch_id}:${row.floor_equipment_id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    options.push({
+      id: row.id,
+      mash_batch_id: row.mash_batch_id,
+      floor_equipment_id: row.floor_equipment_id,
+      volume_gal: available,
+      equipment_name: row.equipment_name,
+      batch_number: row.batch_number,
+      recipe_name: row.recipe_name,
+    });
+  }
+  return options;
 }
 
 export function getChargeableFermentersForMash(
