@@ -8,6 +8,7 @@ import { defaultAssignee } from '../lib/assignee';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
 import {
   getDistillationRuns,
+  distillationRunHasRecordedCuts,
   saveDistillationRun,
   deleteDistillationRun,
   getDistillationCuts,
@@ -315,6 +316,16 @@ export function Distillation() {
     if (!runForm.assigned_user_id) {
       alert('Select the employee assigned to this distillation run.');
       return;
+    }
+    if (runForm.status === 'complete') {
+      if (!editRunId) {
+        alert('Save the run, record at least one cut with volume, then mark it complete.');
+        return;
+      }
+      if (!distillationRunHasRecordedCuts(editRunId)) {
+        alert('Record at least one cut with volume before marking this distillation run complete.');
+        return;
+      }
     }
     if (!validateStillChargeVolume()) return;
     if (isFermenterSourcedRun(runForm.run_type)) {

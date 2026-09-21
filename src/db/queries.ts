@@ -1406,6 +1406,7 @@ export function saveMashBatchWithFermenters(
   id?: number,
 ): number {
   const previous = id ? getMashBatch(id) : undefined;
+  assertMashBatchCompleteHasLogs(batch, id);
   assertMashBatchEquipmentUsable(batch, assignments);
   const mashId = saveMashBatch(batch, id);
   try {
@@ -1554,6 +1555,45 @@ export function getAllFermentationLogs(): FermentationLog[] {
   );
 }
 
+export function mashBatchHasFermentationLogs(mashBatchId: number): boolean {
+  const row = queryOne<{ count: number }>(
+    'SELECT COUNT(*) as count FROM fermentation_logs WHERE mash_batch_id = ?',
+    [mashBatchId],
+  );
+  return (row?.count ?? 0) > 0;
+}
+
+function assertMashBatchCompleteHasLogs(
+  batch: Omit<MashBatch, 'id' | 'created_at'>,
+  id?: number,
+): void {
+  if (batch.status !== 'complete') return;
+  if (!id) {
+    throw new Error('Keep the batch fermenting, add fermentation logs, then mark it complete.');
+  }
+  if (!mashBatchHasFermentationLogs(id)) {
+    throw new Error('Add at least one fermentation log before marking this wash batch complete.');
+  }
+}
+
+export function distillationRunHasRecordedCuts(runId: number): boolean {
+  const row = queryOne<{ count: number }>(
+    'SELECT COUNT(*) as count FROM distillation_cuts WHERE distillation_run_id = ? AND volume_gal > 0',
+    [runId],
+  );
+  return (row?.count ?? 0) > 0;
+}
+
+function assertDistillationRunCompleteHasCuts(runId: number | undefined, status: string): void {
+  if (status !== 'complete') return;
+  if (!runId) {
+    throw new Error('Save the run, record at least one cut with volume, then mark it complete.');
+  }
+  if (!distillationRunHasRecordedCuts(runId)) {
+    throw new Error('Record at least one cut with volume before marking this distillation run complete.');
+  }
+}
+
 export function getFermentationLogs(
   mashBatchId: number,
   floorEquipmentId?: number | null,
@@ -1666,6 +1706,7 @@ export function saveDistillationRun(run: Omit<DistillationRun, 'id' | 'created_a
   ) {
     assertStillAvailableForCharge(run.still_name, id);
   }
+  assertDistillationRunCompleteHasCuts(id, run.status);
   if (id) {
     runQuery(
       `UPDATE distillation_runs SET batch_number=?, run_type=?, source_mash_batch_id=?, source_fermenter_equipment_id=?, source_holding_tank_equipment_id=?, dest_holding_tank_equipment_id=?, still_name=?, run_date=?, charge_volume_gal=?, charge_abv=?, status=?, assigned_user_id=?, assigned_user_name=?, notes=? WHERE id=?`,

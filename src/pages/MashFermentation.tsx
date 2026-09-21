@@ -10,6 +10,7 @@ import {
   saveMashBatchWithFermenters,
   deleteMashBatch,
   getFermentationLogs,
+  mashBatchHasFermentationLogs,
   addFermentationLog,
   generateBatchNumber,
   getAvailableFermenters,
@@ -381,6 +382,16 @@ export function MashFermentation() {
     if (!form.assigned_user_id) {
       alert('Select the employee assigned to this wash batch.');
       return;
+    }
+    if (form.status === 'complete') {
+      if (!editId) {
+        alert('Keep the batch fermenting, add fermentation logs, then mark it complete.');
+        return;
+      }
+      if (!mashBatchHasFermentationLogs(editId)) {
+        alert('Add at least one fermentation log before marking this wash batch complete.');
+        return;
+      }
     }
 
     const assignments =
