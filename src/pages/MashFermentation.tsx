@@ -226,6 +226,9 @@ export function MashFermentation() {
   const [fermenterForm, setFermenterForm] = useState(emptyFermenterForm());
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [adminDeleteBatchId, setAdminDeleteBatchId] = useState<number | null>(null);
+  const [adminEditBatchId, setAdminEditBatchId] = useState<number | null>(null);
+  const [adminSaveEditBatchId, setAdminSaveEditBatchId] = useState<number | null>(null);
+  const completeEditUnlockedRef = useRef<number | null>(null);
 
   void key;
 
@@ -311,15 +314,25 @@ export function MashFermentation() {
     setSearchParams(stripCalendarPlanQuery(searchParams), { replace: true });
   }, [searchParams, setSearchParams, user]);
 
-  const openEdit = (batch: MashBatch) => {
-    if (batch.status === 'complete') {
-      alert('This fermentation is complete — it cannot be edited.');
-      return;
-    }
+  const openEditForm = (batch: MashBatch) => {
     setEditId(batch.id);
     setForm({ ...batch, yeast_lbs: batch.yeast_lbs ?? 0 });
     loadFermenterForm(batch.id);
     setShowForm(true);
+  };
+
+  const closeBatchForm = () => {
+    setShowForm(false);
+    completeEditUnlockedRef.current = null;
+  };
+
+  const openEdit = (batch: MashBatch) => {
+    if (batch.status === 'complete') {
+      setAdminEditBatchId(batch.id);
+      return;
+    }
+    completeEditUnlockedRef.current = null;
+    openEditForm(batch);
   };
 
   const buildAssignments = () => {
@@ -339,14 +352,7 @@ export function MashFermentation() {
     return assignments;
   };
 
-  const handleSave = () => {
-    if (editId) {
-      const existing = batches.find((b) => b.id === editId);
-      if (existing?.status === 'complete') {
-        alert('This fermentation is complete — it cannot be edited.');
-        return;
-      }
-    }
+  const performSave = () => {
     if (fermenterForm.split && fermenterForm.fermenter1Id && fermenterForm.fermenter2Id) {
       const total = fermenterForm.volume1 + fermenterForm.volume2;
       if (form.water_gal > 0 && Math.abs(total - form.water_gal) > 0.5) {
@@ -388,7 +394,7 @@ export function MashFermentation() {
           : [];
     try {
       saveMashBatchWithFermenters(form, assignments, editId);
-      setShowForm(false);
+      closeBatchForm();
       refresh();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not save wash batch.';
@@ -400,6 +406,17 @@ export function MashFermentation() {
         alert(message);
       }
     }
+  };
+
+  const handleSave = () => {
+    if (editId) {
+      const existing = batches.find((b) => b.id === editId);
+      if (existing?.status === 'complete' && completeEditUnlockedRef.current !== editId) {
+        setAdminSaveEditBatchId(editId);
+        return;
+      }
+    }
+    performSave();
   };
 
   const performDelete = (id: number) => {
@@ -420,6 +437,12 @@ export function MashFermentation() {
 
   const adminDeleteBatch = adminDeleteBatchId != null
     ? batches.find((b) => b.id === adminDeleteBatchId)
+    : undefined;
+  const adminEditBatch = adminEditBatchId != null
+    ? batches.find((b) => b.id === adminEditBatchId)
+    : undefined;
+  const adminSaveEditBatch = adminSaveEditBatchId != null
+    ? batches.find((b) => b.id === adminSaveEditBatchId)
     : undefined;
 
   const getBatchFermenters = (mashId: number) =>
@@ -563,8 +586,7 @@ export function MashFermentation() {
                             </button>
                             <button
                               className="btn btn-sm btn-ghost"
-                              disabled={b.status === 'complete'}
-                              title={b.status === 'complete' ? 'Completed fermentations cannot be edited' : undefined}
+                              title={b.status === 'complete' ? 'Completed batches require administrator approval to edit' : undefined}
                               onClick={() => openEdit(b)}
                             >
                               Edit
@@ -598,6 +620,36 @@ export function MashFermentation() {
             const id = adminDeleteBatch.id;
             setAdminDeleteBatchId(null);
             performDelete(id);
+          }}
+        />
+      )}
+
+      {adminEditBatch && (
+        <AdminCredentialConfirmModal
+          title="Edit completed fermentation"
+          message={`Wash batch ${adminEditBatch.batch_number} is complete. Enter an administrator email and password to edit it.`}
+          confirmLabel="Continue to edit"
+          onClose={() => setAdminEditBatchId(null)}
+          onConfirmed={() => {
+            const batch = adminEditBatch;
+            setAdminEditBatchId(null);
+            completeEditUnlockedRef.current = batch.id;
+            openEditForm(batch);
+          }}
+        />
+      )}
+
+      {adminSaveEditBatch && (
+        <AdminCredentialConfirmModal
+          title="Save completed fermentation"
+          message={`Wash batch ${adminSaveEditBatch.batch_number} is complete. Enter an administrator email and password to save your changes.`}
+          confirmLabel="Save changes"
+          onClose={() => setAdminSaveEditBatchId(null)}
+          onConfirmed={() => {
+            const id = adminSaveEditBatch.id;
+            setAdminSaveEditBatchId(null);
+            completeEditUnlockedRef.current = id;
+            performSave();
           }}
         />
       )}
@@ -638,7 +690,7 @@ export function MashFermentation() {
       )}
 
       {showForm && (
-        <Modal title={editId ? 'Edit Wash Batch' : 'New Wash Batch'} onClose={() => setShowForm(false)}>
+        <Modal title={editId ? 'Edit Wash Batch' : 'New Wash Batch'} onClose={closeBatchForm}>
           <div className="form-grid">
             <div className="form-group">
               <label>Batch Number</label>
@@ -889,7 +941,7 @@ export function MashFermentation() {
           </div>
           <p className="form-hint">Saving deducts sugar and yeast from inventory. Fermenters fill on the floor plan only after status is <strong>fermenting</strong> and assignments are saved.</p>
           <div className="form-actions">
-            <button className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+            <button className="btn btn-secondary" onClick={closeBatchForm}>Cancel</button>
             <button className="btn btn-primary" onClick={handleSave}>Save Batch</button>
           </div>
         </Modal>

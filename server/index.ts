@@ -220,7 +220,7 @@ app.get('/api/auth/me', authMiddleware, (req, res) => {
   res.json({ user: publicUser(req.user!) });
 });
 
-/** Re-verify an administrator before sensitive actions (e.g. deleting completed fermentations). */
+/** Re-verify an administrator before sensitive actions (e.g. editing or deleting completed fermentations). */
 app.post('/api/auth/verify-admin', authMiddleware, (req, res) => {
   const email = String(req.body.email ?? '').trim().toLowerCase();
   const password = String(req.body.password ?? '');

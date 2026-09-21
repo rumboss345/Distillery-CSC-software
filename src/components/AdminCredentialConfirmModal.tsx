@@ -41,7 +41,7 @@ export function AdminCredentialConfirmModal({
       <form onSubmit={handleSubmit}>
         <p className="field-hint" style={{ marginTop: 0 }}>{message}</p>
         <div className="form-group">
-          <label htmlFor="admin-confirm-email">Administrator email</label>
+          <label htmlFor="admin-confirm-email">Administrator email (sign-in)</label>
           <input
             id="admin-confirm-email"
             type="email"
