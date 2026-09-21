@@ -6,7 +6,11 @@ import {
   packagingInventoryAdjustments,
 } from '../lib/bottling-lines';
 import { isFermenterSourcedRun, isTankSourcedRun, runUsesDestHoldingTank } from '../lib/distillation-run-types';
-import { chargeExceedsStillCapacity, stillChargeCapacityMessage } from '../lib/still-charge';
+import {
+  chargeExceedsStillCapacity,
+  stillAlreadyOccupiedMessage,
+  stillChargeCapacityMessage,
+} from '../lib/still-charge';
 import {
   equipmentBlocksProduction,
   maintenanceStatusLabel,
@@ -602,6 +606,34 @@ export function getStillCapacityByName(stillName: string): number | null {
     [trimmed],
   );
   return row?.capacity_gal ?? null;
+}
+
+export function getActiveDistillationRunOnStill(
+  stillName: string,
+  excludeRunId?: number,
+): { id: number; batch_number: string; status: string; charge_volume_gal: number } | undefined {
+  const trimmed = stillName.trim();
+  if (!trimmed) return undefined;
+  return queryOne<{ id: number; batch_number: string; status: string; charge_volume_gal: number }>(
+    `SELECT id, batch_number, status, charge_volume_gal FROM distillation_runs
+     WHERE still_name = ? AND status IN ('planned', 'running')
+     AND (? IS NULL OR id != ?)
+     LIMIT 1`,
+    [trimmed, excludeRunId ?? null, excludeRunId ?? -1],
+  ) ?? undefined;
+}
+
+function assertStillAvailableForCharge(stillName: string, excludeRunId?: number): void {
+  const occupied = getActiveDistillationRunOnStill(stillName, excludeRunId);
+  if (!occupied) return;
+  throw new Error(
+    stillAlreadyOccupiedMessage(
+      stillName.trim(),
+      occupied.batch_number,
+      occupied.status,
+      occupied.charge_volume_gal,
+    ),
+  );
 }
 
 export function getHoldingTanks(): FloorEquipment[] {
@@ -1627,6 +1659,12 @@ export function saveDistillationRun(run: Omit<DistillationRun, 'id' | 'created_a
     throw new Error(
       stillChargeCapacityMessage(run.charge_volume_gal, run.still_name, stillCapacity!),
     );
+  }
+  if (
+    run.still_name.trim()
+    && (run.status === 'planned' || run.status === 'running')
+  ) {
+    assertStillAvailableForCharge(run.still_name, id);
   }
   if (id) {
     runQuery(
