@@ -252,23 +252,31 @@ function formatAdditiveVolumeGal(gal: number): string | null {
 
 /** Recipe display: primary amount plus weight/volume equivalent for additives. */
 export function formatBlendRecipeAdditive(
-  ingredient: Pick<BlendIngredientInput, 'amount' | 'unit' | 'name' | 'ingredient_type'>,
+  ingredient: Pick<BlendIngredientInput, 'amount' | 'unit' | 'name' | 'ingredient_type' | 'abv'>,
 ): string {
   const name = (ingredient.name || ingredient.ingredient_type).trim();
   const primary = `${ingredient.amount} ${ingredient.unit}`.trim();
-  if (ingredient.amount <= 0) return `${name}: ${primary}`;
+  const abvNote = ingredient.abv != null && ingredient.abv > 0
+    ? ` @ ${ingredient.abv}% ABV`
+    : '';
+  if (ingredient.amount <= 0) return `${name}: ${primary}${abvNote}`;
 
   if (isWeightUnit(ingredient.unit)) {
     const volume = formatAdditiveVolumeGal(ingredientVolumeGal(ingredient));
-    return volume ? `${name}: ${primary} · ${volume}` : `${name}: ${primary}`;
+    return volume ? `${name}: ${primary}${abvNote} · ${volume}` : `${name}: ${primary}${abvNote}`;
   }
 
   if (isVolumeUnit(ingredient.unit)) {
     const weight = formatAdditiveWeightLbs(ingredientWeightLbs(ingredient));
-    return weight ? `${name}: ${primary} · ${weight}` : `${name}: ${primary}`;
+    return weight ? `${name}: ${primary}${abvNote} · ${weight}` : `${name}: ${primary}${abvNote}`;
   }
 
-  return `${name}: ${primary}`;
+  return `${name}: ${primary}${abvNote}`;
+}
+
+/** Liquid additives that may contribute alcohol (e.g. extract-based flavorings). */
+export function additiveSupportsAbv(ingredientType: BlendIngredientType): boolean {
+  return ingredientType === 'flavoring' || ingredientType === 'syrup';
 }
 
 export function spiritMeasureAlternate(amount: number, unit: string, abv: number): MeasureAlternate | null {

@@ -11,6 +11,7 @@ import {
 import { Modal } from './Modal';
 import {
   BLEND_INGREDIENT_TYPES,
+  additiveSupportsAbv,
   defaultUnitForMode,
   formatBlendRecipeAdditive,
   formatBlendRecipeSpiritPull,
@@ -67,6 +68,7 @@ const emptyIngredient = (): BlendIngredientInput => ({
   name: 'Proofing water',
   amount: 0,
   unit: defaultUnitForMode('water', recommendMeasureMode('water').mode),
+  abv: null,
   cost_per_unit: null,
   lot_number: '',
   inventory_item_id: null,
@@ -155,6 +157,7 @@ export function BlendRecipesTab() {
         name: ingredient.name,
         amount: ingredient.amount,
         unit: ingredient.unit,
+        abv: ingredient.abv ?? null,
         cost_per_unit: ingredient.cost_per_unit,
         lot_number: ingredient.lot_number,
         inventory_item_id: ingredient.inventory_item_id,
@@ -208,6 +211,7 @@ export function BlendRecipesTab() {
           next.inventory_item_id = null;
           if (!next.name.trim()) next.name = 'Proofing water';
         }
+        if (!additiveSupportsAbv(patch.ingredient_type)) next.abv = null;
       }
       return next;
     }));
@@ -675,6 +679,25 @@ export function BlendRecipesTab() {
                             </select>
                           </div>
                         </div>
+                        {additiveSupportsAbv(ingredient.ingredient_type) && (
+                          <div className="form-group">
+                            <label>Alcohol in flavoring (ABV %)</label>
+                            <input
+                              type="number"
+                              step="0.1"
+                              min="0"
+                              max="100"
+                              placeholder="0 if non-alcoholic"
+                              value={ingredient.abv ?? ''}
+                              onChange={(e) => updateIngredient(index, {
+                                abv: e.target.value === '' ? null : parseFloat(e.target.value) || 0,
+                              })}
+                            />
+                            <p className="field-hint">
+                              Optional. Counts toward calculated proof when the flavoring contains alcohol.
+                            </p>
+                          </div>
+                        )}
                       </article>
                     );
                   })}

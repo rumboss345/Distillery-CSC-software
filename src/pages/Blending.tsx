@@ -41,6 +41,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import {
   BLEND_INGREDIENT_TYPES,
   SPIRIT_MEASURE_RECOMMENDATION,
+  additiveSupportsAbv,
   defaultUnitForMode,
   inferMeasureMode,
   measureAlternate,
@@ -104,11 +105,31 @@ const emptyIngredient = (type: BlendIngredientInput['ingredient_type'] = 'water'
   name: type === 'water' ? 'Proofing water' : '',
   amount: 0,
   unit: defaultUnitForMode(type, recommendMeasureMode(type).mode),
+  abv: null,
   cost_per_unit: null,
   lot_number: '',
   inventory_item_id: null,
   notes: '',
 });
+
+function blendIngredientFromRecord(
+  ingredient: Pick<
+    BlendIngredientInput,
+    'ingredient_type' | 'name' | 'amount' | 'unit' | 'cost_per_unit' | 'lot_number' | 'inventory_item_id' | 'notes'
+  > & { abv?: number | null },
+): BlendIngredientInput {
+  return {
+    ingredient_type: ingredient.ingredient_type,
+    name: ingredient.name,
+    amount: ingredient.amount,
+    unit: ingredient.unit,
+    abv: ingredient.abv ?? null,
+    cost_per_unit: ingredient.cost_per_unit,
+    lot_number: ingredient.lot_number,
+    inventory_item_id: ingredient.inventory_item_id,
+    notes: ingredient.notes,
+  };
+}
 
 interface SpiritSourceRow extends BlendSpiritSourceInput {
   amount: number;
@@ -536,16 +557,7 @@ export function Blending() {
         abv: source.abv,
         barrel_id: source.barrel_id ?? null,
       })),
-      ingredients: recipe.ingredients.map((ingredient) => ({
-        ingredient_type: ingredient.ingredient_type,
-        name: ingredient.name,
-        amount: ingredient.amount,
-        unit: ingredient.unit,
-        cost_per_unit: ingredient.cost_per_unit,
-        lot_number: ingredient.lot_number,
-        inventory_item_id: ingredient.inventory_item_id,
-        notes: ingredient.notes,
-      })),
+      ingredients: recipe.ingredients.map((ingredient) => blendIngredientFromRecord(ingredient)),
     };
     setEditId(undefined);
     setSelectedRecipeId(recipeId);
@@ -692,16 +704,7 @@ export function Blending() {
             volume_gal: source.volume_gal,
             abv: source.abv,
           })),
-          ingredients: recipe.ingredients.map((ingredient) => ({
-            ingredient_type: ingredient.ingredient_type,
-            name: ingredient.name,
-            amount: ingredient.amount,
-            unit: ingredient.unit,
-            cost_per_unit: ingredient.cost_per_unit,
-            lot_number: ingredient.lot_number,
-            inventory_item_id: ingredient.inventory_item_id,
-            notes: ingredient.notes,
-          })),
+          ingredients: recipe.ingredients.map((ingredient) => blendIngredientFromRecord(ingredient)),
         });
         const baseSpirits = recipe.spirit_sources
           .filter((source) => source.volume_gal > 0)
@@ -713,16 +716,7 @@ export function Blending() {
         if (baseSpirits.length > 0) {
           const base = computeBlendFormulation(
             baseSpirits,
-            recipe.ingredients.map((ingredient) => ({
-              ingredient_type: ingredient.ingredient_type,
-              name: ingredient.name,
-              amount: ingredient.amount,
-              unit: ingredient.unit,
-              cost_per_unit: ingredient.cost_per_unit,
-              lot_number: ingredient.lot_number,
-              inventory_item_id: ingredient.inventory_item_id,
-              notes: ingredient.notes,
-            })),
+            recipe.ingredients.map((ingredient) => blendIngredientFromRecord(ingredient)),
           );
           setTargetYieldInput((base.theoretical.volumeGal * (blend.scale_factor ?? 1)).toFixed(1));
         }
@@ -757,18 +751,7 @@ export function Blending() {
         })],
     );
     const ings = getBlendIngredients(blend.id);
-    setIngredients(
-      ings.map((i) => ({
-        ingredient_type: i.ingredient_type,
-        name: i.name,
-        amount: i.amount,
-        unit: i.unit,
-        cost_per_unit: i.cost_per_unit,
-        lot_number: i.lot_number,
-        inventory_item_id: i.inventory_item_id,
-        notes: i.notes,
-      })),
-    );
+    setIngredients(ings.map((i) => blendIngredientFromRecord(i)));
     setObservedAbvInput(blend.actual_abv?.toString() ?? '');
     setSampleTempF('60');
     setMeasuredForCorrection({
@@ -876,6 +859,7 @@ export function Blending() {
         const rec = recommendMeasureMode(patch.ingredient_type);
         next.unit = defaultUnitForMode(patch.ingredient_type, rec.mode);
         if (patch.ingredient_type === 'water' && !next.name) next.name = 'Proofing water';
+        if (!additiveSupportsAbv(patch.ingredient_type)) next.abv = null;
       }
       return next;
     }));
@@ -1672,6 +1656,25 @@ export function Blending() {
                   </div>
                   {alternate && (
                     <p className="measure-alt">{alternate.label}</p>
+                  )}
+                  {additiveSupportsAbv(ing.ingredient_type) && (
+                    <div className="form-group" style={{ marginTop: '0.5rem' }}>
+                      <label>Alcohol in flavoring (ABV %)</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="100"
+                        placeholder="0 if non-alcoholic"
+                        value={ing.abv ?? ''}
+                        onChange={(e) => updateIngredient(realIndex, {
+                          abv: e.target.value === '' ? null : parseFloat(e.target.value) || 0,
+                        })}
+                      />
+                      <p className="field-hint">
+                        Optional. Used in proof calculations when this flavoring contains alcohol (e.g. extract).
+                      </p>
+                    </div>
                   )}
                 </div>
               );
