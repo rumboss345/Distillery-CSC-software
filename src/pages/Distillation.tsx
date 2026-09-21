@@ -15,6 +15,7 @@ import {
   deleteDistillationCut,
   getMashBatches,
   getPotStills,
+  getActiveDistillationRunOnStill,
   getFloorEquipment,
   getFermenterWashSourceFermenters,
   getFermenterChargeCapacityGal,
@@ -50,7 +51,7 @@ import {
   runTypeLabel,
 } from '../lib/distillation-run-types';
 import { FERMENTATION_READY_MAX_BRIX, isBrixReadyForDistillation } from '../lib/fermentation';
-import { chargeExceedsStillCapacity } from '../lib/still-charge';
+import { chargeExceedsStillCapacity, stillAlreadyOccupiedMessage } from '../lib/still-charge';
 import type {
   DistillationCutView,
   DistillationRun,
@@ -323,6 +324,21 @@ export function Distillation() {
         return false;
       }
       return true;
+    }
+    if (
+      (runForm.status === 'planned' || runForm.status === 'running')
+      && runForm.still_name.trim()
+    ) {
+      const occupied = getActiveDistillationRunOnStill(runForm.still_name, editRunId);
+      if (occupied) {
+        alert(stillAlreadyOccupiedMessage(
+          runForm.still_name,
+          occupied.batch_number,
+          occupied.status,
+          occupied.charge_volume_gal,
+        ));
+        return false;
+      }
     }
     if (chargeExceedsStillCapacity(runForm.charge_volume_gal, selectedStill.capacity_gal)) {
       alert(
@@ -1006,12 +1022,22 @@ export function Distillation() {
                 onChange={(e) => handleStillChange(e.target.value ? parseInt(e.target.value) : '')}
               >
                 <option value="">— Select still —</option>
-                {stills.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}{s.capacity_gal > 0 ? ` (${s.capacity_gal} gal cap)` : ''}
-                  </option>
-                ))}
+                {stills.map((s) => {
+                  const occupied = getActiveDistillationRunOnStill(s.name, editRunId);
+                  return (
+                    <option key={s.id} value={s.id} disabled={occupied != null}>
+                      {s.name}
+                      {occupied ? ` — in use (${occupied.batch_number})` : ''}
+                      {s.capacity_gal > 0 ? ` (${s.capacity_gal} gal cap)` : ''}
+                    </option>
+                  );
+                })}
               </select>
+              {runForm.still_name && getActiveDistillationRunOnStill(runForm.still_name, editRunId) && (
+                <p className="field-hint" style={{ color: 'var(--danger, #dc2626)' }}>
+                  This still already has an active run. Complete it or pick another still.
+                </p>
+              )}
             </div>
             <div className="form-group">
               <label>Run Date</label>

@@ -15,3 +15,13 @@ export function stillChargeCapacityMessage(
 ): string {
   return `Charge volume (${chargeGal} gal) exceeds ${stillName} capacity (${stillCapacityGal} gal).`;
 }
+
+export function stillAlreadyOccupiedMessage(
+  stillName: string,
+  batchNumber: string,
+  status: string,
+  chargeGal: number,
+): string {
+  const volNote = chargeGal > 0 ? ` with ${chargeGal.toFixed(1)} gal charged` : '';
+  return `${stillName} is already in use by run ${batchNumber} (${status})${volNote}. Complete that run or choose another still before charging again.`;
+}
