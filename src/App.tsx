@@ -7,6 +7,7 @@ import { MashFermentation } from './pages/MashFermentation';
 import { Recipes } from './pages/Recipes';
 import { EquipmentMaintenance } from './pages/EquipmentMaintenance';
 import { Distillation } from './pages/Distillation';
+import { TankTransfer } from './pages/TankTransfer';
 import { Barrels } from './pages/Barrels';
 import { Bottling } from './pages/Bottling';
 import { Blending } from './pages/Blending';
@@ -64,6 +65,7 @@ function AppContent() {
             <Route path="/recipes" element={<Recipes />} />
             <Route path="/equipment-maintenance" element={<EquipmentMaintenance />} />
             <Route path="/distillation" element={<Distillation />} />
+            <Route path="/tank-transfer" element={<TankTransfer />} />
             <Route path="/blending" element={<Blending />} />
             <Route path="/tools/spirit-calculator" element={<SpiritWeightCalculator />} />
             <Route path="/barrels" element={<Barrels />} />

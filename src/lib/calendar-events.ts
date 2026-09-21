@@ -55,7 +55,7 @@ export const CALENDAR_KIND_ROUTES: Record<CalendarActivityKind, string> = {
   barrel: '/barrels',
   bottling: '/bottling',
   blend: '/blending',
-  transfer: '/distillation',
+  transfer: '/tank-transfer',
 };
 
 export const CALENDAR_STATUS_LABELS: Record<CalendarStatusCategory, string> = {
