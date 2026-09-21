@@ -2238,14 +2238,15 @@ function persistBlendRecipeIngredients(
     .forEach((ingredient) => {
       insertRow(
         `INSERT INTO blend_recipe_ingredients (
-          blend_recipe_id, ingredient_type, name, amount, unit, cost_per_unit, lot_number, inventory_item_id, notes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          blend_recipe_id, ingredient_type, name, amount, unit, abv, cost_per_unit, lot_number, inventory_item_id, notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           recipeId,
           ingredient.ingredient_type,
           ingredient.name,
           ingredient.amount,
           ingredient.unit,
+          ingredient.abv ?? null,
           ingredient.cost_per_unit ?? null,
           ingredient.lot_number ?? '',
           ingredient.inventory_item_id ?? null,
@@ -2444,14 +2445,15 @@ function persistIngredients(blendProductId: number, ingredients: BlendIngredient
     if (ing.amount <= 0 && !ing.name.trim()) continue;
     insertRow(
       `INSERT INTO blend_ingredients
-       (blend_product_id, ingredient_type, name, amount, unit, cost_per_unit, lot_number, inventory_item_id, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (blend_product_id, ingredient_type, name, amount, unit, abv, cost_per_unit, lot_number, inventory_item_id, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         blendProductId,
         ing.ingredient_type,
         ing.name,
         ing.amount,
         ing.unit,
+        ing.abv ?? null,
         ing.cost_per_unit ?? null,
         ing.lot_number ?? '',
         ing.inventory_item_id ?? null,
@@ -2749,6 +2751,7 @@ export function executeBlendProduct(id: number, outputTankId: number): void {
     name: i.name,
     amount: i.amount,
     unit: i.unit,
+    abv: i.abv,
     cost_per_unit: i.cost_per_unit,
     lot_number: i.lot_number,
     inventory_item_id: i.inventory_item_id,

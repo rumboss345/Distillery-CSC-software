@@ -544,14 +544,15 @@ function insertBlendRecipeIngredients(
     .forEach((ingredient) => {
       db!.run(
         `INSERT INTO blend_recipe_ingredients (
-          blend_recipe_id, ingredient_type, name, amount, unit, cost_per_unit, lot_number, inventory_item_id, notes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          blend_recipe_id, ingredient_type, name, amount, unit, abv, cost_per_unit, lot_number, inventory_item_id, notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           recipeId,
           ingredient.ingredient_type,
           ingredient.name,
           ingredient.amount,
           ingredient.unit,
+          ingredient.abv ?? null,
           ingredient.cost_per_unit ?? null,
           ingredient.lot_number ?? '',
           ingredient.inventory_item_id ?? null,
@@ -850,6 +851,7 @@ function migrateAdvancedBlending(): void {
     ['cost_per_unit', 'REAL'],
     ['lot_number', "TEXT NOT NULL DEFAULT ''"],
     ['inventory_item_id', 'INTEGER REFERENCES inventory_items(id)'],
+    ['abv', 'REAL'],
   ];
   for (const [name, def] of ingredientColumns) {
     const has = queryOne<{ name: string }>(
@@ -858,6 +860,14 @@ function migrateAdvancedBlending(): void {
     );
     if (!has) {
       db.run(`ALTER TABLE blend_ingredients ADD COLUMN ${name} ${def}`);
+    }
+  }
+  for (const table of ['blend_recipe_ingredients'] as const) {
+    const hasAbv = queryOne<{ name: string }>(
+      `SELECT name FROM pragma_table_info('${table}') WHERE name='abv'`,
+    );
+    if (!hasAbv) {
+      db.run(`ALTER TABLE ${table} ADD COLUMN abv REAL`);
     }
   }
 
