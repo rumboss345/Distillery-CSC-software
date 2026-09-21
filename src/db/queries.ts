@@ -399,6 +399,10 @@ export function getMashBatch(id: number): MashBatch | undefined {
 
 export function saveMashBatch(batch: Omit<MashBatch, 'id' | 'created_at'>, id?: number): number {
   if (id) {
+    const existing = getMashBatch(id);
+    if (existing?.status === 'complete') {
+      throw new Error('Completed fermentations cannot be edited.');
+    }
     runQuery(
       `UPDATE mash_batches SET batch_number=?, recipe_name=?, grain_type=?, grain_lbs=?, water_gal=?, yeast_strain=?, yeast_lbs=?, start_date=?, target_brix=?, actual_brix=?, target_final_brix=?, status=?, assigned_user_id=?, assigned_user_name=?, notes=? WHERE id=?`,
       [batch.batch_number, batch.recipe_name, batch.grain_type, batch.grain_lbs, batch.water_gal, batch.yeast_strain, batch.yeast_lbs, batch.start_date, batch.target_brix, batch.actual_brix, batch.target_final_brix, batch.status, batch.assigned_user_id, batch.assigned_user_name ?? '', batch.notes, id],

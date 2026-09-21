@@ -312,6 +312,10 @@ export function MashFermentation() {
   }, [searchParams, setSearchParams, user]);
 
   const openEdit = (batch: MashBatch) => {
+    if (batch.status === 'complete') {
+      alert('This fermentation is complete — it cannot be edited.');
+      return;
+    }
     setEditId(batch.id);
     setForm({ ...batch, yeast_lbs: batch.yeast_lbs ?? 0 });
     loadFermenterForm(batch.id);
@@ -336,6 +340,13 @@ export function MashFermentation() {
   };
 
   const handleSave = () => {
+    if (editId) {
+      const existing = batches.find((b) => b.id === editId);
+      if (existing?.status === 'complete') {
+        alert('This fermentation is complete — it cannot be edited.');
+        return;
+      }
+    }
     if (fermenterForm.split && fermenterForm.fermenter1Id && fermenterForm.fermenter2Id) {
       const total = fermenterForm.volume1 + fermenterForm.volume2;
       if (form.water_gal > 0 && Math.abs(total - form.water_gal) > 0.5) {
@@ -550,7 +561,14 @@ export function MashFermentation() {
                             >
                               Logs
                             </button>
-                            <button className="btn btn-sm btn-ghost" onClick={() => openEdit(b)}>Edit</button>
+                            <button
+                              className="btn btn-sm btn-ghost"
+                              disabled={b.status === 'complete'}
+                              title={b.status === 'complete' ? 'Completed fermentations cannot be edited' : undefined}
+                              onClick={() => openEdit(b)}
+                            >
+                              Edit
+                            </button>
                             <button
                               className="btn btn-sm btn-ghost"
                               title={b.status === 'complete' ? 'Completed batches require administrator approval to delete' : undefined}
