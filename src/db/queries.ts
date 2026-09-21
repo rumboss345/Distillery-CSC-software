@@ -858,6 +858,24 @@ export function defaultLowWinesTankId(excludeTankId?: number | null): number | n
     ?? null;
 }
 
+/** Hearts on a low wine run (wash) default to the Vendome low wines collection vessel. */
+export function defaultLowWineRunHeartsCollectionVesselId(
+  excludeTankId?: number | null,
+  excludeCutId?: number,
+): number | null {
+  const vessels = getCollectionVesselsForCutType('hearts', excludeCutId)
+    .filter((t) => t.id !== excludeTankId);
+  const preferred = vessels.find((t) => {
+    const name = t.name.toLowerCase();
+    return name.includes('vendome') && name.includes('low wine');
+  });
+  if (preferred) return preferred.id;
+  const byName = vessels.find((t) =>
+    t.name.toLowerCase().includes('low wines collection tank of vendome'),
+  );
+  return byName?.id ?? null;
+}
+
 export function defaultDestTankIdForRunType(
   runType: string,
   excludeTankId?: number | null,
@@ -927,6 +945,10 @@ export function defaultTankForCutType(
     case 'heads':
       return null;
     case 'hearts':
+      if (run?.run_type === 'wash') {
+        const lowWineHearts = defaultLowWineRunHeartsCollectionVesselId(excludeTankId, excludeCutId);
+        if (lowWineHearts) return lowWineHearts;
+      }
       if (
         run?.dest_holding_tank_equipment_id
         && isCollectionVesselEquipmentId(run.dest_holding_tank_equipment_id)
