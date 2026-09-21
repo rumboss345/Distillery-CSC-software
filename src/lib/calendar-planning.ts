@@ -31,7 +31,7 @@ export function calendarPlanPath(kind: CalendarActivityKind, date: string): stri
   if (kind === 'transfer') {
     params.set('transfer', '1');
   }
-  const base = kind === 'transfer' ? CALENDAR_KIND_ROUTES.distillation : CALENDAR_KIND_ROUTES[kind];
+  const base = CALENDAR_KIND_ROUTES[kind];
   return `${base}?${params.toString()}`;
 }
 

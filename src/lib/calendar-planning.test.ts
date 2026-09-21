@@ -13,7 +13,7 @@ describe('calendarPlanPath', () => {
 
   it('builds transfer plan URL on distillation page', () => {
     expect(calendarPlanPath('transfer', '2026-09-18')).toBe(
-      '/distillation?plan=1&date=2026-09-18&transfer=1',
+      '/tank-transfer?plan=1&date=2026-09-18&transfer=1',
     );
   });
 });

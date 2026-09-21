@@ -28,12 +28,7 @@ import {
   getCollectionVessels,
   getCutDestinationsForRun,
   getHoldingTankContents,
-  getHoldingTankIntakeHistory,
-  getSpiritTransferVessels,
   getSpiritTransferVesselsWithContents,
-  getHoldingTankTransfers,
-  saveHoldingTankTransfer,
-  deleteHoldingTankTransfer,
   generateBatchNumber,
   useRefreshKey,
 } from '../db/queries';
@@ -58,7 +53,6 @@ import type {
   DistillationRunType,
   RunStatus,
   CutType,
-  SpiritTransferType,
 } from '../types';
 
 const RUN_STATUSES: RunStatus[] = ['planned', 'running', 'complete'];
@@ -70,22 +64,6 @@ const RUN_STATUS_GROUP_HEADINGS: Record<RunStatus, string> = {
 };
 
 const CUT_TYPES: CutType[] = ['heads', 'hearts', 'tails'];
-
-const SPIRIT_TYPE_LABELS: Record<SpiritTransferType, string> = {
-  low_wines: 'Low wines',
-  high_wines: 'High wines',
-};
-
-const emptyTransferForm = () => ({
-  spirit_type: 'low_wines' as SpiritTransferType,
-  source_tank_equipment_id: 0,
-  dest_tank_equipment_id: 0,
-  volume_gal: 0,
-  observed_abv: '',
-  sample_temp_f: '60',
-  transfer_date: new Date().toISOString().slice(0, 10),
-  notes: '',
-});
 
 const emptyRun = (runType: DistillationRunType = 'wash'): Omit<DistillationRun, 'id' | 'created_at'> => ({
   batch_number: generateBatchNumber('D'),
@@ -113,14 +91,11 @@ export function Distillation() {
   const mashes = getMashBatches();
   const stills = getPotStills();
   const collectionVessels = getCollectionVessels();
-  const spiritTransferVessels = getSpiritTransferVessels();
   const tanksWithContents = getSpiritTransferVesselsWithContents();
-  const tankTransfers = getHoldingTankTransfers();
   const equipment = getFloorEquipment();
   const [showRunForm, setShowRunForm] = useState(false);
   const [showCutForm, setShowCutForm] = useState(false);
   const [editCutId, setEditCutId] = useState<number | undefined>();
-  const [showTransferForm, setShowTransferForm] = useState(false);
   const [editRunId, setEditRunId] = useState<number | undefined>();
   const [runForm, setRunForm] = useState(emptyRun());
   const [selectedRunId, setSelectedRunId] = useState<number | null>(null);
@@ -135,7 +110,6 @@ export function Distillation() {
     sample_temp_f: '60',
     notes: '',
   });
-  const [transferForm, setTransferForm] = useState(emptyTransferForm);
   const [chargeAbvObserved, setChargeAbvObserved] = useState('');
   const [chargeTempF, setChargeTempF] = useState('60');
 
@@ -280,24 +254,12 @@ export function Distillation() {
     setShowRunForm(true);
   };
 
-  const openTransferFormForPlan = (planDate?: string) => {
-    setTransferForm({
-      ...emptyTransferForm(),
-      transfer_date: planDate ?? emptyTransferForm().transfer_date,
-    });
-    setShowTransferForm(true);
-  };
-
   useEffect(() => {
     if (calendarPlanHandled.current) return;
     const plan = readCalendarPlanQuery(searchParams);
-    if (!plan) return;
+    if (!plan || plan.transfer) return;
     calendarPlanHandled.current = true;
-    if (plan.transfer) {
-      openTransferFormForPlan(plan.date ?? undefined);
-    } else {
-      openNewRun('wash', plan.date ?? undefined);
-    }
+    openNewRun('wash', plan.date ?? undefined);
     setSearchParams(stripCalendarPlanQuery(searchParams), { replace: true });
   }, [searchParams, setSearchParams, user]);
 
@@ -642,109 +604,6 @@ export function Distillation() {
   const heartsTotal = cuts.filter((c) => c.cut_type === 'hearts').reduce((s, c) => s + c.volume_gal, 0);
   const gpa = cuts.filter((c) => c.cut_type === 'hearts').reduce((s, c) => s + c.volume_gal * c.abv / 100, 0);
 
-  const sourceTanksForTransfer = tanksWithContents.filter((t) => t.volume_gal > 0);
-  const transferSourceInTankLine = (t: { id: number; volume_gal: number; abv: number }) => {
-    const currentLabel = getHoldingTankIntakeHistory(t.id, 1)[0]?.summary;
-    const cutType = getCollectionVesselStoredCutType(t.id);
-    const quantity = `${t.volume_gal.toFixed(1)} gal @ ${t.abv.toFixed(1)}% ABV`;
-    const product = currentLabel ?? cutType ?? null;
-    return product ? `In tank: ${quantity} — ${product}` : `In tank: ${quantity}`;
-  };
-  const transferSourceTankOptionLabel = (t: { id: number; name: string; volume_gal: number; abv: number }) =>
-    `${t.name} — ${transferSourceInTankLine(t)}`;
-  const selectedTransferSourceTank = sourceTanksForTransfer.find(
-    (t) => t.id === transferForm.source_tank_equipment_id,
-  );
-  const destTanksForTransfer = spiritTransferVessels.filter(
-    (t) => t.id !== transferForm.source_tank_equipment_id,
-  );
-  const transferSourceContents = transferForm.source_tank_equipment_id
-    ? getHoldingTankContents(transferForm.source_tank_equipment_id)
-    : null;
-  const transferDestTank = spiritTransferVessels.find((t) => t.id === transferForm.dest_tank_equipment_id);
-  const transferDestContents = transferForm.dest_tank_equipment_id
-    ? getHoldingTankContents(transferForm.dest_tank_equipment_id)
-    : null;
-
-  const openTransferForm = () => {
-    setTransferForm(emptyTransferForm());
-    setShowTransferForm(true);
-  };
-
-  const handleSourceTankChange = (tankId: number) => {
-    const contents = tankId ? getHoldingTankContents(tankId) : null;
-    setTransferForm({
-      ...transferForm,
-      source_tank_equipment_id: tankId,
-      dest_tank_equipment_id: transferForm.dest_tank_equipment_id === tankId
-        ? 0
-        : transferForm.dest_tank_equipment_id,
-      observed_abv: contents ? (Math.round(contents.abv * 10) / 10).toString() : '',
-      sample_temp_f: '60',
-    });
-  };
-
-  const transferCorrectedAbv = correctedAbvFromInputs(
-    transferForm.observed_abv,
-    transferForm.sample_temp_f,
-  );
-
-  const handleSaveTransfer = () => {
-    if (!transferForm.source_tank_equipment_id) {
-      alert('Select the source tank.');
-      return;
-    }
-    if (!transferForm.dest_tank_equipment_id) {
-      alert('Select the destination tank.');
-      return;
-    }
-    if (transferForm.volume_gal <= 0) {
-      alert('Enter the volume to transfer.');
-      return;
-    }
-    if (transferCorrectedAbv == null || transferCorrectedAbv <= 0) {
-      alert('Enter the transfer ABV (%).');
-      return;
-    }
-    if (transferSourceContents && transferForm.volume_gal > transferSourceContents.volume_gal + 0.01) {
-      alert(`Only ${transferSourceContents.volume_gal.toFixed(1)} gal available in the source tank.`);
-      return;
-    }
-    if (transferDestTank && transferDestContents && transferForm.volume_gal > 0) {
-      const newTotal = transferDestContents.volume_gal + transferForm.volume_gal;
-      if (transferDestTank.capacity_gal > 0 && newTotal > transferDestTank.capacity_gal) {
-        if (!confirm(
-          `This will put ${newTotal.toFixed(1)} gal in ${transferDestTank.name} (capacity ${transferDestTank.capacity_gal} gal). Continue?`,
-        )) {
-          return;
-        }
-      }
-    }
-    try {
-      saveHoldingTankTransfer({
-        spirit_type: transferForm.spirit_type,
-        source_tank_equipment_id: transferForm.source_tank_equipment_id,
-        dest_tank_equipment_id: transferForm.dest_tank_equipment_id,
-        volume_gal: transferForm.volume_gal,
-        abv: transferCorrectedAbv,
-        transfer_date: transferForm.transfer_date,
-        notes: transferForm.notes,
-      });
-      setShowTransferForm(false);
-      setTransferForm(emptyTransferForm());
-      refresh();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Could not save transfer.');
-    }
-  };
-
-  const handleDeleteTransfer = (id: number) => {
-    if (confirm('Delete this tank transfer? Tank levels will be restored.')) {
-      deleteHoldingTankTransfer(id);
-      refresh();
-    }
-  };
-
   return (
     <div>
       <div className="page-header">
@@ -760,7 +619,6 @@ export function Distillation() {
           <button type="button" className="btn btn-secondary" onClick={() => openNewRun('heavy_rum')}>
             {RUN_TYPE_BUTTON_LABELS.heavy_rum}
           </button>
-          <button type="button" className="btn btn-secondary" onClick={openTransferForm}>+ Tank Transfer</button>
         </div>
       </div>
 
@@ -1160,163 +1018,6 @@ export function Distillation() {
           </div>
         )}
       </div>
-
-      <div className="detail-panel" style={{ marginTop: '1.5rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-          <h4>Tank Transfers</h4>
-          <button className="btn btn-primary btn-sm" onClick={openTransferForm}>+ Transfer</button>
-        </div>
-        {tankTransfers.length === 0 ? (
-          <p style={{ color: 'var(--text-muted)' }}>No tank-to-tank transfers recorded yet.</p>
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Spirit</th>
-                  <th>From</th>
-                  <th>To</th>
-                  <th>Volume</th>
-                  <th>ABV</th>
-                  <th>Notes</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {tankTransfers.map((t) => (
-                  <tr key={t.id}>
-                    <td>{format(new Date(t.transfer_date), 'MMM d, yyyy')}</td>
-                    <td>{SPIRIT_TYPE_LABELS[t.spirit_type]}</td>
-                    <td>{t.source_tank_name}</td>
-                    <td>{t.dest_tank_name}</td>
-                    <td>{t.volume_gal.toFixed(1)} gal</td>
-                    <td>{t.abv.toFixed(1)}%</td>
-                    <td>{t.notes || '—'}</td>
-                    <td><button className="btn btn-sm btn-ghost" onClick={() => handleDeleteTransfer(t.id)}>Delete</button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {showTransferForm && (
-        <Modal title="Tank Transfer" onClose={() => setShowTransferForm(false)}>
-          <div className="form-grid">
-            <div className="form-group">
-              <label>Spirit Type</label>
-              <select
-                value={transferForm.spirit_type}
-                onChange={(e) => setTransferForm({ ...transferForm, spirit_type: e.target.value as SpiritTransferType })}
-              >
-                {(Object.keys(SPIRIT_TYPE_LABELS) as SpiritTransferType[]).map((type) => (
-                  <option key={type} value={type}>{SPIRIT_TYPE_LABELS[type]}</option>
-                ))}
-              </select>
-            </div>
-            <div className="form-group">
-              <label>Transfer Date</label>
-              <DatePicker
-                value={transferForm.transfer_date}
-                onChange={(transfer_date) => setTransferForm({ ...transferForm, transfer_date })}
-              />
-            </div>
-            <div className="form-group full-width">
-              <label>From Tank</label>
-              <select
-                value={transferForm.source_tank_equipment_id || ''}
-                onChange={(e) => handleSourceTankChange(e.target.value ? parseInt(e.target.value, 10) : 0)}
-              >
-                <option value="">— Select source tank —</option>
-                {sourceTanksForTransfer.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {transferSourceTankOptionLabel(t)}
-                  </option>
-                ))}
-              </select>
-              {sourceTanksForTransfer.length === 0 && (
-                <p className="field-hint">No holding tanks or collection vessels with spirit — add distillation cuts first.</p>
-              )}
-              {selectedTransferSourceTank && (
-                <p className="field-hint">{transferSourceInTankLine(selectedTransferSourceTank)}</p>
-              )}
-            </div>
-            <div className="form-group full-width">
-              <label>To Tank</label>
-              <select
-                value={transferForm.dest_tank_equipment_id || ''}
-                onChange={(e) => setTransferForm({
-                  ...transferForm,
-                  dest_tank_equipment_id: e.target.value ? parseInt(e.target.value, 10) : 0,
-                })}
-              >
-                <option value="">— Select destination tank —</option>
-                {destTanksForTransfer.map((t) => {
-                  const contents = getHoldingTankContents(t.id);
-                  const label = contents.volume_gal > 0
-                    ? `${t.name} (${contents.volume_gal.toFixed(1)} gal @ ${contents.abv.toFixed(1)}%)`
-                    : `${t.name} (empty · ${t.capacity_gal} gal cap)`;
-                  return <option key={t.id} value={t.id}>{label}</option>;
-                })}
-              </select>
-            </div>
-            <div className="form-group full-width">
-              <AbvVolumeTemperatureFields
-                volumeGal={transferForm.volume_gal}
-                volumeEditable
-                onVolumeChange={(volume_gal) => setTransferForm({ ...transferForm, volume_gal })}
-                volumeLabel="Volume (gal)"
-                abvLabel="Observed transfer ABV (% at sample temp)"
-                abvValue={transferForm.observed_abv}
-                temperatureValue={transferForm.sample_temp_f}
-                onAbvChange={(observed_abv) => setTransferForm({ ...transferForm, observed_abv })}
-                onTemperatureChange={(sample_temp_f) => setTransferForm({ ...transferForm, sample_temp_f })}
-                abvPlaceholder={transferSourceContents?.abv.toFixed(1)}
-                blendPreview={
-                  transferDestContents && transferForm.dest_tank_equipment_id > 0
-                    ? {
-                      existingVolumeGal: transferDestContents.volume_gal,
-                      existingAbv: transferDestContents.abv,
-                    }
-                    : undefined
-                }
-              />
-              {transferSourceContents && transferForm.source_tank_equipment_id > 0 && (
-                <button
-                  type="button"
-                  className="btn btn-sm btn-ghost"
-                  style={{ marginTop: '0.35rem' }}
-                  onClick={() => setTransferForm({
-                    ...transferForm,
-                    volume_gal: Math.round(transferSourceContents.volume_gal * 10) / 10,
-                    observed_abv: (Math.round(transferSourceContents.abv * 10) / 10).toString(),
-                    sample_temp_f: '60',
-                  })}
-                >
-                  Transfer all ({transferSourceContents.volume_gal.toFixed(1)} gal)
-                </button>
-              )}
-            </div>
-            <div className="form-group full-width">
-              <label>Notes</label>
-              <input
-                value={transferForm.notes}
-                onChange={(e) => setTransferForm({ ...transferForm, notes: e.target.value })}
-                placeholder="Optional"
-              />
-            </div>
-          </div>
-          <p className="form-hint">
-            Move spirit between any holding tank and collection vessel. Source volume is reduced and destination volume increases.
-          </p>
-          <div className="form-actions">
-            <button className="btn btn-secondary" onClick={() => setShowTransferForm(false)}>Cancel</button>
-            <button className="btn btn-primary" onClick={handleSaveTransfer}>Transfer</button>
-          </div>
-        </Modal>
-      )}
 
       {showCutForm && (
         <Modal title={editCutId ? 'Edit Cut' : 'Add Cut'} onClose={closeCutForm}>
