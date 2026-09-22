@@ -129,7 +129,7 @@ export function buildLiquidMovements(range: ReportDateRange): LiquidMovementRow[
       movement_type: 'tank_transfer',
       source_label: t.source_name,
       dest_label: t.dest_name,
-      product_liquid: t.spirit_type.replace(/_/g, ' '),
+      product_liquid: 'tank transfer',
       batch_ref: '',
       volume_gal: t.volume_gal,
       abv: t.abv,

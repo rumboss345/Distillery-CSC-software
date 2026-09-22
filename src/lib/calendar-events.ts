@@ -339,7 +339,7 @@ export function buildCalendarEventsFromData(data: CalendarProductionData): Calen
       allDay: true,
       kind: 'transfer',
       title: `${transfer.source_tank_name ?? 'Tank'} → ${transfer.dest_tank_name ?? 'Tank'}`,
-      status: transfer.spirit_type.replace('_', ' '),
+      status: 'transfer',
       statusCategory: 'other',
       detail: `${transfer.volume_gal.toFixed(1)} gal @ ${transfer.abv.toFixed(1)}%`,
     });
