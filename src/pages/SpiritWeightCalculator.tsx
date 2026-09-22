@@ -3,6 +3,8 @@ import { AbvTemperatureInput, correctedAbvFromInputs } from '../components/AbvTe
 import {
   computeAlcoholDilution,
   formatDilutionSummary,
+  waterLitersToWeightKg,
+  waterLitersToWeightLb,
   type DilutionVolumeBasis,
 } from '../lib/alcohol-dilution';
 import {
@@ -24,6 +26,7 @@ type CalculatorTab = 'gauging' | 'dilution';
 type InputMode = 'weight' | 'volume';
 type WeightUnit = 'lb' | 'kg';
 type VolumeUnit = 'gal' | 'l';
+type DilutionAmountMeasure = 'volume' | 'weight';
 
 const litersToUsGal = (liters: number) => (liters * 1000) / ML_PER_GALLON;
 const usGalToLiters = (gal: number) => (gal * ML_PER_GALLON) / 1000;
@@ -78,8 +81,10 @@ function ResultPanel({
 
 function AlcoholDilutionCalculator() {
   const [volumeBasis, setVolumeBasis] = useState<DilutionVolumeBasis>('before');
+  const [amountMeasure, setAmountMeasure] = useState<DilutionAmountMeasure>('volume');
   const [volumeUnit, setVolumeUnit] = useState<VolumeUnit>('l');
-  const [volumeValue, setVolumeValue] = useState('3.71');
+  const [weightUnit, setWeightUnit] = useState<WeightUnit>('lb');
+  const [amountValue, setAmountValue] = useState('3.71');
   const [actualAbv, setActualAbv] = useState('58');
   const [sampleTempF, setSampleTempF] = useState('60');
   const [targetAbv, setTargetAbv] = useState('43');
@@ -92,23 +97,57 @@ function AlcoholDilutionCalculator() {
   const targetAbvNum = parseFloat(targetAbv);
 
   const dilutionResult = useMemo(() => {
-    const vol = parseFloat(volumeValue);
-    if (!Number.isFinite(vol) || vol <= 0) return null;
+    const amount = parseFloat(amountValue);
+    if (!Number.isFinite(amount) || amount <= 0) return null;
     if (correctedActualAbv == null || correctedActualAbv <= 0) return null;
     if (!Number.isFinite(targetAbvNum) || targetAbvNum <= 0) return null;
-    const volumeLiters = volumeUnit === 'l' ? vol : usGalToLiters(vol);
+
+    let volumeLiters: number | null;
+    if (amountMeasure === 'volume') {
+      volumeLiters = volumeUnit === 'l' ? amount : usGalToLiters(amount);
+    } else {
+      const abvForLookup = volumeBasis === 'before' ? correctedActualAbv : targetAbvNum;
+      const proof = proofFromAbv(abvForLookup);
+      const gauged = weightUnit === 'kg'
+        ? gaugeFromWeightKg(amount, proof)
+        : gaugeFromWeightLb(amount, proof);
+      volumeLiters = gauged?.liters ?? null;
+    }
+    if (volumeLiters == null || volumeLiters <= 0) return null;
+
     return computeAlcoholDilution({
       actualAbvPercent: correctedActualAbv,
       targetAbvPercent: targetAbvNum,
       volumeLiters,
       volumeBasis,
     });
-  }, [correctedActualAbv, targetAbvNum, volumeBasis, volumeUnit, volumeValue]);
+  }, [
+    amountMeasure,
+    amountValue,
+    correctedActualAbv,
+    targetAbvNum,
+    volumeBasis,
+    volumeUnit,
+    weightUnit,
+  ]);
 
-  const displayVol = (liters: number) => (
-    volumeUnit === 'l'
+  const displayVol = (liters: number, unit: VolumeUnit = volumeUnit) => (
+    unit === 'l'
       ? `${liters.toFixed(2)} L`
       : `${litersToUsGal(liters).toFixed(2)} US gal`
+  );
+
+  const spiritWeightFromLiters = (liters: number, abv: number) => {
+    const proof = proofFromAbv(abv);
+    return gaugeFromLiters(liters, proof);
+  };
+
+  const weightLine = (lb: number, kg: number) => (
+    <>
+      {lb.toFixed(2)} lb
+      <br />
+      {kg.toFixed(2)} kg
+    </>
   );
 
   return (
@@ -151,21 +190,39 @@ function AlcoholDilutionCalculator() {
           </div>
         </div>
 
-        <p className="measure-mode-label" style={{ marginTop: '1rem' }}>Which volume is fixed?</p>
+        <p className="measure-mode-label" style={{ marginTop: '1rem' }}>Measure fixed amount by</p>
+        <div className="measure-mode-buttons" style={{ marginBottom: '0.75rem' }}>
+          <button
+            type="button"
+            className={`btn btn-sm ${amountMeasure === 'volume' ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setAmountMeasure('volume')}
+          >
+            Volume
+          </button>
+          <button
+            type="button"
+            className={`btn btn-sm ${amountMeasure === 'weight' ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setAmountMeasure('weight')}
+          >
+            Weight (Table No. 3)
+          </button>
+        </div>
+
+        <p className="measure-mode-label">Which amount is fixed?</p>
         <div className="measure-mode-buttons" style={{ marginBottom: '1rem' }}>
           <button
             type="button"
             className={`btn btn-sm ${volumeBasis === 'before' ? 'btn-primary' : 'btn-secondary'}`}
             onClick={() => setVolumeBasis('before')}
           >
-            Volume before dilution
+            Before dilution
           </button>
           <button
             type="button"
             className={`btn btn-sm ${volumeBasis === 'after' ? 'btn-primary' : 'btn-secondary'}`}
             onClick={() => setVolumeBasis('after')}
           >
-            Volume after dilution
+            After dilution
           </button>
         </div>
 
@@ -173,26 +230,49 @@ function AlcoholDilutionCalculator() {
           <div className="form-group">
             <label>
               {volumeBasis === 'before'
-                ? 'Volume (actual) before dilution'
-                : 'Volume (target) after dilution'}
+                ? amountMeasure === 'weight'
+                  ? 'Weight (actual) of spirit before dilution'
+                  : 'Volume (actual) before dilution'
+                : amountMeasure === 'weight'
+                  ? 'Weight (target) of blend after dilution'
+                  : 'Volume (target) after dilution'}
             </label>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <input
                 type="number"
-                step="0.01"
+                step={amountMeasure === 'weight' ? '0.1' : '0.01'}
                 min="0"
-                value={volumeValue}
-                onChange={(e) => setVolumeValue(e.target.value)}
+                value={amountValue}
+                onChange={(e) => setAmountValue(e.target.value)}
                 style={{ flex: 1 }}
               />
-              <select
-                value={volumeUnit}
-                onChange={(e) => setVolumeUnit(e.target.value as VolumeUnit)}
-              >
-                <option value="l">L</option>
-                <option value="gal">US gal</option>
-              </select>
+              {amountMeasure === 'volume' ? (
+                <select
+                  value={volumeUnit}
+                  onChange={(e) => setVolumeUnit(e.target.value as VolumeUnit)}
+                >
+                  <option value="l">L</option>
+                  <option value="gal">US gal</option>
+                </select>
+              ) : (
+                <select
+                  value={weightUnit}
+                  onChange={(e) => setWeightUnit(e.target.value as WeightUnit)}
+                >
+                  <option value="lb">lb</option>
+                  <option value="kg">kg</option>
+                </select>
+              )}
             </div>
+            {amountMeasure === 'weight' && (
+              <p className="field-hint">
+                Weight is converted to wine gallons using TTB Table No. 3 at{' '}
+                {volumeBasis === 'before'
+                  ? `${correctedActualAbv?.toFixed(2) ?? '—'}% ABV (spirit)`
+                  : `${targetAbvNum > 0 ? targetAbvNum.toFixed(2) : '—'}% ABV (finished blend)`}
+                .
+              </p>
+            )}
           </div>
         </div>
 
@@ -206,14 +286,48 @@ function AlcoholDilutionCalculator() {
       {dilutionResult ? (
         <div className="card spirit-calculator-results" style={{ marginTop: '1rem' }}>
           <h3>Results</h3>
+          {(() => {
+            const spiritG = spiritWeightFromLiters(
+              dilutionResult.spiritVolumeLiters,
+              dilutionResult.actualAbvPercent,
+            );
+            const finalG = spiritWeightFromLiters(
+              dilutionResult.finalVolumeLiters,
+              dilutionResult.targetAbvPercent,
+            );
+            const waterLb = waterLitersToWeightLb(dilutionResult.waterVolumeLiters);
+            const waterKg = waterLitersToWeightKg(dilutionResult.waterVolumeLiters);
+            return (
           <dl className="detail-grid">
             <dt>Spirit to use</dt>
-            <dd>{displayVol(dilutionResult.spiritVolumeLiters)} @ {dilutionResult.actualAbvPercent.toFixed(2)}% vol</dd>
+            <dd>
+              {displayVol(dilutionResult.spiritVolumeLiters)} @ {dilutionResult.actualAbvPercent.toFixed(2)}% vol
+              {spiritG && (
+                <>
+                  <br />
+                  {weightLine(spiritG.weightLb, spiritG.weightKg)}
+                </>
+              )}
+            </dd>
             <dt>Water to add</dt>
-            <dd>{displayVol(dilutionResult.waterVolumeLiters)}</dd>
+            <dd>
+              {displayVol(dilutionResult.waterVolumeLiters)}
+              <br />
+              {weightLine(waterLb, waterKg)}
+            </dd>
             <dt>Final volume</dt>
-            <dd>{displayVol(dilutionResult.finalVolumeLiters)} @ {dilutionResult.targetAbvPercent.toFixed(2)}% vol</dd>
+            <dd>
+              {displayVol(dilutionResult.finalVolumeLiters)} @ {dilutionResult.targetAbvPercent.toFixed(2)}% vol
+              {finalG && (
+                <>
+                  <br />
+                  {weightLine(finalG.weightLb, finalG.weightKg)}
+                </>
+              )}
+            </dd>
           </dl>
+            );
+          })()}
           <p className="field-hint">
             <strong>Example:</strong>{' '}
             {formatDilutionSummary(dilutionResult, volumeUnit)}
@@ -224,7 +338,7 @@ function AlcoholDilutionCalculator() {
         </div>
       ) : (
         <div className="card" style={{ marginTop: '1rem' }}>
-          <p className="field-hint">Enter starting ABV, target ABV, and volume to calculate water to add.</p>
+          <p className="field-hint">Enter starting ABV, target ABV, and a fixed volume or weight to calculate water to add.</p>
         </div>
       )}
     </>
