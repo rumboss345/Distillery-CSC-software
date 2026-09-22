@@ -7,6 +7,8 @@ export interface AbvVolumeTemperatureFieldsProps {
   volumeEditable?: boolean;
   onVolumeChange?: (value: number) => void;
   volumeStep?: number;
+  /** When set, input max and hint show the transfer limit (e.g. source tank on-hand). */
+  volumeMax?: number;
   abvLabel?: string;
   abvValue: string;
   temperatureValue: string;
@@ -28,6 +30,7 @@ export function AbvVolumeTemperatureFields({
   volumeEditable = false,
   onVolumeChange,
   volumeStep = 0.1,
+  volumeMax,
   abvLabel,
   abvValue,
   temperatureValue,
@@ -56,9 +59,19 @@ export function AbvVolumeTemperatureFields({
             type="number"
             step={volumeStep}
             min="0"
+            max={volumeMax != null && volumeMax > 0 ? volumeMax : undefined}
             value={volumeGal > 0 ? volumeGal : ''}
-            onChange={(e) => onVolumeChange?.(parseFloat(e.target.value) || 0)}
+            onChange={(e) => {
+              let next = parseFloat(e.target.value) || 0;
+              if (volumeMax != null && volumeMax > 0 && next > volumeMax) {
+                next = volumeMax;
+              }
+              onVolumeChange?.(next);
+            }}
           />
+          {volumeMax != null && volumeMax > 0 && (
+            <span className="field-hint">Up to {volumeMax.toFixed(1)} gal available in source tank.</span>
+          )}
         </label>
       ) : volumeGal > 0 ? (
         <p className="field-hint abv-volume-readout">

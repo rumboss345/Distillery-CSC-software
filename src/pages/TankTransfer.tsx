@@ -17,6 +17,12 @@ import {
   useRefreshKey,
 } from '../db/queries';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
+const sourceTankVolumeGal = (tankId: number) => {
+  if (!tankId) return 0;
+  const contents = getHoldingTankContents(tankId);
+  return contents.volume_gal > 0 ? contents.volume_gal : 0;
+};
+
 const emptyTransferForm = () => ({
   source_tank_equipment_id: 0,
   dest_tank_equipment_id: 0,
@@ -63,11 +69,31 @@ export function TankTransfer() {
     ? getHoldingTankContents(transferForm.dest_tank_equipment_id)
     : null;
 
+  const applySourceTankToForm = (
+    prev: ReturnType<typeof emptyTransferForm>,
+    tankId: number,
+  ) => {
+    const contents = tankId ? getHoldingTankContents(tankId) : null;
+    const fullVolumeGal = sourceTankVolumeGal(tankId);
+    return {
+      ...prev,
+      source_tank_equipment_id: tankId,
+      dest_tank_equipment_id: prev.dest_tank_equipment_id === tankId ? 0 : prev.dest_tank_equipment_id,
+      volume_gal: fullVolumeGal,
+      observed_abv: contents ? (Math.round(contents.abv * 10) / 10).toString() : '',
+      sample_temp_f: '60',
+    };
+  };
+
   const openTransferForm = (planDate?: string) => {
-    setTransferForm({
+    let form = {
       ...emptyTransferForm(),
       transfer_date: planDate ?? emptyTransferForm().transfer_date,
-    });
+    };
+    if (sourceTanksForTransfer.length === 1) {
+      form = applySourceTankToForm(form, sourceTanksForTransfer[0].id);
+    }
+    setTransferForm(form);
     setShowTransferForm(true);
   };
 
@@ -81,20 +107,7 @@ export function TankTransfer() {
   }, [searchParams, setSearchParams]);
 
   const handleSourceTankChange = (tankId: number) => {
-    const contents = tankId ? getHoldingTankContents(tankId) : null;
-    const fullVolumeGal = contents && contents.volume_gal > 0
-      ? Math.round(contents.volume_gal * 10) / 10
-      : 0;
-    setTransferForm({
-      ...transferForm,
-      source_tank_equipment_id: tankId,
-      dest_tank_equipment_id: transferForm.dest_tank_equipment_id === tankId
-        ? 0
-        : transferForm.dest_tank_equipment_id,
-      volume_gal: fullVolumeGal,
-      observed_abv: contents ? (Math.round(contents.abv * 10) / 10).toString() : '',
-      sample_temp_f: '60',
-    });
+    setTransferForm((prev) => applySourceTankToForm(prev, tankId));
   };
 
   const transferCorrectedAbv = correctedAbvFromInputs(
@@ -256,6 +269,7 @@ export function TankTransfer() {
               <AbvVolumeTemperatureFields
                 volumeGal={transferForm.volume_gal}
                 volumeEditable
+                volumeMax={transferSourceContents?.volume_gal}
                 onVolumeChange={(volume_gal) => setTransferForm({ ...transferForm, volume_gal })}
                 volumeLabel="Volume (gal)"
                 abvLabel="Observed transfer ABV (% at sample temp)"
@@ -280,12 +294,12 @@ export function TankTransfer() {
                   style={{ marginTop: '0.35rem' }}
                   onClick={() => setTransferForm({
                     ...transferForm,
-                    volume_gal: Math.round(transferSourceContents.volume_gal * 10) / 10,
+                    volume_gal: transferSourceContents.volume_gal,
                     observed_abv: (Math.round(transferSourceContents.abv * 10) / 10).toString(),
                     sample_temp_f: '60',
                   })}
                 >
-                  Transfer all ({transferSourceContents.volume_gal.toFixed(1)} gal)
+                  Use full tank ({transferSourceContents.volume_gal.toFixed(1)} gal)
                 </button>
               )}
             </div>
