@@ -12,6 +12,7 @@ Production management software for distilleries. Track the full spirit-making pi
 - **Floor Plan** — Interactive equipment layout
 - **Inventory** — Sugar, yeast, barrels, bottles, and labels
 - **Reports** — Yield analysis and production summary
+- **Ask Nelly** — Internal assistant grounded in IBD Diploma distilling notes (sidebar)
 
 ## Local development
 

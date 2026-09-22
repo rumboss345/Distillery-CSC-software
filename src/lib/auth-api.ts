@@ -149,3 +149,34 @@ export async function rejectUser(id: number) {
     method: 'POST',
   });
 }
+
+export interface AskNellySource {
+  sourceId: string;
+  sourceTitle: string;
+  excerpt: string;
+}
+
+export interface AskNellyChatTurn {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export async function fetchAskNellyStatus() {
+  return apiFetch<{
+    name: string;
+    aiEnabled: boolean;
+    sourceCount: number;
+    chunkCount: number;
+  }>('/api/ask-nelly/status');
+}
+
+export async function askNellyChat(message: string, history: AskNellyChatTurn[] = []) {
+  return apiFetch<{
+    answer: string;
+    sources: AskNellySource[];
+    mode: 'ai' | 'excerpt';
+  }>('/api/ask-nelly/chat', {
+    method: 'POST',
+    body: JSON.stringify({ message, history }),
+  });
+}

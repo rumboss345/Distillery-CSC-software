@@ -1,0 +1,625 @@
+1 
+Dipl. Distil. Module 2: Fermentation, Distillation & Maturation: Unit 2.6. Continuous Distillation 
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010) 
+Institute of Brewing and Distilling 
+Diploma in Distilling (Dipl. Distil.) 
+ 
+Module 2: Fermentation, Distillation & Maturation 
+ 
+Unit 2.6 – Continuous Distillation 
+ 
+ 
+   
+The separation of components of a liquid by differences in volatility (Unit 2.5) can be 
+performed even more efficiently by continuous distillation 
+ 
+ A basic design of continuous still for a 2-component mixture, e.g. ethanol and water, is 
+shown in Figure 2.6.1.   
+ 
+The heated mixture (at bubble point temperature, Figure 2.5.1) is fed into the column of 
+perforated plates at about half of its height.  As the liquid falls down through the plates 
+the more volatile component (ethanol) is preferentially stripped out in the lower half of 
+the column by the rising hot vapour, and the less volatile water continues down.  At the 
+bottom, some water is boiled back to steam in the reboiler (heat exchanger) to provide a 
+continuous supply of hot vapour, the remainder is discharged to drain.  Meanwhile, 
+vapour rising through the upper half of the column becomes increasingly rich in the more 
+volatile ethanol, ultimately to the azeotropic concentration.  Part of the product of the top 
+condenser must be returned to the column as reflux, to provide a layer of liquid on each 
+plate, the remainder is drawn off as alcohol. 
+2 
+Dipl. Distil. Module 2: Fermentation, Distillation & Maturation: Unit 2.6. Continuous Distillation 
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010) 
+ 
+ 
+ 
+ 
+ 
+Figure 2.6.1.  Simple distillation column. 
+ 
+However, that simple still design is unsuitable for distillation of potable spirits for the 
+following reasons. 
+ 
+a.  The still is required to separate not only ethanol and water but several hundred 
+flavour congeners from raw materials and fermentation.  Therefore the number of plates 
+required is so large that a single column would be too tall.  So it is normal practice to 
+operate with two linked columns side-by side. 
+b.  The top condenser can not be a total condenser (i.e. all vapour is condensed) as 
+described above, since a proportion of the most volatile congeners must be continuously 
+vented off to prevent unacceptable accumulation in the still. 
+c.  However, there is still an unacceptable concentration of these congeners at the 
+highest plates so the best spirit is drawn off lower down the still, not from the top 
+condensate. 
+d.  Although a reboiler would be a more economical use of steam and boiler feed water, 
+and would reduce the volume of water to be removed in stillage (spent wash), normally it  
+can not be used, since flavours produced by re-heating the spent beer/wash would be 
+
+3 
+Dipl. Distil. Module 2: Fermentation, Distillation & Maturation: Unit 2.6. Continuous Distillation 
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010) 
+unacceptable.  Also, yeast and other solids (e.g. cereal particles, in the case of whisky) 
+could bake on to the steam coil, creating heat transfer problems as well as off-flavours.  
+However, a reboiler is suitable with wine for brandy production, and perhaps with a clear 
+beer for white rum. 
+ 
+Therefore a more practicable design is an analyser (stripper) column, representing the 
+lower half of the still in Figure 2.6.1, and normally heated by direct steam injection, with 
+heated beer/wash/wine feed on to the top plate.  The hot spirit vapour from the top of the 
+column passes to the bottom of the rectifier, equivalent to the upper half of Figure 2.6.1, 
+and the individual components of the beer/wash/wine are separated over the height of 
+that column, with the spirit being drawn off near the top..Three variations on that 
+arrangement are described below. 
+ 
+Continuous stills for potable spirit production 
+The still system is two columns, each containing a stack of 30 – 50 perforated plates, 
+usually about 0.4 m apart, with the feed into the top of the analyser/stripper column A of 
+Figure 2.6.2.  To maintain steady conditions the feed of beer/wash must be heated 
+almost to the boiling point for its alcohol concentration (bubble point temperature, Figure 
+2.5.1 of unit 2.5). This is achieved in the still of Figure 2.6.2 by passing the feed through 
+a heat exchanger, the top condenser of column B.  Condensate is returned to the 
+column as reflux, and the heated beer/wash is fed into the top of column A.  Each 
+perforated plate (sieve plate) carries about 5 cm depth of beer, wash or wine, supported 
+by the upward flow of vapour through the holes, and maintained at 5 cm depth by over-
+flow weirs created by the “downcomer” pipes to the next lower level (Figure 2.6.3)  
+projecting by that amount above each plate.  The downcomers reach almost to the lower 
+plate and are protected by circular 5 cm high weirs (seal pots), maintaining that depth of 
+liquid to prevent escape of steam or vapour up the pipes.  The downcomer pipes are 
+alternately at opposite ends of rectangular plates, or diametrically opposite for circular, 
+to create a flow across the plate, and so on down the column.  Each individual plate is 
+fitted with safety valves to protect against the effects of blockage.  In addition, pressure 
+and vacuum relief valves are fitted to the tops of the two still columns.  
+ 
+Column A is the analyser or stripper column, where all volatile material is evaporated by 
+the upward flow of steam and hot vapour to pass to the base of column B, and non-
+volatile residue leaves the bottom of column A as stillage (spent wash).  In theory, 
+column B should be fitted on top of A (Figure 2.6.1) , so the pipe carrying hot spirit 
+vapour from the top of A to the bottom of B is the equivelant of  the flow from one sieve 
+plate to the next one above.   
+4 
+Dipl. Distil. Module 2: Fermentation, Distillation & Maturation: Unit 2.6. Continuous Distillation 
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010) 
+       
+  
+   
+Figure 2.6.2.  Continuous distillation of white rum or grain whisky. 
+  
+ 
+5 
+Dipl. Distil. Module 2: Fermentation, Distillation & Maturation: Unit 2.6. Continuous Distillation 
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010) 
+          
+  
+                                 Spirit vapour 
+ 
+Figure 2.6.3.  Flow across sieve plates between downcomer pipes (for plan view of 
+plate, see Figure 2.6.6). 
+ 
+Column B is the rectifier section, with the upward flow of hot spirit vapour bubbling 
+through, and partly condensing in, the 5 cm depth of liquid on each sieve plate.  There is 
+a gradual cooling as the vapour rises, so the rectification process is the separation of the 
+least volatile, highest boiling-point congeners at hotter lower levels, and congeners of 
+increasing volatility higher up the column.  Spirit is collected as the liquid flooding the 
+“spirit plate” near the top of the rectifier.  Since it is already liquid, there is no need for a 
+condenser, but a cooler is required to reduce the temperature of the spirit from about 
+79oC to 20oC.   There is a significant ethanol concentration in the liquid cascading to 
+the base of the rectifier, which is pumped to the top of column B.  This flow is equivalent 
+to the liquid in a single tall column falling to the next plate below.   
+ 
+Most of the vapour above the top sieve plate is condensed in the heat exchanger which 
+heats the incoming beer/wash, but a proportion of the most volatile congeners must be 
+allowed to escape to prevent their accumulation in the still system.  Condensed ethanol 
+and congeners of similar volatility are returned to the top plate as reflux, to begin the 
+cascade of liquid phase back down the rectifier. This is the only true equivalent of the 
+reflux in a pot still, since the still columns are enclosed in insulating jackets.  However, 
+the condensation and evaporation at each level, and the upward and downward flows of 
+vapour and liquid respectively from each plate, create the same effect.       
+ 
+Since there is a significant content of higher alcohols in the wash, these compounds 
+must also be continuously removed from the system to maintain steady-state conditions.  
+The zone of highest concentration is in the lower section of the rectifier, from where they 
+are drawn off as “fusel oil” (explained below). 
+6 
+Dipl. Distil. Module 2: Fermentation, Distillation & Maturation: Unit 2.6. Continuous Distillation 
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010) 
+ 
+Traditionally the sieve plates are made of copper.  The frame may also be copper but is 
+more likely to be cast iron or stainless steel.  However, many modern stills are now built 
+entirely of stainless steel to reduce corrosion, but sacrificial copper, usually as copper 
+turnings, must be included to remove sulphur compounds at sensitive points.  Copper is 
+especially important at the spirit plate of the rectifier.  Also, copper mesh is fitted to the 
+vapour pipes at the top of the rectifier, to remove entrained droplets and volatile sulphur 
+compounds from the spirit vapour, as well as acting as a flame arrester.   
+ 
+Two other designs of still are sufficiently common to justify explanation here.               
+(a) Barbet stills, used in many white rum and wine/molasses neutral spirit distilleries, are 
+intended to avoid as much as possible the recycling of process streams between 
+columns, which, it was believed, increased the accumulation of unwanted congeners.   
+ 
+The difference from the standard stripper column A of Figure 2.6.2 is that the beer/wine 
+feed is about 5 plates down from the top of the column, and the hot spirit vapour for the 
+rectifier leaves from about 5 plates below that (Figure 2.6.4).  So the higher levels of the 
+stripper column act as a rectifier, separating the most volatile congeners (whch are 
+vented to atmosphere) from ethanol, which passes back down the column to leave 
+either as liquid spirit or hot spirit vapour.  These streams are fed into the rectifier about 
+20% up its height, not at the base.  So the whole column must have 20% more plates 
+than the rectifier of Figure 2.6.2.  The bottom 20% of column B strips ethanol from the 
+liquid descending from the lowest plate of the true rectifying section, which would 
+otherwise have been recycled to A as hot feints.  This needs a steam supply, generated 
+by re-boiling the descending liquid, so the rectifying section proper receives hot vapour 
+both from its own reboiler and from column A.  The hot water with a small amount of low-
+volatile congeners which leaves the reboiler at the bottom of column B is passed 
+through a heat exchanger (not shown in Figure 2.6.3) to drain.  As in the standard still 
+system, fusel oil is removed continuously from the zone of highest concentration in the 
+lower part of the rectifying section and the ethanol/water phase is returned to the 
+column.    
+ 
+ 
+7 
+Dipl. Distil. Module 2: Fermentation, Distillation & Maturation: Unit 2.6. Continuous Distillation 
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010) 
+         
+  
+Figure 2.6.4.  Barbet still 
+ 
+ (b) Coffey stills (Figure 2.6.5) are mainly associated with whiskies of various nation-
+alities, but are also used in some rum distilleries.  The beer/wash is pre-heated in a 
+copper coil throughout the height of the rectifier column B, so the temperature is close to 
+bubble point as it is discharged into the analyser A.  Condensation on the coil surface 
+provides true reflux throughout the Coffey still rectifier, giving better rectification, and the 
+additional surface area of copper increases reaction with sulphur compounds, but the 
+disadvantage is more complicated construction and cleaning.  Note that the top 
+condenser of the rectifier is not involved in heating the wash.  Its main purpose is to 
+provide reflux to the column but it also provides hot water for the distillery.  Figure 2.6.5 
+is shown with a fusel oil still rather than the simple decanter system of Figures 2.6.2 and 
+2.6.4, but a fusel oil still could be equally well be fitted to the standard still of Figure 
+2.6.2. 
+8 
+Dipl. Distil. Module 2: Fermentation, Distillation & Maturation: Unit 2.6. Continuous Distillation 
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010) 
+ 
+ 
+                                     A    B 
+ 
+Figure 2.6.5.  Coffey still.   
+HSV = hot spirit vapour; HW = hot wash.  X is the wash coil bend at the spirit plate 
+where temperature is monitored to control wash feed rate (see text below).  Within the 
+rectifier the wash coils are on a horizontal plane, see Figure 2.6.6.  Only a few sieve 
+plates are shown, but in reality each column has at least 30 plates. 
+ 
+ 
+ 
+ 
+ 
+
+9 
+Dipl. Distil. Module 2: Fermentation, Distillation & Maturation: Unit 2.6. Continuous Distillation 
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010) 
+ 
+ 
+Figure 2.6.6.  Rectangular sieve plate of a Coffey still showing the shape of the coil, which is 
+supported above the 5-cm depth of liquid.   On this particular plate, liquid flow is right to left.  
+Except for their shape, and of course absence of a wash coil, circular plates of other types of still 
+are of similar construction. 
+ 
+Distillation 
+The following description is based on the standard still system of Figure 2.6.2 but is also 
+applicable in most respects to the operation of Barbet and Coffey stills.   
+ 
+Since the temperature rises to 30 - 34oC during fermentation, as an energy-saving 
+measure the beer/wash should be distilled before any significant cooling occurs.  It is 
+common practice to discharge the beer/wash into a charger vessel of at least twice the 
+capacity of the fermentation vessels.  A mixer is required for three reasons::to ensure 
+homogeneous alcohol content, to keep yeast and other solids in suspension, and to 
+drive off as much as possible of the CO2 to reduce frothing in the still.   
+ 
+Constant alcoholic strength is required for stable conditions in the still.  Although weaker 
+beer/wash may be preferable for more stable operation and optimum separation of 
+flavour congeners, the potential energy savings from distillation of the strongest possible 
+feed are now more important.  However, stable operation becomes increasingly difficult 
+above about 9% abv.  The still can adjust itself to a change in the alcohol content during 
+the run to a limited extent.  Weaker beer/wash increases reflux, because of the 
+increased amount of the less volatile compounds, particularly water.  Stronger feed 
+generates more ethanol, a decrease in reflux.and less fractionation of the various flavour 
+congeners.  In theory, increased alcohol content could be controlled by reducing the 
+10 
+Dipl. Distil. Module 2: Fermentation, Distillation & Maturation: Unit 2.6. Continuous Distillation 
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010) 
+steam supply (as in pot stills, slower distillation means more reflux), but in practice that 
+would probably not be possible, since the liquid would tend to drain through the holes in 
+the plates.  The still is designed for a specific upward flow rate of steam and spirit 
+vapour, within narrow limits.  Slightly larger holes are required in the analyser plates to 
+prevent blockage if yeast and and other solids are intended to be present.  With the 
+constant flow rate of steam for the designed operating conditions, the rate of upward 
+flow of vapour is sufficient to prevent all but a slight leak of liquid through the holes.  In 
+fact some “weeping” of liquid through the holes is said to be useful, to wash away any 
+accumulation of solids and prevent blockage of the holes to allow a longer run.  
+However, the still must eventually be stopped for cleaning, and to allow oxidative 
+reactivation of copper surfaces. 
+ 
+Heated beer/wash is usually discharged into a tray or trough which overflows to flood 
+the top plate of the analyser.  For the necessary steady-state conditions it is more 
+important to maintain a constant feed temperature than constant flow rate, but even so, 
+substantial variation flow rate must be avoided.  So the flow rate through the heat 
+exchanger is adjusted as required to maintain the temperature of feed to the top of the 
+analyzer at, say, 90oC.  In the Coffey still, that feed temperature is controlled by 
+maintaining constant temperature in the coil at the level of the spirit plate.  The rate of 
+the feed  pump can be controlled automatically by a sensor at this point (X in Figure 
+2.6.5). 
+ 
+The hot vapour rising to the top of the analyser, containing all of the volatile components  
+stripped from the beer/wash, flows through the vapour pipes to the base of the rectifier 
+That spirit vapour, initially at the same temperature as the top plate of the analyser, is 
+cooled as it rises up the rectifier, condensing and re-evaporating at each level. .Rising 
+up the rectifier, the different components separate according to their volatility and boiling 
+points.  With the Coffey design of still, the temperature gradient is also partly due to the 
+wash in the coil entering the system at 30 - 33o at the top and increasing to about 90o 
+as the wash pipe leaves the bottom.  But in general, evaporation of congeners is 
+according to boiling point and relative volatility to the concentration of ethanol at each 
+level, and the result is the least volatile components condense in the lower section; but 
+highly volatile compounds remain in the vapour phase throughout the height of the 
+rectifier. 
+ 
+Because of the 2-column design of the still, when the descending liquid phase of the  
+rectifier column reaches the bottom plate, at about 15% abv, it must be pumped up to 
+the feed plate of the analyser.  Usually this is from a buffer tank (hot feints tank; see the 
+final section of this unit) since the flow rate must be co-ordinated with the flow of fresh 
+beer/ wash to maintain a constant alcohol concentration at the feed plate.  And so a 
+steady-state continuous process is maintained of  this combined charge to the analyser 
+cascading downwards, volatile components evaporating in the rising steam and vapour 
+to pass to the rectifier as hot spirit vapour, and water and non-volatile liquid and solid 
+components of the wash being removed at the base of the analyser as stillage/spent 
+wash. 
+ 
+Figure 2.6.7 is a modified version of Figure 2.5.5 of the Batch Distillation unit, showing 
+the relative volatility of type A and B congeners.  In a continuous process, type C  
+11 
+Dipl. Distil. Module 2: Fermentation, Distillation & Maturation: Unit 2.6. Continuous Distillation 
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010) 
+compounds, which are consistently less volatile than ethanol, either do not reach the 
+rectifier column, or if they do, are returned to the analyser from the lowest rectifier plates 
+in the hot feints.  A similar effect occurs in the analyser, where the low-volatile type C 
+congeners cascade down the column to leave eventually in the spent wash.  Type A 
+congeners, being more volatile at all concentrations of ethanol, migrate to the top of the 
+column.  According to the operating conditions of the top condenser, individual 
+components of that mixture will either be vented to atmosphere or recycled in the reflux 
+to the top plate of the rectifier.  The situation with type B congeners is more complicated 
+since their volatility is related to ethanol concentration, which varies over the height of 
+the column.  So type B compounds will accumulate at the level in the column where their 
+volatility and that of ethanol are equal, and that is different for each compound. 
+                          
+  
+Figure 2.6.7.  Relative volatility of flavour congeners. 
+ 
+Figure 2.6.8 shows the concentration of the principal alcohols, ethanol, n-propanol, 
+butanols and amyl alcohols in the liquid on the individual plates of the rectifier.  Each 
+higher alcohol has a slightly different ethanol concentration where their volatilities are 
+equal, i.e. a different level of the column.  Of the butanols and amyl alcohols, only n-
+butanol and iso-amyl alcohol are shown, since they are present in greater amounts than 
+their isomers, which have similar volatility.   The spirit plate is not necessarily the level 
+with highest concentration of ethanol, since that may have an unacceptable level of type 
+A congeners, e.g. acetaldehyde, methanol and any sulphur compounds which have 
+escaped reaction with the copper in the system.  The flavour of the spirit is more 
+important than its strength, and ethanol rising to higher levels will find its way back to the 
+spirit plate take-off point.   Note that concentrations of congeners are shown as 
+percentages by volume in Figure 2.6.8, not the parts per million that would be present in 
+the final spirit.  They are present in considerable amount at their own level in the 
+column, and congeners are still present at ppm levels and have a detectable effect on 
+aroma for several plates above and below their disappearance from the graph.   
+12 
+Dipl. Distil. Module 2: Fermentation, Distillation & Maturation: Unit 2.6. Continuous Distillation 
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010) 
+Figure 2.6.8.  Congener profile in the rectifier column. 
+ 
+Although iso-amyl alcohol is the higher alcohol reaching the highest concentration in the 
+column, all propanol, butanols and amyl alcohols must all be continuously drawn off at 
+constant rate, otherwise they would gradually accumulate in the column and affect spirit 
+quality over the duration of the run.  Inspection of Figure 2.6.8 suggests that about plate 
+15, where all three overlap, they could be drawn off together.  However, in practice it 
+has been found preferable to operate several take-off points as feed for a fusel oil still.  
+For steady-state conditions, these congeners must be drawn off at the same rate as 
+their introduction in the wash, and this is most easily achieved as separate side streams.  
+They can be adjusted independently, but cautiously, to control the congener content of 
+the spirit if necessary.  For example, to increase the butanol content, obviously less 
+butanol should be drawn off as side stream, but in practice, the situation is more 
+complex.  If the previous rate removal of propanol is maintained, as the amount of 
+butanols increases the propanol “bulge” in Figure 2.6.8 will be displaced upwards, 
+increasing the amount of propanol at the level of the spirit plate.  Therefore the rate of 
+removal of propanol to the fusel oil still should be increased to maintain the original 
+propanol content in the spirit.  This effect will be enhanced if amyl alcohols are also 
+removed more slowly.from lower levels, and so will further encourage the movement of 
+
+13 
+Dipl. Distil. Module 2: Fermentation, Distillation & Maturation: Unit 2.6. Continuous Distillation 
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010) 
+butanols and propanol up the column.  However, there are practical limits to this type of 
+manipulation.  Variation in alcohol content of the feed to the analyser also affects 
+flavour, since the changes in alcohol strength over the height of the rectifier affect the 
+levels at which the individual congeners of type B volatility accumulate.   
+ 
+In Japan, North America and European Union countries, whisk(e)y must be distilled at 
+less than 94.8% abv (= 190 o US proof), although Kentucky Bourbon whiskey has a 
+much lower maximum, 80% abv (160o US proof), to produce stronger congener flavour.  
+In Scotland, the spirit plate at which the spirit is drawn off is usually chosen to give an 
+alcohol concentration at some precise point in the range 92 – 94%.  Even that 2% 
+difference has a detectable effect on flavour congeners.  Spirit for gin and vodka 
+production is collected from a higher plate, for least 96% abv.. 
+ 
+Removal of Feints 
+In general, n-propanol, butanols and amyl alcohols are withdrawn continuously from the 
+region of the maximum concentration to maintain constant conditions in the still.  Ethanol 
+is separated from the higher alcohols (fusel oil) either by a decanter or by distillation.     
+Fusel oil is a valuable co-product.  UK Revenue & Customs permits up to 8.6% ethanol 
+in fusel oil for sale, but that amount represents a wasteful loss from the system and it is 
+usually possible to reduce the ethanol content to less than 1%.      
+       
+A fusel oil still (Figure 2.6.9) is a continuous still in its own right and must operate under 
+stable conditions, i.e. constant flow rate, temperature and composition of feed.  Since it 
+is only a small still, and of narrow diameter, its plates alone have insufficient area and 
+reflux capability for efficient separation, which is achieved by packing the still with 
+stainless steel or ceramic rings.  Flavour is irrelevant here, so there is no need for 
+copper and the still is built of stainless steel.  The fusel oil still has an entirely liquid feed, 
+so can be heated by a reboiler.  As with any continuous still, part of the condensed top 
+product must be recycled as reflux, but the remainder is returned to the main stills to 
+recover the ethanol.  For simplicity, the drawing of a Coffey still with associated fusel oil 
+still in Figure 2.6.6 shows a direct return flow, but via the cold feints tank (see below) is 
+more usual.  The bottom product, mainly fusel oil and water, proceeds to the cooling and 
+separation stages.  Fusel oil, iso-amyl alcohol in particular, is only poorly soluble in the 
+water phase and can be drawn off as the surface layer in the separator (decanter) tank.  
+The lower water layer is of sufficiently low organic content (only traces of higher 
+alcohols) to be discharged to drain.   
+ 
+Although it is not as efficient as a fusel oil still for recovering ethanol, it is possible to 
+operate with the decanter alone.  A proportion of the liquid on the plate of maximum 
+amyl alcohol concentration is drawn off and cooled by addition of water.  The water and 
+fusel oil phases separate; the fusel oil layer is decanted off and the alcoholic water 
+phase is returned to a lower level of the rectifier column for recovery of its alcohol 
+content. 
+ 
+ 
+ 
+ 
+ 
+14 
+Dipl. Distil. Module 2: Fermentation, Distillation & Maturation: Unit 2.6. Continuous Distillation 
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010) 
+ 
+                
+  
+2.6.9.  Fusel oil still  
+ 
+Fusel oil contains up to 95% v/v amyl alcohols and small amounts of ethanol, propanol, 
+butanols and various other metabolic products of fermentation.  Although its removal 
+obviously has a direct influence on flavour, there is the indirect benefit that high levels of 
+iso-amyl alcohol inhibit the solution of copper, and therefore restrict the Cu-catalysed 
+breakdown of ethyl carbamate precursors and other unwanted compounds.  Also, high 
+levels of iso-amyl alcohol in the lower section of the still inhibit the rectification of 
+ethanol.  Figure 2.6.9 shows the effect of accumulation of iso-amyl alcohol in the base of 
+the still: the extent of condensation and re-evaporation of ethanol on the lowest plates is 
+substantially reduced (the effect of relative volatility of amyl alcohols and ethanol as in 
+Figure 2.6.7 again).  Figure 2.6.10A is copied from the lower section of Figure 2.6.8; but 
+the different profile of part 2.6.10B shows that an increase in the concentration of amyl 
+15 
+Dipl. Distil. Module 2: Fermentation, Distillation & Maturation: Unit 2.6. Continuous Distillation 
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010) 
+alcohol over the lower plates of the rectifier reduces the ethanol content.  Although both 
+ethanol and iso-amyl alcohol concentrations are normal at plate 12 and above, the over-
+all operation of the still is less efficient, since plates 1 – 11 have not been involved to the 
+usual extent in rectification of the spirit.  Therefore in several ways, removal of amyl 
+alcohol contributes to a better quality of spirit.     
+    
+  
+Figure 2.6.10.  Effect of amyl alcohol concentration: A, normal operation of the lower section of 
+the rectifier; B, restricted fractionation by high amyl alcohol concentration. 
+ 
+Aeration 
+With the current concern about levels of ethyl carbamate in distilled spirits it is now 
+necessary to aerate the beer/wash to eliminate the cyanide precursors of ethyl 
+carbamate.  Also, aerated feed is more reactive with the copper surfaces of the stills, 
+thus reducing the amount of sulphury off-flavour.  Air is usually added at the pump from 
+the charger vessel to the still.  Throughout the still system, the dissolved oxygen 
+encourages reactions between beer/wash and the copper of the plates (and coil, in a 
+Coffey still), producing copper compounds or complexes which react with and remove 
+sulphur congeners.  The solution of Cu salts is particularly important at the bottom three 
+plates of the rectifier, where the hot, aerobic (by air carried in the hot spirit vapour from 
+the top of the analyser), acid (volatile fatty acids) conditions and relatively low 
+concentrations of ethanol and fusel alcohols encourage removal of cyanides associated 
+with ethyl carbamate production.  Therefore unwanted congeners such as S compounds 
+and cyanides are removed from the base of the column with the hot feints.  
+Unfortunately, aeration of the wash increases the rate of corrosion of the copper, and 
+increases the copper content of animal feed co-products.  But that is a price worth 
+paying for good-quality spirit. 
+ 
+It is possible to pump the hot feints from the base of the rectifier directly to the top of the 
+analyser column, but it may be preferable to aerate first, as shown in Figure 2.6.11, to 
+evaporate the more volatile Cu complexes and break down the precursors of ethyl 
+carbamate.  Hot feints are only about 15% abv, but being at least 90oC,  a valuable.  
+amount of ethanol is stripped out by the air flow.  That is condensed, cooled and 
+16 
+Dipl. Distil. Module 2: Fermentation, Distillation & Maturation: Unit 2.6. Continuous Distillation 
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010) 
+recycled to the analyser as cold feints.  However, during aeration at 90o there is no 
+possibility of further solution of oxygen.   
+ 
+ 
+ 
+ 
+Figure 2.6.11.  Hot feints and cold feints streams from continuous distillation. 
+ 
+Since cold feints were mentioned in the previous paragraph, it may be useful to 
+summarise their sources at this point.  Cold feints are about 20oC and of high alcohol 
+content, about the same strength as spirit.   Only small amounts are produced during 
+17 
+Dipl. Distil. Module 2: Fermentation, Distillation & Maturation: Unit 2.6. Continuous Distillation 
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010) 
+normal operation of the still, mainly the heads removed from the fusel oil still and the 
+condensate from the condenser/cooler associated with aeration of hot feints.  Normally 
+all of the reflux from the top condenser is returned to the top plate of the rectifier, but f it 
+is necessary to adjust the amount of reflux descending the rectifier column, the dotted 
+line in Figure 2.6.11 represents the route for the excess which is diverted to the cold 
+feints tank.  The link shown between spirit collection and the cold feints system relates 
+to the start-up and close-down procedures, explained below 
+Summary of continuous operation 
+The relative volumes and typical alcohol concentrations throughout the process are 
+summarised in Table 2.6.1 
+ 
+Table 2.6.1.  Balance of continuous distillation from 7.5% abv.beer/wash (approximate 
+values, since there is some variation between individual stills). 
+ Analyser column 
+             UNITS IN                 UNITS OUT 
+                  Volume    Ethanol                    Volume      Ethanol  
+Berr/wash              100          7.5    Spent wash         103     0    
+Steam          12           0    Hot spirit vapour     20       9.4*    . 
+Cold feints recycle    1           0.9*   TOTAL        123   9.4 
+Hot feints recycle    10          1.0*   . 
+            TOTAL       123          9.4 
+ Rectifier column 
+              UNITS IN                         UNITS OUT 
+                   Volume    Ethanol                Volume     Ethanol  
+Hot spirit vapour      20          9.4  Spirit           8            7.5  
+      Feints           2            0.9 
+      Condenser vent     < 0.1      < 0.1 
+      Hot feints recycle    10           1.0  
+                           TOTAL         20            9.4     
+Fusel oil still 
+                       UNITS IN                          UNITS OUT 
+                   Volume    Ethanol                Volume     Ethanol  
+From rectifier           2            0.9  Cold feints          1              0.9            
+       Fusel oil product      1              0 
+ 
+*Cold feints: 1 unit of 0.9 =  90% abv.  *Hot feints:10 units of 1.0 = 10% abv,  Hot spirit vapour, 
+20 units of 9.4 = 5 x 9.4 = 47% . 
+ 
+Table 2.6.1 is not strictly a mass balance since the quanities are expressed in volume rather than 
+mass, but all units of ethanol are in the correct proportion to allow an estimate of the alcohol 
+concentrations at different points of the system. 
+  
+Stop and Start Procedures 
+Continuous stills should run for as long as possible, but usually after a few weeks’ 
+operation it is necessary to stop for one or more of the following reasons:  
+(a) The accumulation of solids on the analyser plates requires cleaning.   
+18 
+Dipl. Distil. Module 2: Fermentation, Distillation & Maturation: Unit 2.6. Continuous Distillation 
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010) 
+(b) Congeners may have accumulated to unacceptable levels.  
+(c) The internal copper surfaces of the still have become exhausted.  Copper surfaces 
+are oxidized and reactivated while the still is open to the air for cleaning.   
+ 
+Since a substantial amount of alcohol is in circulation in the system it is important to 
+recover as much as possible during the close-down procedure: 
+(a) The feed is changed from beer/wash to water at the same temperature. 
+(b) From then on, the quality of spirit must be checked at frequent intervals.  It will be  
+acceptable quality for some time and then begin to deteriorate.  At that stage, the flow is 
+diverted to the cold feints tank, but at the same time the composition of the bottom 
+product of the analyser must be checked as the amount of beer/wash material 
+decreases.  When sufficiently free of solids, it is run to drain rather than to the co-
+products plant. 
+(c) When no more cold feints can be collected, the steam supply is turned off. 
+(d)  Then the contents of the rectifier column are drained into the hot feints tank, and  
+stored to start the next run. 
+(e) Finally, the water supply to the condensers and coolers is turned off. 
+ 
+Similarly, the start-up routine must avoid any loss of the previously recovered alcohol.  
+Although there will be some variation between distilleries, the procedure is basically  
+one of two possible methods, starting with either hot feints or water.  Hot feints, stored 
+from the previous distillation and probably now cooled, is pumped at the normal flow rate 
+and alcohol concentration of beer/wash, i.e. abv adjusted with water or cold feints as 
+necessary, to the top of the analyser.  From there it provides feed for the analyser 
+column and, evaporated by the steam supply, provides hot spirit vapour for the rectifier 
+and its top condenser.  Although the cold feints tank will also be fairly full at this stage, 
+because of its high strength only the normal small proportion can be bled into the hot 
+feints to supplement its alcohol content.  When the temperature of the feints feed is 
+steady at working temperature, it is replaced by beer/wash, and the hot feints feed is 
+adjusted to its normal rate, which should then be kept constant during the run.  When 
+the first stillage appears at the bottom drain it is directed to the co-products plant.  The 
+distillate at the spirit plate is collected as cold feints until it meets quality specifications of 
+spirit, or for a standard time that is known from previous experience to ensure collection 
+of the desired quality of spirit. 
+ 
+In an alternative start-up procedure the still is heated to its working temperature with a 
+water flow to the feed plate of the analyzer against the upward flow of steam, and the 
+normal feed of beer/wash, hot feints and cold feints is started when the two columns and 
+the top condenser reach working temperature.  As before, alcohol is collected as cold 
+feints until of spirit quality.   
+ 
+Because of its high alcohol content, any variation in addition of cold feints to the still 
+creates unstable conditions.  Only a relatively small quantity of cold feints is collected 
+during normal operation.  Most, or in some distilleries all, of the condensate from the top 
+condenser is recycled as reflux to the rectifier plates, but the top product of the fusel oil 
+still, with its high ethanol content, must be recycled as cold feints.  Stored cold feints 
+from the stop and start procedures is run on to the analyser column at a constant rate 
+calculated to empty the cold feints tank over the planned duration of the run.  However, 
+19 
+Dipl. Distil. Module 2: Fermentation, Distillation & Maturation: Unit 2.6. Continuous Distillation 
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010) 
+if an excess accumulates it can be re-distilled in the same way as unacceptable spirit 
+(see below). 
+ 
+Coffey stills.  To start Coffey stills, water is pumped through the coil during the heating 
+procedure at the normal feed rate for wash.  Then the equivalent of the feints or water 
+start-up procedures are either the hot water is drained from the bottom of the coil and 
+hot feints are added to the top of the analyser.or the hot water continues to the 
+analyser.and the still columns are heated up against the down-flow of that water. When 
+normal working temperature is reached, the wash flow is turned on to replace water in 
+the coil and the feed of supplementary hot and cold feints to the analyser is started.  
+When spent wash rather than water appears at the base of the analyser the flow is 
+diverted to the processing plant.  Again, spirit is collected as cold feints until of 
+acceptable quality for maturation.   
+ 
+Spirit which fails to the meet chemical or nosing tests for quality must be re-distilled.  
+Although an extremely rare event, when it happens the quantity may be too large for 
+blending with normal feed as cold feints.  In that case the still is run only on the failed 
+spirit, diluted with warm water to the temperature and alcoholic strength of the normal 
+beer/wash feed.  Since the bottom product of the analyser is now water with trace 
+amounts of congeners, it is run to drain after heat recovery, but otherwise the still 
+operates normally until all of the faulty spirit has been re-distilled.   
+ 
+Further reading 
+ 
+I..Campbell’s chapter Grain Whisky Distillation in Whisky, Technology, Production and 
+Marketing, ed. I. Russell (Academic Press, 2003) is mainly concerned with grain whisky 
+distillation but most of the information is equally applicable to continuous distillation in 
+general..  
+ 
+The equivalent chapter by R. J. Panek and A. R. Boucher in The Science and 
+Technology of Whiskies, ed. J. R. Piggott et al. (Longman, 1989) may be more relevant 
+to products other than Scotch grain whisky. 
+ 
+ 

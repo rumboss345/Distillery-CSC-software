@@ -1,0 +1,455 @@
+1 
+Dipl. Distil. Module 2: Fermentation, Distillation & Maturation: Unit 2.8. Quality  
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010)  
+Institute of Brewing and Distilling 
+Diploma in Distilling (Dipl. Distil.) 
+ 
+Module 2: Fermentation, Distillation  & 
+Maturation 
+ 
+Unit 2.8 – Quality  
+ 
+2.8.1  Laboratory analytical techniques 
+With the exception of alcoholic strength of the fin al product, the analyses outlined below 
+are not essential for the production and marketing of distilled spirit beverages.  Although 
+all could be useful in certain circumstances, they are not necessarily carried out 
+routinely.   
+ 
+Alcohol determination   Measurement of alcohol content is required at vario us stages 
+of spirit production.  Officially the exact measure ment of alcoholic content of a spirit 
+beverage  is determined as the density of a sample distilled in the laboratory, to 
+eliminate the effect of dissolved solids, but norma lly that procedure is required only 
+occasionally for the calibration, or confirmation o f the accuracy, of more convenient 
+routine methods.  The two methods in common use are  hydrometers and electronic 
+density meters, the latter based on resonant freque ncy of oscillation of the sample, 
+which is related to density.  Provided the correct hydrometer is used, i.e. calibrated for 
+maximum accuracy in the range of alcoholic strength  of interest, both methods provide 
+the accuracy of +/- 0.1% which is required for prod uction and revenue purposes.  Also, 
+an electronic density meter can be fitted in-line t o provide a continuous record of alcohol 
+strength. 
+ 
+Gas-liquid chromatography   Depending on the analysis, the injected sample can be 
+liquid spirit, head-space vapour or material extrac ted by a suitable solvent for the 
+compound(s) of interest.  Alternatively sample preparation could be by steam distillation, 
+e.g. of the phenols associated with peated malt for some Scotch malt whiskies. 
+ 
+Although GLC can be used for some routine measureme nts of ethanol, its typical 
+accuracy of +/- 1% is not precise enough for excise  records or confirmation of bottling 
+strength.  However, GLC is suitable for a wide rang e of analyses of volatile compounds, 
+and non-volatile compounds can also be measured if quantitative conversion to volatile 
+derivatives is possible, but for the latter it is m ore convenient in practice to use.HPLC.  
+The GLC column is normally narrow-bore glass or sta inless steel tubing 2 or 3 m in 
+length, coiled to fit the accurately attemperated o ven of the apparatus.  With specific 
+packing, flow rate of carrier gas and oven temperature (or accurately programmed  
+2 
+Dipl. Distil. Module 2: Fermentation, Distillation & Maturation: Unit 2.8. Quality  
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010)  
+increase of temperature), when the system has been calibrated with known amounts of 
+each compound of interest, the residence time between injection and detection at the far 
+end of the column identifies the compound.  The ine rt carrier gas is usually nitrogen, but 
+for some purposes argon or helium is preferable. Th e size of the peak (to be strictly 
+accurate, the area under the peak) of the detector response indicates the amount.  An 
+internal standard, a compound related to those bein g analysed but which would not be 
+present naturally, must be added at a  known amount  to each sample to recognise and 
+compensate for slight variations in residence time and/or detector response.  As an 
+alternative to inert packing, modern capillary tubing columns use the inner surface of the 
+tube itself is the support.  A flame ionization det ector, which measures the effect of the 
+congener vapour on burning hydrogen, detects the vo latile acids, alcohols and esters 
+from fermentation (although not all could be run in  the same column if different packing 
+is required).  Specialized packings and detection s ystems, e.g. electron capture, are 
+required for diacetyl and sulphur compounds, includ ing dimethyl sulphide and 
+polysulphides.  The standard GLC system outlined ab ove is suitable for most 
+fermentation congeners, e.g. as back-up for sensory  assessment of either new or 
+mature spirit, but coupled to a mass-spectrometer ( as GC-MS) can measure a much 
+wider range of volatile compounds because of the gr eater versatility of the detection 
+system..    
+ 
+Non-volatile congeners by HPLC or TLC.  The non-volatile compounds (e.g. sugars, 
+tannins, lignin degradation products and other phen olic compounds) associated with 
+maturation are more conveniently analysed by High-P erformance (or High-Pressure) 
+Liquid Chromatography or Thin Layer Chromatography.   Both methods are more 
+sophisticated versions of the original method of se paration of coloured compounds by 
+paper chromatography..  For HPLC the sample is chro matographed in the liquid phase 
+through a column could be a miniature version of th at used for GLC, or perhaps a small 
+cylindrical column, and the separated components of the mixture are usually detected by 
+UV fluorescence.  As with GLC, identification is by  elution time and quantification by the 
+extent of detector response.   
+ 
+For TLC, metal foil or glass plates are coated with  a thin layer of inert material, often 
+silica.  As with paper chromatography, samples are spotted on the start line.  Then the 
+plate is placed vertically in the solvent trough wi th the edge beside the start line just 
+immersed (but, as in paper chromatography, not the start line itself).  After elution, which 
+is much faster than with paper, the plate is spraye d with reagent mixture (subsequent 
+heating in an oven may be necessary) and the spots identified by their position and 
+perhaps also by their colour reaction with the reag ent.  Although precise measurement 
+is not possible, amount can be estimated reasonably  accurately by intensity of colour 
+and possibly also by the size of the spot, in compa rison with standards run 
+simultaneously,. 
+and preferaby on the same plate 
+ 
+It may happen that several components of a mixture run so close to each other that 
+clear separation is impossible.  Although only a si ngle sample can then be analysed, 
+one spot at one corner of the plate can be chromatographed as before, and its partly- 
+3 
+Dipl. Distil. Module 2: Fermentation, Distillation & Maturation: Unit 2.8. Quality  
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010)  
+separated components, at this stage still invisible , are then fully separated by 
+chromatography with a different solvent running at 90 o to the first, and then sprayed and 
+heated as before.  This description is necessarily vague since there are so many 
+variations of plate coating, elution solvent and re agent, but one useful application of 2-
+dimensional TLC is the separation and measurement o f the lignin degradation products 
+associated with the maturation process. 
+  
+Nitrosodimethylamine  NDMA, a suspected carcinogen, became a problem in t he 
+brewing and malt whisky industries in the 1970s wit h the introduction of natural gas fuel 
+for malt kilning.  Its higher burning temperature c reated oxides of nitrogen (NO X) which 
+in turn caused the formation of NMDA.  Also, natural gas burns without formation of SO 2, 
+which inhibits NO X formation. .  The problem could be solved by indir ect heating, but if 
+direct heating by flue gas had to be used, heavy fu el oil has sufficient sulphur content to 
+inhibit formation of NO X.  So NDMA analysis is seldom required now, but if necessary is 
+by GLC of a directly injected sample of whisky and a thermal energy analyzer detector.  
+Sensitivity < 1 g/litre is claimed, so ideally NDMA should not be d etected.  This is a 
+particularly appropriate place to emphasise the COS HH requirements of chemical 
+analyses.  Although the small amount of NDMA that m ay be present in the samples is 
+safe, the pure chemicals used for preparation of standards are hazardous. 
+ 
+Ethyl carbamate , also a suspected carcinogen, can occur in trace a mounts in all 
+distilled beverages, created by thermal decompositi on during distillation of 
+isobutyraldehyde cyanohydrin which is formed from n aturally occurring cyanide 
+glycosides of plant origin during fermentation.  The problem was eliminated by (a) use of 
+raw materials with low levels of CN precursors and (b) aeration during continuous 
+distillation to prevent accumulation of cyanides in  the system, this to be done in the 
+presence of sacrificial copper in stainless-steel s tills.   GC-MS of a directly injected 
+sample is an appropriate method of analysis. 
+ 
+ 
+2.8.2  Sensory analyses 
+ 
+Because of the high alcohol content of potable spir its, flavour analysis by tasting is not 
+often used, and is not used at all in some companie s.  Sensory analysis is normally by 
+nosing, i.e. by aroma only, so panelists must be se lected on the basis of natural highly 
+developed odour recognition, which is enhanced by r egular training.  Therefore trained 
+panelists have a sensory threshold for aroma charac ters well below the average of the 
+general public. 
+ 
+The basic requirement for sensory analysis is a tra ined panel working in a room of 
+consistent ambient temperature and free from distra cting odours.  Whether communal 
+assessment takes place round the table or panelists  work in separate booths is the 
+choice of individual companies and should not by it self have any effect on the 
+significance of the results. Views on whether to pr ovide computer terminals to record 
+individual responses directly, or written forms wit h the option of giving more detailed 
+impressions when appropriate, also vary between companies.  For most types of test a  
+4 
+Dipl. Distil. Module 2: Fermentation, Distillation & Maturation: Unit 2.8. Quality  
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010)  
+minimum of ten trained panelists is necessary for s tatistical significance.  Decisions on 
+blending could well be based on one person’s assess ment, but that is a different 
+situation from the use of a sensory panel as an ana lytical technique.  Sensory 
+assessment is believed to be most sensitive with po table spirit samples diluted to 20% 
+abv with aroma-free water, perhaps distilled to ach ieve that ideal.  Samples of 25 ml in 
+tulip-shaped nosing glasses are diluted with an equ al volume of water and left at 
+ambient temperature for 30 min, each covered with a  watch glass, to allow aroma to 
+develop in the head space.   
+ 
+Difference tests 
+Although there are many variations for specific pur poses, there are only two basic types 
+of sensory test: difference and descriptive.  A dif ference test is precisely that: are the 
+samples the same or different?  For statistical val idity a minimum 20 assessors is 
+normally required, also there are various strategies for presenting the test samples. .The 
+two most common types of difference tests for sensory analysis of spirits are (a) triangle, 
+(b). A or not-A.  Several other variations are wide ly used for food, beer and wine but 
+because of the number of samples involved are unsui table for spirits.  Even when 
+working only by nosing, an assessor is normally lim ited to a maximum of 10 samples in 
+total (or 12, in some establishments) to avoid sensory fatigue. 
+ 
+A or not-A: A is a reference sample, and panelists are presented with that and a second 
+which is either A again or one of the samples under  test.   And so on, with a succession 
+of paired samples.  In the Triangle test  each person is given three samples, two of 
+which are identical (either 2 reference, 1 test or 1 reference, 2 test).  For both methods, 
+the intention is to determine if a statistically si gnificant difference can be detected.  It is 
+also possible for panelists to comment on their per ception of the aroma of the samples, 
+thus providing a simple form of descriptive test, b ut the results can never be as 
+significant as from a test designed specifically fo r that purpose.  The triangle test is also 
+ideal for assessing the sensory perception of panel ists, by discriminating between 
+accurately prepared samples. 
+ 
+Descriptive tests 
+Such tests may be limited to describing the aroma c omponents, but normally it is useful 
+to estimate of the strength of specific characters in the assessment.  A higher level of 
+training is required than for difference tests: not  only must the panelists have highly 
+developed sensory perception but they also require the ability to recognise, and 
+describe accurately, specific aroma components.  Th erefore assessors are trained to 
+use a standard vocabulary of descriptive terms, as first used in the wine and brewing 
+industries.   
+The flavour wheel developed by the Scotch Whisky Re search Institute is shown below 
+as an example (Figure 2.8.1), but several more complex  variations for whiskies have  
+subsequently been proposed, e.g. to include “spicy”  which did not appear in the SWRI 
+flavour wheel..  Although there are numerous common  congeners from the fermentation 
+and maturation processes, the aromas of brandy, rum  and whisky are sufficiently 
+different to require specific “flavour wheel” stand ard terms for the various desirable and 
+undesirable components of each.  Equivalent wheels exist for brandy, gin and rum, and  
+5 
+Dipl. Distil. Module 2: Fermentation, Distillation & Maturation: Unit 2.8. Quality  
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010)  
+presumably also for other spirit beverages with sufficiently complex aroma and flavour to 
+justify such a descriptive presentation of the comp onent factors.  Note that Figure 2.8.1 
+includes factors which are undetectable by nosing: the taste sensations sweet, sour, salt 
+and bitter, and “mouthfeel” effects.  Also, “metall ic” in the “stale” sector and “glycerin” 
+and “honey” in ”sweet-associated” are probably tast e rather than aroma sensations.                    
+ 
+The flavour wheel for the mature final product is unnecessarily complex for new spirit, so 
+a simplified version prepared within the company, p erhaps with no more than 12 named 
+characters, is adequate for sensory work before the  start of maturation.  For similar 
+reasons, with neutral spirit or vodka samples, eith er a difference test or a simple list of 
+the few likely aroma characters is sufficient for sensory analysis. 
+ 
+It is possible to relate most of the descriptive te rms of the flavour wheel to specific 
+chemical compounds. Accurately prepared solutions o f such compounds can then be 
+used for training and assessment of panelists.  Some examples are listed in Table 2.8.1.  
+ 
+  
+Figure 2.8.1.  Flavour wheel for mature whisky characters 
+ 
+6 
+Dipl. Distil. Module 2: Fermentation, Distillation & Maturation: Unit 2.8. Quality  
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010)  
+Flavour profile.   In the simplest version, which originated with th e wine industry, the 
+assessor(s) describe(s) the character of each sampl e using standard terminology.  The 
+same system can be used with gin and matured spirit s, but because of its limited 
+precision and reproducibility it is used more by amateur enthusiasts than by professional 
+assessors. 
+ 
+For a more accurate and reproducible assessment, a selection of sensory characters is 
+scored on a 0 -10 scale.  In practice it is difficu lt to operate with more than 8 in a single 
+assessment, but with a suitable choice of character s appropriate to the product a 
+precise profile can be prepared.  The scores for a hypothetical Scotch malt whisky are 
+presented in Figure 2.8.2, resembling a spider’s we b early in its construction, hence the 
+term spider diagram.  Even though there are differe nces between each distillation and 
+even each cask, the shapes of spider diagrams of in dividual Scotch malt and grain 
+whiskies are remark-ably consistent.  Similar consi stency applies to specific brands of 
+brandy, gin and rum.   To some extent, the characteristic spider diagram can be used for 
+identification. However, legal disputes about the a uthenticity of a branded product are 
+better resolved by GLC analysis, including ethanol content (to detect dilution), which 
+gives a more detailed and precise profile of the fl avour congeners of the genuine and 
+allegedly fraudulent products. 
+ 
+Table 2.8.1.  Typical flavour wheel descriptors and reference compounds 
+ 
+  Descriptor           Reference compound    
+Buttery   Diacetyl 
+Cooked vegetable  Dimethyl sulphide 
+Earthy    Geosmin 
+Fruity    iso-Amyl acetate 
+Medicinal   o-Cresol 
+Musty (mouldy)  2,4,6 Trichloroanisole 
+Nutty    Oak lactone 
+Pungent   Formic acid 
+Rancid   n-Butyric acid (or Ethyl butyrate) 
+Solvent   Ethyl acetate 
+Spicy (clove)   Eugenol 
+Sweaty   iso-Valeric acid 
+Vanilla   Vanillin     
+7 
+Dipl. Distil. Module 2: Fermentation, Distillation & Maturation: Unit 2.8. Quality  
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010)  
+                
+  
+ 
+Figure 2.8.2 .  “Spider diagram” of a hypothetical new-make Scotch malt whisky . 
+ 
+ 
+ 
+Trueness to type  can be assessed in various ways, according to the product.  GLC, as 
+mentioned immediately above, could be used, but the  trained human nose is a much 
+more sophisticated analytical instrument and normal ly decides for routine quality 
+analysis.  The simplest assessment is “A or not A”,  a comparison with a standard 
+sample shows identity, or not.  Problems arise when  it is “not A”, what has gone wrong?  
+A spider diagram may identify the discrepancy, but equally well may not, since only a 
+limited number of characteristics is assessed.  GLC  or HPLC may be used, but many 
+congeners are significant to spirit quality well be low their detection levels by with these 
+methods.  Expressed another way, there are many con geners which are undetectable 
+by laboratory instruments when present at or near aroma threshold levels. The company 
+must rely on the expertise of the sensory panel or the blender to put things right.  .   
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+8 
+Dipl. Distil. Module 2: Fermentation, Distillation & Maturation: Unit 2.8. Quality  
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010)  
+2.8.3  Quality Management 
+ 
+Quality Assurance is the organisation and managemen t of tests and audits to ensure 
+that quality standards are defined and the product is prepared so as to meet or exceed 
+these standards consistently.  Typically the following factors are involved: 
+•  Definition of requirements and responsibilities fo r quality of processes and 
+materials 
+•  Definition of the required properties of the produ ct 
+•  Definition of  the materials and processes involve d 
+•  Definition of the number and qualifications of per sonnel 
+•  Assessment of factors affecting quality 
+•  Defnition of quality assurance actions: education,  training and motivation; 
+requirements for and methods of analyses (quality c ontrol); documentation of 
+results 
+•  Definition of responsibilities for quality assuran ce actions.   
+ 
+Quality Assurance standards 
+ISO 9000 is a family of standards for quality manag ement systems maintained by the 
+International Standardization Organization and admi nistered by accreditation and 
+certification bodies.  ISO 9001 is the internationa lly recognised standard for an 
+organisation’s Quality Management.systems, incorpor ating all the activities associated 
+with quality.  Basically there are two principal re quirements (a) a well-planned and well-
+managed quality system and (b) documentary evidence that such a system exists and is 
+operating properly   A company that has been indepe ndently audited and certified with 
+ISO 9001 has proof that formalized business process es are being applied, although this 
+does not necessarily guarantee the quality of the company’s products.   
+The requirements in ISO 9001:2008 include 
+•  a set of procedures that cover all key processes i n the company,  
+•  monitoring processes to ensure they are effective;   
+•  keeping adequate records;  
+•  checking output for defects, with appropriate and corrective action where 
+necessary;  
+•  regularly reviewing individual processes and the q uality system itself for 
+effectiveness; and  
+•  facilitating continual improvement  
+ 
+The quality policy is a formal statement from manag ement, closely linked to the 
+business and marketing plan and to customer needs. The quality policy is understood 
+and followed at all levels and by all employees. Ea ch employee needs measurable 
+objectives to work towards.  Decisions about the qu ality system are based on recorded 
+data and the system is regularly audited and evalua ted for conformance and 
+effectiveness.  Records must show how and where raw  materials and products were 
+processed, to allow products and problems to be tra ced back to their source.   ISO 9001 
+stipulates a need to determine customer requirement s: that may not apply literally to the 
+actual distilled spirits, but certainly it is necessary to create systems for communicating  
+9 
+Dipl. Distil. Module 2: Fermentation, Distillation & Maturation: Unit 2.8. Quality  
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010)  
+with customers about product information, enquiries , contracts, orders, feedback and 
+complaints.  
+ 
+Regularly reviews of performance are required, thro ugh internal audits and meetings. It 
+is necessary to determine whether the quality system is working and what improvements 
+can be made. Records must be kept of the procedures  and decisions for dealing with 
+past problems, and for anticipating potential futur e problems, and monitoring their 
+effective-ness.  Also required are documented proce dures for dealing with actual and 
+potential problems involving suppliers or customers , or internal problems e.g. a faulty 
+batch of product : how to deal with the cause of the problem and keep  records to use in 
+improve-ment of the system in future.  
+ 
+ISO 9001 can provide the basis, and the stimulus, f or Total Quality Management.  This 
+involves an understanding by all staff of the advan tages of operating a strict 
+documented quality assurance system at all levels, controlled by system auditing and 
+management review.   TQM includes the following principles: 
+•  Quality must be managed.  Management must be invol ved, and lead. 
+Implementing TQM starts with top management and flows downward. 
+•  Every employee has a customer and is a supplier  
+•  Every employee is responsible for quality 
+•  Problems must be prevented, not just corrected 
+•  Quality must be measured 
+•  The quality standard is defect-free 
+•  Quality improvements must be continuous, and plann ed and organised 
+accordingly 
+ 
+A quality control system involves a variety of qual ity assurance techniques and co-
+operation between all departments, to their mutual benefit.  Although the scope of TQM 
+is much wider, NAMAS and HACCP are briefly describe d below as examples of the 
+application of documented procedures to maintenance and improvement of standards. 
+. 
+National Accreditation of Measurement and Sampling (NAMAS) by the United Kingdom 
+Accreditation Service (UKAS) means that testing and  calibration laboratories have been 
+assessed against internationally recognised standar ds to demonstrate their 
+competence, impartiality and performance capability .  All aspects or company operation 
+can be evaluated: not only the laboratory methods a nd equipment and the final product, 
+but also management systems or organisation.  Such accreditation forms part of the 
+assessment for ISO 9001.  Also, accreditation by UK AS confirms that external 
+consultant laboratory, certification or inspection services meet international accreditation 
+standards.  
+ 
+HACCP   The concept of Hazard Analysis and Critical  Control Points was invented to 
+ensure the safety  of processed food and drink products. It is not co ncerned with 
+sensory quality being out of specification since th at by itself is not a health hazard.  It is 
+true that similar principles can be applied to main taining sensory quality, but that is not 
+HACCP. 
+10 
+Dipl. Distil. Module 2: Fermentation, Distillation & Maturation: Unit 2.8. Quality  
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010)  
+The original purpose of HACCP was to ensure as near  as possible to 100% food safety 
+on NASA space flights, but it quickly became adopte d for food and drink processing in 
+general.  The important innovation of HACCP was tha t instead of quality checks on 
+representative samples of the product, the manufacturing process itself was assessed to 
+identify and eliminate hazards. It is not necessary  to monitor every step.  Only those 
+steps where a significant hazard exists need to be considered as critical points for 
+process control.  For potable spirits, CCPs will be mainly associated with packaging, e.g. 
+mcrobiological quality of the dilution water and th e risk of broken glass or other foreign 
+material in bottles are health or safety issues.  E xcept for compounds like ethyl 
+carbamate, methanol and NDMA, any faults earlier in  the process, whatever their effect 
+on sensory quality, do not make the product dangerous. 
+ 
+As a first step a team must be set up with collecti ve expertise in all stages and aspects 
+of the process, to decide the objectives of the plan and then set it in operation.  Although 
+the precise details of the system can be different in each company, and perhaps even 
+for each product within the company, there is gener al agreement that the principles of 
+HACCP are:   
+1.  Prepare a detailed flow diagram identifying every stage of the process.  Use both that 
+diagram and on-site inspection to conduct a hazard analysis of the entire process.  
+Prepare a list of steps in the process where potent ial hazards exist, and specify the 
+preventative measures which are required. 
+2.  Then consider which of these steps have to be d esignated as Critical Control Points. 
+Figure 2.8.1 explains the reasoning for choice of C CPs.  A CCP for a later stage of the 
+process may also be able to control a separate upst ream hazard, in which case the 
+earlier CCP is redundant.  For operational efficien cy and plant-friendliness, unnecessary 
+CCPs must be avoided.  Identify each CCP and the corrective action to be taken.         
+3.  Establish critical levels for preventive measur es associated with each identified CCP.  
+Each CCP will have one or more critical measures th at need to be properly applied to 
+ensure prevention or elimination of hazards.  Each control measure must have critical 
+levels as safety boundaries. 
+4.  Establish CCP monitoring requirements and proce dures for using the results of such 
+monitoring to adjust the process and maintain control. 
+5.  For each CCP, establish corrective action to be  taken when monitoring indicates that 
+there is a deviation from a critical limit. 
+6.  Establish effective record keeping procedures f or the HACCP system.  The HACCP 
+plan and associated support documents, including co rrective action records, must be on 
+file and kept up-to-date. 
+7.  Establish procedures to verify that the HACCP system is working smoothly. 
+11 
+Dipl. Distil. Module 2: Fermentation, Distillation & Maturation: Unit 2.8. Quality  
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010)  
+ 
+ 
+ 
+ 
+Figure 2.8.4.  “Decision tree” for specifying a Cri tical Control Point (CCP). 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+Further reading 
+R. Aylott, Chapter 9, Whisky Analysis, in Whisky, T echnology, Production and 
+Marketing, ed. I. Russell (Academic Press, 2003). 
+Also UKAS/NAMAS websites 
+ 
+ 

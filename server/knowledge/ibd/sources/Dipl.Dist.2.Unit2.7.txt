@@ -1,0 +1,657 @@
+1 
+Dipl. Distil. Module 2: Ferm’n, Distill’n & Mat’n: Unit 2.7. Post-distillation modification of Flavour 
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010)  
+Institute of Brewing and Distilling 
+Diploma in Distilling (Dipl. Distil.) 
+ 
+Module 2: Fermentation, Distillation  & 
+Maturation 
+ 
+Unit 2.7 – Post-distillation Modification of Flavou r 
+ 
+Maturation of spirit beverages  
+ 
+Maturation of distilled spirits is the removal duri ng a period of storage of off-notes from 
+raw materials and fermentation, and the development  of colour, fragrance, mellowness 
+and complexity of aroma.  A specified minimum numbe r of years of maturation in oak 
+casks is a legal requirement for grape brandies, da rk rums and whiskies.  During that 
+time a complex sequence of reactions removes undesi rable flavours and creates 
+desirable flavours in the mature spirit.  For Scotc h whisky, a minimum of 3 years’ 
+maturation is a legal requirement, and Table 1 shows the typical effect of that maturation 
+on the main flavour congeners, using a malt whisky spirit as an example, although in 
+practice most Scotch malt whiskies would be matured for longer. 
+ 
+Table 2.7.1: Maturation changes in a Scotch malt whisky spirit 
+ 
+                Congener concentration (mg/litre) 
+           New spirit                    3 years ol d  
+Total higher alcohols  2500    2500 
+Total esters      650      700 
+Total sugars        0    1500 
+Total acids      100      200 
+Total aldehydes      80        50 
+Tannins        0      500   
+Also,   Ethanol            63 % abv           60 % abv  
+ 
+Only the volatile components of the fermented wash can be present in the new spirit, so 
+the entire amount of non-volatile congeners such as  sugars and tannins must develop 
+during maturation.  However, the higher alcohols of  the spirit remain unchanged by 
+maturation.  Changes in acids, aldehydes and esters  are greater than the table would 
+suggest, since some compounds originally present ar e lost or reduced in amount, and 
+partially replaced by different acids, aldehydes an d esters.  Only partially, since some of 
+these classes of congener derived from raw material s or fermentation persist through 
+maturation to contribute to the characteristic aroma of the product. 
+2 
+Dipl. Distil. Module 2: Ferm’n, Distill’n & Mat’n: Unit 2.7. Post-distillation modification of Flavour 
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010)  
+About 2% of the volume is lost annually by evaporat ion from the cask, but the reduction 
+of alcoholic strength during maturation is typical of Scottish conditions.  In theory, the 
+smaller molecules of water vapour should evaporate faster than ethanol, and this 
+actually happens in a dry climate, where the spirit  increases in alcoholic strength over 
+maturation.  However, the damp Scottish atmosphere restricts evaporation of water so a 
+slight dilution occurs. As a result, the changes in  flavour congeners are different in 
+Scotland.  Hence the clause in the definition of Sc otch Whisky: it must be matured in an 
+Excise warehouse in Scotland, thereby specifying th e environmental conditions of 
+maturation.  The definition also specifies oak cask s, of maximum capacity 700 litres 
+(since surface/volume ratio is important) and a min imum maturation period of 3 years.  
+The significance of these factors is discussed below. 
+ 
+Maturation is an expensive process.  The principal costs are: 
+(a) Loss of capital: the value of the spirit itself, which can not be sold until the end of  the 
+maturation period, and in Scotland, the bond lodged  with Revenue and Customs.  
+Presumably other countries require a similar financial guarantee. 
+(b) Outlay on casks and warehouse buildings; also their maintenance costs. 
+(c) Costs of security against leakage, fire and theft. 
+(d) The value of the proportion of the product which is unavoidably lost by evaporation   
+(e)  Costs of general organisation, in particular r egular quality checks and record-
+keeping, but  
+even the initial checks for matching of the spirit to the available stock of casks 
+represents a significant expense.    
+ 
+So it is possible that 5 years of maturation could cost as much as the raw materials and  
+labour and energy costs for initial production of t hat volume of spirit.  Therefore the 
+duration of maturation has to be carefully consider ed, e.g. on that 5-year estimate, 
+production of 15-year old whisky would be double th e cost of the same volume of 5-year 
+old.  Do the contents of a cask have the potential to reach the quality to sell at the 
+inevitably higher price? Another aspect of the cost  of maturation is the organisation of 
+stocks for blending.  Since the age of a blended Scotch whisky is the age of its youngest 
+component, not  the average, it makes commercial sense to blend wh iskies of the same 
+age.  Unless there is some essential sensory contri bution from older whisky, the 
+expense of the additional maturation of 10-year old is wasted on a 5-year old blend. 
+ 
+ 
+Properties of cooperage oak wood 
+Strong, durable, non-porous oak has been the prefer red wood for storage of preserved 
+food and drink for hundreds of years.  Now, with th e availability of other methods of 
+packaging and storage, maturation of alcoholic beverages is a rare surviving commercial 
+use of oak casks, for which several types of oak (g enus Quercus ) are in common use.  
+White oak, Q. alba , is available in greatest amount, largely because of its forest habitat.  
+Competition for sunlight with other trees encourage s tall straight unbranched  trunks, 
+yielding the greatest amount of useable wood per tr ee (Figure 2.7.1).  The principal 
+source is U.S.A., hence its common name American oa k.  Several types of oak grow in 
+Europe, particularly the species Q. robur, Q. pdunculata  and Q. petraea .  However,  
+3 
+Dipl. Distil. Module 2: Ferm’n, Distill’n & Mat’n: Unit 2.7. Post-distillation modification of Flavour 
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010)  
+nomenclature of the genus Quercus  is still uncertain and these may not all be valid 
+specific names, e.g. the shape and small size of Q petraea  may be due to its stony 
+hillside habitat in the Limousin region of France.  In practice cooperage oak is known 
+simply as either American, Spanish, Limousin, or another French type Tronçais, which is 
+mainly used for wine.  Northern European types, particularly English and Memel, are not 
+normally used for maturation of spirits, but have b een used in the past in casks for other 
+purposes.  Not only the shapes of the trees differ;  there are significant differences in 
+wood chemical structure which affect maturation of spirits, and which will be mentioned 
+in the context of the specific congeners. 
+ 
+Oak is a strong hardwood, and its structure prevent s leakage of liquids.  In a growing 
+tree only an outer ring of wood just below the bark  carries sap to the higher levels of the 
+tree.  In the inner zone, the heart wood, tyloses d evelop in, and block, the sap vessels 
+and the grain of the wood.  Therefore well construc ted oak casks are impervious to 
+liquids, but can not completely prevent slow loss o f water and alcohol vapour,  or inward 
+diffusion of atmospheric oxygen, both of which fort uitously enhance the progress of 
+maturation.   
+Figure 2.7.1 shows the sequence of sawing an oak tr ee for cask staves.  The useable 
+length of trunk of an American oak will be many tim es the length of a single cask stave, 
+but with the shorter and more branched European oak s, only 1 - 2 stave lengths are 
+likely.  Obviously this affects availability and cost of wood of cooperage quality.   
+ 
+.  
+  
+Figure 2.7.1.  Preparation of oak for cooperage. 
+4 
+Dipl. Distil. Module 2: Ferm’n, Distill’n & Mat’n: Unit 2.7. Post-distillation modification of Flavour 
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010)  
+Precise sawing is essential to prevent leakage.  Th e staves are cut from a “bolt” of 
+triangular cross-section so that the medullary rays  which run radially in the trunk are in 
+the same plane as the cut.  If a ray runs across th e stave, that creates a leak.Oak must 
+be seasoned before use in cooperage.  For tradition al outdoor seasoning, planks are 
+laid in rows with each level of the stack at right angles to the next, to allow air to 
+circulate.  Traditional seasoning continues for 1 –  2 years so it was inevitable that rapid 
+oven treatments were introduced.  However, slow dec omposition changes in the wood 
+over long slow open-air seasoning, too slight to af fect structural strength, release 
+tannins which contribute to the matur-ation process .  The heating required to bend the 
+cask staves (the curvature of traditional casks is essential for manual rolling and 
+steering when filled).also causes some chemical deg radation of structural components, 
+again providing possible congeners of maturation.  
+ 
+Figure 2.7.2 illustrates the process of cask constr uction.  Glue or metal nails can not be 
+used, so the planks of the cask ends are secured by  wooden pegs.  However, external 
+steel bands can be used to hold the curved staves s ince liquid spirit can not come in 
+contact with the metal round the outside of the cas k.  An important stage of manufacture 
+of new casks, but not shown in Figure 2.7.2, is the  charring of the internal surface of the 
+body of the cask, or at least a milder "toasting" w hich does not actually char the wood.  
+Heating generates compounds which contribute to mat uration, as explained in the 
+section on wood chemistry.  
+ 
+Figure 2.7.2.  Construction of casks. 
+ 
+5 
+Dipl. Distil. Module 2: Ferm’n, Distill’n & Mat’n: Unit 2.7. Post-distillation modification of Flavour 
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010)  
+Commonest sizes of cask for whisky maturation are t he Standard American Barrel  (190 
+litres) and the Hogshead (250 litres) but the tradi tional Butt and Puncheon (both 500 
+littes but of different shape) are also still in us e.  For economy of transport, used 
+American barrels are dismantled for export to Scotl and, and the staves are normally re-
+assembled as 250 litre casks. The finished cask can  be tested by adding a few litres of 
+water, pressurising with air and rolling the cask a round to check for leaks.  Another 
+important activity of the cooperage is the "rejuven ation" of the inner surface of used 
+casks by scraping off the previous char layer and r e-charring.  This can be repeated 
+several times over the “life” of the cask since only about 2 mm has to be removed. 
+ 
+Chemistry of oak wood and its heat-degradation products 
+The structural strength of oak wood is conferred by  cellulose and lignin which constitute 
+approximately 50% and 25% respectively of the wood.   The other 25% is accounted for 
+by a variety of materials, the most important of wh ich are listed in Table 2.7.2.  Although 
+the amount of cellulose, hemicellulose and lignin is approximately constant, the amounts 
+of some minor components vary between types of oak,  e.g.  Spanish oak has a higher 
+content of extractable tannins than American.  
+ 
+Many of the compounds contributing to maturation ar e generated, or at least their 
+production is initiated, by toasting or charring of  the wood.  Because of the physical 
+structure of oak wood, spirit can penetrate only ab out 4 mm.  Since the thermal gradient 
+associated with charring the internal surface affec ts only the first 2 mm of wood, in the 4 
+mm layer in contact with liquid spirit there is a r ange from unheated to intensely charred 
+wood, providing a range of heat-degradation product s from different temperatures. 
+Charring has the physical effect of increasing the surface area, and the capacity for 
+absorption of sulphur compounds on the activated ca rbon.  Charring also forms caramel 
+and other strongly coloured products which are extr acted into the spirit.  The less 
+intense heating immediately beneath the charred lay er produces.degradation products 
+of cellulose, hemicellulose, lignin and tannins whi ch are essential for maturation.   But 
+even in the unheated layer the ethanol-lignin compl ex which is formed by contact with 
+spirit releases the maturation congeners derived from lignin. 
+ 
+Table 2.7.2.  Typical analysis of oak wood 
+ 
+Polymer      %      Function   Contribution to matu ration   
+Cellulose     50    Structural   Sweetness (glucose , cellobiose) 
+ 
+Lignin      25    Structural              Ethanol-l ignin, lignin degradation products 
+ 
+Hemicellulose     10    Cell gum   Sweetness (gluco se, arabinose, etc)    
+                                                                        Various heterocyclics by thermal  
+     degradation of pentoses 
+ 
+Tannins              10     Antimicrobial               Ellagic, gallic acids, flavonoids, also  
+     defence?       glucose 
+       
+Miscellaneous     5   Various   Lactones, sterols, terpenes, aliphatic  
+   compounds                                                  acids and methyl esters, hydrocarbons, etc    
+6 
+Dipl. Distil. Module 2: Ferm’n, Distill’n & Mat’n: Unit 2.7. Post-distillation modification of Flavour 
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010)  
+ 
+Heat-degradation of cellulose and hemicellulose pro duces a range of simple sugars.  
+Cellulose is a linear polymer of β1-4 linked glucose units, hemicellulose (cell gum) is 
+more complex (Figure 2.7.3).   
+ 
+Glucose and cellobiose from cellulose, and the comb ination of glucose and the range of 
+pentoses derived from hemicellulose,  contribute sw eetness and caramel colour to the 
+maturing spirit.  Various heterocyclics, e.g. furan s, are also formed by pyrolysis of 
+glucose and pentoses and extracted into the spirit,  but subsequently degraded to less 
+objectionable congeners. 
+ 
+ 
+ 
+ 
+ 
+.   
+  
+ 
+ 
+Figure 2.7.3.  Typical repeating unit of hemicellulose. 
+7 
+Dipl. Distil. Module 2: Ferm’n, Distill’n & Mat’n: Unit 2.7. Post-distillation modification of Flavour 
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010)  
+ 
+ 
+Figure  2.7.4.  Structure of lignin and its guaiacyl and syringyl sub-units.    
+The figure shows a softwood lignin, since it contains only guaiacyl units..    
+8 
+Dipl. Distil. Module 2: Ferm’n, Distill’n & Mat’n: Unit 2.7. Post-distillation modification of Flavour 
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010)  
+Table 2.7.3.  Formation of aromatic aldehydes during maturation in oak 
+             
+1 Lignin + ethanol     > Coniferyl alcohol, sinapic  alcohol 
+ 
+2 Coniferyl alohol + O 2 > Coniferaldehyde        
+ Sinapic alcohol + O 2 >  Sinapaldehyde 
+ 
+3 Coniferaldehyde + O 2 > Vanillin 
+ Sinapaldehyde + O 2     > Syringaldehyde     
+ 
+ 
+Table 2.7.4.  Aromatic aldehydes (mg/litre) produce d by toasting or charring oak 
+chips.  Treated chips, added at 2%, were extracted by 60% ethanol. 
+ 
+Product             Toasted temperature oC         Charred  
+   100  150  200    
+Guaiacyl congeners : 
+Coniferaldehyde trace  4.3  24.0  4.8 
+Vanillin  1.1  3.8  13.5  2.8 
+Vanillic acid    -  1.8    6.1  1.1 
+ 
+Syringyl congeners : 
+Sinapaldehyde trace  6.5  60.0  9.0 
+Syringaldehyde 0.1  3.8  32.0  9.2  
+ 
+However, the contribution of lignin degradation pro ducts is much more significant.  
+Lignin is a complex phenolic polymer; hardwood lign ins such as oak contain both 
+guaiacyl (mono-methoxy) and syringyl (di-methoxy) u nits, in approximately 1 :2 ratio, 
+providing a complex range of congeners.  Unit A (to p right) separated from the complete 
+structure by the successive effects of heat treatme nt (pyrolysis) and extraction by 
+ethanol of the spirit (ethanolysis) would form 
+coniferaldehyde.  The equivalent syringyl structure  with two methoxy groups is 
+sinapaldehyde.  Table 2.7.3 is a summary of these r eactions, and subsequent oxidation 
+reactions.  More detail, with chemical formulae, is provided in the Progress of Maturation 
+section of this chapter.  Typical yields of these a nd related compounds from different 
+intensities of experimental heat treatment and subs equent ethanolysis are shown in 
+Table 2.7.4. 
+ 
+The reduction in these compounds by the unspecified  high temperature of charring is 
+not as important as may appear at first glance.  In  charring a cask, all temperatures in 
+Table 2.7.4 would be reached at some point in the 2 -mm thermal gradient referred to 
+above. However, although toasting at 200 oC gives a good yield of flavour compounds, 
+only charring provides the surface layer of activat ed carbon that absorbs unwanted 
+congeners.  Note that heating only to 100 oC yields little flavour, and all cask wood must 
+be heated to about 100 oC to bend the staves to the correct shape.  More in tense 
+heating, “toasting” at least, is generally regarded as necessary for spirit maturation for  
+9 
+Dipl. Distil. Module 2: Ferm’n, Distill’n & Mat’n: Unit 2.7. Post-distillation modification of Flavour 
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010)  
+degradation.of wood polymers and destruction of unp leasant wood aromas.  Actual 
+charring is often preferred, and is a legal requirement for Kentucky Bourbon whiskey..   
+ 
+Heat degradation of tannins also produces a wide ra nge of non-volatile astringent and 
+flavoured compounds.  Oak tannins are phenolic glyc oside polymers of which the 
+principal degradation products are ellagic and gall ic acids, flavonoids, and glucose.  
+Figure 2.7.5 illustrates these three important tann ins, but there are others which also 
+contribute to mature flavour.  Tannins of the diffe rent types of cooperage oak differ in 
+several respects, e.g. of the total tannin in Spani sh oak, 10% can be extracted into the 
+65% alcohol typical of spirit maturation, but only 3% from American. Also the 
+gallotannin/ellagitannin ratio varies between American and Spanish oaks. 
+ 
+ 
+ 
+Figure 2.7.5.  Principal tannins of oak wood. 
+ 
+Progress of maturation 
+Before filling into casks, spirit from continuous d istillation must be diluted to about 65% 
+abv.  Spirit from pot stills is normally of the cor rect strength for maturation, although the 
+stronger product of triple distillation requires re duction.  For Kentucky Bourbon whiskey, 
+there is a legal requirement for precisely 62.5% ab v (125 US proof) at filling.  Otherwise, 
+if there is a standard filling strength, that is th e distillery’s choice. The range of 
+congeners extracted from the wood varies with alcoh ol concentration, e.g. more of the 
+water-soluble congeners such as glycerol and sugars  at lower concentration, and more 
+of the ethanol-soluble (e.g. lactones, etc) at high er.  With filling strengths above about 
+75% abv, wood lipids and unpleasant harsh flavours are increasingly extracted into the 
+spirit, so the usual filling strength is 63 – 70%. 
+ 
+The introduction and removal of congeners over the course of maturation are termed 
+additive and subtractive reactions respectively, bu t it can be useful to subdivide these 
+terms, e.g. to distinguish between additive and productive reactions.  Additive  refers to  
+10 
+Dipl. Distil. Module 2: Ferm’n, Distill’n & Mat’n: Unit 2.7. Post-distillation modification of Flavour 
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010)  
+the extraction into the spirit of compounds which w ere already present  in the wood of 
+the cask at the time of filling; productive  is the development of new  compounds over 
+the course of maturation by reactions within the bu lk of the spirit, or between the spirit 
+and the cask surface and/or oxygen.  Oxygen is init ially dissolved in the spirit by the 
+turbulence of filling, and subsequently there is a slow diffusion of air through the wood of 
+the cask.  Probably the most important example of p roductive maturation is the 
+sequence of oxidation and esterification reactions of lignin degradation products (Figure 
+2.7.6).   
+ 
+ 
+Figure 2.7.6.  “Productive” oxidation and esterific ation reactions of lignin 
+degradation products.  
+ 
+ 
+Similarly, reductive and subtractive reactions can be distinguished.  Subtractive  implies 
+physical removal , either by absorption to the activated carbon of t he char layer, or by 
+evaporation through the wood of the cask, e.g. acet aldehyde and dimethyl sulphide.  
+However, some of the acetaldehyde could be oxidised  to acetic acid, an example of a 
+reductive  effect: where a congener is removed from the spirit, or at least reduced in  
+11 
+Dipl. Distil. Module 2: Ferm’n, Distill’n & Mat’n: Unit 2.7. Post-distillation modification of Flavour 
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010)  
+amount, by chemical removal : conversion to a less pungent or more pleasantly 
+flavoured compound.  Important examples of each are listed in Table 2.7.5.   
+ 
+Table 2.7.5.  Examples of flavour changes during maturation in oak wood 
+              
+Type          Activity            Chemical compound s    
+Additive Extraction of flavour      Sugars, aromati c aldehydes, lactones,  
+  Congeners from wood     polyphenols, etc 
+ 
+Productive Creation of new congeners           Acet als (by oxidation reactions) 
+  by reactions in the spirit or      Esters (of eth anol + various acids) 
+at surface of cask      Quinones (hydrolysis of tan nins) 
+ 
+Subtractive Evaporation and      Acetaldehyde, dime thyl sulphide,  
+  absorption to char layer     polysulphides (but s ee Fig. 8) 
+             (Malt whisky: various N and S heterocy clics 
+    from malt) 
+          
+Reductive Conversion of undesirable     Acrolein (v ery pungent)  to acrylic acid 
+  congener to less strongly    
+  flavoured          
+ 
+ 
+Note that the progress of maturation is not linear:  changes occur rapidly at first and slow 
+down over subsequent years (Figure 2.7.7).  It is f ortunate that in general it is the 
+undesirable congeners which are removed by maturati on, but some desirable 
+compounds may also be reduced in amount and regular sensory analysis is required.    
+ 
+Figure 2.7.7.  Increase in colour and congeners during maturation.  
+12 
+Dipl. Distil. Module 2: Ferm’n, Distill’n & Mat’n: Unit 2.7. Post-distillation modification of Flavour 
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010)  
+However, complete removal of some of the undesirabl e compounds may only be 
+achieved by unacceptably long maturation.  An impor tant example of this problem is the 
+slow removal of dimethyl polysulphides.  Dimethyl s ulphide is lost rapidly, mainly by 
+evaporation, but absorption to char also occurs.  Unfortunately the more pungent di- and 
+tri-sulphides decline slowly: Figure 2.7.8 shows ex cessive DMTS even after 12 years.  
+So DMTS is an example of an unacceptable congener w hich may be impossible to 
+control by maturation alone.  If “high” DMTS (i.e. high in the parts per billion range which 
+gives off-flavour) is detected in a batch of new sp irit, re-distillation will give the copper of 
+the still a second chance to remove the offending c ongener.  Once aware of the 
+problem, increased removal of foreshots/heads durin g spirit distillation, bringing the 
+initial DMTS content down to a more manageable leve l, is a more efficient solution for 
+subsequent distillations.   
+ 
+ 
+Figure 2.7.8.  Loss of sulphur compounds during maturation. 
+DMS = Dimethyl sulphide; DMDS = Dimethyl disulphide, DMTS = Dimethyl trisulphide 
+ 
+ 
+The history of the cask is also relevant in this co ntext.  A charred new cask, rich in all of 
+the congeners associated with maturation and with a  powerful char layer of activated 
+carbon, will carry out the required changes more ra pidly and effectively than a cask on 
+its second fill, which is about 50% less efficient.   A further 25% (approximately) of “cask 
+virtue” is lost on a third fill, after which the ch oice must be rejuvenation or disposal.  So, 
+matching the spirit to the cask is important.  Sens ory assessment will determine how 
+much maturation is required (i.e. sensory changes, rather than time) and new, refill or 
+rejuvenated casks are chosen accordingly.  Re-use o f casks from other alcoholic 
+beverages (e.g. sherry, port and Madeira wines) is also a possibility for whisky 
+maturation.  However, whether to use such casks, an d if so for what proportion of the 
+total maturation time, is so dependent on the prefe rences of individual blenders as to be 
+beyond the scope of this chapter. 
+ 
+Compared with brandy and rum maturation, where only  strongly-flavoured pot-distilled 
+spirits would normally receive any significant maturation, the choice of cask is especially  
+13 
+Dipl. Distil. Module 2: Ferm’n, Distill’n & Mat’n: Unit 2.7. Post-distillation modification of Flavour 
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010)  
+important in whisky maturation.  All whisky spirit,  ranging from lightly-flavoured grain to 
+malt spirit with the phenolic aroma of peat smoke, requires at least 3 years of 
+maturation, requiring a range of casks of different  potential for maturation changes..  
+With a newly charred cask, the increase in additive  and productive congeners may 
+overwhelm the lightly-flavoured spirit.  Figure 2.7 .9 is a simple sketch of the problem.  
+The horizontal lines represent the congeners confer ring the basic character of two 
+whiskies and the rising lines the development of ma turation flavour.   So, a new cask is 
+acceptable for malt whisky of strong flavour character, whereas a “lighter” spirit would be 
+overwhelmed by the maturation flavours developing e ven over only 3 years in that cask.  
+A refill cask would be sufficient.  Although not included in Figure 2.7.9, the converse also 
+applies: with their higher level of undesirable con geners at time 0, some malt whiskies 
+could not be satisfactorily matured in the weaker refill cask.   
+ 
+ 
+Figure 2.7.9.  Comparison of congener development i n newly charred and second 
+refill casks. 
+ 
+To complete this section, Figure 2.7.10 summarises the principal reactions associated 
+with maturation of spirits.  Note that the char its elf (insoluble carbon) does not provide 
+colour, which comes mainly from heated hemicellulose and lignin. 
+ 
+Figure 2.7.10.  Relationship between wood constitue nts and flavour changes 
+during maturation. 
+14 
+Dipl. Distil. Module 2: Ferm’n, Distill’n & Mat’n: Unit 2.7. Post-distillation modification of Flavour 
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010)  
+Other congeners 
+The maturation congeners discussed above are formed  by degradation of polymers.  
+Table 2.7.2 also mentioned aliphatic acids and thei r methyl esters, lactones, sterols, 
+terpenes and hydro-carbons as components of the fin al 5% of the dry weight of oak 
+wood.  These were named because of their contributi on to additive maturation by direct 
+extraction from the wood, i.e. without preliminary heat degradation, but there are other 
+compounds present as well.  Hydro-carbons, sterols and terpenes have little or no effect 
+on aroma or flavour but, like tannins, could cause haze problems after bottling because 
+of their poorer solubility in 40% ethanol than in the higher strength in the cask.   
+ 
+Two important volatile congeners are “oak lactone” (coconut aroma) and eugenol (clove 
+aroma).  Of the isomers of “oak lactone” 3-methyl-4 -octalactone (Figure 2.7.11), the 
+trans  form has a slightly lower aroma threshold, about 0 .5 mg/litre, as an oak-wood 
+aroma.  Its coconut effect is detectable above 1 mg /litre. However, both forms occur 
+together and, extracted into maturing spirit, contr ibute to the coconut aroma. Oak 
+lactone is another important example of a differenc e between the main oak types, in this 
+case, American high yield, Spanish low.   
+ 
+ 
+ 
+Figure 2.7.11.  “Oak lactone” and eugenol. 
+ 
+ 
+Although similar in structure to vanillin (Figure 2 .7.6), eugenol is not part of the guaiacyl 
+group of lignin degradation products formed by pyro lysis and ethanolysis.  It is already 
+present in unheated oak and is extracted directly from the wood.. 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+15 
+Dipl. Distil. Module 2: Ferm’n, Distill’n & Mat’n: Unit 2.7. Post-distillation modification of Flavour 
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010)  
+Further reading 
+The following three articles are recommended: 
+J. Conner, K. Reid & F. Jack (2003).  Maturation and Blending.  Chapter 7 in Whisky:    
+     Technology, Production and Marketing,  edited by. I. Russell.  Academic Press. 
+K. Nishimura & R. Matsuyama (1989).  .Maturation and maturation chemistry.  Chapter  
+     8 in The Science and Technology of Whiskies, edited by J. R. Piggott et al.,  
+     Longman. 
+J. M. Philp (1989). Cask quality and warehouse conditions.  Chapter 9 in The Science  
+     and Technology of Whiskies , edited by. J. R. Piggott et a l.,  Longman. 
+ 
+The contributions on maturation and wood chemistry in: 
+J. R. Piggott (editor) (1983).  Flavour of Distilled Beverages .  Ellis Horwood,   
+J. R. Piggott & A. Paterson (editors) (1989). Distilled Beverage Flavour .  Ellis Horwood,   
+and in the Proceedings of the Institute of Brewing Aviemore Conferences 1982 – 1998, 
+also of  the Institute of Brewing & Distilling Dist illed Spirits Conferences from 2001, may 
+not now be easily available, but are useful reading if they can be obtained.. 
+ 
+ 
+ 
+ 
+     Gin and Vodka Production 
+ 
+Neutral spirit feedstock 
+Gin, vodka and many liqueurs are prepared from neut ral spirit obtained by continuous 
+distillation.  The usual raw materials for fermenta tion are grapes, molasses, potatoes or 
+unmalted cereals.  The common factor is distillatio n to a minimum alcoholic strength of 
+96.0% abv in the European Union (or perhaps slightl y different elsewhere) to remove 
+most of the congeners which would impart a distinctive but unwelcome aroma or taste.   
+ 
+The EU specification for neutral spirit for gin and  vodka production is shown below.  
+Although  an upper limit is not officially specifie d, diacetyl is also an unacceptable 
+congener.  However, the limit for all of these cong eners other than methanol is so low 
+that nosing is a more practicable assessment of quality than chemical analysis.   
+ 
+Table 2.7.6.  E.U. specification of neutral spirit:  maxima expressed as g/100 ml of 
+pure ethanol. 
+            
+Total acidity (expressed as acetic acid)    1.5 g 
+Esters (expressed as ethyl acetate)    1.3 g 
+Aldehydes (expressed as acetaldehyde)    0.5 g 
+Higher alcohols (expressed as iso -butanol)   0.5 g 
+Methanol                 50 g 
+Dry extract        1.5 g  
+Volatile bases containing nitrogen (expressed as N)  0.5 g 
+Furfural              not detectable    
+ 
+16 
+Dipl. Distil. Module 2: Ferm’n, Distill’n & Mat’n: Unit 2.7. Post-distillation modification of Flavour 
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010)  
+These figures are too high for vodka, and also for certain types of gin, hence the 
+requirement for further purification of the spirit by additional column stills and hydro-
+selective distillation.  Although really Module 3 m aterial, a brief outline of the process is 
+relevant here.   
+ 
+Hydro-selective distillation 
+The principle is explained in Figure 2.6.6 of the C ontinuous Distillation unit : at low 
+alcohol concentration, iso-amyl alcohol is more volatile than ethanol, and at high ethanol 
+concentration it is less volatile.  Therefore spiri t from a 2-column continuous distillation 
+(identified as columns A and B) is diluted to 20% a bv with hot water as feed to a third 
+column C, where amyl alcohols and other congeners o f similar behaviour (i.e. other 
+higher alcohols) migrate to the upper  part of the column to be concentrated and drawn 
+off for separation of fusel oil and ethanol.  Perma nently high-volatile congeners are 
+vented off as heads.  Any rising ethanol vapour is refluxed in the downward flow of 
+water, providing a stream of purified 20% alcohol a t the base of the column.  This is 
+concentrated back to 96% abv in column D, which is similar in most respects to the 
+original rectifier column B.  Also, the re-rectifie r column D is yet another opportunity to 
+remove any traces of congeners remaining from colum n C, providing neutral spirit of a 
+high degree of purity. The system is more energy-ef ficient than this description may 
+suggest, since water continuously circulates at hig h temperature between columns C 
+and D.  To reduce the number of separate stills req uired, the fusel oil fraction from 
+columns C and D can go to fusel oil still of column  B for re-distillation, but not if rectifier 
+column B also produces Scotch whisky spirit, since column D operates above the 94.8% 
+limit. 
+ 
+Vodka 
+Even so, to meet the standards for high quality vod ka, the re-distilled spirit treated with 
+activated charcoal.  Some vodka brands first requir e yet another re-distillation.  Usually 
+spirit is diluted for charcoal treatment, perhaps o nly to 80% abv, but carbon-filtration 
+may take place even at bottling strength.  The carb on treatment is one of the following:  
+(a)  filtration through carbon-impregnated filter s heets, as many times as necessary for 
+the desired quality, (b) mixing with powdered charc oal, which is then removed by 
+filtration (a messy process, therefore not often us ed), or (c) passage through a series of 
+columns of granular charcoal.  Good quality charcoa l is required, and (b) and (c) must 
+be replaced at regular intervals or reactivated by steam treatment ( N.B. danger of 
+spontaneous ignition of charcoal at 100 oC exposed to air),  
+ 
+“Mouthfeel” is an important characteristic of many drinks, and particularly so with the 
+essentially flavourless vodka.  To provide that sen sation, trace amounts of mineral salts 
+(e.g. Ca and Na), sugars or sugar alcohols may be a dded below their flavour threshold.  
+However, natural congeners from fermentation are al so present in small quantities that 
+are impossible to remove completely, e.g. acetaldeh yde, diacetyl and methanol.  Their 
+presence can prove, e.g. in a case of disputed auth enticity, that the vodka is not a 
+synthetic mixture of ethanol and water but is of na tural origin.  Also, various flavoured 
+vodkas exist, prepared by infusion with plant mater ial, not distillation as for gin or many 
+liqueurs.  
+17 
+Dipl. Distil. Module 2: Ferm’n, Distill’n & Mat’n: Unit 2.7. Post-distillation modification of Flavour 
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010)  
+Gin 
+The English word gin comes from Dutch genever  (juniper), the obligatory flavouring of 
+both the Dutch and English (London and Plymouth) ve rsions.  An important distinction is 
+that Dutch gin uses EU standard grain neutral spiri t, to preserve some grain flavour, but 
+the London style of “dry gin” (which can be distill ed anywhere, provided the flavour is 
+typical) requires a feedstock of re-distilled neutr al spirit from hydro-selective distillation.  
+Since London gin is the type produced in greatest q uantity world-wide, these notes deal 
+specifically with its production, but other gins differ only in minor details. 
+ 
+The various plant materials for flavouring are coll ectively known as botanicals.  The 
+flavour of juniper must predominate, but that does not prohibit a less strongly flavoured 
+component being added in greater amount.  The ingre dients vary between brands, but 
+the most commonly used, in addition to juniper berr ies, are believed to be coriander 
+seeds, citrus peel (lemon, sweet orange or bitter o range), angelica root and cinnamon 
+bark. All contain aromatic essential oils which are  extracted by the distillation process, 
+according to the relative amounts of the botanicals , the alcohol charge of the still (% abv 
+and(volume), geometry of the still (affecting reflu x) and the cut points.  Juniper berries 
+are dried for storage after harvest, so quality ass essment is based on (a) aroma of 
+essential oil, (b) the extractable yield of essenti al oil, (c) appearance and size and (d) 
+moisture content.  Similar criteria apply to the other botanicals. 
+ 
+A gin still usually has a taller neck to increase r eflux but is operated in the same way as 
+the spirit still of rum or whisky distillation, exc ept for the higher starting % abv (usually in 
+the 50 – 60% range) and the addition of botanicals.   For the latter, there are various 
+possibilities: (a) botanicals added loose to the sp irit in the still, (b) added in a fabric or 
+metal mesh bag for easier removal (giving a slightl y decreased yield) or (c) on a 
+perforated tray above the charge of spirit in the s till, so that extraction is by alcohol 
+vapour alone.  Adding botanicals for (a) or (b) to the spirit in the still 12 – 24 h for 
+extraction before the start of distillation increas es the total yield of essential oils.  The 
+only certainly about (c) is a different aroma profi le from (a) and (b); but the total yield of 
+volatile oils is usually lower. 
+ 
+As in rum and whisky distillations, the first disti llate (heads) is collected for recycling, 
+then the gin fraction is collected down to the pred etermined % abv of the cut point, often 
+40%.  The remaining alcohol is collected in the tai ls fraction.  However, recycling of 
+heads and tails is not  done in the next run of the gin still, since repea ted distillation of 
+botanical essential oils would create unacceptable flavours and aromas.  Instead, the 
+gin feints are returned to the continuous distillat ion system that produced the pure spirit 
+feedstock, for removal of the remaining flavour, an d concentration back to 96% spirit.  
+Smaller distilleries have the choice of re-distilli ng their own feints in a single-column still 
+similar that for Armagnac brandy (Figure 2.5.6, of unit 2.5), or selling back to the original 
+supplier for purification. 
+ 
+ 
+ 
+ 
+18 
+Dipl. Distil. Module 2: Ferm’n, Distill’n & Mat’n: Unit 2.7. Post-distillation modification of Flavour 
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 2 Revision Notes Version 2, September 2010)  
+Other production methods for gin. 
+Not all gin is produced as above.  A product of sim ilar aroma can be produced by 
+blending pure neutral spirit with gin concentrate, e.g. a concentrated gin from a 3-fold 
+greater charge of botanicals.  Despite loss of the desirable title "distilled gin", the 
+advantage is that a standard flavour concentrate is  provided for different bottling plants.  
+However it is probably impossible to produce exactl y the same aroma by the two 
+methods.  Although the two should be of the similar  quality, triple strength gin diluted in 
+neutral spirit is unlikely to be identical with the product from standard distillation. 
+ 
+Gin flavourings (gin essences) are highly concentrated products from specialised flavour 
+companies. Some are specific essential oils produce d by distillation of plant material 
+with ethyl alcohol, but solvent extraction in liqui d ethyl alcohol, liquid CO 2 or other 
+solvent is also used for production of essences for  “compounded gin”. Again, there are 
+advantages for producing a standard product world-w ide, but with the loss of the title 
+“distilled gin”. 
+ 
+ 
+ 
+ 
+ 
+ 

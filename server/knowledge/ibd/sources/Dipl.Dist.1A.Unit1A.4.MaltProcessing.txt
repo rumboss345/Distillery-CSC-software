@@ -1,0 +1,978 @@
+1 
+Dipl. Distil. Module 1A: Preparation of Cereal Wort: Unit 1A.4. Malt Processing in the 
+Distillery  
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 1 Revision Notes Version 1, November 2009)  
+ 
+ 
+Institute of Brewing and Distilling 
+Diploma in Distilling (Dipl. Distil.) 
+ 
+Module 1A: Raw Materials & Preparation 
+of Cereal Wort 
+ 
+Unit 1A.4 – Malt Processing in the Distillery 
+ 
+1A.4.1.  Malt Performance - Requirements of Good Quality Malt 
+ 
+(a) Introduction 
+ 
+Two general types of distillers malts are produced commercially – malt for malt 
+whisky and high diastatic malt for grain distillers  (see Table 4.1). Malt whisky malts 
+are made from plumper, heavier kernels with a friab le starch mass. They are steeped 
+and germinated at moisture contents ranging from 45  – 46%; the final temperature 
+used in drying malts is in the range of 70 - 72 oC.  These malts are dried to 4.5 - 5% 
+moisture.  Unlike brewing malt there is no final hi gh temperature cure so that all 
+distilling malts should have negligible tint and produce almost colourless worts.   
+ 
+Grain distillers’ (or high diastatic) malts are gen erally made from smaller barley 
+kernels that are higher in protein and enzyme conte nt.  This barley is steeped and 
+malted at a higher moisture content (48 – 50%) and dried at lower temperatures (50 
+– 60 oC) to a higher final moisture content (ca 6%) than the malt whisky type of  malt. 
+ 
+Table 4.1.   Comparative ranges in the composition of barley and malt. 
+  Malt  
+Measurement Barley  Malt Whisky High DP 
+Kernel weight (mg) 38 - 42 32 - 36 29 – 32 
+Starch (%) 63 – 65 58 - 60 50 – 55 
+Sugars (%) 0.5 – 1.0 8.0 – 10.0 8.0 – 10.0 
+Total nitrogen (%) 1.5 – 2.3 1.5 – 1.8 1.8 – 2.3 
+Soluble nitrogen (% of 
+total) 
+10 – 12 35 – 45 40 – 50 
+Diastatic Power 50 – 60 70 - 80 180 – 200 
+α-Amylase Trace 35 – 45 60 – 80 
+Proteolytic activity 
+(arbitrary units) 
+Trace 15 – 20 20 - 25 
+ 
+2 
+Dipl. Distil. Module 1A: Preparation of Cereal Wort: Unit 1A.4. Malt Processing in the 
+Distillery  
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 1 Revision Notes Version 1, November 2009)  
+(b) Malt Specifications 
+Barley and hence the malt are derived from living m aterials and so are subject to the 
+variations that can occur as a result of genetic an d environmental conditions.  This 
+means that no two batches of malt are alike.  Malt analysis provides guidance on the 
+effectiveness of the malting process and suitability of the malt for brewing. 
+ 
+Malt is tested in accordance with the Institute of Brewing ( IOB ), European Brewery 
+Convention ( EBC ) and the American Society of Brewing Chemists ( ASBC ) methods 
+of analyses.  However, malt specifications are not always the most reliable indicator 
+on how well the malt will perform in the brewery, a nd maltsters, brewers and distillers 
+are continually looking for better predictions of brewing performance of malt. 
+ 
+(c) Barley Variety 
+ 
+Each variety has its own characteristics; its genet ic make-up determines whether it 
+has qualities that are important to brewing.  Some varieties produce better distilling 
+malts than others. 
+ 
+The following characteristics will vary according to the barley variety: 
+ 
+/head2right Percentage of nitrogen (protein) in the grain. 
+/head2right Proportion of small to large starch granules. 
+/head2right β-glucanase levels. 
+/head2right Homogeneity of corn size. 
+/head2right Ability to produce the necessary enzymes. 
+ 
+ 
+These factors are also influenced by environmental conditions, e.g. weather, soil type 
+and fertilizer.  The barley variety is also importa nt not only because of its spirit yield 
+but also its wort composition which may influence fermentation and spirit character. 
+ 
+ 
+ 
+3 
+Dipl. Distil. Module 1A: Preparation of Cereal Wort: Unit 1A.4. Malt Processing in the 
+Distillery  
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 1 Revision Notes Version 1, November 2009)  
+1A.4.2. Key Malt Analytical Parameters 
+ 
+Table 4.2.   Typical list of analytical parameters used in spe cifications for  distilling 
+malts. 
+ 
+Analytical 
+Parameter  
+Abbreviation  Typical 
+Distilling Malt  
+High DP  Range (Dist. 
+Malt only) 
+Moisture (%)   5.0  6.0  4.5 – 5.0 
+Hot Water Extract 
+(%)  
+HWE  76.5  71.7  76 - 78 
+Fine Coarse 
+Difference (%)  
+F/C Diff  1.5  1.1  1.0 – 2.0 
+Fermentability (%)   86.8  83.0  86.5 – 87.5 
+Predicted Spirit 
+Yield (litres of 
+alcohol/ tonne)  
+PSY  402  361  400 - 416 
+Total Nitrogen (%)  TN  1.65  1.95  1.5 – 1.7 
+Soluble Nitrogen 
+Ratio (%)  
+SNR  38 .6  44.1  37 - 40 
+Phenols (ppm)   4  0 0 - 80 
+Colour (EBC units)   2.3  2.7  2 - 3 
+NDMA (ppb)   <1.0  <1.0  < 1.0 
+α -Amylase  DU  36  75  35 - 40 
+Diastatic Power 
+(oL)  
+DP  88  180  80 - 90 
+Friability (%)   96  95  >95 
+Homogeneity (%)   98  96  >98 
+ 
+Key analytical parameters for malt distilling malt and examples of typical values are: 
+ 
+(a) Moisture  < 5 %H 2O 
+ 
+In the last 20 years, the moisture content has been  raised from 4 to 5 % for two main 
+reasons. Firstly, gentler kilning helps preserve th e activities of the more heat-
+sensitive enzymes, which can continue to work durin g the mashing and fermentation, 
+releasing more fermentable carbohydrate. Second, th ere is a saving in energy. Malt 
+is hygroscopic (attracts water) and there is normal ly a moisture pickup of around 
+0.5% between maltings and distillery. So, if the ma lt is required to be 5% moisture, 
+the off-kiln moisture should be 4.5%.  
+Where there are adjacent maltings and distillery, i t can be dried to 5%. Malt with 
+moisture content of 6% or more is difficult to mill , and there is the possibility that 
+‘green-malt’ sensory notes may enter the spirit from lightly kilned malt.  
+However, grain distilling malt moisture content can  be up to 6%, the lighter kilning 
+preserving enzymes. 
+4 
+Dipl. Distil. Module 1A: Preparation of Cereal Wort: Unit 1A.4. Malt Processing in the 
+Distillery  
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 1 Revision Notes Version 1, November 2009)  
+(b)  Friability  and     96% of corns friable  
+(c ) Homogeneity    98% of corns homogeneous 
+ 
+The Friabilimeter is a laboratory instrument in whi ch a weighed amount of malt is 
+subjected to pressure of a roller pressing it again st a rotating perforated drum. The 
+more friable the malt due to modification, the more passes through the drum.  
+This analysis is commonly used in malting as a chec k on the endosperm’s 
+modification of the malt, to determine the homogene ity of the modification and to 
+measure the percentage of corns that have not grown . It is widely used in the plant 
+as well as in the laboratory.  
+The information obtained from the Friabilimeter, wh ile a useful early indicator of the 
+quality of malting, must be taken as complementary to laboratory results. In recent 
+years, there have been severe problems with calibra ting these instruments, and 
+results should be treated with caution, as they are  also variety and operator 
+dependent. 
+ 
+ 
+(d) Soluble Extract (SE)  > 80%(dwb) of malt materi als made soluble 
+ 
+The units used to describe SE are ‘litre o/kilogram’ or ‘% extract’ (%). The two units 
+are related by a factor. Both units are in use, depending on distiller’s preference. 
+The SE2 figure is the maximum extract that is obtai nable from the malt, as milling at 
+this 0.2mm setting (fine grind) mechanically breaks  up the cell wall material, 
+releasing the starch granules. This figure varies l ittle with the degree of modification 
+of the malt. Milling at the 0.7mm setting (coarse g rind) (SE7) releases only the starch 
+granules that have been made available because of m atrix breakdown during 
+malting, so it is a measure of the degree of modifi cation of the malt. The fine/coarse 
+difference is normally about 1%. Some distillers pr efer to use a coarse SE figure 
+obtained by milling the malt sample with a mill gap  setting of 1.0mm, but the vast 
+majority use 0.2 and 0.7mm SE’s. 
+The SE7 figure was chosen when the Miag laboratory mill became standard because 
+its values were closest to the distillery’s mash tu n extract (mte), when the traditional 
+mash tun was the norm. In the last about 30 years, there has been a gradual change 
+in Scottish malt distilleries to lauter-type mash t uns, which have higher extraction 
+efficiency. These tuns can achieve SE2 levels of ex tract, but the SE7 figure that is 
+the most reliable figure for predicting spirit yield. 
+ 
+(e) Fermentability                    >88% (dwb) of the extract obtained is fermentable 
+ 
+This laboratory test is used to determine the perce ntage of the SE7 that is 
+fermentable, and allows calculation of the Fermentable Extract (FE7). 
+ 
+The method of determining wort’s Fermentability is by conducting a laboratory 
+fermentation, and calculating it using the laborato ry Original Gravity (OG) and Final 
+Gravity (FG). Malt fermentabilities are normally up  to in the range 86-90%. It should 
+be noted that this laboratory test, based on IGB la boratory wort, is not suitable for 
+malts that have high sulphur content or those that are highly modified to achieve high 
+TSN values. 
+ 
+5 
+Dipl. Distil. Module 1A: Preparation of Cereal Wort: Unit 1A.4. Malt Processing in the 
+Distillery  
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 1 Revision Notes Version 1, November 2009)  
+(f) Fermentable Extract   >70%(dwb) 
+ 
+The % fermentability value multiplied by the SE7 va lue gives a figure for fermentable 
+extract obtainable from the malt. 
+The fermentable extract value is used to calculate a predicted spirit yield from the 
+malt. 
+ 
+ 
+(g) Predicted Spirit Yield (PSY) 
+ 
+It is possible to predict the distillery spirit yie ld from the laboratory data described 
+above.  
+ 
+In a malt distillery, this can be done using the ob tained values of the malt soluble 
+extract (SE7), the % fermentability and a fixed factor: 
+             PSY (lpa/t, dwb)   = fermentability (%)   x   SE7 (dwb)   x  6.06 
+(where lpa/t = litres of pure alcohol per tonne, and dwb = dry weight basis). 
+ 
+In a grain distillery, the calculation is a little more complicated due to the use of both 
+malt and wheat (or maize). The first step is to cal culate separately the PSY of the 
+malt and the PSY of the other cereal. Then it is an  easy matter to calculate the PSY 
+of the particular mash recipe in use at the time.  
+ 
+For instance, in a distillery using 10% malt with a  PSY of 420 lpa/t and 90% wheat 
+with a PSY of 370 lpa/t, the calculation and result is: 
+                           420 x (10/100) + 370 x (90/100)  =375 lpa/t 
+ 
+ 
+ 
+(h) Total Soluble Nitrogen (TSN) 
+ 
+Free α-amino nitrogen in the wort is required for the yea st growth that occurs at the 
+start of fermentation. If wort is deficient in this  respect, the performance of the yeast 
+fermentation will be affected. TSN measurement is u sed when there is any doubt 
+about there being enough. It is unlikely that there  will be a shortage in malt whisky 
+production. Some distillers specify high TSN values, which tend to depress laboratory 
+fermentability values. Grain distillery wort can be  deficient particularly if the 
+proportion of malt in the mash is lower than 9% (w/ w). Typical values are shown 
+above in Table. 4.2 
+ 
+(i) Malt enzyme levels 
+ 
+Sometimes it is necessary to measure the enzyme lev els in malt. Two measures are 
+used:  the dextrinising units (DU) that gives an in dication of the content of alpha-
+amylase in the malt and the diastatic power (DP) power that gives an indication of the 
+content of beta-amylase in the malt.  
+ 
+Typical values for dried distilling malt are shown in Table 4.2 above 
+ 
+6 
+Dipl. Distil. Module 1A: Preparation of Cereal Wort: Unit 1A.4. Malt Processing in the 
+Distillery  
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 1 Revision Notes Version 1, November 2009)  
+1A.4.3. Malt Delivery and Handling 
+ 
+ 
+1A.4.3.1 Malt Delivery Procedures 
+ 
+The maltster has responsibility to deliver malt of the specified quality in each load. In 
+the past malt samples would be taken at the distill ery and re-analysed and compared 
+with the maltster’s data. This was expensive and ti me consuming. Now, with quality 
+management systems in place and guaranteed quality assurance schemes, the 
+maltster provides an analysis with PSY on each load  for comparison with actual spirit 
+yield in the distillery. However it may be necessar y to check deliveries if there is non-
+compliance with the purchase specification.   
+ 
+ 
+1A.4.3.2. Malt Intake 
+ 
+The responsibilities of the distiller start as soon  as malt is delivered.  It is important to 
+routinely check for malt parameters that can be aff ected in transit such moisture 
+uptake, broken corns, dust, and delivered weight.   
+ 
+(a) Sampling 
+ 
+When the consignment of malt arrives at the distill ery, the delivery vehicle is weighed 
+in and then again before it leaves; this is to chec k that the quantity delivered is 
+correct.  At this point the materials are randomly sampled and checked for the quality 
+parameters mentioned above.    
+ 
+The sampling of malt can be carried out using spear s.  These are hollow spikes that 
+are pushed into the load (see Figure 4.1), and when  withdrawn retrieve a sample of 
+the grain.   
+ 
+Many designs are available, but to avoid bias resul ts samples must be taken from 
+randomly defined points throughout the grain bed.   
+ 
+The main priority is to obtain a homogeneous batch of malt; this helps avoid 
+production problems.   
+7 
+Dipl. Distil. Module 1A: Preparation of Cereal Wort: Unit 1A.4. Malt Processing in the 
+Distillery  
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 1 Revision Notes Version 1, November 2009)  
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+  
+ 
+ 
+Figure 4.1.   Compartmented spear samplers.  A)  and B)  are examples of whole bed 
+samplers whilst C)  is used for sampling bags of cereal.  
+ 
+ 
+ 
+KEYPOINT:  The most important issue for malt, whether during production in the 
+maltings or during processing in the distillery is HOMOGENEITY.  Non homogeneous 
+malt can cause problems such as  reduced extract recovery. 
+ 
+Sampling is therefore very important.  In modern ti mes a more refined method of 
+sampling is by use of a trickle filter or diverter system.  This equipment either 
+continuously takes small samples of material as it is conveyed to the grain store or 
+diverts the occasional sample into a collection cha mber as the conveyor transports 
+the cereal. 
+  The majority of distilleries unload their malt in to a delivery bay from where the malt 
+will be transported to a storage silo, by pneumatic methods or conveyor belt. 
+ A  B C 
+8 
+Dipl. Distil. Module 1A: Preparation of Cereal Wort: Unit 1A.4. Malt Processing in the 
+Distillery  
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 1 Revision Notes Version 1, November 2009)  
+ 
+(b) Storage 
+ 
+The storage of malt requires the same diligence as storage of barley.   Most storage 
+silos are constructed from stainless steel but they  can be made from concrete.  Silos 
+have smooth walls with hopper bottoms to ensure eas y grain withdrawal.  The malt is 
+stored at delivery moisture levels to: 
+ 
+/head2right Discourage the growth of pests such as insects, mo ulds, fungi and bacteria. 
+/head2right Prevent alteration to the biochemical structure of  malt prior to use (i.e. turning 
+slack). 
+ 
+Of course all storage silos should be cleaned at re gular intervals to prevent the build 
+up of soil and contaminants.  
+ 
+KEYPOINT:  Hand evaluation of the malt’s appearance and odour  should never be 
+overlooked; it is a quick and easy method of  analysis. 
+ 
+ 
+Malt should be delivered and stored in sufficient q uantities to defend against 
+unforeseen shortages that could halt production.  H owever, storage should not be 
+excessive – providing for only a few days’ requirem ents.  Otherwise capital becomes 
+unnecessarily tied up in expensive material and storage capacity. 
+ 
+ 
+(c) Screening/Grading and Dressing 
+ 
+Prior to despatch from the maltings the malt is scr eened and dressed.   To ensure 
+uniformity of milling, it is necessary to have a re asonable consistency in the size of 
+corns.  To obtain such consistency, bulks of malt a re often graded.  The malt is 
+carried by pneumatic or mechanical means past magne tic separators to rotating, 
+cylindrical, oscillating or flat-bed screens.  Not only are corns of unwanted size 
+rejected (these are sold for animal feed wherever p ossible) but residual malt culms, 
+broken corns and dust are removed. In maltings wher e cleaning and grading is 
+carried out on the barley  prior to steeping there should be a negligible amount of 
+small corn removal in the finished malt and only de culming and dust extraction are 
+necessary. Nevertheless,  some additional dressing is required at intake especially to 
+remove accidental pick-up of metallic objects and t o remove small stones and gravel 
+which have the same size as malt grains. 
+ 
+Magnets 
+It is essential that pieces of metal that may be in  the malt should be removed before 
+they reach the mill, because such metal can cause a  spark and start a fire or 
+explosion.  Separation is effected by placing perma nent magnets either in the malt 
+chute to the dressing machine or across the feed to the mill. 
+Malt should flow over the magnet in a thin layer an d at the same rate as it is being 
+ground, thus allowing the magnet to extract any metal that may be in the malt. 
+9 
+Dipl. Distil. Module 1A: Preparation of Cereal Wort: Unit 1A.4. Malt Processing in the 
+Distillery  
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 1 Revision Notes Version 1, November 2009)  
+Dressing and destoning 
+The malt dresser was usually a cylindrical screen r evolving inside a wooden casing 
+that has detachable doors on either side for easy a ccess.  The last part of the screen 
+consists of a mesh large enough to let malt pass th rough to a small hopper feeding 
+the weigher or the mill.  Any foreign matter such a s pieces of wood, metal, or stone, 
+which are too large to pass through this mesh, is c arried forward to the end of the 
+screen where it is rejected via a spout into a bag.  When the culms were separated 
+from the malt during screening at the maltings, cir cular brushes revolved against the 
+exterior of the screens thereby ensuring that the apertures were kept clear. 
+ 
+In modern installations there is a separator/dresse r to remove foreign material based 
+on size, and in addition a de-stoner  that separates material according to density.  
+Usually these are inclined vibrating table separato rs on which higher density stones 
+and gravel fall to one side and can be collected. M ost stones and gravel of this type 
+are the result of high speed combining, especially in wet harvest years when barley 
+may have become lodged in the field and cutter bars  have to be  lowered. In this way 
+small stones of the same size as the malt grains ca n be removed and it has been 
+found that the amount of stones can vary considerab ly according to the source of the 
+barley. 
+ 
+Dust Removal 
+Dust is a dangerous substance because of the risk o f explosion and also irritation to 
+the lungs.  It is now covered by COSHH (Control of Substances Hazardous to Health 
+Act) regulations and it is extremely important that  dust is not allowed to accumulate.  
+If a film of dust appears, measures  must be taken to eliminate the source of dust and 
+vacuum any deposits – the presence of dust would in dicate a failure in the dust 
+extraction system or leak in the plant. 
+ 
+An electrically driven fan sucks the dust through m etal ducts or pipes from various 
+points such as the elevator, dresser and weighing  machine.  There are several ways 
+of dealing with the dust collected; it may be blown  into a cyclone from which it drops 
+down into a bagging point.  In some installations d ust is blown into sleeves mounted 
+inside a metal unit, on a frame that can be vibrate d at the end of the grinding or malt 
+intake operation to shake off the dust.  The dust t hen falls into a container at the 
+bottom.  A regular system of emptying the dust sack s or containers is necessary to 
+allow the plant to work at maximum efficiency, and a periodical examination must be 
+made of the pipe ducts to and from the fan to avoid build up and blockage by dust. 
+ 
+Even if there is good housekeeping, it may not be p ossible to completely eliminate 
+the risk of explosions in hoppers and conveying equ ipment.  For this reason, 
+explosion vents are provided to allow an explosion to pass harmlessly into the 
+atmosphere without damage to equipment and people. 
+ 
+10 
+Dipl. Distil. Module 1A: Preparation of Cereal Wort: Unit 1A.4. Malt Processing in the 
+Distillery  
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 1 Revision Notes Version 1, November 2009)  
+1A.4.3.3 Safety Concerns (Dust) 
+ 
+The operations encompassed within grain intake and milling are potential hazard 
+areas within any brewery: 
+ 
+/head2right Health hazards as a result of dust exposure.  Dust  has long-term effects upon 
+the human mucous membranes causing diseases such as  pulmonary 
+alveolitis. 
+ 
+/head2right Risk of dust explosions. 
+ 
+Why should the intake of malt and adjuncts cause su ch problems?  Although the 
+maltster scrupulously cleans barley on intake and malt prior to dispatch, it is essential 
+that the distiller also carry out rigorous screenin g of the materials on intake at the 
+brewery.  Even after malting and cereal processing,  it is quite normal to find grain-
+sized stones, grits, string, and straw and metal pa rticles that have escaped the 
+cleaning operation.  If these objects are not remov ed they can pass through the mill 
+into the mash.  These objects can cause damage to m ill rollers or even nudge their 
+alignment; this can affect the milling operation an d therefore extract recovery.  The 
+most important objective during the removal of debr is is to minimise the risk of 
+explosion. 
+ 
+Vast quantities of dust are produced when handling grain, especially during malting.  
+For instance, values quoted for dust production are  in the range of 0.4 to 1.4 kg of 
+dust per 100 kg of malt – a considerable volume.  T his dust is extremely dangerous 
+and easily combusts.  One spark produced from a pie ce of stone or metal can be 
+sufficient to cause an explosion.  This explosion c an cause significant damage to 
+plant hardware, and is an obvious fire risk.  It is  for this reason that smoking is 
+prohibited throughout the brewhouse (in addition to  food safety issues) whilst all 
+equipment should be electrically earthed to avoid the production of sparks. 
+ 
+Supplementary safety measures are also employed in connection with dust 
+explosions: 
+ 
+/head2right Metal explosion sheets are located below the mill rollers.  These hold back the 
+grist to prevent the formation of an explosive air-grist mixture below the mill. 
+ 
+/head2right Pressure release pipes (quench pipes) are installe d that convert the kinetic 
+energy of an explosion into thermal energy, which i s released to the 
+atmosphere.  This prevents damage to the plant; how ever, they must be 
+cleaned after each discharge. 
+ 
+/head2right Explosion suppression; inert gas is injected into the chamber milliseconds 
+after an explosion to prevent its spread. 
+ 
+Extraction systems are installed to remove all dust from the atmosphere in the mill 
+room and ancillary plant.  This minimises health concerns and 
+11 
+Dipl. Distil. Module 1A: Preparation of Cereal Wort: Unit 1A.4. Malt Processing in the 
+Distillery  
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 1 Revision Notes Version 1, November 2009)  
+the risk of dust explosions.  This material can be recovered and mixed with the 
+grist, a valuable method of extract recovery.  Alte rnatively it can also be mixed 
+with the spent grains produced during wort separation and sold as animal feed. 
+ 
+ 
+ 
+ 
+Table 4.3.  Malt Intake – The Key Risks 
+ 
+Risk Potential Effect Prevention 
+Damage /square4 Poor  mashing 
+performance. 
+/square4 Excessive dust 
+generated. 
+/square4 Gentle handling 
+Moisture pick-up /square4 Biochemical 
+change. 
+/square4 Infestation. 
+/square4 Keep system dry. 
+/square4 Intake under 
+cover. 
+Consistent corn size /square4 Maximise milling 
+and extract 
+efficiency 
+/square4 Screen to remove 
+large and small 
+corns. 
+Protect plant /square4 Damage to mills. 
+/square4 Explosion risk. 
+/square4 Magnetic 
+extractor. 
+/square4 Screens/ 
+explosion vent/ 
+dust extraction. 
+Hygiene /square4 Food safety. 
+/square4 Infestation. 
+/square4 Pest control. 
+/square4 Cover intake 
+hopper. 
+ 
+12 
+Dipl. Distil. Module 1A: Preparation of Cereal Wort: Unit 1A.4. Malt Processing in the 
+Distillery  
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 1 Revision Notes Version 1, November 2009)  
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+Figure 4.2.  Dry goods intake .   
+Malt/ adjuncts are loaded into the intake hopper (A ) and are transferred via 
+the elevator (B) to the grain receiver (C).  The gr ain may then be weighed 
+(D) before passing through the magnetic separator ( E).  The cereals then 
+move through the cleaning screens (F) prior to a fi nal weighing (G), along 
+the elevator (H) and conveyor (I), for storage in the silos (J).   
+ 
+ 
+ 
+1A.4.4. Milling  
+ 
+1A.4.4.1. Introduction and Summary 
+ 
+In a malt distillery, milling must crush the starchy endosperm into fine particles while 
+preserving the husk. The fine particles are needed to expose the starch and enzymes 
+to liquid so that they can disperse in the mash. The husk is needed as a filter bed for 
+the extraction. 
+ 
+This process is illustrated below: 
+ 
+A  
+B 
+C 
+D 
+E 
+F 
+G 
+H  
+I 
+J  
+13 
+Dipl. Distil. Module 1A: Preparation of Cereal Wort: Unit 1A.4. Malt Processing in the 
+Distillery  
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 1 Revision Notes Version 1, November 2009)  
+M illing 
+Malt 
+Mill Rolls 
+G rist consisting of 
+Flour 
+G rits & 
+Husk 
+ 
+ 
+ 
+In practice there are usually four rolls in a mill in order to give the distiller good 
+control of the particle size needed for the type of mashing vessel that the distillery 
+possesses. The milled malt is called ‘grist’. It consists of malt flour, malt grits and malt 
+husks. 
+ 
+ 
+(a)The Purpose of Milling and Mill Types  
+ 
+The purpose of milling is to prepare the malt, whea t and maize for mashing and 
+starch conversion by making the centre of the malt corn accessible.  
+ 
+Where a wort separation system like a mash tun or l auter tun is used, milling must 
+crush the starch into fine particles while preservi ng the husk so that it can be utilised 
+as an effective filter during separation. 
+ 
+Distillery mills are designed to meet the requireme nts of different types of malt and 
+inert cereals and the different mashing and mash separation systems that are in use. 
+ 
+Four roll mills  are often used for milling well-modified malts whe re the starch is 
+readily accessible and a mash tun will be used for mash separation. 
+ 
+ 
+Six roll mills  are sometimes used for milling less modified malts  where the starch 
+needs to be finely ground and the husk protected be cause of the aggressive 
+treatment that the mash receives during cooking and  transfer to lauter tun. They are 
+not widely used in malt distilleries since the specification is for well modified malt. 
+ 
+14 
+Dipl. Distil. Module 1A: Preparation of Cereal Wort: Unit 1A.4. Malt Processing in the 
+Distillery  
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 1 Revision Notes Version 1, November 2009)  
+Feed roll controls the malt flow 
+First pair of rolls crack the malt 
+                   Sieve sends flour straight                
+                       through, grits to the third pair                                             
+                             of rolls and coarse pa rticles  
+                             to the second pair of rolls. 
+          
+                             Second pair of rolls c rush 
+                             the coarse particles. 
+Sieve sends husk straight through, grits to the 
+third pair of rolls and flour straight through. 
+Third pair of rolls crush the grits.  
+Six roll mill with screens 
+ 
+ 
+In grain distilleries, it is not usually necessary to preserve malt husks for filtration 
+purposes. Hammer mills  are used to achieve a fine malt grind, maximising the 
+availability of the malt enzymes for the conversion  of the maize or wheat starch to 
+sugars. The preferred particle size specification, assisted by screening as in the malt 
+distilleries, could be < 4mm, most particles being at 2mm. 
+ 
+Some distilleries use green malt , freshly produced malt that has not been stabilise d 
+by kilning. In this case, the milling is done in a wet hammer mill. Again, the objective 
+of the milling is to expose the enzymes need to effect  
+conversion. Milled green malt has the consistency o f a thin porridge, no particles 
+being greater than a quarter of a corn in size. Obviously, all green malt has to be kept 
+as cool as possible and used as quickly as possible , for it would deteriorate rapidly in 
+storage. 
+ 
+ 
+KEYPOINT : In general 2- & 4-roll mills are suited to and us ed in combination with 
+over/well-modified malts (e.g. malt distilling malt s) infusion mashing systems 
+obviating the need for more complex 5- and 6- row mills. 
+ 
+ 
+1A.4.4.2 Comminution  
+ 
+Malt contains all of the essential ingredients for spirit production, all the distiller must 
+do is open up the malt and add water, yeast and energy.   
+The first step is to mill the malt and adjuncts to produce the grist  (cereal flour).  From 
+the flour grist we extract  the sugars, proteins and other nutrients essential  for yeast 
+fermentation.   
+ 
+There are two main objectives of milling malt and cereals for brewing: 
+ 
+15 
+Dipl. Distil. Module 1A: Preparation of Cereal Wort: Unit 1A.4. Malt Processing in the 
+Distillery  
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 1 Revision Notes Version 1, November 2009)  
+1. Particle size reduction 
+2. Particle size control 
+ 
+During milling, the malt grain is crushed so that t he highest possible yield of soluble 
+nutrients can be extracted during mashing.  This ph ysical degradation of the malt into 
+an array of small particles is called comminution .   
+ 
+The greater the degree of comminution (i.e. the fin er the flour produced) the larger 
+the surface area available for enzymatic attack – t his means there will be a better 
+extract efficiency.  As a comparison it takes longe r for a sugar lump to dissolve in 
+your coffee than a spoonful of granulated sugar.   
+ 
+ 
+1A.4.4.3. Friability 
+ 
+The action of comminution is influenced by malt friability .  What is friability?  The 
+friability (extent of modification) of malt is a me asure of the amount of energy 
+required to “crush” the grain.   
+ 
+During malting of barley the endosperm is modified to differing extents with particular 
+areas prone to under-modification (high nitrogen, s teely areas) and over-modification 
+(the low nitrogen, mealy areas).  The internal stru cture of well-modified malts fully 
+degraded by diastatic malt enzymes are said to be f riable – they are easily crushable 
+and therefore require only a small input of mechanical energy ( milling ) to break them 
+up.   
+ 
+In the case of poorly modified malt, the internal s tructure of the grain remains fairly 
+intact (they are less friable) and requires a high input of energy via milling to 
+comminute the grain. 
+ 
+Milling of well-modified malts yields grist with a large proportion of fine flours and 
+small grits, whilst under-modified malts produce co arser grist.  This is because the 
+endosperm cell walls that survive in an under-modif ied grain bind the particles 
+together giving coarse grits.  Therefore, inhomogen eous batches of malt subject to 
+the same milling operation (i.e. the same mill sett ing) will breakup into different sized 
+particles – this is dependant upon the extent of mo dification.   
+ 
+If milling is excessive the grist produced will be too fine for Lautering (but may be 
+suitable for Mash Filters ).  Extremely fine grist will theoretically yield m aximal extract 
+but hinder the separation of wort to the extent tha t wort filtration can be halted (a “set 
+mash”).  Wort filtration ( lautering ) is affected by particle size because very small 
+particles reduce the porosity of the filter bed, wh ich can become compressed.  This 
+causes process down time, and various quality issue s associated with extended 
+processing.   
+ 
+There is therefore a trade off between extract yield and process efficiency. 
+ 
+16 
+Dipl. Distil. Module 1A: Preparation of Cereal Wort: Unit 1A.4. Malt Processing in the 
+Distillery  
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 1 Revision Notes Version 1, November 2009)  
+Large grist particles  
+Fast filtration = Reduced extract recovery 
+ 
+Small grist particles  
+Slow filtration = Increased extract recovery 
+ 
+ 
+ 
+ 
+1A.4.4.4. Milling Operations 
+ 
+(a) Compression and Shear 
+The milling operation crushes the malt to release the extract for mashing.  The milling 
+action is performed by pairs of rollers (set in seq uence) or by steel beaters (hammer 
+mills).  When using roller mills the disruption of the grain structure is effected by: 
+ 
+/head2right Direct compression on the grain. 
+/head2right Shear forces. 
+ 
+The grain is compressed as it passes between the tw o rollers, which rotate towards 
+each other (Figure 4.3).  The rollers squeeze the g rain disrupting its structure to 
+produce particles of varying sizes.  The shearing e nergy applies additional 
+destructive force – this force is dependent upon th e difference in the peripheral 
+speeds of the rollers.  High shear is produced when  only one of the rollers is rotating.  
+The second roller is turned by the action of the fi rst, its rotational movement (and 
+therefore destructive energy) transmitted through t he grain as it passes between the 
+two rollers. 
+ 
+Figure 4.3.  The basic components and operation of a 2-roll mill.    
+Grains are fed between rollers A and B.  They compress and crush the grain into 
+finer particles.  Roller A is rotating faster than roller B, this impacts shear forces upon 
+the grain assisting breakdown.  Each roller is manu factured with 600-900 grooves 
+(flutes) around their circumference, which intensif y the cutting action.  C is the rear 
+angle and D is the cutting angle.  
+A B 
+C 
+Flute Cutting Edge 
+Flute Rear Edge 
+D 
+17 
+Dipl. Distil. Module 1A: Preparation of Cereal Wort: Unit 1A.4. Malt Processing in the 
+Distillery  
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 1 Revision Notes Version 1, November 2009)  
+Rollers arranged in parallel (essential for uniform  milling) should have a minimum 
+diameter of 250 mm, otherwise the angle of nip  (the area which initially receives the 
+grain to be crushed) is too small and performance is reduced (i.e. the crushing time is 
+too short).  The surfaces of the rolls are fluted l ike a cog but do not run in parallel to 
+the roller axis; they are set with a slight lateral  twist.  This design intensifies the 
+“cutting” action applied to the malt as it is drawn through the rollers.   
+ 
+The efficiency and capacity of the mill are therefore controlled by: 
+ 
+/head2right Roller length. 
+/head2right Roller diameter. 
+/head2right Roller speed. 
+/head2right The mill setting (the gap between the rollers). 
+/head2right The friction between the malt and roller surface ( increased by fluting). 
+ 
+(b) Mechanism of Grain Destruction 
+ 
+We have established that malt passing through the m ill breaks up according to the 
+friability of the kernel and the force placed upon the individual grain sections.  In 
+Figure 1 we can see how the grains are fed to the r oller for crushing.  In practice the 
+grains are sorted and pass through the preliminary crushing rollers end-on; this 
+means that crushing occurs over the whole length of  the grain.  Typically, transverse 
+breakage of the grain occurs, whilst the husk is in clined to split longitudinally.  This 
+ensures that the endosperm fragments  
+are released whilst the husk is separated but remai ns intact (remember the husk is 
+important for Lauter filtration). 
+ 
+During milling  for Lautering, it is important not to completely di sintegrate the grain.  
+The husk plays an important role, during lautering,  as it forms part of the filter bed 
+through which the wort is separated.  This proporti on of husk in the mash provides 
+and helps maintain bed porosity.  If the husk is co mpletely shattered during milling, 
+increased run-off times and inefficient wort clarif ication can detrimentally affect 
+lautering.  Furthermore, the husk is a potential so urce of polyphenols, which if 
+extracted into the wort will affect beer flavour and shelf life.   
+ 
+If a mash filter is used to separate wort none of t he problems with grist particle size 
+are applicable  
+ 
+– as the filtration is performed through a polyprop ylene cloth.  This cloth (an artificial 
+filter bed) comprises a huge number of very fine po res.  The wort is run-off through 
+these pores, assisted by pneumatic compression of t he mash within the filter 
+chambers. 
+18 
+Dipl. Distil. Module 1A: Preparation of Cereal Wort: Unit 1A.4. Malt Processing in the 
+Distillery  
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 1 Revision Notes Version 1, November 2009)  
+ 
+Figure 4.5.  A diagrammatic representation of a Hammer Mill. 
+ 
+ 
+ 
+1A.4.4.5. Grist Evaluation 
+  
+One of the most important tools the distiller has a vailable is the plansifter.  The 
+plansifter consists of a series of sieves (stacked as a column) through which a 100 to 
+200 g sample of grist is shaken.  Each sieve is seq uentially set with a finer pore 
+diameter.  There are five sieves that separate the grist sample into a total of six 
+fractions. 
+ 
+ 
+Table 4.4.  Plansifter sieve specifications. 
+ 
+Sieve 
+Number 
+Fraction Wire Thickness 
+(mm) 
+Mesh Hole 
+Size (mm) 
+1 Husk 0.31 1.27 
+2 Coarse grits 0.26 1.01 
+3 Fine grits I 0.15 0.547 
+4 Fine grits II 0.07 0.253 
+5 Flour 0.04 0.152 
+Sieve Bottom Fine Flour - - 
+ 
+Grain Hopper  
+Rotor 
+Hammer  
+Sieve 
+19 
+Dipl. Distil. Module 1A: Preparation of Cereal Wort: Unit 1A.4. Malt Processing in the 
+Distillery  
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 1 Revision Notes Version 1, November 2009)  
+It is important to check that milling achieves the correct specification for the grist.  By 
+analysing the grist in this manner it is possible t o diagnose and pre-empt  mashing 
+problems. 
+Checking the grist allows us to check the integrity  of the milling operation.  If the mill 
+operation has deteriorated (i.e. the rollers have b ecome worn or the mill setting 
+disrupted) the extract recovery value will suffer. 
+ 
+It is important though to set differing grist speci fications depending on whether a 
+lauter tun or mash filter is to be used to separate  wort.  Remember the mash filter 
+can cope with much finer grist than the lauter tun. 
+ 
+ (a) Grist Analyses 
+The quality of the grist or crushed malt that leave s the mill has a major effect on 
+subsequent performance in the mashtun. If it is too  coarse, the starch will remain 
+protected and the enzymes will not be able to convert it into sugar. 
+If it is too fine, wort separation will be slow because the filter bed will become choked. 
+Grist quality can be judged by ‘eye’ or by sieve analysis. 
+To the eye, the grist should display large pieces o f empty husk and small pieces of 
+white grist and flour. 
+A traditional sieve box or more modern mechanical s ix sieve apparatus as described 
+above is more objective and the ideal grist analysi s for the malt and the mashhouse 
+plant in use should be specified. 
+ 
+Examples of typical grist analyses for mash tun, la uter tuns and modern mash filters 
+are illustrated in the charts below:  
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+
+20 
+Dipl. Distil. Module 1A: Preparation of Cereal Wort: Unit 1A.4. Malt Processing in the 
+Distillery  
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 1 Revision Notes Version 1, November 2009)  
+Additionally a histogram using the same data, which  shows a comparison of these 
+typical grist sieve analyses, is shown : 
+ 
+0
+10 
+20 
+30 
+40 
+50 
+60 
+70 
+80 
+90 
+100 
+%
+Mash 
+Tun. 
+Lauter 
+Tun. 
+Mash 
+Filter. 
+Comparison of Grist Sieve Fractions. 
+Fine Grits 
+Coarse grits 
+Husk 
+Flour 
+ 
+ 
+ 
+ 
+ 
+ 
+1A.4.4.6 Milling Safety. 
+ 
+Malt dust is hazardous, fine dust in the atmosphere  is explosive and breathing in the 
+dust can cause respiratory problems. 
+ 
+Malt mills are designed to prevent explosions. Magn ets fitted to collect any steel or 
+iron debris that could cause a spark. Stone separat ors are also installed to prevent 
+sparks and to protect the rolls from damage/wear. 
+ 
+The modern mill and malt handling plant is fitted w ith explosion doors that would 
+direct a blast safely outwards should an explosion occur.  
+ 
+People working on the malt plant need to wear dust masks to avoid breathing in any 
+dust. 
+ 
+Safe systems of work (permits to enter confined spa ces) are required for people 
+entering malt silos. 
+ 
