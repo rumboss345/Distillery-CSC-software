@@ -1078,7 +1078,6 @@ export function getHoldingTankIntakeHistory(
     occurred_at: string;
     volume_gal: number;
     abv: number;
-    spirit_type: string;
     source_tank_name: string;
   }>(`
     SELECT
@@ -1086,7 +1085,6 @@ export function getHoldingTankIntakeHistory(
       COALESCE(t.created_at, t.transfer_date) as occurred_at,
       t.volume_gal,
       t.abv,
-      t.spirit_type,
       src.name as source_tank_name
     FROM holding_tank_transfers t
     JOIN floor_equipment src ON src.id = t.source_tank_equipment_id
@@ -1120,11 +1118,6 @@ export function getHoldingTankIntakeHistory(
     heavy_rum: 'heavy rum run',
   };
 
-  const spiritLabels: Record<string, string> = {
-    low_wines: 'low wines',
-    high_wines: 'high wines',
-  };
-
   const entries: HoldingTankIntakeEntry[] = [
     ...cuts.map((c) => {
       const cutLabel = c.cut_type.charAt(0).toUpperCase() + c.cut_type.slice(1);
@@ -1147,7 +1140,7 @@ export function getHoldingTankIntakeHistory(
       volume_gal: t.volume_gal,
       abv: t.abv,
       summary: `Transfer from ${t.source_tank_name}`,
-      detail: spiritLabels[t.spirit_type] ?? t.spirit_type.replace('_', ' '),
+      detail: undefined,
     })),
     ...blends.map((b) => ({
       kind: 'blend' as const,
@@ -1186,7 +1179,9 @@ export function getHoldingTanksWithContents(): (FloorEquipment & HoldingTankCont
 }
 
 export function saveHoldingTankTransfer(
-  transfer: Omit<HoldingTankTransfer, 'id' | 'created_at'>,
+  transfer: Omit<HoldingTankTransfer, 'id' | 'created_at' | 'spirit_type'> & {
+    spirit_type?: HoldingTankTransfer['spirit_type'];
+  },
 ): void {
   if (transfer.source_tank_equipment_id === transfer.dest_tank_equipment_id) {
     throw new Error('Source and destination tanks must be different.');
@@ -1207,7 +1202,7 @@ export function saveHoldingTankTransfer(
       (spirit_type, source_tank_equipment_id, dest_tank_equipment_id, volume_gal, abv, transfer_date, notes)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [
-      transfer.spirit_type,
+      transfer.spirit_type ?? 'low_wines',
       transfer.source_tank_equipment_id,
       transfer.dest_tank_equipment_id,
       transfer.volume_gal,

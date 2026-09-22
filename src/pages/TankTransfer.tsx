@@ -17,15 +17,7 @@ import {
   useRefreshKey,
 } from '../db/queries';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
-import type { SpiritTransferType } from '../types';
-
-const SPIRIT_TYPE_LABELS: Record<SpiritTransferType, string> = {
-  low_wines: 'Low wines',
-  high_wines: 'High wines',
-};
-
 const emptyTransferForm = () => ({
-  spirit_type: 'low_wines' as SpiritTransferType,
   source_tank_equipment_id: 0,
   dest_tank_equipment_id: 0,
   volume_gal: 0,
@@ -139,7 +131,6 @@ export function TankTransfer() {
     }
     try {
       saveHoldingTankTransfer({
-        spirit_type: transferForm.spirit_type,
         source_tank_equipment_id: transferForm.source_tank_equipment_id,
         dest_tank_equipment_id: transferForm.dest_tank_equipment_id,
         volume_gal: transferForm.volume_gal,
@@ -182,7 +173,6 @@ export function TankTransfer() {
               <thead>
                 <tr>
                   <th>Date</th>
-                  <th>Spirit</th>
                   <th>From</th>
                   <th>To</th>
                   <th>Volume</th>
@@ -195,7 +185,6 @@ export function TankTransfer() {
                 {tankTransfers.map((t) => (
                   <tr key={t.id}>
                     <td>{format(new Date(t.transfer_date), 'MMM d, yyyy')}</td>
-                    <td>{SPIRIT_TYPE_LABELS[t.spirit_type]}</td>
                     <td>{t.source_tank_name}</td>
                     <td>{t.dest_tank_name}</td>
                     <td>{t.volume_gal.toFixed(1)} gal</td>
@@ -213,17 +202,6 @@ export function TankTransfer() {
       {showTransferForm && (
         <Modal title="Tank Transfer" onClose={() => setShowTransferForm(false)}>
           <div className="form-grid">
-            <div className="form-group">
-              <label>Spirit Type</label>
-              <select
-                value={transferForm.spirit_type}
-                onChange={(e) => setTransferForm({ ...transferForm, spirit_type: e.target.value as SpiritTransferType })}
-              >
-                {(Object.keys(SPIRIT_TYPE_LABELS) as SpiritTransferType[]).map((type) => (
-                  <option key={type} value={type}>{SPIRIT_TYPE_LABELS[type]}</option>
-                ))}
-              </select>
-            </div>
             <div className="form-group">
               <label>Transfer Date</label>
               <DatePicker
