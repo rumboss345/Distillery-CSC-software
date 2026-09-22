@@ -19,7 +19,7 @@ import {
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
 import type { SpiritTransferType } from '../types';
 
-const TANK_TYPE_LABELS: Record<SpiritTransferType, string> = {
+const SPIRIT_TYPE_LABELS: Record<SpiritTransferType, string> = {
   low_wines: 'Low wines',
   high_wines: 'High wines',
 };
@@ -182,7 +182,7 @@ export function TankTransfer() {
               <thead>
                 <tr>
                   <th>Date</th>
-                  <th>Tank Type</th>
+                  <th>Spirit</th>
                   <th>From</th>
                   <th>To</th>
                   <th>Volume</th>
@@ -195,7 +195,7 @@ export function TankTransfer() {
                 {tankTransfers.map((t) => (
                   <tr key={t.id}>
                     <td>{format(new Date(t.transfer_date), 'MMM d, yyyy')}</td>
-                    <td>{TANK_TYPE_LABELS[t.spirit_type]}</td>
+                    <td>{SPIRIT_TYPE_LABELS[t.spirit_type]}</td>
                     <td>{t.source_tank_name}</td>
                     <td>{t.dest_tank_name}</td>
                     <td>{t.volume_gal.toFixed(1)} gal</td>
@@ -214,13 +214,13 @@ export function TankTransfer() {
         <Modal title="Tank Transfer" onClose={() => setShowTransferForm(false)}>
           <div className="form-grid">
             <div className="form-group">
-              <label>Tank Type</label>
+              <label>Spirit Type</label>
               <select
                 value={transferForm.spirit_type}
                 onChange={(e) => setTransferForm({ ...transferForm, spirit_type: e.target.value as SpiritTransferType })}
               >
-                {(Object.keys(TANK_TYPE_LABELS) as SpiritTransferType[]).map((type) => (
-                  <option key={type} value={type}>{TANK_TYPE_LABELS[type]}</option>
+                {(Object.keys(SPIRIT_TYPE_LABELS) as SpiritTransferType[]).map((type) => (
+                  <option key={type} value={type}>{SPIRIT_TYPE_LABELS[type]}</option>
                 ))}
               </select>
             </div>
