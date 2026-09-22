@@ -82,12 +82,16 @@ export function TankTransfer() {
 
   const handleSourceTankChange = (tankId: number) => {
     const contents = tankId ? getHoldingTankContents(tankId) : null;
+    const fullVolumeGal = contents && contents.volume_gal > 0
+      ? Math.round(contents.volume_gal * 10) / 10
+      : 0;
     setTransferForm({
       ...transferForm,
       source_tank_equipment_id: tankId,
       dest_tank_equipment_id: transferForm.dest_tank_equipment_id === tankId
         ? 0
         : transferForm.dest_tank_equipment_id,
+      volume_gal: fullVolumeGal,
       observed_abv: contents ? (Math.round(contents.abv * 10) / 10).toString() : '',
       sample_temp_f: '60',
     });
