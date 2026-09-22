@@ -1,0 +1,551 @@
+1 
+Dipl. Distil. Module 1A: Preparation of Cereal Wort: Unit 1A.6. Cooking & Mashing in Grain 
+Distilleries  
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 1 Revision Notes Version 1, November 2009)  
+ 
+ 
+Institute of Brewing and Distilling 
+Diploma in Distilling (Dipl. Distil.) 
+ 
+Module 1A: Raw Materials & Preparation 
+of Cereal Wort 
+ 
+Unit 1A.6 – Cooking and Mashing in Grain 
+Distilleries 
+ 
+1A.6.1.  Preparation of Wort from a Mash Bill high in Unmalted 
+Cereal, with a small proportion of Malted Barley 
+ 
+ 
+In this type of mash bill (which may consist of 85 – 90% unmalted cereal, plus 10 – 
+15% malted barley), the saccharification enzymes co me from malted barley. 
+Therefore the process is similar to that described for the 100% malt mash (in 1A.5), 
+particularly as regards the temperature at which the conversion takes place. 
+ 
+The main difference is that most of the starch to b e saccharified comes from 
+unmalted grain, often maize and wheat. As described  above, in unit 1A.5, the starch 
+granules in malted barley are partly broken down in  the malting process, they 
+gelatinize at a relatively low temperature of about  64 ºC. Starch granules in maize and 
+wheat on the other hand gelatinize at higher temper atures , can be heavily encased 
+in protein, and are enclosed in undegraded cell walls.so require cooking. 
+ 
+When malted barley is being used as a source of enz ymes to convert the gelatinized 
+starch to sugars, it also provides its share of the total starch needed. As in 100% malt 
+whisky production, the malt must be milled and mash ed to release the enzymes and 
+allow them to disperse into the liquid of the mash. 
+ 
+In contrast to the use of malted barley in malt whi sky production, relatively intact 
+husks are not necessary; either the wort is filtere d on a series of sieves or it is 
+pumped to the fermentation vessel without any filtr ation. Therefore, the malt is 
+ground to fine flour in a hammer mill for ease of mixing into the rest of the mash. 
+ 
+The required quantity of malt is added to the coole d maize mash at a temperature of 
+about 64 ºC. This is often done in the fermentation vessel it self. As soon as the vessel 
+has received the correct amount of mash, the temperature is reduced to that required 
+for the start of fermentation (15 to 25 ºC) and the yeast is added immediately. 
+ 
+The specific gravity of the wort usually lies withi n the range 1.060 to 1.080 and the 
+pH value in the region of 5.5 to 5.8. Maltose and maltotriose are the main sugars in  
+2 
+Dipl. Distil. Module 1A: Preparation of Cereal Wort: Unit 1A.6. Cooking & Mashing in Grain 
+Distilleries  
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 1 Revision Notes Version 1, November 2009)  
+the wort, together with smaller amounts of glucose and maltotetraose. All of these 
+sugars can be fermented by suitable yeast strains. 
+ 
+A significant amount of starch remains to be conver ted to sugar in the early stages of 
+fermentation. Without this secondary conversion, th e alcohol yield would be about 
+15% lower. 
+ 
+1A.6.2. Preparation of Wort from 100% Unmalted Cereal and   
+              Microbial Enzymes 
+ 
+Microbial enzymes have at least three advantages over malt enzymes for the distiller: 
+•  they give more alcohol yield per tonne of grain, t he yield is between 4 and 
+10% higher, 
+•  they avoid the processing involved in the use of m alt, 
+•  the enzyme preparation may be more tolerant of dif ferent pH and temperature 
+than the malt enzymes. 
+ 
+The unmalted cereal, usually maize or wheat which a re relatively cheap compared to 
+malt, is cooked and cooled as described above and t he enzymes are added. This 
+can be done in the fermentation vessel. 
+ 
+The conditions under which to add the enzymes are v ery important. There will be an 
+optimal set of conditions, those that give the best result, the highest alcohol yield. 
+ 
+The optimal conditions may be those recommended by the manufacturer. 
+Alternatively, the conditions might be those devise d empirically (the method of trial 
+and error) by the distiller. However the optimal co nditions when found, they must be 
+employed exactly for every mash, because deviations  are likely to lead to loss of 
+yield. The yeast is added to the wort as soon as possible. 
+ 
+The specific gravity of the wort is usually in the range 1.060 to 1.080 and the pH 
+value about 5.8. Glucose is the only sugar present in the wort. 
+Only a small amount of starch remains to be converted to sugar in the early stages of 
+fermentation, so ‘secondary conversion’ is not as i mportant as it is in malt 
+saccharified mashes. 
+ 
+1A.6.2.1.  The selection of Exogenous Enzymes  
+ 
+In the production of Scotch Whisky, only endogenous  enzymes are allowed. This 
+means that the only enzymes permitted are those pre sent in the raw materials, which 
+in practice means the malt and yeast.   
+ 
+Exogenous enzymes are permitted in the production o f GNS. They are used in the 
+conversion of starch to sugars in mashing and can, if desired, totally replace the use 
+of malt. These enzymes are extracted from microbial  sources (bacteria & fungi) by 
+specialist enzyme companies. They are sold as purif ied preparations of specific type 
+and power of activity and recommended conditions of  use. All enzyme preparations 
+have to be selected carefully and targeted at the requirement of each individual  
+3 
+Dipl. Distil. Module 1A: Preparation of Cereal Wort: Unit 1A.6. Cooking & Mashing in Grain 
+Distilleries  
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 1 Revision Notes Version 1, November 2009)  
+distillery. Enzyme supplying companies offer advice  on the conditions of use as 
+defined by four criteria: 
+•  the type and quantity of starch to be broken down,   
+•  the prevailing pH and temperature at the point of use, 
+•  the equipment being used  and  
+•  the time available. 
+ 
+The types that are used in GNS production for starc h breakdown are α-amylase 
+and amyloglucosidase (sometimes called glucoamylase). In some 
+cases, pullulanase and protease might also be used.  
+ 
+These enzymes can accomplish an almost complete con version of starch to 
+fermentable sugar.  
+Thus, the yield of alcohol in GNS production is pot entially higher than that in Scotch 
+Whisky production. 
+ 
+ (a) alpha-Amylase 
+This enzyme breaks the starch molecule into smaller  units, called branched 
+maltodextrins and oligosaccharides, but produces so me maltose and maltotriose. 
+Important physical effects of this enzyme are incre ased liquefaction and a reduction 
+of the viscosity of a starch suspension. Microbial α-amylase preparations act in a 
+similar manner to the malt enzyme chemically. Howev er, they are can work at higher 
+temperature and lower pH than the malt enzymes.  
+ 
+ (b) Amyloglucosidase (glucoamylase) 
+Amyloglucosidase is a saccharification enzyme, that  is to say it can convert nearly all 
+of the maltodextrins to glucose. It breaks down α1-4 bonds of the linear parts of the 
+starch molecule quickly and α 1-6 bonds of the branched parts slowly. This is an  
+advantage over the malt enzymes, which cannot break  the α 1-6 bonds. Again, the 
+commercial preparations are very stable in relatively extreme conditions such as high 
+temperature. 
+ 
+ (c) Pullulanase (debranching enzyme or limit dextr inase in malt) 
+This enzyme is specific for the breakdown of α 1-6 bonds. It is also known as 
+debranching enzyme because the α 1-6 bonds are the branch points of some of the 
+starch molecules. It would be used in combination with amyloglucosidase. 
+ (d) Protease 
+In wheat, the starch granules are encased in a protein matrix. Proteases can be used 
+to hydrolyse the protein. This exposes the starch g ranules and improves the 
+effectiveness of the alpha-amylase. Proteases in us e include: neutral protease of 
+microbial origin; the plant enzyme, papain and a ‘s ide’ activity of some preparations 
+of amyloglucosidase.   
+ 
+ (e) Other activities 
+When enzymes are extracted from biological material , it is usual for more than one 
+type of enzyme to be present. The subsequent partial purification of the target  
+4 
+Dipl. Distil. Module 1A: Preparation of Cereal Wort: Unit 1A.6. Cooking & Mashing in Grain 
+Distilleries  
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 1 Revision Notes Version 1, November 2009)  
+enzyme is designed to remove unwanted enzymes and t o concentrate the one 
+needed. However, one or more of the minor enzyme co nstituents might be of use in 
+the final application. An example is the possible p resence of protease and/or β-
+glucanase in amyloglucosidase 
+ 
+ 
+ 
+1A.6.3. Cereal Cooking  
+ 
+The purpose of cooking is to gelatinize the starch granules in cereals that are not 
+malted. Maize and wheat are the main unmalted cereals used by distillers. 
+ 
+Gelatinized starch is accessible for saccharificati on by enzymes, but ungelatinized 
+starch is not. The gelatinization is achieved by co oking the grains. Many different 
+methods of cooking are used. The following is one e xample that illustrates the basic 
+principles of most cooking methods: 
+ 
+1. grain, for instance maize, is mixed with warm wa ter in a slurry vessel, using 
+about two and a half tonnes of water per tonne of grain, 
+1. when this is well mixed, it is transferred to a pressure vessel fitted with a stirrer 
+to gently mix the grain as it is cooking, 
+2. steam is injected into the cooker to raise the p ressure above that of the 
+atmosphere to achieve a temperature of 130 ºC, 
+3. this temperature is held for 5 minutes and the s team supply is cut off, 
+4. then the vessel is opened in a carefully regulat ed way to remove the contents, 
+this is called blowdown, and finally 
+5. the cooked cereal is cooled to below 70 ºC as quickly as possible. 
+ 
+Variations to this process include: 
+•  hammer milling the grain to a flour to help mixing  and gelatinization and 
+•  the addition of backset (stillage from the beer co lumn of the continuous 
+still) to the water, reducing the water usage rate. 
+ 
+The combination of the cooking and sudden release o f pressure ensures that the 
+starch in the maize is completely gelatinized and i n perfect condition for the 
+saccharification enzymes. 
+ 
+(a) Batch cooking 
+ 
+Cooking is carried out in pressure vessels that are  equipped with stirrers in order to 
+prevent the grain from settling and cooking unevenl y. Cookers vary in load capacity 
+from about 2 tonnes to about 20 tonnes. Whole or mi lled grain is added to the vessel 
+with the appropriate amount of water.  
+In some distilleries, backset (spent wash) may be added along with the fresh water.  
+ 
+Steam is then injected into the vessel to flush out  all air at which point the vessel 
+vents are closed and the steam injection continued until the desired pressure is 
+attained. The steam used for direct injection must be “pure water” steam. 
+ 
+5 
+Dipl. Distil. Module 1A: Preparation of Cereal Wort: Unit 1A.6. Cooking & Mashing in Grain 
+Distilleries  
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 1 Revision Notes Version 1, November 2009)  
+Three factors determine the effectiveness of cooking: 
+•  the pressure and temperature reached (these are di rectly linked), 
+•  the duration of the elevated pressure conditions a nd  
+•  the solid/liquid ratio in the cooking vessel. 
+ 
+Cooking conditions vary widely between grain distil leries. The following table 
+compares a low pressure, short duration cook with a high-pressure cook. 
+ 
+ 
+ LOW 
+TEMPERATURE 
+HIGH 
+TEMPERATURE 
+Time to reach hold temp.(mins)                    80 40 
+Maximum temp.( oC)                                                                       103 150 
+Hold pressure (psig)                                                                          15 68 
+Hold time (mins)                                              0 30 
+ 
+ 
+ 
+ (b) Continuous Cooking 
+ 
+Continuous cooking equipment is more complex in con struction and more difficult to 
+control and to clean than batch cooking plant. This  is at least partly due to the need 
+to maintain ‘steady-state’ to achieve the required cook without overcooking and 
+energy waste.  
+ 
+Factors common to the various types of continuous system are: 
+ 
+•  fine ground cereal, e.g. wheat through a hammer mi ll, to aid quick cooking, 
+•  addition of a small amount of malt, the ‘pre-malt’ , to reduce the viscosity of the 
+slurry (action of alpha-amylase converting the larg e starch molecules into the 
+smaller dextrins); in gns production microbial alpha-amylase is used. 
+•  grain slurry pumped through a relatively narrow tu be,   
+•  control of residence time,  
+•  use of high pressure and temperature which can be higher than those 
+economically achievable in batch cooking  
+ 
+ 
+ (c) Cooling after Cooking 
+ 
+At the planned time, the contents of the cooking ve ssel are blown by the internal 
+pressure of the vessel to the mash tun, or holding (conversion) vessel, or to the 
+washback.  
+Temperature control is vital, each distillery havin g a target final mash temperature. 
+This is often about 63 oC.   
+6 
+Dipl. Distil. Module 1A: Preparation of Cereal Wort: Unit 1A.6. Cooking & Mashing in Grain 
+Distilleries  
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 1 Revision Notes Version 1, November 2009)  
+However, throughput constraints or other operationa l factors could require a quite 
+different cooling regime with the cooked material b eing added directly to the 
+washback with the malt slurry. 
+ 
+Cooling of the cooked grain can be achieved in a variety of ways:  
+•  by drawing a vacuum in the cooker, 
+•  by using flash/vacuum vessels, 
+•  in a heat exchanger between the cooker and the mas h tun, 
+•  or by simultaneous addition of cold water to the m ash tun at blow down.   
+ 
+It is possible to supplement the cold water with ba ckset, which is acidic and can help 
+accelerate the breakdown of cereals in the cooker. The malt grist can be added to 
+either the cooker or the mash tun as long as the temperature is appropriate. 
+ 
+In summary, the procedures for cooling the cooked g rain and the sequence of the 
+transfer to the washback can differ widely in different distilleries.  
+ 
+All distilleries have the objective of achieving th eir desired throughput and their target 
+conversion temperature from the first moment when the malt meets the grain.  
+ 
+ 
+ 
+1A.6.4. The Principles and Purpose of Mashing (malt and enzymic). 
+ 
+The major objective of mashing and wort preparation  is to extract all of the available 
+carbohydrate from the raw materials and present it to the yeast in a fermentable form 
+A subsidiary but important objective is to extract other materials: 
+•  that provide the yeast with nutrients leading to a  successful fermentation 
+and 
+•  other materials that will eventually contribute to  the flavour of the new 
+make spirit.  
+ 
+Various quite different procedures are employed suc cessfully in the preparation of 
+cereal based worts for Scotch Whisky and GNS production, 
+It must be stressed that although it takes time to saccharify starch using the malt 
+enzymes (or in G NS production, the exogenous enzym es), it is not necessary to 
+have all of this complete before starting fermentat ion. The final portion of conversion 
+that takes place in the early stages of fermentatio n is known as 'secondary 
+conversion'. In many distilleries at least 1 5% of the starch saccharification remains to 
+be completed in the washback. 
+At the other extreme, in some distilleries simultan eous saccharification and 
+fermentation is practised. For instance, in a Scotc h Whisky grain distillery it would be 
+possible to add the malt suspension along with the cooked and cooled wheat (plus 
+the additional water needed) to the washback and ad d the yeast at the same time. 
+Thus, the process stage called wort preparation tha t is described below can be 
+reduced to a minimum of mixing cereal suspensions in the washback. 
+7 
+Dipl. Distil. Module 1A: Preparation of Cereal Wort: Unit 1A.6. Cooking & Mashing in Grain 
+Distilleries  
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 1 Revision Notes Version 1, November 2009)  
+Mashing is the process where the milled and/or cook ed cereal is mixed intimately 
+with hot water at the appropriate striking temperat ure (under specified conditions) to 
+achieve the required temperature in the mash.  
+ 
+The conditions chosen by each distillery are vital in obtaining: 
+•  optimal extraction of potentially fermentable carb ohydrate  from the cereal, 
+and  
+•  optimal conversion of the carbohydrate to fermenta ble sugars. 
+ 
+When present, protein-degrading enzymes (proteases)  could produce smaller 
+molecules such as amino acids that can have a benef icial effect on yeast growth 
+early in fermentation. Malt contains some protease. 
+In most malt distilleries a mashing-in machine (Steel’s masher) is used. 
+Purified and concentrated enzyme preparations (know n as exogenous enzymes 
+because they do not enter the production system in the malt or the yeast) may be 
+used for GNS wort preparation. The examples shown b elow include two such 
+enzymes, amyloglucosidase and pullulanase.  
+‘Conversion’ or ‘saccharification’ are the terms us ed to describe the enzymic 
+production of fermentable wort from starch. 
+The conversion of starch from unmalted cereal by th e enzymes from malted barley is 
+exactly the same as shown in the malt mashing section 1A.4.   
+ 
+In the presence of the exogenous enzymes (i.e. exte rnally added), amyloglucosidase 
+and pullulanase, the attack on the starch molecule is different. Amyloglucosidase can 
+break  all of the linkages between the glucose mole cules (including the branch 
+points) by itself although the branch points are br oken more slowly.. If heat resistant 
+pullulanase is used along with amyloglucosidase, th e pullulanase specifically and 
+quickly attacks the branch chain link allowing the amyloglucosidase  to rapidly 
+convert the debranched molecules to glucose. 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+Pullulanase 
+Branch Linkage 
+Glucose 
+Reducing 
+End 
+Enzyme 
+Action 
+Point 
+8 
+Dipl. Distil. Module 1A: Preparation of Cereal Wort: Unit 1A.6. Cooking & Mashing in Grain 
+Distilleries  
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 1 Revision Notes Version 1, November 2009)  
+Thus, glucose will be almost the only sugar present  in the wort. It is possible for malt 
+to be used, for its enzymes or other reasons, in ad dition to exogenous enzymes in 
+GNS production 
+ 
+The range of sugars produced during conversion dete rmines the fermentability of the 
+wort. If the enzyme attack is complete, the wort wi ll be very fermentable. If the 
+enzyme attack is incomplete, the wort will be only partially fermentable. Enzymes are 
+very sensitive to the conditions that they work in.  They are affected by how much 
+water is present, temperature and pH or mash acidit y. They take time to work, so the 
+length of time that is allowed for mash conversion will affect the degree of 
+conversion. 
+ 
+In the production of GNS, added enzymes are allowed . The main ones in use are 
+alpha-amylase, amyloglucosidase (an alternative nam e is glucoamylase) and 
+pullulanase, all of microbial origin. The action of  microbial alpha-amylase is the same 
+as that of malt. Amyloglucosidase works its way alo ng the dextrin sugar chain 
+releasing glucose molecules as it progresses. Pullu lanase is a starch debranching 
+enzyme. The stability and temperature and pH optima  of these exogenous enzymes 
+vary according to their source. 
+ 
+In general, these exogenous enzyme preparations are  more stable than malt 
+enzymes.  
+Wort produced by exogenous enzymes alone (no malt used) contains only glucose, a 
+sugar that is easily fermented by a wider range of yeast strains than is the case with 
+the malt mashes used in Scotch Whisky production. 
+ 
+ 
+ 
+There are optimum conditions for mashing and these are illustrated in the table 
+below : 
+ 
+ 
+Condition Low Optimum High 
+Temperature.  Low temperatures do not 
+affect the enzymes much, 
+but the starch must be 
+gelatinized first. 
+Gelatinization temperature 
+for malt starch is 60-65 °C. 
+65 °C High temperatures 
+inactivate enzymes, 
+including α and ß 
+amylases and limit 
+dextrinase. 
+The action of amylases 
+is stopped at 
+temperatures over 
+70 °C. 
+pH. Acidic conditions kill the 
+enzymes. Enzyme action is 
+stopped at pHs below 5.0 
+5.4 High pHs slow enzyme 
+action, but it does 
+continue at pHs of 7 or 
+above. 
+9 
+Dipl. Distil. Module 1A: Preparation of Cereal Wort: Unit 1A.6. Cooking & Mashing in Grain 
+Distilleries  
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 1 Revision Notes Version 1, November 2009)  
+ 
+Water. 
+(Mash 
+thickness) 
+Enzymes are more sensitive 
+to heat in a thin mash. 
+There is a lower 
+concentration of enzyme and 
+starch in a thin mash.  
+Between 2.5 
+and 3.5 litres 
+of water per 
+kilogram of 
+dry grist.  
+Enzymes are less 
+sensitive to heat in a 
+thick mash. There is a 
+higher concentration of 
+enzyme and starch in a 
+thick mash.  
+Time. Enzymes take time to attack 
+the starch. Conversion will 
+be incomplete in less than 30 
+minutes.  
+30 minutes Conversion will be 
+almost complete after 
+30 minutes. A longer 
+time will not increase 
+the yield of sugar but 
+may make it more 
+fermentable, but not if 
+the temperature is 
+~65 O C. 
+ 
+ 
+In general, grain distillers do not use a similar e quation to that used in determining 
+the extract from malt They rely on simple but effec tive indicators in order to ensure 
+that mashing has proceeded as normal. Gravity and p H are the main indicators, 
+combined with a close watch being kept on temperatu re during the stage of the 
+primary conversion of the cooked starch. In those d istilleries where the grain is 
+crushed before cooking, mash samples will be checke d for presence of whole corns, 
+an indicator of screen failure. 
+A higher gravity than normal may indicate overcooki ng of the grain. A lower gravity 
+could indicate lower than normal conversion, concer ning which the temperature and 
+pH history are highly relevant. Too high a temperat ure on too low a pH would lead to 
+a more rapid inactivation of the malt conversion en zyme complex. This is critical in 
+grain distilling because malt is a relatively expen sive source of starch compared with 
+other grains. There is thus a permanent incentive f or the grain distiller to consider the 
+minimum amount of malt that would provide sufficien t enzyme activity to convert the 
+starch in both the malt and the cooked cereal. 
+ 
+ 
+ 
+ 
+1A.6.5. Wort Separation and Cooling. 
+ 
+In some grain distilleries the entire mash, includi ng residues from the wheat or maize 
+and malt is carried forward to the fermenter (to ac hieve higher alcohol yields), and in 
+some the wort is separated from the spent grains in  a mash tun or on filters of 
+various types. Wort is separated from the spent malt grains in every malt distillery. 
+When conversion is complete, the mash will consist of a sugar solution called wort 
+and the husks of the malted barley. The purpose of wort separation is to remove 
+these husks and any other particles that are not wanted in the wort. 
+The objectives of effective wort separation are the  removal of unwanted material 
+while at the same time extracting all the available wort. 
+ 
+10 
+Dipl. Distil. Module 1A: Preparation of Cereal Wort: Unit 1A.6. Cooking & Mashing in Grain 
+Distilleries  
+ 
+© The Institute of Brewing & Distilling (Dipl.Distil. 1 Revision Notes Version 1, November 2009)  
+Effective wort separation means : 
+•  Maximising extract recovery. 
+•  Absence of particles in the wort. 
+•  Absence of starch in the wort. 
+ 
+To achieve these objectives, wort separation systems use some common principles : 
+•  Filtration using the husk as a fine filter support ed by the slotted base in the 
+case of a mash or lauter tun. 
+•  Control of wort flow to ensure wort clarity and ma ximise filtration efficiency. 
+•  Sparging with hot waters to extract the maximum am ount of soluble extract 
+(wort). 
+•  Spent grain (waste husk) removal and disposal on c ompletion of filtration. 
+There are many systems in which wort can be separat ed from the mash, the most 
+common in the Whisky industry being : 
+•  The traditional mash tun. 
+•  The lauter mash tun. 
+•  the semi-lauter mash tun 
+•  the mash filter 
+ 
+The operation of different wort separation and cool ing systems is described in the 
+previous unit on malt mashing and the systems used in grain distilling are essentially 
+the same. 
+ 
+The wort that leaves the cooling system is now read y for the next stage of 
+fermentation.  
+ 
+It should have the following characteristics:- 
+ 
+•  The required mixture of sugars, most of which will  ferment into alcohol  
+•  It should contain soluble protein. Barley protein will have been broken down into 
+soluble form, for example into amino acids. Soluble  protein is required in the wort 
+because it provides food for the yeast. 
+•  A temperature that suits the yeast and encourages a start to fermentation. 
+•  Absence of any spoilage micro-organisms. 
+•  Traces of materials like calcium and zinc which ar e essential for healthy yeast 
+growth.  
+•  Other nutrients that will encourage yeast growth, for example oxygen. 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 

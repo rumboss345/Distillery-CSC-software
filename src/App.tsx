@@ -28,6 +28,7 @@ import { Register } from './pages/Register';
 import { ApproveUser } from './pages/ApproveUser';
 import { AdminUsers } from './pages/AdminUsers';
 import { SpiritWeightCalculator } from './pages/SpiritWeightCalculator';
+import { AskNelly } from './pages/AskNelly';
 import { useDatabaseReady } from './db/queries';
 
 function AppContent() {
@@ -60,6 +61,7 @@ function AppContent() {
           <Route element={<Layout />}>
             <Route path="/" element={<Dashboard />} />
             <Route path="/calendar" element={<Calendar />} />
+            <Route path="/ask-nelly" element={<AskNelly />} />
             <Route path="/wash" element={<MashFermentation />} />
             <Route path="/mash" element={<Navigate to="/wash" replace />} />
             <Route path="/recipes" element={<Recipes />} />
