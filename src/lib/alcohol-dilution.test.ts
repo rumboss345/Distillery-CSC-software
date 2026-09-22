@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeAlcoholDilution } from './alcohol-dilution';
+import { computeAlcoholDilution, waterLitersToWeightLb } from './alcohol-dilution';
 
 describe('computeAlcoholDilution', () => {
   it('matches distilling-spirits.com example (volume before dilution)', () => {
@@ -26,6 +26,10 @@ describe('computeAlcoholDilution', () => {
     expect(result!.spiritVolumeLiters).toBeCloseTo(3.71, 1);
     expect(result!.finalVolumeLiters).toBeCloseTo(5, 2);
     expect(result!.waterVolumeLiters).toBeCloseTo(1.29, 1);
+  });
+
+  it('converts water volume to weight at 8.34 lb/gal', () => {
+    expect(waterLitersToWeightLb(3.785411784)).toBeCloseTo(8.34, 2);
   });
 
   it('rejects target ABV not lower than starting ABV', () => {

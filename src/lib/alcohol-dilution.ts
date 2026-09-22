@@ -67,6 +67,18 @@ export function computeAlcoholDilution(
 
 const litersToUsGal = (liters: number) => (liters * 1000) / ML_PER_GALLON;
 
+/** Proofing water at 60 °F — used for water weight from volume (contraction not applied). */
+export const WATER_LBS_PER_US_GALLON = 8.34;
+
+export function waterLitersToWeightLb(liters: number): number {
+  if (!Number.isFinite(liters) || liters <= 0) return 0;
+  return round2(litersToUsGal(liters) * WATER_LBS_PER_US_GALLON);
+}
+
+export function waterLitersToWeightKg(liters: number): number {
+  return round2(waterLitersToWeightLb(liters) / 2.2046226218);
+}
+
 export function formatDilutionSummary(result: AlcoholDilutionResult, unit: 'l' | 'gal'): string {
   const factor = unit === 'gal' ? litersToUsGal(1) : 1;
   const fmt = (liters: number) => {
