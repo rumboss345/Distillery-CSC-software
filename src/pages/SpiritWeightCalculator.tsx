@@ -155,7 +155,7 @@ function AlcoholDilutionCalculator() {
       <div className="card">
         <h3>Alcohol dilution</h3>
         <p className="field-hint" style={{ marginTop: 0 }}>
-          Calculate proofing water to reach a target ABV (linear mix; volume contraction is not applied).
+          Calculate proofing water to reach a target ABV. Mixing uses TTB Table No. 3 weights so alcohol–water volume contraction is included.
         </p>
 
         <div className="form-group full-width">
@@ -323,9 +323,6 @@ function AlcoholDilutionCalculator() {
           <p className="field-hint">
             <strong>Example:</strong>{' '}
             {formatDilutionSummary(dilutionResult, volumeUnit)}
-          </p>
-          <p className="field-hint">
-            Contraction (shrinkage when mixing alcohol and water) is not included in this calculation.
           </p>
         </div>
       ) : (

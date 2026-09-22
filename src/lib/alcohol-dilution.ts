@@ -1,3 +1,4 @@
+import { LITERS_PER_US_GALLON, proofFromAbv, weightFromWineGallons, wineGallonsFromLiters } from '../services/spirit-gauging';
 import { ML_PER_GALLON } from '../types';
 
 /** Which volume field the user fixed (matches common dilution calculators). */
@@ -23,9 +24,12 @@ export interface AlcoholDilutionResult {
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+const wineGallonsToLiters = (wineGallons: number) => wineGallons * LITERS_PER_US_GALLON;
+
 /**
- * Linear dilution: pure alcohol volume conserved; mix volume = spirit + water (no contraction).
- * @see https://www.distilling-spirits.com/tools/calculations/diluting-alcohol/
+ * Proofing water with volume contraction via TTB Table No. 3.
+ * Pure alcohol (proof gallons) is conserved; spirit and blend weights come from Table 3,
+ * so the water added is less than a naive spirit+water volume sum (contraction).
  */
 export function computeAlcoholDilution(
   input: AlcoholDilutionInput,
@@ -39,27 +43,39 @@ export function computeAlcoholDilution(
   }
   if (a2 >= a1) return null;
 
-  const r1 = a1 / 100;
-  const r2 = a2 / 100;
+  const proofStart = proofFromAbv(a1);
+  const proofTarget = proofFromAbv(a2);
+  const r1 = proofStart / 100;
+  const r2 = proofTarget / 100;
 
-  let spiritL: number;
-  let finalL: number;
+  let spiritWineGal: number;
+  let finalWineGal: number;
 
   if (volumeBasis === 'before') {
-    spiritL = volumeLiters;
-    finalL = volumeLiters * r1 / r2;
+    spiritWineGal = wineGallonsFromLiters(volumeLiters);
+    const proofGallons = spiritWineGal * r1;
+    finalWineGal = proofGallons / r2;
   } else {
-    finalL = volumeLiters;
-    spiritL = volumeLiters * r2 / r1;
+    finalWineGal = wineGallonsFromLiters(volumeLiters);
+    const proofGallons = finalWineGal * r2;
+    spiritWineGal = proofGallons / r1;
   }
 
-  const waterL = finalL - spiritL;
-  if (waterL < -0.001) return null;
+  if (spiritWineGal <= 0 || finalWineGal <= 0 || finalWineGal < spiritWineGal - 1e-9) {
+    return null;
+  }
+
+  const spiritWeightLb = weightFromWineGallons(spiritWineGal, proofStart);
+  const finalWeightLb = weightFromWineGallons(finalWineGal, proofTarget);
+  const waterWeightLb = finalWeightLb - spiritWeightLb;
+  if (waterWeightLb < -0.005) return null;
+
+  const waterWineGal = Math.max(0, waterWeightLb) / WATER_LBS_PER_US_GALLON;
 
   return {
-    spiritVolumeLiters: round2(spiritL),
-    waterVolumeLiters: round2(Math.max(0, waterL)),
-    finalVolumeLiters: round2(finalL),
+    spiritVolumeLiters: round2(wineGallonsToLiters(spiritWineGal)),
+    waterVolumeLiters: round2(wineGallonsToLiters(waterWineGal)),
+    finalVolumeLiters: round2(wineGallonsToLiters(finalWineGal)),
     actualAbvPercent: a1,
     targetAbvPercent: a2,
   };
@@ -67,7 +83,7 @@ export function computeAlcoholDilution(
 
 const litersToUsGal = (liters: number) => (liters * 1000) / ML_PER_GALLON;
 
-/** Proofing water at 60 °F — used for water weight from volume (contraction not applied). */
+/** Proofing water at 60 °F (8.34 lb/US wine gal). */
 export const WATER_LBS_PER_US_GALLON = 8.34;
 
 export function waterLitersToWeightLb(liters: number): number {
