@@ -60,6 +60,8 @@ import type {
   RecipeNutrient,
   RecipeNutrientInput,
   RecipeView,
+  MashBatchNutrient,
+  MashBatchNutrientInput,
   ProductionSummary,
   EquipmentVolumeReport,
   YieldReport,
@@ -359,21 +361,66 @@ function attachRecipeNutrients(recipes: Recipe[]): RecipeView[] {
 function persistRecipeNutrients(recipeId: number, nutrients: RecipeNutrientInput[]): void {
   runQuery('DELETE FROM recipe_nutrients WHERE recipe_id = ?', [recipeId]);
   nutrients
-    .filter((n) => n.amount > 0 || n.name.trim())
+    .filter((n) => n.amount > 0 && n.name.trim())
     .forEach((n) => {
+      const name = n.name.trim();
+      const item = findInventoryItem('nutrients', name);
       insertRow(
         `INSERT INTO recipe_nutrients (recipe_id, name, amount, unit, inventory_item_id, notes)
          VALUES (?, ?, ?, ?, ?, ?)`,
         [
           recipeId,
-          n.name.trim(),
+          name,
           n.amount,
-          n.unit || 'lbs',
-          n.inventory_item_id ?? null,
+          'lbs',
+          item?.id ?? n.inventory_item_id ?? null,
           n.notes ?? '',
         ],
       );
     });
+}
+
+export function getMashBatchNutrients(mashBatchId: number): MashBatchNutrient[] {
+  return queryAll<MashBatchNutrient>(
+    'SELECT * FROM mash_batch_nutrients WHERE mash_batch_id = ? ORDER BY id',
+    [mashBatchId],
+  );
+}
+
+function persistMashBatchNutrients(mashBatchId: number, nutrients: MashBatchNutrientInput[]): void {
+  runQuery('DELETE FROM mash_batch_nutrients WHERE mash_batch_id = ?', [mashBatchId]);
+  nutrients
+    .filter((n) => n.lbs > 0 && n.name.trim())
+    .forEach((n) => {
+      insertRow(
+        'INSERT INTO mash_batch_nutrients (mash_batch_id, name, lbs) VALUES (?, ?, ?)',
+        [mashBatchId, n.name.trim(), n.lbs],
+      );
+    });
+}
+
+function nutrientUsageByName(rows: MashBatchNutrientInput[]): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const row of rows) {
+    const name = row.name.trim();
+    if (!name || row.lbs <= 0) continue;
+    map.set(name, (map.get(name) ?? 0) + row.lbs);
+  }
+  return map;
+}
+
+function applyMashNutrientInventory(
+  previous: MashBatchNutrientInput[],
+  next: MashBatchNutrientInput[],
+): void {
+  const prevMap = nutrientUsageByName(previous);
+  const nextMap = nutrientUsageByName(next);
+  const names = new Set([...prevMap.keys(), ...nextMap.keys()]);
+  for (const name of names) {
+    const prevLbs = prevMap.get(name) ?? 0;
+    const nextLbs = nextMap.get(name) ?? 0;
+    applyInventoryDelta('nutrients', name, prevLbs - nextLbs);
+  }
 }
 
 export function getRecipes(): RecipeView[] {
@@ -465,6 +512,8 @@ export function saveMashBatch(batch: Omit<MashBatch, 'id' | 'created_at'>, id?: 
 function applyMashInventoryUsage(
   next: Omit<MashBatch, 'id' | 'created_at'>,
   previous?: MashBatch,
+  previousNutrients: MashBatchNutrientInput[] = [],
+  nextNutrients: MashBatchNutrientInput[] = [],
 ): void {
   const prevSugar = previous?.grain_type ?? '';
   const nextSugar = next.grain_type ?? '';
@@ -489,6 +538,8 @@ function applyMashInventoryUsage(
     applyInventoryDelta('yeast', prevYeast, prevYeastLbs);
     applyInventoryDelta('yeast', nextYeast, -nextYeastLbs);
   }
+
+  applyMashNutrientInventory(previousNutrients, nextNutrients);
 }
 
 export interface FermenterAssignmentInput {
@@ -1445,15 +1496,18 @@ export function getPrimaryWashTankEquipment(): FloorEquipment | undefined {
 export function saveMashBatchWithFermenters(
   batch: Omit<MashBatch, 'id' | 'created_at'>,
   assignments: FermenterAssignmentInput[],
+  nutrients: MashBatchNutrientInput[] = [],
   id?: number,
 ): number {
   const previous = id ? getMashBatch(id) : undefined;
+  const previousNutrients = id ? getMashBatchNutrients(id).map((n) => ({ name: n.name, lbs: n.lbs })) : [];
   assertMashBatchCompleteHasLogs(batch, id);
   assertMashBatchEquipmentUsable(batch, assignments);
   const mashId = saveMashBatch(batch, id);
   try {
     saveMashFermenterAssignments(mashId, assignments);
-    applyMashInventoryUsage(batch, previous);
+    persistMashBatchNutrients(mashId, nutrients);
+    applyMashInventoryUsage(batch, previous, previousNutrients, nutrients);
     syncWashTankForMashBatch(mashId, batch.status);
   } catch (err) {
     if (!id) {

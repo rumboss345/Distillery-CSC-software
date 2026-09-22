@@ -502,8 +502,24 @@ function runMigrations(): void {
   migrateAdvancedBlending();
   migrateAssignedEmployee();
   migrateRecipeNutrients();
+  migrateMashBatchNutrients();
   seedBlendRecipes2024();
   persistDb();
+}
+
+function migrateMashBatchNutrients(): void {
+  if (!db) return;
+  db.run(`
+    CREATE TABLE IF NOT EXISTS mash_batch_nutrients (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      mash_batch_id INTEGER NOT NULL REFERENCES mash_batches(id) ON DELETE CASCADE,
+      name TEXT NOT NULL DEFAULT '',
+      lbs REAL NOT NULL DEFAULT 0
+    )
+  `);
+  db.run(`
+    CREATE INDEX IF NOT EXISTS idx_mash_batch_nutrients_batch ON mash_batch_nutrients(mash_batch_id)
+  `);
 }
 
 function migrateRecipeNutrients(): void {

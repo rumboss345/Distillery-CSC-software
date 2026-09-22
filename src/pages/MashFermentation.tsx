@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { defaultAssignee } from '../lib/assignee';
 import {
   getMashBatches,
+  getMashBatchNutrients,
   saveMashBatchWithFermenters,
   deleteMashBatch,
   getFermentationLogs,
@@ -28,7 +29,13 @@ import { AdminCredentialConfirmModal } from '../components/AdminCredentialConfir
 import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
 import { estimateAbvFromBrix, estimateSugarWash, formatAbvEstimate } from '../lib/fermentation';
-import { appendNutrientsToBatchNotes, formatRecipeNutrientsSummary } from '../lib/wash-recipe-nutrients';
+import type { MashBatchNutrientInput } from '../types';
+import {
+  emptyMashBatchNutrient,
+  formatMashBatchNutrientsSummary,
+  formatRecipeNutrientsSummary,
+  recipeNutrientsToBatchInputs,
+} from '../lib/wash-recipe-nutrients';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
 import { equipmentBlocksProduction } from '../lib/equipment-maintenance';
 import type { MashBatch, MashStatus } from '../types';
@@ -226,6 +233,7 @@ export function MashFermentation() {
   const [editId, setEditId] = useState<number | undefined>();
   const [form, setForm] = useState(emptyBatch());
   const [fermenterForm, setFermenterForm] = useState(emptyFermenterForm());
+  const [batchNutrients, setBatchNutrients] = useState<MashBatchNutrientInput[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [adminDeleteBatchId, setAdminDeleteBatchId] = useState<number | null>(null);
   const [adminEditBatchId, setAdminEditBatchId] = useState<number | null>(null);
@@ -236,6 +244,7 @@ export function MashFermentation() {
 
   const sugarItems = getInventoryByCategory('sugar');
   const yeastItems = getInventoryByCategory('yeast');
+  const nutrientItems = getInventoryByCategory('nutrients');
   const recipes = getRecipes();
   const availableFermenters = getAvailableFermenters(editId);
   const availableFermenters2 = getAvailableFermenters(editId).filter(
@@ -304,6 +313,7 @@ export function MashFermentation() {
       start_date: planDate ?? emptyBatch().start_date,
     });
     loadFermenterForm();
+    setBatchNutrients([]);
     setShowForm(true);
   };
 
@@ -319,6 +329,9 @@ export function MashFermentation() {
   const openEditForm = (batch: MashBatch) => {
     setEditId(batch.id);
     setForm({ ...batch, yeast_lbs: batch.yeast_lbs ?? 0 });
+    setBatchNutrients(
+      getMashBatchNutrients(batch.id).map((n) => ({ name: n.name, lbs: n.lbs })),
+    );
     loadFermenterForm(batch.id);
     setShowForm(true);
   };
@@ -380,6 +393,31 @@ export function MashFermentation() {
         return;
       }
     }
+
+    const prevNutrients = editId
+      ? getMashBatchNutrients(editId).map((n) => ({ name: n.name, lbs: n.lbs }))
+      : [];
+    const nutrientLbsByName = (rows: MashBatchNutrientInput[]) => {
+      const map = new Map<string, number>();
+      for (const row of rows) {
+        const name = row.name.trim();
+        if (!name || row.lbs <= 0) continue;
+        map.set(name, (map.get(name) ?? 0) + row.lbs);
+      }
+      return map;
+    };
+    const prevNutrientMap = nutrientLbsByName(prevNutrients);
+    const nextNutrientMap = nutrientLbsByName(batchNutrients);
+    for (const [name, nextLbs] of nextNutrientMap) {
+      const needed = nextLbs - (prevNutrientMap.get(name) ?? 0);
+      if (needed <= 0) continue;
+      const item = nutrientItems.find((i) => i.name === name);
+      if (item && needed > item.quantity + 0.0001) {
+        if (!confirm(`${name} inventory is ${item.quantity} ${item.unit}, but this batch needs ${needed.toFixed(2)} lbs more. Save anyway?`)) {
+          return;
+        }
+      }
+    }
     if (!form.assigned_user_id) {
       alert('Select the employee assigned to this wash batch.');
       return;
@@ -405,7 +443,7 @@ export function MashFermentation() {
           }))
           : [];
     try {
-      saveMashBatchWithFermenters(form, assignments, editId);
+      saveMashBatchWithFermenters(form, assignments, batchNutrients, editId);
       closeBatchForm();
       refresh();
     } catch (error) {
@@ -727,8 +765,9 @@ export function MashFermentation() {
                     yeast_lbs: recipe.yeast_lbs,
                     target_brix: recipe.target_brix,
                     target_final_brix: recipe.target_final_brix,
-                    notes: appendNutrientsToBatchNotes(recipe.notes || form.notes, recipe.nutrients),
+                    notes: recipe.notes || form.notes,
                   });
+                  setBatchNutrients(recipeNutrientsToBatchInputs(recipe.nutrients));
                 }}
               >
                 <option value="">— Select a saved recipe —</option>
@@ -739,9 +778,6 @@ export function MashFermentation() {
                   </option>
                 ))}
               </select>
-              <p className="field-hint">
-                Loading a recipe copies nutrient additions into batch notes when the recipe defines them.
-              </p>
             </div>
             <div className="form-group">
               <label>Recipe Name</label>
@@ -793,6 +829,67 @@ export function MashFermentation() {
               <label>Yeast (lbs)</label>
               <input type="number" min="0" step="0.01" value={form.yeast_lbs || ''} onChange={(e) => setForm({ ...form, yeast_lbs: parseFloat(e.target.value) || 0 })} placeholder="2" />
             </div>
+
+            {batchNutrients.map((row, index) => (
+              <div key={index} className="form-group full-width wash-nutrient-row">
+                <div className="form-grid" style={{ marginBottom: 0 }}>
+                  <div className="form-group">
+                    <label>{index === 0 ? 'Nutrient' : `Nutrient ${index + 1}`}</label>
+                    <select
+                      value={row.name}
+                      onChange={(e) => {
+                        const name = e.target.value;
+                        setBatchNutrients((prev) => prev.map((n, i) => (i === index ? { ...n, name } : n)));
+                      }}
+                    >
+                      <option value="">— Select nutrient from inventory —</option>
+                      {nutrientItems.map((item) => (
+                        <option key={item.id} value={item.name}>
+                          {item.name} ({item.quantity} {item.unit} on hand)
+                        </option>
+                      ))}
+                      {row.name && !nutrientItems.some((i) => i.name === row.name) && (
+                        <option value={row.name}>{row.name} (not in inventory)</option>
+                      )}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label>{index === 0 ? 'Nutrient (lbs)' : `Nutrient ${index + 1} (lbs)`}</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={row.lbs || ''}
+                      onChange={(e) => {
+                        const lbs = parseFloat(e.target.value) || 0;
+                        setBatchNutrients((prev) => prev.map((n, i) => (i === index ? { ...n, lbs } : n)));
+                      }}
+                      placeholder="5"
+                    />
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-ghost"
+                  onClick={() => setBatchNutrients((prev) => prev.filter((_, i) => i !== index))}
+                >
+                  Remove nutrient
+                </button>
+              </div>
+            ))}
+            <div className="form-group full-width">
+              <button
+                type="button"
+                className="btn btn-sm btn-secondary"
+                onClick={() => setBatchNutrients((prev) => [...prev, emptyMashBatchNutrient()])}
+              >
+                + Add nutrient
+              </button>
+              {batchNutrients.length > 0 && (
+                <p className="field-hint">{formatMashBatchNutrientsSummary(batchNutrients)}</p>
+              )}
+            </div>
+
             <div className="form-group">
               <label>Start Date</label>
               <DatePicker
@@ -957,7 +1054,7 @@ export function MashFermentation() {
               <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
             </div>
           </div>
-          <p className="form-hint">Saving deducts sugar and yeast from inventory. Fermenters fill on the floor plan only after status is <strong>fermenting</strong> and assignments are saved.</p>
+          <p className="form-hint">Saving deducts sugar, yeast, and nutrients from inventory. Fermenters fill on the floor plan only after status is <strong>fermenting</strong> and assignments are saved.</p>
           <div className="form-actions">
             <button className="btn btn-secondary" onClick={closeBatchForm}>Cancel</button>
             <button className="btn btn-primary" onClick={handleSave}>Save Batch</button>

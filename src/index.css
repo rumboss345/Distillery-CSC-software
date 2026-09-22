@@ -855,9 +855,10 @@ tr:hover td {
 }
 
 .blend-recipe-spirit-card,
-.recipe-nutrient-list {
-  margin: 0;
-  padding-left: 1.25rem;
+.wash-nutrient-row {
+  border-top: 1px solid var(--border, #e5e7eb);
+  padding-top: 0.75rem;
+  margin-top: 0.25rem;
 }
 
 .blend-recipe-additive-card {
