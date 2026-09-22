@@ -1,14 +1,17 @@
 import { useEffect, useState } from 'react';
 import { HoldingTankIntakeHistory } from '../HoldingTankIntakeHistory';
 import { StatusBadge } from '../StatusBadge';
-import { holdingTankIntakeKey } from '../../db/queries';
+import { AssigneeSelect } from '../AssigneeSelect';
+import { holdingTankIntakeKey, markEquipmentCleaned } from '../../db/queries';
 import { STATUS_LABELS, formatGal } from './equipment-visual-shared';
 import type { EquipmentVisualData } from './equipment-visual.types';
 import type { FloorEquipmentView } from '../../types';
+import { equipmentCleaningStatusLabel, equipmentNeedsCleaning } from '../../lib/equipment-cleaning';
 import {
   equipmentBlocksProduction,
   maintenanceStatusLabel,
 } from '../../lib/equipment-maintenance';
+import type { AssignedEmployee } from '../../lib/assignee';
 
 interface ProcessEquipmentDetailPanelProps {
   equipment: FloorEquipmentView | null;
@@ -16,6 +19,7 @@ interface ProcessEquipmentDetailPanelProps {
   planName: string;
   onEdit?: () => void;
   onRemove?: () => void;
+  onEquipmentUpdated?: () => void;
 }
 
 export function ProcessEquipmentDetailPanel({
@@ -24,11 +28,17 @@ export function ProcessEquipmentDetailPanel({
   planName,
   onEdit,
   onRemove,
+  onEquipmentUpdated,
 }: ProcessEquipmentDetailPanelProps) {
   const [selectedIntakeKey, setSelectedIntakeKey] = useState<string | null>(null);
+  const [cleanedBy, setCleanedBy] = useState<AssignedEmployee>({
+    assigned_user_id: null,
+    assigned_user_name: null,
+  });
 
   useEffect(() => {
     setSelectedIntakeKey(null);
+    setCleanedBy({ assigned_user_id: null, assigned_user_name: null });
   }, [equipment?.id]);
 
   if (!equipment || !visual) {
@@ -41,11 +51,37 @@ export function ProcessEquipmentDetailPanel({
   }
 
   const statusLabel = STATUS_LABELS[visual.status] ?? equipment.status.replace('_', ' ');
+  const dirty = equipmentNeedsCleaning(equipment);
+
+  const handleMarkCleaned = () => {
+    if (!cleanedBy.assigned_user_id) {
+      alert('Select who cleaned this equipment.');
+      return;
+    }
+    try {
+      markEquipmentCleaned(
+        equipment.id,
+        cleanedBy.assigned_user_id,
+        cleanedBy.assigned_user_name ?? '',
+      );
+      onEquipmentUpdated?.();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Could not mark equipment clean.');
+    }
+  };
 
   return (
     <div className="process-panel card process-panel--detail">
       <h4 className="process-panel-title">{visual.name}</h4>
       <p className="process-equipment-detail-code">{visual.code} · {visual.typeLabel}</p>
+      {dirty && (
+        <div className="process-equipment-cleaning-banner" role="status">
+          <strong>{equipmentCleaningStatusLabel()}</strong>
+          <p className="field-hint" style={{ margin: '0.35rem 0 0' }}>
+            This unit was emptied after use. Mark it clean before charging the next batch.
+          </p>
+        </div>
+      )}
       <dl className="process-equipment-detail-list">
         <dt>Status</dt>
         <dd><StatusBadge status={statusLabel} /></dd>
@@ -55,6 +91,16 @@ export function ProcessEquipmentDetailPanel({
             <dd>
               {maintenanceStatusLabel(equipment.maintenance_status)}
               {equipmentBlocksProduction(equipment) ? ' — not available for production' : ''}
+            </dd>
+          </>
+        )}
+        {equipment.cleaned_at && (
+          <>
+            <dt>Last cleaned</dt>
+            <dd>
+              {equipment.cleaned_by_user_name || '—'}
+              {' · '}
+              {new Date(equipment.cleaned_at).toLocaleString()}
             </dd>
           </>
         )}
@@ -126,6 +172,20 @@ export function ProcessEquipmentDetailPanel({
           </>
         )}
       </dl>
+      {dirty && (
+        <div className="process-equipment-cleaning-form">
+          <label htmlFor="equipment-cleaned-by">Cleaned by</label>
+          <AssigneeSelect
+            id="equipment-cleaned-by"
+            value={cleanedBy}
+            onChange={setCleanedBy}
+            required
+          />
+          <button type="button" className="btn btn-sm btn-primary" onClick={handleMarkCleaned}>
+            Mark as cleaned
+          </button>
+        </div>
+      )}
       {(equipment.equipment_type === 'holding_tank' || equipment.equipment_type === 'collection_vessel') && (
         <HoldingTankIntakeHistory
           tankId={equipment.id}

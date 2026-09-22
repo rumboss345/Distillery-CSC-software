@@ -57,6 +57,9 @@ export interface FloorEquipment {
   notes: string;
   maintenance_status: EquipmentMaintenanceStatus | null;
   maintenance_notes: string;
+  cleaned_at: string | null;
+  cleaned_by_user_id: number | null;
+  cleaned_by_user_name: string | null;
   created_at: string;
 }
 

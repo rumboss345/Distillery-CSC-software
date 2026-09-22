@@ -37,7 +37,7 @@ import {
   recipeNutrientsToBatchInputs,
 } from '../lib/wash-recipe-nutrients';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
-import { equipmentBlocksProduction } from '../lib/equipment-maintenance';
+import { equipmentUnavailableForProduction } from '../lib/equipment-maintenance';
 import type { MashBatch, MashStatus } from '../types';
 
 const STATUSES: MashStatus[] = ['planned', 'mashing', 'fermenting', 'complete', 'discarded'];
@@ -530,7 +530,7 @@ export function MashFermentation() {
   const washTank = useMemo(() => getPrimaryWashTankEquipment(), [key]);
   const washTankBlocksSave = form.status === 'mashing'
     && washTank != null
-    && equipmentBlocksProduction(washTank);
+    && equipmentUnavailableForProduction(washTank);
   const washTankPreview = useMemo((): EquipmentVisualData | null => {
     if (form.status !== 'mashing') return null;
     const capacityGal = washTank?.capacity_gal ?? 600;

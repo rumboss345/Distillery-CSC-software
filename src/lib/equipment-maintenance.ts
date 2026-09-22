@@ -1,4 +1,5 @@
 import type { EquipmentMaintenanceStatus, EquipmentType, FloorEquipment } from '../types';
+import { equipmentNeedsCleaning } from './equipment-cleaning';
 import { EQUIPMENT_TYPES } from './equipment';
 
 export const MAINTENANCE_STATUS_OPTIONS: {
@@ -15,6 +16,13 @@ export function equipmentBlocksProduction(
   item: Pick<FloorEquipment, 'maintenance_status'>,
 ): boolean {
   return item.maintenance_status === 'broken' || item.maintenance_status === 'maintenance';
+}
+
+/** Broken/maintenance or post-use cleaning required. */
+export function equipmentUnavailableForProduction(
+  item: Pick<FloorEquipment, 'maintenance_status' | 'status'>,
+): boolean {
+  return equipmentBlocksProduction(item) || equipmentNeedsCleaning(item);
 }
 
 export function equipmentHasMaintenanceTag(

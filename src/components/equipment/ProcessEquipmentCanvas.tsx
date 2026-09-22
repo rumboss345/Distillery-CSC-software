@@ -20,6 +20,7 @@ import { ProcessEquipmentDetailPanel } from './ProcessEquipmentDetailPanel';
 import { processEquipmentVisualScale } from './process-visual-scale';
 import type { EquipmentVisualData } from './equipment-visual.types';
 import type { FloorEquipmentView } from '../../types';
+import { equipmentNeedsCleaning } from '../../lib/equipment-cleaning';
 import {
   equipmentBlocksProduction,
   equipmentHasMaintenanceTag,
@@ -358,13 +359,14 @@ export function ProcessEquipmentCanvas({
               const pos = resolvePosition(item);
               const isDragging = dragging?.id === item.id;
               const outOfService = equipmentBlocksProduction(item);
+              const needsCleaning = equipmentNeedsCleaning(item);
               const repairNote = equipmentShowsRepairNoteIndicator(item);
               const hasMaintenanceTag = equipmentHasMaintenanceTag(item);
 
               return (
                 <div
                   key={item.id}
-                  className={`process-equipment-node${isDragging ? ' process-equipment-node--dragging' : ''}${selectedId === item.id ? ' process-equipment-node--selected' : ''}${visual.isFermenting ? ' process-equipment-node--fermenting' : ''}${outOfService ? ' process-equipment-node--out-of-service' : ''}${repairNote ? ' process-equipment-node--repair-note' : ''}${hasMaintenanceTag ? ' process-equipment-node--has-maintenance' : ''}`}
+                  className={`process-equipment-node${isDragging ? ' process-equipment-node--dragging' : ''}${selectedId === item.id ? ' process-equipment-node--selected' : ''}${visual.isFermenting ? ' process-equipment-node--fermenting' : ''}${outOfService ? ' process-equipment-node--out-of-service' : ''}${needsCleaning ? ' process-equipment-node--needs-cleaning' : ''}${repairNote ? ' process-equipment-node--repair-note' : ''}${hasMaintenanceTag ? ' process-equipment-node--has-maintenance' : ''}`}
                   style={{ left: pos.x, top: pos.y }}
                   onPointerDown={(e) => onEquipmentPointerDown(e, item)}
                   onContextMenu={(e) => onEquipmentContextMenu(e, item)}
@@ -385,6 +387,14 @@ export function ProcessEquipmentCanvas({
                       <svg viewBox="0 0 100 100" className="process-equipment-out-of-service-icon">
                         <line x1="18" y1="18" x2="82" y2="82" />
                         <line x1="82" y1="18" x2="18" y2="82" />
+                      </svg>
+                    </div>
+                  )}
+                  {needsCleaning && (
+                    <div className="process-equipment-cleaning-badge" aria-label="Needs cleaning">
+                      <svg viewBox="0 0 24 24" className="process-equipment-cleaning-badge-icon">
+                        <path d="M12 3v3M5.5 8.5l2 2M3 14h3M18.5 8.5l-2 2M21 14h-3M8 20h8M9 17h6" />
+                        <path d="M7 11c0-2.8 2.2-5 5-5s5 2.2 5 5v2H7v-2z" />
                       </svg>
                     </div>
                   )}
@@ -440,6 +450,7 @@ export function ProcessEquipmentCanvas({
               planName={selectedPlanName}
               onEdit={onEditEquipment}
               onRemove={onRemoveEquipment}
+              onEquipmentUpdated={onLayoutChange}
             />
           </section>
         </aside>

@@ -46,6 +46,9 @@ const emptyEquipment = (planId: number, type: EquipmentType = 'fermenter'): Omit
     notes: '',
     maintenance_status: null,
     maintenance_notes: '',
+    cleaned_at: null,
+    cleaned_by_user_id: null,
+    cleaned_by_user_name: null,
   };
 };
 
