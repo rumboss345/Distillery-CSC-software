@@ -155,15 +155,7 @@ function AlcoholDilutionCalculator() {
       <div className="card">
         <h3>Alcohol dilution</h3>
         <p className="field-hint" style={{ marginTop: 0 }}>
-          Calculate proofing water to reach a target ABV. Same approach as the{' '}
-          <a
-            href="https://www.distilling-spirits.com/tools/calculations/diluting-alcohol/"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Distilling Spirits dilution calculator
-          </a>
-          {' '}(linear mix; volume contraction is not applied).
+          Calculate proofing water to reach a target ABV (linear mix; volume contraction is not applied).
         </p>
 
         <div className="form-group full-width">
