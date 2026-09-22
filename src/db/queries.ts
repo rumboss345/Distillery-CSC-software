@@ -13,8 +13,10 @@ import {
 } from '../lib/still-charge';
 import {
   equipmentBlocksProduction,
+  equipmentUnavailableForProduction,
   maintenanceStatusLabel,
 } from '../lib/equipment-maintenance';
+import { equipmentCleaningStatusLabel, equipmentNeedsCleaning } from '../lib/equipment-cleaning';
 import { fermenterShowsAssignedWash } from '../lib/mash-fermenter-fill';
 import type { EquipmentMaintenanceStatus } from '../types';
 import { initDatabase, clearAllData } from './database';
@@ -84,17 +86,52 @@ import {
 const BLEND_LEDGER_STATUSES_SQL = "('executed', 'bottled', 'blended')";
 
 function onlyProductionUsable<T extends FloorEquipment>(items: T[]): T[] {
-  return items.filter((e) => !equipmentBlocksProduction(e));
+  return items.filter((e) => !equipmentUnavailableForProduction(e));
+}
+
+function markEquipmentNeedsCleaningAfterUse(equipmentId: number): void {
+  const eq = queryOne<FloorEquipment>('SELECT status FROM floor_equipment WHERE id = ?', [equipmentId]);
+  if (!eq || eq.status === 'offline') return;
+  if (eq.status === 'in_use') {
+    runQuery(
+      `UPDATE floor_equipment SET status='cleaning', linked_mash_batch_id=NULL WHERE id=?`,
+      [equipmentId],
+    );
+  }
 }
 
 function assertEquipmentUsableForProduction(equipmentId: number, role = 'Equipment'): void {
   const eq = queryOne<FloorEquipment>('SELECT * FROM floor_equipment WHERE id = ?', [equipmentId]);
   if (!eq) throw new Error(`${role} not found.`);
+  if (equipmentNeedsCleaning(eq)) {
+    throw new Error(
+      `${eq.name} is ${equipmentCleaningStatusLabel().toLowerCase()} and cannot be used until marked clean on the process view.`,
+    );
+  }
   if (equipmentBlocksProduction(eq)) {
     throw new Error(
       `${eq.name} is ${maintenanceStatusLabel(eq.maintenance_status).toLowerCase()} and cannot be used until returned to service.`,
     );
   }
+}
+
+export function markEquipmentCleaned(
+  equipmentId: number,
+  cleanedByUserId: number,
+  cleanedByUserName: string,
+): void {
+  const eq = queryOne<FloorEquipment>('SELECT * FROM floor_equipment WHERE id = ?', [equipmentId]);
+  if (!eq) throw new Error('Equipment not found.');
+  if (!equipmentNeedsCleaning(eq)) {
+    throw new Error(`${eq.name} is not waiting to be cleaned.`);
+  }
+  if (!cleanedByUserId) {
+    throw new Error('Select who cleaned this equipment.');
+  }
+  runQuery(
+    `UPDATE floor_equipment SET status='empty', cleaned_at=datetime('now'), cleaned_by_user_id=?, cleaned_by_user_name=? WHERE id=?`,
+    [cleanedByUserId, cleanedByUserName.trim(), equipmentId],
+  );
 }
 
 function assertStillUsableByName(stillName: string): void {
@@ -1378,7 +1415,7 @@ export function syncHoldingTankStatuses(): void {
     if (contents.volume_gal > 0) {
       runQuery(`UPDATE floor_equipment SET status='in_use' WHERE id=?`, [tank.id]);
     } else if (tank.status === 'in_use') {
-      runQuery(`UPDATE floor_equipment SET status='empty' WHERE id=?`, [tank.id]);
+      markEquipmentNeedsCleaningAfterUse(tank.id);
     }
   }
 }
@@ -1406,10 +1443,7 @@ export function syncFermenterAndStillStatuses(): void {
         [row.mash_batch_id, f.id],
       );
     } else if (f.status === 'in_use') {
-      runQuery(
-        `UPDATE floor_equipment SET status='empty', linked_mash_batch_id=NULL WHERE id=?`,
-        [f.id],
-      );
+      markEquipmentNeedsCleaningAfterUse(f.id);
     }
   }
 
@@ -1425,7 +1459,7 @@ export function syncFermenterAndStillStatuses(): void {
     if (activeRun) {
       runQuery(`UPDATE floor_equipment SET status='in_use' WHERE id=?`, [s.id]);
     } else if (s.status === 'in_use') {
-      runQuery(`UPDATE floor_equipment SET status='empty' WHERE id=?`, [s.id]);
+      markEquipmentNeedsCleaningAfterUse(s.id);
     }
   }
 }
@@ -1456,11 +1490,21 @@ function getPrimaryWashTank(): FloorEquipment | undefined {
 }
 
 function releaseWashTankForMashBatch(mashBatchId: number): void {
-  runQuery(
-    `UPDATE floor_equipment SET status='empty', linked_mash_batch_id=NULL
+  const tanks = queryAll<{ id: number; status: string }>(
+    `SELECT id, status FROM floor_equipment
      WHERE equipment_type='mash_tun' AND linked_mash_batch_id=?`,
     [mashBatchId],
   );
+  for (const tank of tanks) {
+    if (tank.status === 'in_use') {
+      markEquipmentNeedsCleaningAfterUse(tank.id);
+    } else {
+      runQuery(
+        `UPDATE floor_equipment SET linked_mash_batch_id=NULL WHERE id=?`,
+        [tank.id],
+      );
+    }
+  }
 }
 
 function syncWashTankForMashBatch(mashBatchId: number, status: MashStatus): void {
@@ -1537,10 +1581,7 @@ export function releaseFermenterForMash(mashBatchId: number, equipmentId: number
     'DELETE FROM mash_fermenter_assignments WHERE mash_batch_id = ? AND floor_equipment_id = ?',
     [mashBatchId, equipmentId],
   );
-  runQuery(
-    `UPDATE floor_equipment SET status='empty', linked_mash_batch_id=NULL WHERE id=?`,
-    [equipmentId],
-  );
+  markEquipmentNeedsCleaningAfterUse(equipmentId);
   syncFermenterAndStillStatuses();
 }
 

@@ -460,6 +460,16 @@ function runMigrations(): void {
     persistDb();
   }
 
+  const hasCleanedAt = queryOne<{ name: string }>(
+    "SELECT name FROM pragma_table_info('floor_equipment') WHERE name='cleaned_at'",
+  );
+  if (!hasCleanedAt) {
+    db.run('ALTER TABLE floor_equipment ADD COLUMN cleaned_at TEXT');
+    db.run('ALTER TABLE floor_equipment ADD COLUMN cleaned_by_user_id INTEGER');
+    db.run('ALTER TABLE floor_equipment ADD COLUMN cleaned_by_user_name TEXT');
+    persistDb();
+  }
+
   const hasRecipes = queryOne<{ name: string }>(
     "SELECT name FROM sqlite_master WHERE type='table' AND name='recipes'",
   );

@@ -339,6 +339,9 @@ CREATE TABLE IF NOT EXISTS floor_equipment (
   notes TEXT NOT NULL DEFAULT '',
   maintenance_status TEXT,
   maintenance_notes TEXT NOT NULL DEFAULT '',
+  cleaned_at TEXT,
+  cleaned_by_user_id INTEGER,
+  cleaned_by_user_name TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

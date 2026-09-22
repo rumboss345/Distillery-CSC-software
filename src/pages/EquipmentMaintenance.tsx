@@ -7,6 +7,7 @@ import {
 } from '../db/queries';
 import { Modal } from '../components/Modal';
 import { equipmentTypeLabel } from '../lib/equipment';
+import { equipmentCleaningStatusLabel, equipmentNeedsCleaning } from '../lib/equipment-cleaning';
 import {
   equipmentBlocksProduction,
   groupEquipmentByCategory,
@@ -57,7 +58,8 @@ export function EquipmentMaintenance() {
         <h2>Equipment Maintenance</h2>
         <p>
           Mark equipment broken or under maintenance to block production use and show a red X on the process view.
-          Suggested repairs show a wrench in the upper-left on the process view; right-click tagged equipment there to view details.
+          After use, emptied equipment shows a mop on the process view until someone marks it cleaned.
+          Suggested repairs show a wrench in the upper-left; right-click tagged equipment there to view details.
         </p>
       </div>
 
@@ -67,7 +69,10 @@ export function EquipmentMaintenance() {
           <ul className="equipment-maintenance-list">
             {group.items.map((item) => {
               const blocked = equipmentBlocksProduction(item);
-              const statusLabel = maintenanceStatusLabel(item.maintenance_status);
+              const dirty = equipmentNeedsCleaning(item);
+              const statusLabel = dirty
+                ? equipmentCleaningStatusLabel()
+                : maintenanceStatusLabel(item.maintenance_status);
               return (
                 <li key={item.id} className="equipment-maintenance-row">
                   <div className="equipment-maintenance-row-main">
@@ -87,9 +92,11 @@ export function EquipmentMaintenance() {
                       className={`badge equipment-maintenance-badge${
                         blocked
                           ? ' equipment-maintenance-badge--blocked'
-                          : item.maintenance_status === 'repair_note'
+                          : dirty
                             ? ' equipment-maintenance-badge--note'
-                            : ''
+                            : item.maintenance_status === 'repair_note'
+                              ? ' equipment-maintenance-badge--note'
+                              : ''
                       }`}
                     >
                       {statusLabel}
