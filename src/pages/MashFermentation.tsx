@@ -28,6 +28,7 @@ import { AdminCredentialConfirmModal } from '../components/AdminCredentialConfir
 import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
 import { estimateAbvFromBrix, estimateSugarWash, formatAbvEstimate } from '../lib/fermentation';
+import { appendNutrientsToBatchNotes, formatRecipeNutrientsSummary } from '../lib/wash-recipe-nutrients';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
 import { equipmentBlocksProduction } from '../lib/equipment-maintenance';
 import type { MashBatch, MashStatus } from '../types';
@@ -726,15 +727,21 @@ export function MashFermentation() {
                     yeast_lbs: recipe.yeast_lbs,
                     target_brix: recipe.target_brix,
                     target_final_brix: recipe.target_final_brix,
-                    notes: recipe.notes || form.notes,
+                    notes: appendNutrientsToBatchNotes(recipe.notes || form.notes, recipe.nutrients),
                   });
                 }}
               >
                 <option value="">— Select a saved recipe —</option>
                 {recipes.map((r) => (
-                  <option key={r.id} value={r.id}>{r.name}{r.spirit_type ? ` (${r.spirit_type})` : ''}</option>
+                  <option key={r.id} value={r.id}>
+                    {r.name}{r.spirit_type ? ` (${r.spirit_type})` : ''}
+                    {r.nutrients.length ? ` · ${formatRecipeNutrientsSummary(r.nutrients)}` : ''}
+                  </option>
                 ))}
               </select>
+              <p className="field-hint">
+                Loading a recipe copies nutrient additions into batch notes when the recipe defines them.
+              </p>
             </div>
             <div className="form-group">
               <label>Recipe Name</label>

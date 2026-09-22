@@ -57,6 +57,9 @@ import type {
   MashBatch,
   MashStatus,
   Recipe,
+  RecipeNutrient,
+  RecipeNutrientInput,
+  RecipeView,
   ProductionSummary,
   EquipmentVolumeReport,
   YieldReport,
@@ -337,19 +340,60 @@ export function addInventoryCategory(name: string): string {
 
 // ── Recipes ────────────────────────────────────────────────
 
-export function getRecipes(): Recipe[] {
-  return queryAll<Recipe>('SELECT * FROM recipes ORDER BY name');
+function attachRecipeNutrients(recipes: Recipe[]): RecipeView[] {
+  const nutrients = queryAll<RecipeNutrient>(
+    'SELECT * FROM recipe_nutrients ORDER BY id',
+  );
+  const byRecipe = new Map<number, RecipeNutrient[]>();
+  for (const row of nutrients) {
+    const bucket = byRecipe.get(row.recipe_id) ?? [];
+    bucket.push(row);
+    byRecipe.set(row.recipe_id, bucket);
+  }
+  return recipes.map((recipe) => ({
+    ...recipe,
+    nutrients: byRecipe.get(recipe.id) ?? [],
+  }));
 }
 
-export function getRecipe(id: number): Recipe | undefined {
-  return queryOne<Recipe>('SELECT * FROM recipes WHERE id = ?', [id]) ?? undefined;
+function persistRecipeNutrients(recipeId: number, nutrients: RecipeNutrientInput[]): void {
+  runQuery('DELETE FROM recipe_nutrients WHERE recipe_id = ?', [recipeId]);
+  nutrients
+    .filter((n) => n.amount > 0 || n.name.trim())
+    .forEach((n) => {
+      insertRow(
+        `INSERT INTO recipe_nutrients (recipe_id, name, amount, unit, inventory_item_id, notes)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          recipeId,
+          n.name.trim(),
+          n.amount,
+          n.unit || 'lbs',
+          n.inventory_item_id ?? null,
+          n.notes ?? '',
+        ],
+      );
+    });
+}
+
+export function getRecipes(): RecipeView[] {
+  const recipes = queryAll<Recipe>('SELECT * FROM recipes ORDER BY name');
+  return attachRecipeNutrients(recipes);
+}
+
+export function getRecipe(id: number): RecipeView | undefined {
+  const recipe = queryOne<Recipe>('SELECT * FROM recipes WHERE id = ?', [id]);
+  if (!recipe) return undefined;
+  return attachRecipeNutrients([recipe])[0];
 }
 
 export function saveRecipe(
   recipe: Omit<Recipe, 'id' | 'created_at' | 'updated_at'>,
   id?: number,
-): void {
-  if (id) {
+  nutrients: RecipeNutrientInput[] = [],
+): number {
+  let recipeId = id;
+  if (recipeId) {
     runQuery(
       `UPDATE recipes SET name=?, spirit_type=?, grain_type=?, grain_lbs=?, water_gal=?, yeast_strain=?, yeast_lbs=?, target_brix=?, target_final_brix=?, notes=?, updated_at=datetime('now') WHERE id=?`,
       [
@@ -363,11 +407,11 @@ export function saveRecipe(
         recipe.target_brix,
         recipe.target_final_brix,
         recipe.notes,
-        id,
+        recipeId,
       ],
     );
   } else {
-    insertRow(
+    recipeId = insertRow(
       `INSERT INTO recipes (name, spirit_type, grain_type, grain_lbs, water_gal, yeast_strain, yeast_lbs, target_brix, target_final_brix, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         recipe.name,
@@ -383,9 +427,12 @@ export function saveRecipe(
       ],
     );
   }
+  persistRecipeNutrients(recipeId, nutrients);
+  return recipeId;
 }
 
 export function deleteRecipe(id: number): void {
+  runQuery('DELETE FROM recipe_nutrients WHERE recipe_id = ?', [id]);
   runQuery('DELETE FROM recipes WHERE id = ?', [id]);
 }
 
