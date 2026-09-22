@@ -50,15 +50,6 @@ export function Layout() {
               {item.label}
             </NavLink>
           ))}
-          <NavLink
-            to="/ask-nelly"
-            className={({ isActive }) =>
-              `nav-link${isActive ? ' active' : ''}`
-            }
-          >
-            <span className="nav-icon">💬</span>
-            Ask Nelly
-          </NavLink>
           {user?.role === 'admin' && (
             <NavLink
               to="/admin/users"

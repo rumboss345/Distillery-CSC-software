@@ -49,8 +49,6 @@ import {
 } from './db.js';
 import { sanitizePermissions, sanitizeProcessStages } from './permissions.js';
 import { sendAdminApprovalEmail } from './email.js';
-import { askNelly, isAskNellyAiEnabled } from './ask-nelly/answer.js';
-import { knowledgeStats, loadKnowledgeChunks } from './ask-nelly/knowledge.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const isProduction = process.env.NODE_ENV === 'production';
@@ -368,49 +366,6 @@ app.delete('/api/admin/users/:id', authMiddleware, adminMiddleware, (req, res) =
     return;
   }
   res.json({ message: 'User removed' });
-});
-
-loadKnowledgeChunks();
-
-app.get('/api/ask-nelly/status', authMiddleware, (_req, res) => {
-  const stats = knowledgeStats();
-  res.json({
-    name: 'Ask Nelly',
-    aiEnabled: isAskNellyAiEnabled(),
-    ...stats,
-  });
-});
-
-app.post('/api/ask-nelly/chat', authMiddleware, async (req, res) => {
-  const message = String(req.body.message ?? '').trim();
-  const history = Array.isArray(req.body.history)
-    ? req.body.history
-        .filter(
-          (t: unknown) =>
-            t
-            && typeof t === 'object'
-            && 'role' in t
-            && 'content' in t
-            && ((t as { role: string }).role === 'user' || (t as { role: string }).role === 'assistant'),
-        )
-        .map((t: { role: 'user' | 'assistant'; content: string }) => ({
-          role: t.role,
-          content: String(t.content ?? '').slice(0, 4000),
-        }))
-    : [];
-
-  if (!message) {
-    res.status(400).json({ error: 'Message is required' });
-    return;
-  }
-
-  try {
-    const result = await askNelly(message, history);
-    res.json(result);
-  } catch (err) {
-    console.error('Ask Nelly error:', err);
-    res.status(500).json({ error: 'Ask Nelly could not answer right now.' });
-  }
 });
 
 initializeAuthDatabase();
