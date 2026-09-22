@@ -12,7 +12,6 @@ import { useAuth } from '../context/AuthContext';
 import {
   emptyRecipeNutrient,
   formatRecipeNutrientsSummary,
-  WASH_NUTRIENT_UNITS,
 } from '../lib/wash-recipe-nutrients';
 import type { Recipe, RecipeNutrientInput } from '../types';
 
@@ -87,22 +86,6 @@ export function Recipes() {
 
   const updateNutrient = (index: number, patch: Partial<RecipeNutrientInput>) => {
     setNutrients((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
-  };
-
-  const handleNutrientInventorySelect = (index: number, itemId: string) => {
-    if (!itemId) {
-      updateNutrient(index, { inventory_item_id: null });
-      return;
-    }
-    const item = nutrientItems.find((i) => i.id === Number(itemId));
-    if (!item) return;
-    updateNutrient(index, {
-      inventory_item_id: item.id,
-      name: item.name,
-      unit: WASH_NUTRIENT_UNITS.includes(item.unit as typeof WASH_NUTRIENT_UNITS[number])
-        ? item.unit
-        : 'lbs',
-    });
   };
 
   const handleSave = () => {
@@ -222,19 +205,14 @@ export function Recipes() {
                 <dt>Yeast (lbs)</dt><dd>{selected.yeast_lbs}</dd>
                 <dt>Target start brix</dt><dd>{selected.target_brix ?? '—'}</dd>
                 <dt>Target final brix</dt><dd>{selected.target_final_brix ?? '—'}</dd>
-                <dt>Nutrient additions</dt>
+                <dt>Nutrients</dt>
                 <dd>
                   {selected.nutrients.length
-                    ? (
-                      <ul className="recipe-nutrient-list">
-                        {selected.nutrients.map((n) => (
-                          <li key={n.id}>
-                            {formatRecipeNutrientsSummary([n])}
-                            {n.notes ? ` — ${n.notes}` : ''}
-                          </li>
-                        ))}
-                      </ul>
-                    )
+                    ? selected.nutrients.map((n) => (
+                      <div key={n.id}>
+                        {n.name || '—'} — {n.amount} lbs
+                      </div>
+                    ))
                     : '—'}
                 </dd>
                 {selected.notes && (
@@ -329,6 +307,55 @@ export function Recipes() {
                 onChange={(e) => setForm({ ...form, yeast_lbs: parseFloat(e.target.value) || 0 })}
               />
             </div>
+
+            {nutrients.map((row, index) => (
+              <div key={index} className="form-group full-width wash-nutrient-row">
+                <div className="form-grid" style={{ marginBottom: 0 }}>
+                  <div className="form-group">
+                    <label>{index === 0 ? 'Nutrient' : `Nutrient ${index + 1}`}</label>
+                    <select
+                      value={row.name}
+                      onChange={(e) => updateNutrient(index, { name: e.target.value })}
+                    >
+                      <option value="">— Select nutrient from inventory —</option>
+                      {nutrientItems.map((item) => (
+                        <option key={item.id} value={item.name}>{item.name}</option>
+                      ))}
+                      {row.name && !nutrientItems.some((i) => i.name === row.name) && (
+                        <option value={row.name}>{row.name}</option>
+                      )}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label>{index === 0 ? 'Nutrient (lbs)' : `Nutrient ${index + 1} (lbs)`}</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      value={row.amount || ''}
+                      onChange={(e) => updateNutrient(index, { amount: parseFloat(e.target.value) || 0 })}
+                    />
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-ghost"
+                  onClick={() => setNutrients((prev) => prev.filter((_, i) => i !== index))}
+                >
+                  Remove nutrient
+                </button>
+              </div>
+            ))}
+            <div className="form-group full-width">
+              <button
+                type="button"
+                className="btn btn-sm btn-secondary"
+                onClick={() => setNutrients((prev) => [...prev, emptyRecipeNutrient()])}
+              >
+                + Add nutrient
+              </button>
+            </div>
+
             <div className="form-group">
               <label>Target Start Brix</label>
               <input
@@ -360,100 +387,6 @@ export function Recipes() {
               />
             </div>
 
-            <section className="form-group full-width blend-recipe-section">
-              <div className="blend-recipe-section-header">
-                <h4 className="blend-recipe-section-title">Yeast nutrients</h4>
-                <button
-                  type="button"
-                  className="btn btn-sm btn-secondary"
-                  onClick={() => setNutrients((prev) => [...prev, emptyRecipeNutrient()])}
-                >
-                  + Add nutrient
-                </button>
-              </div>
-              {nutrients.length === 0 ? (
-                <p className="field-hint blend-recipe-empty-hint">
-                  Optional DAP, ammonium sulphate, or other additions at wort prep (per IBD molasses wash practice).
-                </p>
-              ) : (
-                <div className="blend-recipe-card-list">
-                  {nutrients.map((row, index) => (
-                    <article key={index} className="blend-recipe-additive-card">
-                      <header className="blend-recipe-card-header">
-                        <span className="blend-recipe-card-title">
-                          {row.name.trim() || 'Nutrient'}
-                        </span>
-                        <button
-                          type="button"
-                          className="btn btn-sm btn-ghost"
-                          onClick={() => setNutrients((prev) => prev.filter((_, i) => i !== index))}
-                        >
-                          Remove
-                        </button>
-                      </header>
-                      <div className="blend-recipe-additive-fields">
-                        <div className="form-group">
-                          <label>Inventory item</label>
-                          <select
-                            value={row.inventory_item_id ?? ''}
-                            onChange={(e) => handleNutrientInventorySelect(index, e.target.value)}
-                          >
-                            <option value="">— Select or type name —</option>
-                            {nutrientItems.map((item) => (
-                              <option key={item.id} value={item.id}>
-                                {item.name} ({item.quantity} {item.unit})
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div className="form-group">
-                          <label>Name</label>
-                          <input
-                            value={row.name}
-                            onChange={(e) => updateNutrient(index, { name: e.target.value })}
-                            placeholder="Diammonium Phosphate (DAP)"
-                          />
-                        </div>
-                      </div>
-                      <div className="wizard-additive-amount-row blend-recipe-amount-row">
-                        <div className="form-group">
-                          <label>Amount</label>
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={row.amount || ''}
-                            onChange={(e) => updateNutrient(index, { amount: parseFloat(e.target.value) || 0 })}
-                          />
-                        </div>
-                        <div className="form-group">
-                          <label>Unit</label>
-                          <select
-                            value={row.unit}
-                            onChange={(e) => updateNutrient(index, { unit: e.target.value })}
-                          >
-                            {WASH_NUTRIENT_UNITS.map((u) => (
-                              <option key={u} value={u}>{u}</option>
-                            ))}
-                            {row.unit && !WASH_NUTRIENT_UNITS.includes(row.unit as typeof WASH_NUTRIENT_UNITS[number]) && (
-                              <option value={row.unit}>{row.unit}</option>
-                            )}
-                          </select>
-                        </div>
-                      </div>
-                      <div className="form-group">
-                        <label>Notes</label>
-                        <input
-                          value={row.notes}
-                          onChange={(e) => updateNutrient(index, { notes: e.target.value })}
-                          placeholder="Added at wort prep"
-                        />
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              )}
-            </section>
           </div>
           <div className="modal-actions">
             <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>

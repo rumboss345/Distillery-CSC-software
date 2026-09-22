@@ -45,6 +45,15 @@ CREATE TABLE IF NOT EXISTS recipe_nutrients (
 
 CREATE INDEX IF NOT EXISTS idx_recipe_nutrients_recipe ON recipe_nutrients(recipe_id);
 
+CREATE TABLE IF NOT EXISTS mash_batch_nutrients (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  mash_batch_id INTEGER NOT NULL REFERENCES mash_batches(id) ON DELETE CASCADE,
+  name TEXT NOT NULL DEFAULT '',
+  lbs REAL NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_mash_batch_nutrients_batch ON mash_batch_nutrients(mash_batch_id);
+
 CREATE TABLE IF NOT EXISTS mash_batches (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   batch_number TEXT NOT NULL UNIQUE,

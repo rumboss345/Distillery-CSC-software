@@ -123,6 +123,16 @@ export interface RecipeView extends Recipe {
   nutrients: RecipeNutrient[];
 }
 
+/** Yeast-style nutrient line on a wash batch (name + lbs). */
+export interface MashBatchNutrient {
+  id: number;
+  mash_batch_id: number;
+  name: string;
+  lbs: number;
+}
+
+export type MashBatchNutrientInput = Pick<MashBatchNutrient, 'name' | 'lbs'>;
+
 export interface MashBatch {
   id: number;
   batch_number: string;
