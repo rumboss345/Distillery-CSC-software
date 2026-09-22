@@ -1,6 +1,11 @@
 import { useMemo, useState } from 'react';
 import { AbvTemperatureInput, correctedAbvFromInputs } from '../components/AbvTemperatureInput';
 import {
+  computeAlcoholDilution,
+  formatDilutionSummary,
+  type DilutionVolumeBasis,
+} from '../lib/alcohol-dilution';
+import {
   gaugeFromLiters,
   gaugeFromWeightKg,
   gaugeFromWeightLb,
@@ -13,10 +18,15 @@ import {
   applyAbvTemperatureCorrection,
   STANDARD_GAUGING_TEMP_F,
 } from '../services/temperature-correction';
+import { ML_PER_GALLON } from '../types';
 
+type CalculatorTab = 'gauging' | 'dilution';
 type InputMode = 'weight' | 'volume';
 type WeightUnit = 'lb' | 'kg';
 type VolumeUnit = 'gal' | 'l';
+
+const litersToUsGal = (liters: number) => (liters * 1000) / ML_PER_GALLON;
+const usGalToLiters = (gal: number) => (gal * ML_PER_GALLON) / 1000;
 
 function ResultPanel({
   result,
@@ -66,7 +76,163 @@ function ResultPanel({
   );
 }
 
+function AlcoholDilutionCalculator() {
+  const [volumeBasis, setVolumeBasis] = useState<DilutionVolumeBasis>('before');
+  const [volumeUnit, setVolumeUnit] = useState<VolumeUnit>('l');
+  const [volumeValue, setVolumeValue] = useState('3.71');
+  const [actualAbv, setActualAbv] = useState('58');
+  const [sampleTempF, setSampleTempF] = useState('60');
+  const [targetAbv, setTargetAbv] = useState('43');
+
+  const correctedActualAbv = useMemo(
+    () => correctedAbvFromInputs(actualAbv, sampleTempF),
+    [actualAbv, sampleTempF],
+  );
+
+  const targetAbvNum = parseFloat(targetAbv);
+
+  const dilutionResult = useMemo(() => {
+    const vol = parseFloat(volumeValue);
+    if (!Number.isFinite(vol) || vol <= 0) return null;
+    if (correctedActualAbv == null || correctedActualAbv <= 0) return null;
+    if (!Number.isFinite(targetAbvNum) || targetAbvNum <= 0) return null;
+    const volumeLiters = volumeUnit === 'l' ? vol : usGalToLiters(vol);
+    return computeAlcoholDilution({
+      actualAbvPercent: correctedActualAbv,
+      targetAbvPercent: targetAbvNum,
+      volumeLiters,
+      volumeBasis,
+    });
+  }, [correctedActualAbv, targetAbvNum, volumeBasis, volumeUnit, volumeValue]);
+
+  const displayVol = (liters: number) => (
+    volumeUnit === 'l'
+      ? `${liters.toFixed(2)} L`
+      : `${litersToUsGal(liters).toFixed(2)} US gal`
+  );
+
+  return (
+    <>
+      <div className="card">
+        <h3>Alcohol dilution</h3>
+        <p className="field-hint" style={{ marginTop: 0 }}>
+          Calculate proofing water to reach a target ABV. Same approach as the{' '}
+          <a
+            href="https://www.distilling-spirits.com/tools/calculations/diluting-alcohol/"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Distilling Spirits dilution calculator
+          </a>
+          {' '}(linear mix; volume contraction is not applied).
+        </p>
+
+        <div className="form-group full-width">
+          <AbvTemperatureInput
+            abvLabel="Alcohol content (actual) before dilution — ABV % at sample temp"
+            abvValue={actualAbv}
+            temperatureValue={sampleTempF}
+            onAbvChange={setActualAbv}
+            onTemperatureChange={setSampleTempF}
+          />
+        </div>
+
+        <div className="form-grid">
+          <div className="form-group">
+            <label>Alcohol content (target) after dilution — ABV %</label>
+            <input
+              type="number"
+              step="0.1"
+              min="0"
+              max="100"
+              value={targetAbv}
+              onChange={(e) => setTargetAbv(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <p className="measure-mode-label" style={{ marginTop: '1rem' }}>Which volume is fixed?</p>
+        <div className="measure-mode-buttons" style={{ marginBottom: '1rem' }}>
+          <button
+            type="button"
+            className={`btn btn-sm ${volumeBasis === 'before' ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setVolumeBasis('before')}
+          >
+            Volume before dilution
+          </button>
+          <button
+            type="button"
+            className={`btn btn-sm ${volumeBasis === 'after' ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setVolumeBasis('after')}
+          >
+            Volume after dilution
+          </button>
+        </div>
+
+        <div className="form-grid">
+          <div className="form-group">
+            <label>
+              {volumeBasis === 'before'
+                ? 'Volume (actual) before dilution'
+                : 'Volume (target) after dilution'}
+            </label>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={volumeValue}
+                onChange={(e) => setVolumeValue(e.target.value)}
+                style={{ flex: 1 }}
+              />
+              <select
+                value={volumeUnit}
+                onChange={(e) => setVolumeUnit(e.target.value as VolumeUnit)}
+              >
+                <option value="l">L</option>
+                <option value="gal">US gal</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {correctedActualAbv != null && targetAbvNum > 0 && targetAbvNum >= correctedActualAbv && (
+          <p className="field-hint" style={{ color: 'var(--danger, #dc2626)' }}>
+            Target ABV must be lower than starting ABV when diluting with water.
+          </p>
+        )}
+      </div>
+
+      {dilutionResult ? (
+        <div className="card spirit-calculator-results" style={{ marginTop: '1rem' }}>
+          <h3>Results</h3>
+          <dl className="detail-grid">
+            <dt>Spirit to use</dt>
+            <dd>{displayVol(dilutionResult.spiritVolumeLiters)} @ {dilutionResult.actualAbvPercent.toFixed(2)}% vol</dd>
+            <dt>Water to add</dt>
+            <dd>{displayVol(dilutionResult.waterVolumeLiters)}</dd>
+            <dt>Final volume</dt>
+            <dd>{displayVol(dilutionResult.finalVolumeLiters)} @ {dilutionResult.targetAbvPercent.toFixed(2)}% vol</dd>
+          </dl>
+          <p className="field-hint">
+            <strong>Example:</strong>{' '}
+            {formatDilutionSummary(dilutionResult, volumeUnit)}
+          </p>
+          <p className="field-hint">
+            Contraction (shrinkage when mixing alcohol and water) is not included in this calculation.
+          </p>
+        </div>
+      ) : (
+        <div className="card" style={{ marginTop: '1rem' }}>
+          <p className="field-hint">Enter starting ABV, target ABV, and volume to calculate water to add.</p>
+        </div>
+      )}
+    </>
+  );
+}
+
 export function SpiritWeightCalculator() {
+  const [tab, setTab] = useState<CalculatorTab>('gauging');
   const [inputMode, setInputMode] = useState<InputMode>('weight');
   const [weightUnit, setWeightUnit] = useState<WeightUnit>('lb');
   const [volumeUnit, setVolumeUnit] = useState<VolumeUnit>('gal');
@@ -136,110 +302,133 @@ export function SpiritWeightCalculator() {
     <div className="page">
       <div className="page-header">
         <div>
-          <h1>Spirit Weight Calculator</h1>
+          <h1>Spirit Calculator</h1>
           <p className="page-subtitle">
-            TTB Table No. 3 gauging — convert between weight, physical volume, and proof gallons. Enter observed ABV and sample temperature; values are corrected to 60 °F before lookup.
+            TTB Table No. 3 gauging and alcohol dilution for proofing. Enter observed ABV and sample temperature where applicable; values are corrected to 60 °F before use.
           </p>
         </div>
       </div>
 
-      <div className="card">
-        <h3>What do you know?</h3>
-        <div className="measure-mode-buttons" style={{ marginBottom: '1rem' }}>
-          <button
-            type="button"
-            className={`btn btn-sm ${inputMode === 'weight' && !useWeighing ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => { setInputMode('weight'); setUseWeighing(false); }}
-          >
-            Weight
-          </button>
-          <button
-            type="button"
-            className={`btn btn-sm ${inputMode === 'volume' ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => { setInputMode('volume'); setUseWeighing(false); }}
-          >
-            Volume
-          </button>
-          <button
-            type="button"
-            className={`btn btn-sm ${useWeighing ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => setUseWeighing(true)}
-          >
-            Scale (gross − tare)
-          </button>
-        </div>
-
-        {useWeighing ? (
-          <div className="form-grid">
-            <div className="form-group">
-              <label>Gross weight (lb)</label>
-              <input type="number" step="0.1" value={grossWeight} onChange={(e) => setGrossWeight(e.target.value)} />
-            </div>
-            <div className="form-group">
-              <label>Tare weight (lb)</label>
-              <input type="number" step="0.1" value={tareWeight} onChange={(e) => setTareWeight(e.target.value)} />
-            </div>
-          </div>
-        ) : inputMode === 'weight' ? (
-          <div className="form-grid">
-            <div className="form-group">
-              <label>Weight</label>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={weightValue}
-                  onChange={(e) => setWeightValue(e.target.value)}
-                  style={{ flex: 1 }}
-                />
-                <select value={weightUnit} onChange={(e) => setWeightUnit(e.target.value as WeightUnit)}>
-                  <option value="lb">lb</option>
-                  <option value="kg">kg</option>
-                </select>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="form-grid">
-            <div className="form-group">
-              <label>Physical volume</label>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={volumeValue}
-                  onChange={(e) => setVolumeValue(e.target.value)}
-                  style={{ flex: 1 }}
-                />
-                <select value={volumeUnit} onChange={(e) => setVolumeUnit(e.target.value as VolumeUnit)}>
-                  <option value="gal">US gal</option>
-                  <option value="l">L</option>
-                </select>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="form-group full-width" style={{ marginTop: '1rem' }}>
-          <AbvTemperatureInput
-            abvLabel="Observed ABV (% at sample temp)"
-            abvValue={abvValue}
-            temperatureValue={sampleTempF}
-            onAbvChange={setAbvValue}
-            onTemperatureChange={setSampleTempF}
-          />
-          {proof > 0 && correctedAbv != null && (
-            <p className="field-hint" style={{ marginTop: '0.5rem' }}>
-              Table No. 3 gauging uses <strong>{proof.toFixed(1)} proof</strong> ({correctedAbv.toFixed(2)}% ABV) at {STANDARD_GAUGING_TEMP_F} °F.
-            </p>
-          )}
-        </div>
+      <div className="measure-mode-buttons" style={{ marginBottom: '1rem' }}>
+        <button
+          type="button"
+          className={`btn btn-sm ${tab === 'gauging' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => setTab('gauging')}
+        >
+          Weight &amp; gauging
+        </button>
+        <button
+          type="button"
+          className={`btn btn-sm ${tab === 'dilution' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => setTab('dilution')}
+        >
+          Alcohol dilution
+        </button>
       </div>
 
-      <ResultPanel
-        result={result}
-        temperatureCorrected={temperatureCorrection?.applied ?? false}
-      />
+      {tab === 'dilution' ? (
+        <AlcoholDilutionCalculator />
+      ) : (
+        <>
+          <div className="card">
+            <h3>What do you know?</h3>
+            <div className="measure-mode-buttons" style={{ marginBottom: '1rem' }}>
+              <button
+                type="button"
+                className={`btn btn-sm ${inputMode === 'weight' && !useWeighing ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => { setInputMode('weight'); setUseWeighing(false); }}
+              >
+                Weight
+              </button>
+              <button
+                type="button"
+                className={`btn btn-sm ${inputMode === 'volume' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => { setInputMode('volume'); setUseWeighing(false); }}
+              >
+                Volume
+              </button>
+              <button
+                type="button"
+                className={`btn btn-sm ${useWeighing ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setUseWeighing(true)}
+              >
+                Scale (gross − tare)
+              </button>
+            </div>
+
+            {useWeighing ? (
+              <div className="form-grid">
+                <div className="form-group">
+                  <label>Gross weight (lb)</label>
+                  <input type="number" step="0.1" value={grossWeight} onChange={(e) => setGrossWeight(e.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label>Tare weight (lb)</label>
+                  <input type="number" step="0.1" value={tareWeight} onChange={(e) => setTareWeight(e.target.value)} />
+                </div>
+              </div>
+            ) : inputMode === 'weight' ? (
+              <div className="form-grid">
+                <div className="form-group">
+                  <label>Weight</label>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={weightValue}
+                      onChange={(e) => setWeightValue(e.target.value)}
+                      style={{ flex: 1 }}
+                    />
+                    <select value={weightUnit} onChange={(e) => setWeightUnit(e.target.value as WeightUnit)}>
+                      <option value="lb">lb</option>
+                      <option value="kg">kg</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="form-grid">
+                <div className="form-group">
+                  <label>Physical volume</label>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={volumeValue}
+                      onChange={(e) => setVolumeValue(e.target.value)}
+                      style={{ flex: 1 }}
+                    />
+                    <select value={volumeUnit} onChange={(e) => setVolumeUnit(e.target.value as VolumeUnit)}>
+                      <option value="gal">US gal</option>
+                      <option value="l">L</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="form-group full-width" style={{ marginTop: '1rem' }}>
+              <AbvTemperatureInput
+                abvLabel="Observed ABV (% at sample temp)"
+                abvValue={abvValue}
+                temperatureValue={sampleTempF}
+                onAbvChange={setAbvValue}
+                onTemperatureChange={setSampleTempF}
+              />
+              {proof > 0 && correctedAbv != null && (
+                <p className="field-hint" style={{ marginTop: '0.5rem' }}>
+                  Table No. 3 gauging uses <strong>{proof.toFixed(1)} proof</strong> ({correctedAbv.toFixed(2)}% ABV) at {STANDARD_GAUGING_TEMP_F} °F.
+                </p>
+              )}
+            </div>
+          </div>
+
+          <ResultPanel
+            result={result}
+            temperatureCorrected={temperatureCorrection?.applied ?? false}
+          />
+        </>
+      )}
     </div>
   );
 }
