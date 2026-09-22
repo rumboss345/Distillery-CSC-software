@@ -1504,8 +1504,15 @@ export function saveMashBatchWithFermenters(
   assertMashBatchCompleteHasLogs(batch, id);
   assertMashBatchEquipmentUsable(batch, assignments);
   const mashId = saveMashBatch(batch, id);
+  let assignmentsToPersist = assignments;
+  if (assignmentsToPersist.length === 0 && batch.status === 'complete' && id) {
+    assignmentsToPersist = getMashFermenterAssignments(id).map((a) => ({
+      equipmentId: a.floor_equipment_id,
+      volumeGal: a.volume_gal,
+    }));
+  }
   try {
-    saveMashFermenterAssignments(mashId, assignments);
+    saveMashFermenterAssignments(mashId, assignmentsToPersist);
     persistMashBatchNutrients(mashId, nutrients);
     applyMashInventoryUsage(batch, previous, previousNutrients, nutrients);
     syncWashTankForMashBatch(mashId, batch.status);

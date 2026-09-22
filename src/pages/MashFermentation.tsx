@@ -433,14 +433,17 @@ export function MashFermentation() {
       }
     }
 
+    const existingAssignments = editId
+      ? getMashFermenterAssignments(editId).map((a) => ({
+        equipmentId: a.floor_equipment_id,
+        volumeGal: a.volume_gal,
+      }))
+      : [];
     const assignments =
       form.status === 'fermenting'
         ? buildAssignments()
-        : editId && form.status === 'mashing'
-          ? getMashFermenterAssignments(editId).map((a) => ({
-            equipmentId: a.floor_equipment_id,
-            volumeGal: a.volume_gal,
-          }))
+        : form.status === 'mashing' || form.status === 'complete'
+          ? existingAssignments
           : [];
     try {
       saveMashBatchWithFermenters(form, assignments, batchNutrients, editId);
@@ -1054,7 +1057,7 @@ export function MashFermentation() {
               <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
             </div>
           </div>
-          <p className="form-hint">Saving deducts sugar, yeast, and nutrients from inventory. Fermenters fill on the floor plan only after status is <strong>fermenting</strong> and assignments are saved.</p>
+          <p className="form-hint">Saving deducts sugar, yeast, and nutrients from inventory. Fermenters show wash after status is <strong>fermenting</strong> (and stay filled when marked <strong>complete</strong> until charged on a still run).</p>
           <div className="form-actions">
             <button className="btn btn-secondary" onClick={closeBatchForm}>Cancel</button>
             <button className="btn btn-primary" onClick={handleSave}>Save Batch</button>
