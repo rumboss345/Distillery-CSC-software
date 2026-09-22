@@ -18,8 +18,7 @@
     "create-user": "tsx server/create-user.ts",
     "preview": "vite preview",
     "test": "vitest run",
-    "build:table3": "python3 scripts/build-table3-data.py",
-    "extract:ibd-knowledge": "python3 scripts/extract-ibd-knowledge.py"
+    "build:table3": "python3 scripts/build-table3-data.py"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
