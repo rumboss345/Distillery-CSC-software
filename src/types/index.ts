@@ -107,6 +107,22 @@ export interface Recipe {
   updated_at: string;
 }
 
+export interface RecipeNutrient {
+  id: number;
+  recipe_id: number;
+  name: string;
+  amount: number;
+  unit: string;
+  inventory_item_id: number | null;
+  notes: string;
+}
+
+export type RecipeNutrientInput = Omit<RecipeNutrient, 'id' | 'recipe_id'>;
+
+export interface RecipeView extends Recipe {
+  nutrients: RecipeNutrient[];
+}
+
 export interface MashBatch {
   id: number;
   batch_number: string;

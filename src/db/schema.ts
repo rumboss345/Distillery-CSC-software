@@ -33,6 +33,18 @@ CREATE TABLE IF NOT EXISTS recipes (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS recipe_nutrients (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  recipe_id INTEGER NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
+  name TEXT NOT NULL DEFAULT '',
+  amount REAL NOT NULL DEFAULT 0,
+  unit TEXT NOT NULL DEFAULT 'lbs',
+  inventory_item_id INTEGER REFERENCES inventory_items(id),
+  notes TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_recipe_nutrients_recipe ON recipe_nutrients(recipe_id);
+
 CREATE TABLE IF NOT EXISTS mash_batches (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   batch_number TEXT NOT NULL UNIQUE,
@@ -339,6 +351,7 @@ export const SEED_DATA = `
 INSERT OR IGNORE INTO inventory_categories (name) VALUES
   ('sugar'),
   ('yeast'),
+  ('nutrients'),
   ('barrels'),
   ('bottles'),
   ('packaging'),
@@ -362,11 +375,17 @@ INSERT OR IGNORE INTO inventory_items (id, name, category, unit, quantity, reord
   (14, '750mL Muse', 'packaging', 'each', 0, 200, '750 ml bottle'),
   (15, '375mL Oslo', 'packaging', 'each', 0, 100, '375 ml bottle'),
   (16, '200mL Flask', 'packaging', 'each', 0, 100, '200 ml bottle'),
-  (17, '50mL Airplane', 'packaging', 'each', 0, 200, '50 ml bottle');
+  (17, '50mL Airplane', 'packaging', 'each', 0, 200, '50 ml bottle'),
+  (18, 'Diammonium Phosphate (DAP)', 'nutrients', 'lbs', 50, 10, 'Yeast nutrient for molasses wash'),
+  (19, 'Ammonium Sulphate', 'nutrients', 'lbs', 25, 5, 'Yeast nutrient for molasses wash');
 
 INSERT OR IGNORE INTO recipes (id, name, spirit_type, grain_type, grain_lbs, water_gal, yeast_strain, yeast_lbs, target_brix, target_final_brix, notes) VALUES
   (1, 'Molasses Wash', 'Rum', 'Blackstrap Molasses', 400, 150, 'Distillers Yeast DADY', 2, 16.0, 2.5, 'Standard molasses wash for rum production'),
   (2, 'Cane Sugar Wash', 'Rum', 'Raw Cane Sugar', 750, 225, 'Distillers Yeast DADY', 3, 17.1, 2.0, 'High-test cane sugar wash');
+
+INSERT OR IGNORE INTO recipe_nutrients (recipe_id, name, amount, unit, inventory_item_id, notes) VALUES
+  (1, 'Diammonium Phosphate (DAP)', 5, 'lbs', 18, 'Added at wort prep'),
+  (1, 'Ammonium Sulphate', 2, 'lbs', 19, '');
 
 INSERT OR IGNORE INTO mash_batches (id, batch_number, recipe_name, grain_type, grain_lbs, water_gal, yeast_strain, start_date, target_brix, actual_brix, target_final_brix, actual_final_brix, status, notes) VALUES
   (1, 'M-2025-001', 'Molasses Wash', 'Blackstrap Molasses', 400, 150, 'Distillers Yeast DADY', '2025-06-01', 16.0, 15.5, 2.5, 3.0, 'complete', 'Clean fermentation, ready for still'),

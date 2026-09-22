@@ -501,8 +501,52 @@ function runMigrations(): void {
   migrateFloorPlanPages();
   migrateAdvancedBlending();
   migrateAssignedEmployee();
+  migrateRecipeNutrients();
   seedBlendRecipes2024();
   persistDb();
+}
+
+function migrateRecipeNutrients(): void {
+  if (!db) return;
+  db.run(`
+    CREATE TABLE IF NOT EXISTS recipe_nutrients (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      recipe_id INTEGER NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
+      name TEXT NOT NULL DEFAULT '',
+      amount REAL NOT NULL DEFAULT 0,
+      unit TEXT NOT NULL DEFAULT 'lbs',
+      inventory_item_id INTEGER REFERENCES inventory_items(id),
+      notes TEXT NOT NULL DEFAULT ''
+    )
+  `);
+  db.run(`
+    CREATE INDEX IF NOT EXISTS idx_recipe_nutrients_recipe ON recipe_nutrients(recipe_id)
+  `);
+  db.run(`INSERT OR IGNORE INTO inventory_categories (name) VALUES ('nutrients')`);
+  db.run(`
+    INSERT OR IGNORE INTO inventory_items (id, name, category, unit, quantity, reorder_level, notes) VALUES
+      (18, 'Diammonium Phosphate (DAP)', 'nutrients', 'lbs', 50, 10, 'Yeast nutrient for molasses wash'),
+      (19, 'Ammonium Sulphate', 'nutrients', 'lbs', 25, 5, 'Yeast nutrient for molasses wash')
+  `);
+  const molasses = queryOne<{ id: number }>(
+    "SELECT id FROM recipes WHERE name = 'Molasses Wash' COLLATE NOCASE LIMIT 1",
+  );
+  if (molasses) {
+    const existing = queryOne<{ n: number }>(
+      'SELECT COUNT(*) as n FROM recipe_nutrients WHERE recipe_id = ?',
+      [molasses.id],
+    );
+    if (!existing || existing.n === 0) {
+      db.run(
+        `INSERT INTO recipe_nutrients (recipe_id, name, amount, unit, inventory_item_id, notes) VALUES (?, ?, ?, ?, ?, ?)`,
+        [molasses.id, 'Diammonium Phosphate (DAP)', 5, 'lbs', 18, 'Added at wort prep'],
+      );
+      db.run(
+        `INSERT INTO recipe_nutrients (recipe_id, name, amount, unit, inventory_item_id, notes) VALUES (?, ?, ?, ?, ?, ?)`,
+        [molasses.id, 'Ammonium Sulphate', 2, 'lbs', 19, ''],
+      );
+    }
+  }
 }
 
 function migrateAssignedEmployee(): void {
