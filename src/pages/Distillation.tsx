@@ -831,7 +831,7 @@ export function Distillation() {
                   )}
                   {fermenterSourceOptions.length === 0 && (
                     <p className="field-hint">
-                      No fermenters in use with fermenting wash. Assign a wash to fermenters and set status to fermenting first.
+                      No fermenters with wash ready to charge. Assign fermenters while fermenting; wash stays until a low wine or heavy rum run is running or complete.
                     </p>
                   )}
                   {runForm.run_type === 'heavy_rum' && (
@@ -973,13 +973,14 @@ export function Distillation() {
                 Charge fermenters when logs show Brix below {FERMENTATION_READY_MAX_BRIX}° (recommended).
                 {runForm.run_type === 'heavy_rum' ? (
                   <>
-                    {' '}Heavy rum runs deduct only the <strong>charge volume</strong> you record; remaining wash stays in the fermenter for later runs.
+                    {' '}Heavy rum deducts the recorded <strong>charge volume</strong> when the run is <strong>running</strong> or <strong>complete</strong>; remaining wash stays in the fermenter.
                     Hearts cuts go into the <strong>Heavy Rum Storage Tank</strong> you select.
                   </>
                 ) : (
                   <>
-                    {' '}Saving with a source fermenter selected marks that tank <strong>empty</strong> on the floor plan
-                    {fermenterSourceOptions.length > 1 ? ' (other fermenters stay in use until charged in a separate run)' : ''}.
+                    {' '}The fermenter stays full while the run is <strong>planned</strong>. Wash is removed when status is
+                    {' '}<strong>running</strong> or <strong>complete</strong>
+                    {fermenterSourceOptions.length > 1 ? ' (charge each fermenter in its own run)' : ''}.
                   </>
                 )}
               </>
