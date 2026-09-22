@@ -573,7 +573,7 @@ export function isFermenterAvailable(equipmentId: number, forMashBatchId?: numbe
     SELECT a.mash_batch_id FROM mash_fermenter_assignments a
     JOIN mash_batches m ON m.id = a.mash_batch_id
     WHERE a.floor_equipment_id = ?
-      AND m.status NOT IN ('complete', 'discarded')
+      AND m.status != 'discarded'
   `, [equipmentId]);
   if (!active) return true;
   return forMashBatchId !== undefined && active.mash_batch_id === forMashBatchId;
@@ -588,7 +588,7 @@ export interface FermenterWashSourceOption extends MashFermenterAssignment {
 /** @deprecated Use FermenterWashSourceOption */
 export type HeavyRumSourceFermenterOption = FermenterWashSourceOption;
 
-/** Fermenters in use with fermenting wash — source picker for low wine and heavy rum runs. */
+/** Fermenters holding wash (fermenting or fermentation complete) — distillation source picker. */
 export function getFermenterWashSourceFermenters(
   excludeRunId?: number,
 ): FermenterWashSourceOption[] {
@@ -607,7 +607,7 @@ export function getFermenterWashSourceFermenters(
     JOIN mash_batches m ON m.id = a.mash_batch_id
     JOIN floor_equipment fe ON fe.id = a.floor_equipment_id
     WHERE a.volume_gal > 0.01
-      AND m.status = 'fermenting'
+      AND m.status IN ('fermenting', 'complete')
       AND fe.equipment_type = 'fermenter'
     ORDER BY fe.name COLLATE NOCASE, m.batch_number COLLATE NOCASE
   `);
