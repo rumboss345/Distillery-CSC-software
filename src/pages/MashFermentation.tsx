@@ -75,6 +75,7 @@ function FermenterLogPanel({
   startBrix,
   refreshKey,
   onAdded,
+  readOnly = false,
 }: {
   mashBatchId: number;
   equipmentId: number | null;
@@ -83,6 +84,7 @@ function FermenterLogPanel({
   startBrix: number | null;
   refreshKey: number;
   onAdded: () => void;
+  readOnly?: boolean;
 }) {
   void refreshKey;
   const [logForm, setLogForm] = useState(emptyLogForm());
@@ -132,41 +134,49 @@ function FermenterLogPanel({
       <p className="form-hint">
         Estimated ABV uses starting Brix ({startBrix ?? 'set actual start Brix on the wash'}) vs each log’s Brix.
       </p>
-      <div className="form-grid" style={{ marginBottom: '1rem' }}>
-        <div className="form-group">
-          <label>Temp (°F) *</label>
-          <input
-            value={logForm.temperature_f}
-            onChange={(e) => setLogForm({ ...logForm, temperature_f: e.target.value })}
-            placeholder="72"
-            inputMode="decimal"
-            required
-          />
-        </div>
-        <div className="form-group">
-          <label>Brix *</label>
-          <input
-            value={logForm.brix}
-            onChange={(e) => setLogForm({ ...logForm, brix: e.target.value })}
-            placeholder="10.5"
-            inputMode="decimal"
-            required
-          />
-        </div>
-        <div className="form-group">
-          <label>pH</label>
-          <input value={logForm.ph} onChange={(e) => setLogForm({ ...logForm, ph: e.target.value })} placeholder="4.2" />
-        </div>
-        <div className="form-group">
-          <label>Notes</label>
-          <input value={logForm.notes} onChange={(e) => setLogForm({ ...logForm, notes: e.target.value })} />
-        </div>
-      </div>
-      <button className="btn btn-primary btn-sm" onClick={handleAddLog} disabled={!canAddLog}>
-        + Log Reading
-      </button>
+      {readOnly ? (
+        <p className="field-hint" style={{ marginBottom: '1rem' }}>
+          This batch is complete — logs are read-only.
+        </p>
+      ) : (
+        <>
+          <div className="form-grid" style={{ marginBottom: '1rem' }}>
+            <div className="form-group">
+              <label>Temp (°F) *</label>
+              <input
+                value={logForm.temperature_f}
+                onChange={(e) => setLogForm({ ...logForm, temperature_f: e.target.value })}
+                placeholder="72"
+                inputMode="decimal"
+                required
+              />
+            </div>
+            <div className="form-group">
+              <label>Brix *</label>
+              <input
+                value={logForm.brix}
+                onChange={(e) => setLogForm({ ...logForm, brix: e.target.value })}
+                placeholder="10.5"
+                inputMode="decimal"
+                required
+              />
+            </div>
+            <div className="form-group">
+              <label>pH</label>
+              <input value={logForm.ph} onChange={(e) => setLogForm({ ...logForm, ph: e.target.value })} placeholder="4.2" />
+            </div>
+            <div className="form-group">
+              <label>Notes</label>
+              <input value={logForm.notes} onChange={(e) => setLogForm({ ...logForm, notes: e.target.value })} />
+            </div>
+          </div>
+          <button className="btn btn-primary btn-sm" onClick={handleAddLog} disabled={!canAddLog}>
+            + Log Reading
+          </button>
+        </>
+      )}
 
-      {logs.length > 0 && (
+      {logs.length > 0 ? (
         <div className="table-wrap" style={{ marginTop: '1rem' }}>
           <table>
             <thead>
@@ -190,7 +200,9 @@ function FermenterLogPanel({
             </tbody>
           </table>
         </div>
-      )}
+      ) : readOnly ? (
+        <p className="field-hint" style={{ marginTop: '1rem' }}>No fermentation logs recorded for this batch.</p>
+      ) : null}
     </div>
   );
 }
@@ -515,13 +527,9 @@ export function MashFermentation() {
 
   const selectedAssignments = selectedId ? getMashFermenterAssignments(selectedId) : [];
   const selectedBatch = batches.find((b) => b.id === selectedId);
-  const canLogSelectedBatch = selectedBatch?.status === 'fermenting';
-
-  useEffect(() => {
-    if (selectedId && !canLogSelectedBatch) {
-      setSelectedId(null);
-    }
-  }, [selectedId, canLogSelectedBatch]);
+  const canViewFermentationLogs = selectedBatch?.status === 'fermenting'
+    || selectedBatch?.status === 'complete';
+  const fermentationLogsReadOnly = selectedBatch?.status === 'complete';
 
   const selectedStartBrix = selectedBatch
     ? selectedBatch.actual_brix ?? selectedBatch.target_brix
@@ -631,11 +639,17 @@ export function MashFermentation() {
                           <td className="td-actions">
                             <button
                               className="btn btn-sm btn-secondary"
-                              disabled={b.status !== 'fermenting'}
-                              title={b.status !== 'fermenting' ? 'Set status to fermenting to log readings' : undefined}
+                              disabled={b.status !== 'fermenting' && b.status !== 'complete'}
+                              title={
+                                b.status === 'complete'
+                                  ? 'View fermentation logs (read-only)'
+                                  : b.status !== 'fermenting'
+                                    ? 'Logs available while fermenting or after completion'
+                                    : undefined
+                              }
                               onClick={() => setSelectedId(b.id)}
                             >
-                              Logs
+                              {b.status === 'complete' ? 'View logs' : 'Logs'}
                             </button>
                             <button
                               className="btn btn-sm btn-ghost"
@@ -707,10 +721,10 @@ export function MashFermentation() {
         />
       )}
 
-      {selectedId && selectedBatch && canLogSelectedBatch && (
+      {selectedId && selectedBatch && canViewFermentationLogs && (
         <Modal
           wide
-          title={`Fermentation Logs — ${selectedBatch.batch_number}`}
+          title={`Fermentation Logs — ${selectedBatch.batch_number}${fermentationLogsReadOnly ? ' (read-only)' : ''}`}
           onClose={() => setSelectedId(null)}
         >
           {selectedAssignments.length > 1 ? (
@@ -725,6 +739,7 @@ export function MashFermentation() {
                   startBrix={selectedStartBrix}
                   refreshKey={key}
                   onAdded={refresh}
+                  readOnly={fermentationLogsReadOnly}
                 />
               ))}
             </div>
@@ -737,6 +752,7 @@ export function MashFermentation() {
               startBrix={selectedStartBrix}
               refreshKey={key}
               onAdded={refresh}
+              readOnly={fermentationLogsReadOnly}
             />
           )}
         </Modal>
