@@ -291,14 +291,14 @@ export function ProcessEquipmentCanvas({
       <div className="process-toolbar">
         <span className="process-toolbar-title">Production flow</span>
         <span className="process-toolbar-hint">
-          Drag within each section · items snap to grid · view auto-fits
+          Drag to rearrange · snap to grid
         </span>
         <nav className="process-toolbar-links" aria-label="Production shortcuts">
           <Link to="/wash" className="process-toolbar-link">Wash</Link>
           <Link to="/distillation" className="process-toolbar-link">Distill</Link>
           <Link to="/blending" className="process-toolbar-link">Blend</Link>
           <Link to="/bottling" className="process-toolbar-link">Bottle</Link>
-          <Link to="/barrels" className="process-toolbar-link">Barrels</Link>
+          <Link to="/equipment-maintenance" className="process-toolbar-link">Maintenance</Link>
         </nav>
         <div className="process-toolbar-actions">
           <button type="button" className="btn btn-sm btn-secondary" onClick={autoArrangeSections}>
@@ -421,9 +421,8 @@ export function ProcessEquipmentCanvas({
         )}
 
         <aside className="process-sidebar">
-          <section className="process-sidebar-section">
-            <h4 className="process-sidebar-heading">Live summary</h4>
-            <div className="process-stat-grid">
+          <section className="process-sidebar-section process-sidebar-section--summary">
+            <div className="process-stat-grid process-stat-grid--compact">
               <div className="process-stat">
                 <span className="process-stat-value">{summary.activeMashes}</span>
                 <span className="process-stat-label">Mashes</span>
