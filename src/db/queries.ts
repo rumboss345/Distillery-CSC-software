@@ -18,7 +18,11 @@ import {
 } from '../lib/equipment-maintenance';
 import { equipmentCleaningStatusLabel, equipmentNeedsCleaning } from '../lib/equipment-cleaning';
 import { fermenterShowsAssignedWash } from '../lib/mash-fermenter-fill';
-import type { EquipmentMaintenanceStatus } from '../types';
+import type {
+  EquipmentMaintenanceLogEventType,
+  EquipmentMaintenanceLogView,
+  EquipmentMaintenanceStatus,
+} from '../types';
 import { initDatabase, clearAllData } from './database';
 import type {
   Barrel,
@@ -89,6 +93,29 @@ function onlyProductionUsable<T extends FloorEquipment>(items: T[]): T[] {
   return items.filter((e) => !equipmentUnavailableForProduction(e));
 }
 
+function appendEquipmentMaintenanceLog(entry: {
+  floor_equipment_id: number;
+  event_type: EquipmentMaintenanceLogEventType;
+  maintenance_status?: EquipmentMaintenanceStatus | null;
+  notes?: string;
+  recorded_by_user_id?: number | null;
+  recorded_by_user_name?: string;
+}): void {
+  insertRow(
+    `INSERT INTO equipment_maintenance_log (
+      floor_equipment_id, event_type, maintenance_status, notes, recorded_by_user_id, recorded_by_user_name
+    ) VALUES (?, ?, ?, ?, ?, ?)`,
+    [
+      entry.floor_equipment_id,
+      entry.event_type,
+      entry.maintenance_status ?? null,
+      entry.notes?.trim() ?? '',
+      entry.recorded_by_user_id ?? null,
+      entry.recorded_by_user_name?.trim() ?? '',
+    ],
+  );
+}
+
 function markEquipmentNeedsCleaningAfterUse(equipmentId: number): void {
   const eq = queryOne<FloorEquipment>('SELECT status FROM floor_equipment WHERE id = ?', [equipmentId]);
   if (!eq || eq.status === 'offline') return;
@@ -97,6 +124,11 @@ function markEquipmentNeedsCleaningAfterUse(equipmentId: number): void {
       `UPDATE floor_equipment SET status='cleaning', linked_mash_batch_id=NULL WHERE id=?`,
       [equipmentId],
     );
+    appendEquipmentMaintenanceLog({
+      floor_equipment_id: equipmentId,
+      event_type: 'needs_cleaning',
+      notes: 'Equipment emptied after production use.',
+    });
   }
 }
 
@@ -132,6 +164,13 @@ export function markEquipmentCleaned(
     `UPDATE floor_equipment SET status='empty', cleaned_at=datetime('now'), cleaned_by_user_id=?, cleaned_by_user_name=? WHERE id=?`,
     [cleanedByUserId, cleanedByUserName.trim(), equipmentId],
   );
+  appendEquipmentMaintenanceLog({
+    floor_equipment_id: equipmentId,
+    event_type: 'marked_cleaned',
+    notes: 'Marked clean and returned to empty status.',
+    recorded_by_user_id: cleanedByUserId,
+    recorded_by_user_name: cleanedByUserName,
+  });
 }
 
 function assertStillUsableByName(stillName: string): void {
@@ -3332,15 +3371,54 @@ export function getAllFloorEquipment(): FloorEquipment[] {
   );
 }
 
+export function getEquipmentMaintenanceLog(
+  equipmentId: number,
+  limit = 100,
+): EquipmentMaintenanceLogView[] {
+  return queryAll(
+    `SELECT l.*, fe.name AS equipment_name
+     FROM equipment_maintenance_log l
+     JOIN floor_equipment fe ON fe.id = l.floor_equipment_id
+     WHERE l.floor_equipment_id = ?
+     ORDER BY l.created_at DESC, l.id DESC
+     LIMIT ?`,
+    [equipmentId, limit],
+  );
+}
+
+export function getAllEquipmentMaintenanceLog(limit = 500): EquipmentMaintenanceLogView[] {
+  return queryAll(
+    `SELECT l.*, fe.name AS equipment_name
+     FROM equipment_maintenance_log l
+     JOIN floor_equipment fe ON fe.id = l.floor_equipment_id
+     ORDER BY l.created_at DESC, l.id DESC
+     LIMIT ?`,
+    [limit],
+  );
+}
+
 export function updateEquipmentMaintenance(
   equipmentId: number,
   maintenance_status: EquipmentMaintenanceStatus | null,
   maintenance_notes: string,
+  recordedByUserId: number,
+  recordedByUserName: string,
 ): void {
+  if (!recordedByUserId) {
+    throw new Error('Select who recorded this maintenance action.');
+  }
   runQuery(
     'UPDATE floor_equipment SET maintenance_status=?, maintenance_notes=? WHERE id=?',
     [maintenance_status, maintenance_notes.trim(), equipmentId],
   );
+  appendEquipmentMaintenanceLog({
+    floor_equipment_id: equipmentId,
+    event_type: maintenance_status ? 'maintenance_set' : 'returned_to_service',
+    maintenance_status,
+    notes: maintenance_notes,
+    recorded_by_user_id: recordedByUserId,
+    recorded_by_user_name: recordedByUserName,
+  });
 }
 
 export function saveFloorEquipment(

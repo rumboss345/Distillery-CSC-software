@@ -32,6 +32,27 @@ export type EquipmentStatus = 'empty' | 'in_use' | 'cleaning' | 'offline';
 /** Out-of-service tagging from Equipment Maintenance (repair_note does not block use). */
 export type EquipmentMaintenanceStatus = 'broken' | 'maintenance' | 'repair_note';
 
+export type EquipmentMaintenanceLogEventType =
+  | 'needs_cleaning'
+  | 'marked_cleaned'
+  | 'maintenance_set'
+  | 'returned_to_service';
+
+export interface EquipmentMaintenanceLogEntry {
+  id: number;
+  floor_equipment_id: number;
+  event_type: EquipmentMaintenanceLogEventType;
+  maintenance_status: EquipmentMaintenanceStatus | null;
+  notes: string;
+  recorded_by_user_id: number | null;
+  recorded_by_user_name: string;
+  created_at: string;
+}
+
+export interface EquipmentMaintenanceLogView extends EquipmentMaintenanceLogEntry {
+  equipment_name: string;
+}
+
 export interface FloorPlan {
   id: number;
   name: string;
