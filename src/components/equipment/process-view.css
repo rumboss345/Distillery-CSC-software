@@ -543,6 +543,10 @@
   min-width: 0;
 }
 
+.process-sidebar-section--summary {
+  padding: 0.55rem 0.75rem;
+}
+
 .process-sidebar-section--detail {
   flex: 1 1 auto;
   min-height: 0;
@@ -570,6 +574,14 @@
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 0.45rem;
+}
+
+.process-stat-grid--compact .process-stat {
+  padding: 0.35rem 0.45rem;
+}
+
+.process-stat-grid--compact .process-stat-value {
+  font-size: 1rem;
 }
 
 .process-stat {
@@ -622,8 +634,24 @@
   overflow: hidden;
 }
 
-.process-sidebar .process-panel.card {
-  padding: 0.85rem 0.9rem;
+.process-sidebar .process-panel.card,
+.process-sidebar .process-panel--detail {
+  padding: 0;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.process-equipment-detail-note {
+  font-size: 0.85rem;
+  color: #475569;
+  margin-top: 0.25rem;
+  display: inline-block;
+}
+
+.process-equipment-cleaning-banner a {
+  color: #b45309;
+  font-weight: 600;
 }
 
 .process-sidebar .process-panel-title {

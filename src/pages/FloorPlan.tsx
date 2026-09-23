@@ -226,7 +226,7 @@ export function FloorPlanPage() {
         <h2>Distillery Equipment</h2>
         <p>
           {viewMode === 'process'
-            ? 'Process flow view — all equipment with live levels from the production ledger'
+            ? 'Live production flow — select equipment for fill, proof, and status. Maintenance history is on Equipment Maintenance.'
             : `${plan.name} — ${plan.width_ft} × ${plan.height_ft} ft · Drag equipment to reposition`}
         </p>
         <div className="page-actions">
