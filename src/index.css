@@ -67,9 +67,12 @@ body {
   position: sticky;
   top: 0;
   height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
 }
 
 .sidebar-brand {
+  flex-shrink: 0;
   padding: 1.5rem 1.25rem;
   border-bottom: 1px solid var(--border-subtle);
 }
@@ -89,11 +92,16 @@ body {
 }
 
 .sidebar-nav {
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
   padding: 0.75rem;
   display: flex;
   flex-direction: column;
   gap: 2px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .nav-link {
@@ -2489,6 +2497,7 @@ tr:hover td {
 }
 
 .sidebar-footer {
+  flex-shrink: 0;
   padding: 1rem 1.25rem;
   border-top: 1px solid var(--border-subtle);
   display: flex;
@@ -3026,8 +3035,11 @@ tr:hover td {
   }
 
   .sidebar-nav {
+    flex: none;
+    min-height: unset;
     flex-direction: row;
     overflow-x: auto;
+    overflow-y: hidden;
     padding: 0.5rem;
   }
 
