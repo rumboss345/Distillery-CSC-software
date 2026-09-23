@@ -347,6 +347,20 @@ CREATE TABLE IF NOT EXISTS floor_equipment (
 
 CREATE INDEX IF NOT EXISTS idx_floor_equipment_plan ON floor_equipment(floor_plan_id);
 
+CREATE TABLE IF NOT EXISTS equipment_maintenance_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  floor_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id) ON DELETE CASCADE,
+  event_type TEXT NOT NULL,
+  maintenance_status TEXT,
+  notes TEXT NOT NULL DEFAULT '',
+  recorded_by_user_id INTEGER,
+  recorded_by_user_name TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_equipment_maintenance_log_equipment ON equipment_maintenance_log(floor_equipment_id);
+CREATE INDEX IF NOT EXISTS idx_equipment_maintenance_log_created ON equipment_maintenance_log(created_at);
+
 CREATE TABLE IF NOT EXISTS mash_fermenter_assignments (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   mash_batch_id INTEGER NOT NULL REFERENCES mash_batches(id) ON DELETE CASCADE,

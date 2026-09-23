@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { HoldingTankIntakeHistory } from '../HoldingTankIntakeHistory';
 import { StatusBadge } from '../StatusBadge';
 import { AssigneeSelect } from '../AssigneeSelect';
-import { holdingTankIntakeKey, markEquipmentCleaned } from '../../db/queries';
+import { getEquipmentMaintenanceLog, holdingTankIntakeKey, markEquipmentCleaned } from '../../db/queries';
+import { EquipmentMaintenanceLogTable } from './EquipmentMaintenanceLogTable';
 import { STATUS_LABELS, formatGal } from './equipment-visual-shared';
 import type { EquipmentVisualData } from './equipment-visual.types';
 import type { FloorEquipmentView } from '../../types';
@@ -40,6 +41,8 @@ export function ProcessEquipmentDetailPanel({
     setSelectedIntakeKey(null);
     setCleanedBy({ assigned_user_id: null, assigned_user_name: null });
   }, [equipment?.id]);
+
+  const maintenanceLog = equipment ? getEquipmentMaintenanceLog(equipment.id, 8) : [];
 
   if (!equipment || !visual) {
     return (
@@ -201,6 +204,13 @@ export function ProcessEquipmentDetailPanel({
           }}
         />
       )}
+      <div style={{ marginTop: '1rem' }}>
+        <h5 className="process-panel-title" style={{ fontSize: '0.95rem' }}>Maintenance &amp; cleaning log</h5>
+        <EquipmentMaintenanceLogTable
+          entries={maintenanceLog}
+          emptyMessage="No maintenance or cleaning events yet."
+        />
+      </div>
       {(onEdit || onRemove) && (
         <div className="process-detail-actions">
           {onEdit && (

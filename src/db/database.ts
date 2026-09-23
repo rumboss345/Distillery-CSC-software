@@ -470,6 +470,27 @@ function runMigrations(): void {
     persistDb();
   }
 
+  const hasMaintenanceLog = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='equipment_maintenance_log'",
+  );
+  if (!hasMaintenanceLog) {
+    db.run(`
+      CREATE TABLE equipment_maintenance_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        floor_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id) ON DELETE CASCADE,
+        event_type TEXT NOT NULL,
+        maintenance_status TEXT,
+        notes TEXT NOT NULL DEFAULT '',
+        recorded_by_user_id INTEGER,
+        recorded_by_user_name TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
+    db.run('CREATE INDEX IF NOT EXISTS idx_equipment_maintenance_log_equipment ON equipment_maintenance_log(floor_equipment_id)');
+    db.run('CREATE INDEX IF NOT EXISTS idx_equipment_maintenance_log_created ON equipment_maintenance_log(created_at)');
+    persistDb();
+  }
+
   const hasRecipes = queryOne<{ name: string }>(
     "SELECT name FROM sqlite_master WHERE type='table' AND name='recipes'",
   );
