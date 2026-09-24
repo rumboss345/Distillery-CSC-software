@@ -221,7 +221,7 @@ export function FloorPlanPage() {
   };
 
   return (
-    <div>
+    <div className={viewMode === 'process' ? 'floor-plan-page floor-plan-page--process' : 'floor-plan-page'}>
       <div className="page-header">
         <h2>Distillery Equipment</h2>
         <p>
