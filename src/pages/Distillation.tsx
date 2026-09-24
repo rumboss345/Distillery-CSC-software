@@ -257,11 +257,57 @@ export function Distillation() {
 
   useEffect(() => {
     if (calendarPlanHandled.current) return;
+    const fermenterId = parseInt(searchParams.get('chargeFermenter') ?? '', 10);
+    const tankId = parseInt(searchParams.get('chargeTank') ?? '', 10);
     const plan = readCalendarPlanQuery(searchParams);
-    if (!plan || plan.transfer) return;
+    const fromFermenter = fermenterId > 0;
+    const fromTank = tankId > 0;
+    const fromCalendar = Boolean(plan && !plan.transfer);
+    if (!fromFermenter && !fromTank && !fromCalendar) return;
     calendarPlanHandled.current = true;
-    openNewRun('wash', plan.date ?? undefined);
-    setSearchParams(stripCalendarPlanQuery(searchParams), { replace: true });
+
+    if (fromFermenter) {
+      const runType: DistillationRunType = searchParams.get('runType') === 'heavy_rum' ? 'heavy_rum' : 'wash';
+      const row = getFermenterWashSourceFermenters().find((f) => f.floor_equipment_id === fermenterId);
+      const chargeGal = row
+        ? runType === 'heavy_rum'
+          ? getFermenterChargeCapacityGal(row.mash_batch_id, fermenterId)
+          : row.volume_gal
+        : 0;
+      setEditRunId(undefined);
+      setRunForm({
+        ...emptyRun(runType),
+        ...defaultAssignee(user),
+        source_fermenter_equipment_id: row ? fermenterId : null,
+        source_mash_batch_id: row?.mash_batch_id ?? null,
+        charge_volume_gal: chargeGal,
+      });
+      setChargeAbvObserved('');
+      setChargeTempF('60');
+      setShowRunForm(true);
+    } else if (fromTank) {
+      const tank = getChargeableHoldingTanks().find((t) => t.id === tankId);
+      setEditRunId(undefined);
+      setRunForm({
+        ...emptyRun('low_wines'),
+        ...defaultAssignee(user),
+        source_holding_tank_equipment_id: tank ? tankId : null,
+        charge_volume_gal: tank?.available_gal ?? 0,
+        charge_abv: tank?.available_abv ?? null,
+        dest_holding_tank_equipment_id: null,
+      });
+      setChargeAbvObserved(tank && tank.available_abv > 0 ? tank.available_abv.toString() : '');
+      setChargeTempF('60');
+      setShowRunForm(true);
+    } else if (plan) {
+      openNewRun('wash', plan.date ?? undefined);
+    }
+
+    const next = stripCalendarPlanQuery(searchParams);
+    next.delete('chargeFermenter');
+    next.delete('chargeTank');
+    next.delete('runType');
+    setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams, user]);
 
   const openEditRun = (run: DistillationRun) => {

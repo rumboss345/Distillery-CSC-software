@@ -356,6 +356,7 @@ export function Blending() {
   const [wizardSpiritSource, setWizardSpiritSource] = useState<'tank' | 'barrel'>('tank');
   const worksheetPrintRef = useRef<HTMLDivElement>(null);
   const deepLinkHandled = useRef(false);
+  const prefilledTankId = useRef<number | null>(null);
 
   void key;
 
@@ -572,7 +573,26 @@ export function Blending() {
       blend_recipe_id: recipeId,
       notes: recipe.notes,
     });
-    applyScaledRecipeAmounts(template, factor);
+    applyScaledRecipeAmounts(
+      template,
+      factor,
+      prefilledTankId.current ? [prefilledTankId.current] : [],
+    );
+    if (prefilledTankId.current) {
+      const tankId = prefilledTankId.current;
+      const contents = getHoldingTankContents(tankId);
+      setSpiritSources((prev) => prev.map((src, index) => {
+        if (index !== 0) return src;
+        const abv = contents.abv > 0 ? contents.abv : src.abv;
+        return {
+          ...src,
+          holding_tank_equipment_id: tankId,
+          abv,
+          observed_abv: abv > 0 ? (Math.round(abv * 10) / 10).toString() : src.observed_abv,
+          sample_temp_f: '60',
+        };
+      }));
+    }
     const baseSpirits = template.spirit_sources
       .filter((source) => source.volume_gal > 0)
       .map((source) => ({
@@ -634,6 +654,32 @@ export function Blending() {
 
   useEffect(() => {
     if (deepLinkHandled.current) return;
+    const tankId = parseInt(searchParams.get('tank') ?? '', 10);
+    if (tankId > 0) {
+      deepLinkHandled.current = true;
+      prefilledTankId.current = tankId;
+      const tankRecipes = blendRecipes.filter((recipe) => (recipe.source_type ?? 'tank') !== 'barrel');
+      if (tankRecipes.length === 0) {
+        alert('Create a tank blend recipe on the Recipes page before starting a batch.');
+      } else {
+        const contents = getHoldingTankContents(tankId);
+        const abv = contents.abv > 0 ? contents.abv : 0;
+        setWizardSpiritSource('tank');
+        resetWizardForNewBatch();
+        setSpiritSources([{
+          ...emptySpiritSource(),
+          holding_tank_equipment_id: tankId,
+          volume_gal: contents.volume_gal,
+          amount: contents.volume_gal,
+          abv,
+          observed_abv: abv > 0 ? (Math.round(abv * 10) / 10).toString() : '',
+        }]);
+      }
+      const next = new URLSearchParams(searchParams);
+      next.delete('tank');
+      setSearchParams(next, { replace: true });
+      return;
+    }
     const plan = readCalendarPlanQuery(searchParams);
     if (plan && !plan.transfer) {
       deepLinkHandled.current = true;
