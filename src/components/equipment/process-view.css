@@ -1,4 +1,5 @@
 .process-view {
+  width: 100%;
   border: 1px solid #c5ccd6;
   border-radius: var(--radius, 10px);
   background: #eceef1;
