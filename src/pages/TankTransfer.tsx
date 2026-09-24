@@ -99,12 +99,27 @@ export function TankTransfer() {
 
   useEffect(() => {
     if (calendarPlanHandled.current) return;
+    const sourceId = parseInt(searchParams.get('source') ?? '', 10);
     const plan = readCalendarPlanQuery(searchParams);
-    if (!plan?.transfer) return;
+    const fromSource = sourceId > 0;
+    const fromCalendar = Boolean(plan?.transfer);
+    if (!fromSource && !fromCalendar) return;
     calendarPlanHandled.current = true;
-    openTransferForm(plan.date ?? undefined);
-    setSearchParams(stripCalendarPlanQuery(searchParams), { replace: true });
-  }, [searchParams, setSearchParams]);
+    let form = {
+      ...emptyTransferForm(),
+      transfer_date: plan?.date ?? emptyTransferForm().transfer_date,
+    };
+    if (fromSource) {
+      form = applySourceTankToForm(form, sourceId);
+    } else if (sourceTanksForTransfer.length === 1) {
+      form = applySourceTankToForm(form, sourceTanksForTransfer[0].id);
+    }
+    setTransferForm(form);
+    setShowTransferForm(true);
+    const next = stripCalendarPlanQuery(searchParams);
+    next.delete('source');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams, sourceTanksForTransfer]);
 
   const handleSourceTankChange = (tankId: number) => {
     setTransferForm((prev) => applySourceTankToForm(prev, tankId));

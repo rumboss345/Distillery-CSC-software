@@ -5,6 +5,7 @@ import { StatusBadge } from '../StatusBadge';
 import { AssigneeSelect } from '../AssigneeSelect';
 import { holdingTankIntakeKey, markEquipmentCleaned } from '../../db/queries';
 import { STATUS_LABELS, formatGal } from './equipment-visual-shared';
+import { classifyProcessLiquid } from './process-floor-label';
 import type { EquipmentVisualData } from './equipment-visual.types';
 import type { FloorEquipmentView } from '../../types';
 import { equipmentCleaningStatusLabel, equipmentNeedsCleaning } from '../../lib/equipment-cleaning';
@@ -12,6 +13,7 @@ import {
   equipmentBlocksProduction,
   maintenanceStatusLabel,
 } from '../../lib/equipment-maintenance';
+import { FERMENTATION_READY_MAX_BRIX, isBrixReadyForDistillation } from '../../lib/fermentation';
 import type { AssignedEmployee } from '../../lib/assignee';
 
 interface ProcessEquipmentDetailPanelProps {
@@ -55,6 +57,22 @@ export function ProcessEquipmentDetailPanel({
 
   const statusLabel = STATUS_LABELS[visual.status] ?? equipment.status.replace('_', ' ');
   const dirty = equipmentNeedsCleaning(equipment);
+  const hasLiquid = visual.currentVolumeGal > 0;
+  const isTransferVessel = equipment.equipment_type === 'holding_tank'
+    || equipment.equipment_type === 'collection_vessel';
+  const isHoldingTank = equipment.equipment_type === 'holding_tank';
+  const liquidClass = classifyProcessLiquid(visual.name, visual.liquidName);
+  const canProcessSpirit = isHoldingTank
+    && hasLiquid
+    && (visual.abv ?? 0) > 0
+    && liquidClass !== 'stillage'
+    && liquidClass !== 'dunder';
+  const canChargeFermenter = equipment.equipment_type === 'fermenter'
+    && !!equipment.active_batch_number
+    && hasLiquid;
+  const brixNotReady = canChargeFermenter
+    && equipment.active_latest_brix != null
+    && !isBrixReadyForDistillation(equipment.active_latest_brix);
 
   const handleMarkCleaned = () => {
     if (!cleanedBy.assigned_user_id) {
@@ -193,6 +211,47 @@ export function ProcessEquipmentDetailPanel({
         ) : null}
       </dl>
 
+      {(canChargeFermenter || (isTransferVessel && hasLiquid)) && (
+        <div className="process-next-actions">
+          <div className="process-next-actions-label">Next step</div>
+          {brixNotReady && (
+            <p className="process-next-hint">
+              Brix is {equipment.active_latest_brix?.toFixed(1)}°. Below {FERMENTATION_READY_MAX_BRIX}° is recommended before charging.
+            </p>
+          )}
+          <div className="process-next-actions-row">
+            {canChargeFermenter && (
+              <>
+                <Link className="btn btn-sm btn-primary" to={`/distillation?chargeFermenter=${equipment.id}&runType=wash`}>
+                  Low wine run
+                </Link>
+                <Link className="btn btn-sm btn-secondary" to={`/distillation?chargeFermenter=${equipment.id}&runType=heavy_rum`}>
+                  Heavy rum
+                </Link>
+              </>
+            )}
+            {isTransferVessel && hasLiquid && (
+              <Link className="btn btn-sm btn-primary" to={`/tank-transfer?source=${equipment.id}`}>
+                Transfer
+              </Link>
+            )}
+            {canProcessSpirit && (
+              <>
+                <Link className="btn btn-sm btn-secondary" to={`/distillation?chargeTank=${equipment.id}`}>
+                  Spirit run
+                </Link>
+                <Link className="btn btn-sm btn-secondary" to={`/blending?tank=${equipment.id}`}>
+                  Blend
+                </Link>
+                <Link className="btn btn-sm btn-secondary" to={`/bottling?tank=${equipment.id}`}>
+                  Bottle
+                </Link>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {dirty && (
         <div className="process-equipment-cleaning-form">
           <label htmlFor="equipment-cleaned-by">Cleaned by</label>
@@ -213,6 +272,7 @@ export function ProcessEquipmentDetailPanel({
           tankId={equipment.id}
           selectedKey={selectedIntakeKey}
           title="Intake history"
+          hint={false}
           emptyMessage="No cuts or transfers into this tank yet."
           onSelect={(entry) => {
             setSelectedIntakeKey(

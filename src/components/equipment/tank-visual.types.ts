@@ -21,6 +21,8 @@ export interface TankVisualData {
   fillPercent: number;
   liquidName?: string;
   abv?: number;
+  /** Product color for the fill. Status stays on the indicator dot. */
+  liquidPalette?: { base: string; highlight: string; edge: string };
   status: TankVisualStatus;
   equipmentStatus: EquipmentStatus;
 }
