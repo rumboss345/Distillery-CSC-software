@@ -38,9 +38,7 @@ export function TankVisual({
 }: TankVisualProps) {
   const uid = useId().replace(/:/g, '');
   const scale = SIZE_MAP[size] * scaleMultiplier;
-  const liquid = tank.status === 'offline' || tank.status === 'empty'
-    ? LIQUID_COLORS[tank.status]
-    : (tank.liquidPalette ?? LIQUID_COLORS[tank.status]);
+  const liquid = LIQUID_COLORS[tank.status];
   const isProcess = labelStyle === 'process';
 
   const fillHeight = useMemo(() => {
