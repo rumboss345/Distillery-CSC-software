@@ -17,6 +17,7 @@ import {
 } from './process-layout';
 import { EquipmentVisual } from './EquipmentVisual';
 import { ProcessEquipmentDetailPanel } from './ProcessEquipmentDetailPanel';
+import { isEquipmentContextMenuPointer } from './process-equipment-gesture';
 import { processEquipmentVisualScale } from './process-visual-scale';
 import type { EquipmentVisualData } from './equipment-visual.types';
 import type { FloorEquipmentView } from '../../types';
@@ -60,6 +61,8 @@ export function ProcessEquipmentCanvas({
   const livePosRef = useRef<{ x: number; y: number } | null>(null);
   const dragMovedRef = useRef(false);
   const dragStartRef = useRef({ x: 0, y: 0 });
+  /** Set on pointer down. Chrome fires a fake contextmenu after preventDefault on a left click. */
+  const contextMenuGestureRef = useRef(false);
   const [assignmentsByStage, setAssignmentsByStage] = useState<
     Record<string, ProcessAssignmentEntry[]>
   >({});
@@ -244,6 +247,12 @@ export function ProcessEquipmentCanvas({
   }, [maintenancePopover]);
 
   const onEquipmentContextMenu = (e: React.MouseEvent, item: EquipmentItem) => {
+    const fromRealGesture = contextMenuGestureRef.current;
+    contextMenuGestureRef.current = false;
+    if (!fromRealGesture) {
+      e.preventDefault();
+      return;
+    }
     if (!equipmentHasMaintenanceTag(item)) return;
     e.preventDefault();
     e.stopPropagation();
@@ -253,6 +262,8 @@ export function ProcessEquipmentCanvas({
 
   const onEquipmentPointerDown = (e: React.PointerEvent, item: EquipmentItem) => {
     e.stopPropagation();
+    contextMenuGestureRef.current = isEquipmentContextMenuPointer(e.button, e.ctrlKey);
+    if (contextMenuGestureRef.current) return;
     e.preventDefault();
     setMaintenancePopover(null);
     dragMovedRef.current = false;
