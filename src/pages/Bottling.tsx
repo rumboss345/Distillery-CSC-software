@@ -161,11 +161,29 @@ export function Bottling() {
 
   useEffect(() => {
     if (calendarPlanHandled.current) return;
+    const tankId = parseInt(searchParams.get('tank') ?? '', 10);
     const plan = readCalendarPlanQuery(searchParams);
-    if (!plan || plan.transfer) return;
+    const fromTank = tankId > 0;
+    const fromCalendar = Boolean(plan && !plan.transfer);
+    if (!fromTank && !fromCalendar) return;
     calendarPlanHandled.current = true;
-    openNew(plan.date ?? undefined);
-    setSearchParams(stripCalendarPlanQuery(searchParams), { replace: true });
+    if (fromTank) {
+      const contents = getHoldingTankContents(tankId);
+      setEditId(undefined);
+      setForm({
+        ...emptyRun(),
+        source_holding_tank_equipment_id: tankId,
+        final_abv: contents.abv,
+      });
+      setLines([emptyLine()]);
+      setSourceType('tank');
+      setShowForm(true);
+    } else if (plan) {
+      openNew(plan.date ?? undefined);
+    }
+    const next = stripCalendarPlanQuery(searchParams);
+    next.delete('tank');
+    setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
 
   const openEdit = (run: BottlingRunView) => {
