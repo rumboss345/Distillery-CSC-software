@@ -17,6 +17,7 @@ import {
 } from './process-layout';
 import { EquipmentVisual } from './EquipmentVisual';
 import { ProcessEquipmentDetailPanel } from './ProcessEquipmentDetailPanel';
+import { isEquipmentContextMenuPointer } from './process-equipment-gesture';
 import { processEquipmentVisualScale } from './process-visual-scale';
 import type { EquipmentVisualData } from './equipment-visual.types';
 import type { FloorEquipmentView } from '../../types';
@@ -51,7 +52,7 @@ export function ProcessEquipmentCanvas({
   const viewportRef = useRef<HTMLDivElement>(null);
   const [viewportSize, setViewportSize] = useState({ width: 800, height: 520 });
   const [scale, setScale] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [pan, setPan] = useState({ x: 12, y: 12 });
   const [panning, setPanning] = useState(false);
   const panStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
 
@@ -60,6 +61,8 @@ export function ProcessEquipmentCanvas({
   const livePosRef = useRef<{ x: number; y: number } | null>(null);
   const dragMovedRef = useRef(false);
   const dragStartRef = useRef({ x: 0, y: 0 });
+  /** Set on pointer down. Chrome fires a fake contextmenu after preventDefault on a left click. */
+  const contextMenuGestureRef = useRef(false);
   const [assignmentsByStage, setAssignmentsByStage] = useState<
     Record<string, ProcessAssignmentEntry[]>
   >({});
@@ -133,10 +136,6 @@ export function ProcessEquipmentCanvas({
     setScale(fit.scale);
     setPan(fit.pan);
   }, [canvasSize, viewportSize]);
-
-  useEffect(() => {
-    applyFitToViewport();
-  }, [applyFitToViewport, refreshKey]);
 
   const summary = getProductionSummary();
   const offlineCount = allEquipment.filter(
@@ -248,6 +247,12 @@ export function ProcessEquipmentCanvas({
   }, [maintenancePopover]);
 
   const onEquipmentContextMenu = (e: React.MouseEvent, item: EquipmentItem) => {
+    const fromRealGesture = contextMenuGestureRef.current;
+    contextMenuGestureRef.current = false;
+    if (!fromRealGesture) {
+      e.preventDefault();
+      return;
+    }
     if (!equipmentHasMaintenanceTag(item)) return;
     e.preventDefault();
     e.stopPropagation();
@@ -257,6 +262,8 @@ export function ProcessEquipmentCanvas({
 
   const onEquipmentPointerDown = (e: React.PointerEvent, item: EquipmentItem) => {
     e.stopPropagation();
+    contextMenuGestureRef.current = isEquipmentContextMenuPointer(e.button, e.ctrlKey);
+    if (contextMenuGestureRef.current) return;
     e.preventDefault();
     setMaintenancePopover(null);
     dragMovedRef.current = false;
@@ -291,7 +298,7 @@ export function ProcessEquipmentCanvas({
       <div className="process-toolbar">
         <span className="process-toolbar-title">Production flow</span>
         <span className="process-toolbar-hint">
-          Drag to rearrange · snap to grid
+          Drag a vessel to rearrange · drag the background to pan · Fit shows the whole floor
         </span>
         <nav className="process-toolbar-links" aria-label="Production shortcuts">
           <Link to="/wash" className="process-toolbar-link">Wash</Link>
@@ -371,7 +378,14 @@ export function ProcessEquipmentCanvas({
                   onPointerDown={(e) => onEquipmentPointerDown(e, item)}
                   onContextMenu={(e) => onEquipmentContextMenu(e, item)}
                   onClick={(e) => e.stopPropagation()}
-                  title={hasMaintenanceTag ? 'Right-click to view maintenance' : undefined}
+                  title={[
+                    visual.name,
+                    visual.liquidName,
+                    visual.currentVolumeGal > 0 ? `${visual.currentVolumeGal.toFixed(1)} gal` : 'Empty',
+                    visual.abv != null && visual.abv > 0 ? `${visual.abv.toFixed(1)}% ABV` : null,
+                    visual.fermenterLatestBrix != null ? `${visual.fermenterLatestBrix.toFixed(1)}° Brix` : null,
+                    hasMaintenanceTag ? 'Right-click to view maintenance' : null,
+                  ].filter(Boolean).join(' · ')}
                 >
                   <EquipmentVisual
                     data={visual}

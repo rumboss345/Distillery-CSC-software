@@ -1,5 +1,6 @@
 import type { FloorEquipmentView } from '../../types';
 import type { EquipmentVisualData } from './equipment-visual.types';
+import { processLiquidPalette } from './process-floor-label';
 import type { TankVisualData, TankVisualStatus } from './tank-visual.types';
 
 function mapEquipmentStatus(
@@ -42,6 +43,7 @@ export function tankVisualDataFromVisualData(data: EquipmentVisualData): TankVis
     fillPercent: data.fillPercent,
     liquidName: data.liquidName,
     abv: data.abv,
+    liquidPalette: processLiquidPalette(data.name, data.liquidName, data.fillPercent),
     status: data.status,
     equipmentStatus: data.status === 'active' ? 'in_use' : data.status === 'empty' ? 'empty' : 'offline',
   };
