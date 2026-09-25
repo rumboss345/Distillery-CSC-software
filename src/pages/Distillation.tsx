@@ -646,6 +646,10 @@ export function Distillation() {
   };
 
   const handleDeleteCut = (id: number) => {
+    if (selectedRunIsComplete) {
+      alert('This run is complete — cuts are read-only.');
+      return;
+    }
     if (confirm('Delete this cut?')) {
       deleteDistillationCut(id);
       refresh();
@@ -728,7 +732,7 @@ export function Distillation() {
                           </td>
                           <td className="td-actions">
                             <button className="btn btn-sm btn-secondary" onClick={() => setSelectedRunId(r.id)}>
-                              Cuts
+                              {r.status === 'complete' ? 'View cuts' : 'Cuts'}
                             </button>
                             <button className="btn btn-sm btn-ghost" onClick={() => openEditRun(r)}>Edit</button>
                             <button
@@ -754,7 +758,7 @@ export function Distillation() {
       {selectedRunId && (
         <Modal
           wide
-          title={`Cuts — ${runs.find((r) => r.id === selectedRunId)?.batch_number ?? ''}`}
+          title={`${selectedRunIsComplete ? 'View cuts' : 'Cuts'} — ${runs.find((r) => r.id === selectedRunId)?.batch_number ?? ''}`}
           onClose={() => setSelectedRunId(null)}
         >
           <div className="cuts-modal-toolbar">
@@ -764,7 +768,7 @@ export function Distillation() {
               </span>
             )}
             {selectedRunIsComplete ? (
-              <span className="text-muted">Run complete — cuts locked</span>
+              <span className="text-muted">This run is complete — cuts are read-only.</span>
             ) : (
               <button type="button" className="btn btn-primary btn-sm" onClick={openAddCutForm}>+ Add Cut</button>
             )}
@@ -778,7 +782,10 @@ export function Distillation() {
             <div className="table-wrap">
               <table>
                 <thead>
-                  <tr><th>Cut</th><th>Tank</th><th>Start</th><th>End</th><th>Volume</th><th>ABV</th><th>GPA</th><th>Notes</th><th></th></tr>
+                  <tr>
+                    <th>Cut</th><th>Tank</th><th>Start</th><th>End</th><th>Volume</th><th>ABV</th><th>GPA</th><th>Notes</th>
+                    {!selectedRunIsComplete && <th></th>}
+                  </tr>
                 </thead>
                 <tbody>
                   {cuts.map((c) => (
@@ -791,14 +798,14 @@ export function Distillation() {
                       <td>{c.abv}%</td>
                       <td>{(c.volume_gal * c.abv / 100).toFixed(2)} gal</td>
                       <td>{c.notes}</td>
-                      <td className="td-actions">
-                        {!selectedRunIsComplete && (
+                      {!selectedRunIsComplete && (
+                        <td className="td-actions">
                           <button type="button" className="btn btn-sm btn-ghost" onClick={() => openEditCutForm(c)}>
                             Edit
                           </button>
-                        )}
-                        <button type="button" className="btn btn-sm btn-ghost" onClick={() => handleDeleteCut(c.id)}>Delete</button>
-                      </td>
+                          <button type="button" className="btn btn-sm btn-ghost" onClick={() => handleDeleteCut(c.id)}>Delete</button>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
