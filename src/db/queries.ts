@@ -2084,6 +2084,19 @@ export function saveDistillationCut(cut: Omit<DistillationCut, 'id'>, id?: numbe
 }
 
 export function deleteDistillationCut(id: number): void {
+  const cut = queryOne<{ distillation_run_id: number }>(
+    'SELECT distillation_run_id FROM distillation_cuts WHERE id = ?',
+    [id],
+  );
+  if (cut) {
+    const run = queryOne<{ status: string }>(
+      'SELECT status FROM distillation_runs WHERE id = ?',
+      [cut.distillation_run_id],
+    );
+    if (run?.status === 'complete') {
+      throw new Error('Cannot add or change cuts on a completed distillation run.');
+    }
+  }
   runQuery('DELETE FROM distillation_cuts WHERE id = ?', [id]);
   syncHoldingTankStatuses();
 }
