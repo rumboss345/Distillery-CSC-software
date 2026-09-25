@@ -1562,6 +1562,12 @@ tr:hover td {
   margin-bottom: 0.2rem;
 }
 
+.fermenter-tag--distilled {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
 .fermenter-log-stack {
   display: flex;
   flex-direction: column;
