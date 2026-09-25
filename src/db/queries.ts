@@ -1781,6 +1781,25 @@ export function getAllFermentationLogs(): FermentationLog[] {
   );
 }
 
+export interface FermentationLogSource {
+  mash_batch_id: number;
+  floor_equipment_id: number | null;
+  equipment_name: string;
+}
+
+/** One row per fermenter that has logs, including fermenters released after a still charge. */
+export function getAllFermentationLogSources(): FermentationLogSource[] {
+  return queryAll<FermentationLogSource>(
+    `SELECT fl.mash_batch_id,
+            fl.floor_equipment_id,
+            COALESCE(fe.name, '') as equipment_name
+     FROM fermentation_logs fl
+     LEFT JOIN floor_equipment fe ON fe.id = fl.floor_equipment_id
+     GROUP BY fl.mash_batch_id, fl.floor_equipment_id
+     ORDER BY fl.mash_batch_id, MIN(fl.logged_at)`,
+  );
+}
+
 export function mashBatchHasFermentationLogs(mashBatchId: number): boolean {
   const row = queryOne<{ count: number }>(
     'SELECT COUNT(*) as count FROM fermentation_logs WHERE mash_batch_id = ?',

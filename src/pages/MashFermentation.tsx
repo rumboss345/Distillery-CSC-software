@@ -17,6 +17,7 @@ import {
   getAvailableFermenters,
   getMashFermenterAssignments,
   getAllMashFermenterAssignments,
+  getAllFermentationLogSources,
   getInventoryByCategory,
   getLatestFermentationBrix,
   getRecipes,
@@ -38,6 +39,7 @@ import {
 } from '../lib/wash-recipe-nutrients';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
 import { equipmentUnavailableForProduction } from '../lib/equipment-maintenance';
+import { fermenterColumnTags, fermenterLogPanels } from '../lib/fermentation-log-panels';
 import type { MashBatch, MashStatus } from '../types';
 
 const STATUSES: MashStatus[] = ['planned', 'mashing', 'fermenting', 'complete', 'discarded'];
@@ -76,6 +78,7 @@ function FermenterLogPanel({
   refreshKey,
   onAdded,
   readOnly = false,
+  distilled = false,
 }: {
   mashBatchId: number;
   equipmentId: number | null;
@@ -85,6 +88,7 @@ function FermenterLogPanel({
   refreshKey: number;
   onAdded: () => void;
   readOnly?: boolean;
+  distilled?: boolean;
 }) {
   void refreshKey;
   const [logForm, setLogForm] = useState(emptyLogForm());
@@ -136,7 +140,9 @@ function FermenterLogPanel({
       </p>
       {readOnly ? (
         <p className="field-hint" style={{ marginBottom: '1rem' }}>
-          This batch is complete — logs are read-only.
+          {distilled
+            ? 'This fermenter was distilled — its logs stay here and are read-only.'
+            : 'This batch is complete — logs are read-only.'}
         </p>
       ) : (
         <>
@@ -241,6 +247,7 @@ export function MashFermentation() {
   const { key, refresh } = useRefreshKey();
   const batches = getMashBatches();
   const allAssignments = getAllMashFermenterAssignments();
+  const allLogSources = getAllFermentationLogSources();
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<number | undefined>();
   const [form, setForm] = useState(emptyBatch());
@@ -513,6 +520,9 @@ export function MashFermentation() {
   const getBatchFermenters = (mashId: number) =>
     allAssignments.filter((a) => a.mash_batch_id === mashId);
 
+  const getBatchLogSources = (mashId: number) =>
+    allLogSources.filter((source) => source.mash_batch_id === mashId);
+
   const batchesByStatus = useMemo(() => {
     const byStatus = Object.fromEntries(
       STATUSES.map((status) => [status, [] as MashBatch[]]),
@@ -526,6 +536,13 @@ export function MashFermentation() {
   }, [batches]);
 
   const selectedAssignments = selectedId ? getMashFermenterAssignments(selectedId) : [];
+  const selectedLogPanels = selectedId
+    ? fermenterLogPanels({
+        batchComplete: batches.find((b) => b.id === selectedId)?.status === 'complete',
+        assignments: selectedAssignments,
+        logSources: getBatchLogSources(selectedId),
+      })
+    : [];
   const selectedBatch = batches.find((b) => b.id === selectedId);
   const canViewFermentationLogs = selectedBatch?.status === 'fermenting'
     || selectedBatch?.status === 'complete';
@@ -607,7 +624,10 @@ export function MashFermentation() {
                   </thead>
                   <tbody>
                     {items.map((b) => {
-                      const fermenters = getBatchFermenters(b.id);
+                      const fermenters = fermenterColumnTags({
+                        assignments: getBatchFermenters(b.id),
+                        logSources: getBatchLogSources(b.id),
+                      });
                       const startBrix = b.actual_brix ?? b.target_brix;
                       const currentBrix = getLatestFermentationBrix(b.id) ?? b.actual_final_brix;
                       const estAbv = startBrix != null && currentBrix != null
@@ -624,8 +644,11 @@ export function MashFermentation() {
                               <span style={{ color: 'var(--text-muted)' }}>—</span>
                             ) : (
                               fermenters.map((f) => (
-                                <span key={f.id} className="fermenter-tag">
-                                  {f.equipment_name}{f.volume_gal > 0 ? ` (${f.volume_gal} gal)` : ''}
+                                <span
+                                  key={f.key}
+                                  className={f.distilled ? 'fermenter-tag fermenter-tag--distilled' : 'fermenter-tag'}
+                                >
+                                  {f.label}
                                 </span>
                               ))
                             )}
@@ -727,32 +750,34 @@ export function MashFermentation() {
           title={`Fermentation Logs — ${selectedBatch.batch_number}${fermentationLogsReadOnly ? ' (read-only)' : ''}`}
           onClose={() => setSelectedId(null)}
         >
-          {selectedAssignments.length > 1 ? (
+          {selectedLogPanels.length > 1 ? (
             <div className="fermenter-log-stack">
-              {selectedAssignments.map((a) => (
+              {selectedLogPanels.map((panel) => (
                 <FermenterLogPanel
-                  key={a.floor_equipment_id}
+                  key={panel.equipmentId ?? 'unassigned'}
                   mashBatchId={selectedId}
-                  equipmentId={a.floor_equipment_id}
-                  equipmentName={a.equipment_name}
-                  volumeGal={a.volume_gal}
+                  equipmentId={panel.equipmentId}
+                  equipmentName={panel.equipmentName}
+                  volumeGal={panel.volumeGal}
                   startBrix={selectedStartBrix}
                   refreshKey={key}
                   onAdded={refresh}
-                  readOnly={fermentationLogsReadOnly}
+                  readOnly={panel.readOnly}
+                  distilled={panel.distilled}
                 />
               ))}
             </div>
           ) : (
             <FermenterLogPanel
               mashBatchId={selectedId}
-              equipmentId={selectedAssignments[0]?.floor_equipment_id ?? null}
-              equipmentName={selectedAssignments[0]?.equipment_name}
-              volumeGal={selectedAssignments[0]?.volume_gal}
+              equipmentId={selectedLogPanels[0]?.equipmentId ?? null}
+              equipmentName={selectedLogPanels[0]?.equipmentName}
+              volumeGal={selectedLogPanels[0]?.volumeGal}
               startBrix={selectedStartBrix}
               refreshKey={key}
               onAdded={refresh}
-              readOnly={fermentationLogsReadOnly}
+              readOnly={selectedLogPanels[0]?.readOnly ?? fermentationLogsReadOnly}
+              distilled={selectedLogPanels[0]?.distilled}
             />
           )}
         </Modal>
