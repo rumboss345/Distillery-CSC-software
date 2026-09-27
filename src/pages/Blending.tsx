@@ -64,10 +64,15 @@ import {
   type SpiritSourceInput,
 } from '../lib/blend-formulation';
 import {
+  nearestSugarBagCount,
   roundScaledAmount,
+  scaleFactorForWholeSugarBags,
   scaleFactorFromTargetYield,
   scaleIngredients,
   scaleSpiritSources,
+  SUGAR_BAG_LBS,
+  sugarBagScaleIssue,
+  totalSugarLbs,
 } from '../lib/blend-recipe-scale';
 import type {
   BlendIngredientInput,
@@ -89,7 +94,7 @@ const WIZARD_STEPS = [
 ] as const;
 
 const STEP_HINTS: Record<number, string> = {
-  1: 'Pick a saved blend recipe, then scale the batch up or down before you assign tanks and produce.',
+  1: 'Pick a saved blend recipe, then choose any batch size. Recipes with sugar step in whole 50 lb bags so you don\'t open a partial bag.',
   2: 'Choose holding tanks and how much spirit to pull — by the gallon (recommended) or by weight on a scale.',
   3: 'Enter the proof you want to bottle at. We can calculate how much water to add.',
   4: 'Add sweetener, flavorings, or color if this product needs them. Skip if not.',
@@ -485,9 +490,16 @@ export function Blending() {
   ]);
 
   const baseYieldGal = baseFormulation?.theoretical.volumeGal ?? 0;
+  const baseSugarLbs = recipeTemplate ? totalSugarLbs(recipeTemplate.ingredients) : 0;
   const scaledYieldGal = baseYieldGal > 0
     ? baseYieldGal * (form.scale_factor || 1)
     : formulation.theoretical.volumeGal;
+  const batchSugarBags = baseSugarLbs > 0
+    ? nearestSugarBagCount(baseSugarLbs * (form.scale_factor || 1))
+    : 0;
+  const oneBagYieldGal = baseSugarLbs > 0 && baseYieldGal > 0
+    ? baseYieldGal * (SUGAR_BAG_LBS / baseSugarLbs)
+    : 0;
 
   const verifyAbv = form.actual_abv ?? form.final_abv ?? formulation.theoretical.abv ?? 0;
   const correctionAbv = correctedAbvFromInputs(measuredForCorrection.abv, measuredForCorrection.tempF)
@@ -535,7 +547,10 @@ export function Blending() {
 
   const setBatchScale = (factor: number) => {
     if (!recipeTemplate || factor <= 0) return;
-    const safeFactor = Math.round(factor * 1000) / 1000;
+    const safeFactor = scaleFactorForWholeSugarBags(
+      totalSugarLbs(recipeTemplate.ingredients),
+      factor,
+    );
     setForm((prev) => ({ ...prev, scale_factor: safeFactor }));
     applyScaledRecipeAmounts(
       recipeTemplate,
@@ -563,19 +578,20 @@ export function Blending() {
     setEditId(undefined);
     setSelectedRecipeId(recipeId);
     setRecipeTemplate(template);
+    const snappedFactor = scaleFactorForWholeSugarBags(totalSugarLbs(template.ingredients), factor);
     setForm({
       ...emptyProduct(),
       ...defaultAssignee(user),
       product_name: recipe.product_name,
       target_abv: recipe.target_abv,
       target_brix: recipe.target_brix,
-      scale_factor: factor,
+      scale_factor: snappedFactor,
       blend_recipe_id: recipeId,
       notes: recipe.notes,
     });
     applyScaledRecipeAmounts(
       template,
-      factor,
+      snappedFactor,
       prefilledTankId.current ? [prefilledTankId.current] : [],
     );
     if (prefilledTankId.current) {
@@ -602,7 +618,7 @@ export function Blending() {
       }));
     if (baseSpirits.length > 0) {
       const base = computeBlendFormulation(baseSpirits, template.ingredients);
-      setTargetYieldInput((base.theoretical.volumeGal * factor).toFixed(1));
+      setTargetYieldInput((base.theoretical.volumeGal * snappedFactor).toFixed(1));
     } else {
       setTargetYieldInput('');
     }
@@ -965,7 +981,7 @@ export function Blending() {
     );
     if (!solved) return;
     const sugarLine = emptyIngredient('sugar');
-    sugarLine.amount = solved.sugarLbs;
+    sugarLine.amount = nearestSugarBagCount(solved.sugarLbs) * SUGAR_BAG_LBS;
     sugarLine.name = 'Sugar';
     const sugarIdx = ingredients.findIndex((i) => i.ingredient_type === 'sugar');
     if (sugarIdx >= 0) {
@@ -1002,6 +1018,11 @@ export function Blending() {
         alert('Batch size must be greater than zero.');
         return false;
       }
+      const sugarIssue = sugarBagScaleIssue(totalSugarLbs(ingredients));
+      if (sugarIssue) {
+        alert(sugarIssue);
+        return false;
+      }
       if (!form.assigned_user_id) {
         alert('Select the employee assigned to this blend batch.');
         return false;
@@ -1020,6 +1041,13 @@ export function Blending() {
     if (step === 3 && form.target_abv == null) {
       alert('Please enter your target proof (ABV).');
       return false;
+    }
+    if (step === 4) {
+      const sugarIssue = sugarBagScaleIssue(totalSugarLbs(ingredients));
+      if (sugarIssue) {
+        alert(sugarIssue);
+        return false;
+      }
     }
     if (step === 5) {
       if (formulation.theoretical.volumeGal <= 0 || formulation.theoretical.abv <= 0) {
@@ -1062,6 +1090,11 @@ export function Blending() {
   const goBack = () => setWizardStep((s) => Math.max(1, s - 1));
 
   const handleApprove = () => {
+    const sugarIssue = sugarBagScaleIssue(totalSugarLbs(ingredients));
+    if (sugarIssue) {
+      alert(sugarIssue);
+      return;
+    }
     try {
       const id = persistFormula('approved');
       setEditId(id);
@@ -1098,6 +1131,11 @@ export function Blending() {
   const handleProduce = () => {
     if (!editId) {
       alert('Save the recipe first.');
+      return;
+    }
+    const sugarIssue = sugarBagScaleIssue(totalSugarLbs(ingredients));
+    if (sugarIssue) {
+      alert(sugarIssue);
       return;
     }
     const sourceTankIds = activeSources.map((s) => s.holding_tank_equipment_id);
@@ -1390,6 +1428,9 @@ export function Blending() {
             {selectedRecipeId && recipeTemplate && (
               <div className="blend-size-panel">
                 <p className="blend-size-title">Size this batch</p>
+                <p className="field-hint">
+                  The saved recipe is one batch size. Enter any yield and the spirit, water, sugar, and flavor scale with it.
+                </p>
                 <div className="measure-mode-buttons">
                   {[0.5, 1, 1.5, 2].map((factor) => (
                     <button
@@ -1398,41 +1439,73 @@ export function Blending() {
                       className={`btn btn-sm ${Math.abs(form.scale_factor - factor) < 0.001 ? 'btn-primary' : 'btn-secondary'}`}
                       onClick={() => setBatchScale(factor)}
                     >
-                      {factor}×
+                      {factor}× recipe
                     </button>
                   ))}
                 </div>
                 <div className="wizard-lab-inputs">
                   <label>
-                    Scale factor
+                    Batch size (gal)
                     <input
                       type="number"
-                      step="0.01"
-                      min="0.01"
-                      value={form.scale_factor || ''}
-                      onChange={(e) => setBatchScale(parseFloat(e.target.value) || 1)}
-                    />
-                  </label>
-                  <label>
-                    Target yield (gal)
-                    <input
-                      type="number"
-                      step="0.1"
+                      step={oneBagYieldGal > 0 ? Number(oneBagYieldGal.toFixed(2)) : 0.1}
                       min="0"
                       value={targetYieldInput}
-                      onChange={(e) => {
-                        setTargetYieldInput(e.target.value);
-                        const target = parseFloat(e.target.value);
+                      onChange={(e) => setTargetYieldInput(e.target.value)}
+                      onBlur={() => {
+                        const target = parseFloat(targetYieldInput);
                         if (baseYieldGal > 0 && target > 0) {
                           setBatchScale(scaleFactorFromTargetYield(baseYieldGal, target));
                         }
                       }}
                     />
                   </label>
+                  <label>
+                    Scale factor
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      value={form.scale_factor ? Number(form.scale_factor.toFixed(4)) : ''}
+                      onChange={(e) => setBatchScale(parseFloat(e.target.value) || 1)}
+                    />
+                  </label>
                 </div>
+                {baseSugarLbs > 0 && (
+                  <div className="sugar-bag-sizer">
+                    <p className="blend-size-title">Sugar bags</p>
+                    <div className="measure-mode-buttons">
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-secondary"
+                        disabled={batchSugarBags <= 1}
+                        onClick={() => setBatchScale(
+                          ((batchSugarBags - 1) * SUGAR_BAG_LBS) / baseSugarLbs,
+                        )}
+                      >
+                        − 1 bag
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-secondary"
+                        onClick={() => setBatchScale(
+                          ((batchSugarBags + 1) * SUGAR_BAG_LBS) / baseSugarLbs,
+                        )}
+                      >
+                        + 1 bag
+                      </button>
+                    </div>
+                    <p className="field-hint">
+                      {batchSugarBags} bag{batchSugarBags === 1 ? '' : 's'} × {SUGAR_BAG_LBS} lb = {batchSugarBags * SUGAR_BAG_LBS} lb sugar.
+                      The saved recipe uses {baseSugarLbs.toFixed(0)} lb, so sizes step by whole bags and you don&apos;t open a partial bag.
+                    </p>
+                  </div>
+                )}
                 {baseYieldGal > 0 && (
                   <p className="field-hint">
-                    Recipe base yield: {baseYieldGal.toFixed(1)} gal → this batch: {scaledYieldGal.toFixed(1)} gal at {form.target_abv != null ? `${form.target_abv}%` : 'target proof'}
+                    Saved recipe: {baseYieldGal.toFixed(1)} gal → this batch: {scaledYieldGal.toFixed(1)} gal
+                    {form.target_abv != null ? ` at ${form.target_abv}%` : ''}
+                    {baseSugarLbs > 0 ? ` · ${batchSugarBags * SUGAR_BAG_LBS} lb sugar` : ''}
                   </p>
                 )}
               </div>
