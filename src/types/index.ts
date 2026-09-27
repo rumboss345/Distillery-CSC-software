@@ -11,6 +11,9 @@ export type RunStatus = 'planned' | 'running' | 'complete';
 
 export type DistillationRunType = 'wash' | 'low_wines' | 'heavy_rum';
 
+/** Where spirit-run proofing water is mixed. */
+export type SpiritProofPlace = 'before_still' | 'in_still';
+
 export type CutType = 'heads' | 'hearts' | 'tails';
 
 export type SpiritTransferType = 'low_wines' | 'high_wines';
@@ -205,6 +208,13 @@ export interface DistillationRun {
   run_date: string;
   charge_volume_gal: number;
   charge_abv: number | null;
+  /** Gallons of tails drawn when this charge was proofed. Null when charged as-is. */
+  proof_spirit_gal?: number | null;
+  /** ABV of the tails before proofing water. */
+  proof_spirit_abv?: number | null;
+  /** Water blended into the charge. Zero when the charge is not proofed. */
+  proof_water_gal?: number | null;
+  proof_place?: SpiritProofPlace | null;
   status: RunStatus;
   assigned_user_id: number | null;
   assigned_user_name: string | null;
