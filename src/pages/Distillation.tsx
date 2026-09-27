@@ -48,6 +48,11 @@ import {
 } from '../lib/distillation-run-types';
 import { FERMENTATION_READY_MAX_BRIX, isBrixReadyForDistillation } from '../lib/fermentation';
 import { chargeExceedsStillCapacity, stillAlreadyOccupiedMessage } from '../lib/still-charge';
+import {
+  planSpiritChargeProof,
+  spiritChargeDetail,
+  type SpiritProofPlace,
+} from '../lib/spirit-charge-proof';
 import type {
   DistillationCutView,
   DistillationRun,
@@ -113,6 +118,8 @@ export function Distillation() {
   });
   const [chargeAbvObserved, setChargeAbvObserved] = useState('');
   const [chargeTempF, setChargeTempF] = useState('60');
+  const [proofTarget, setProofTarget] = useState('');
+  const [proofPlace, setProofPlace] = useState<SpiritProofPlace>('in_still');
 
   void key;
 
@@ -182,6 +189,11 @@ export function Distillation() {
     return `${row.equipment_name} — ${row.batch_number} (${row.volume_gal.toFixed(1)} gal · ${brixNote}, ${readyNote})`;
   };
 
+  const clearChargeProof = () => {
+    setProofTarget('');
+    setProofPlace('in_still');
+  };
+
   const handleRunTypeChange = (runType: DistillationRunType) => {
     setRunForm({
       ...emptyRun(runType),
@@ -192,6 +204,7 @@ export function Distillation() {
       assigned_user_id: runForm.assigned_user_id,
       assigned_user_name: runForm.assigned_user_name,
     });
+    clearChargeProof();
   };
 
   const handleFermenterSourceChange = (equipmentId: number | null) => {
@@ -252,6 +265,7 @@ export function Distillation() {
     });
     setChargeAbvObserved('');
     setChargeTempF('60');
+    clearChargeProof();
     setShowRunForm(true);
   };
 
@@ -284,6 +298,7 @@ export function Distillation() {
       });
       setChargeAbvObserved('');
       setChargeTempF('60');
+      clearChargeProof();
       setShowRunForm(true);
     } else if (fromTank) {
       const tank = getChargeableHoldingTanks().find((t) => t.id === tankId);
@@ -298,6 +313,7 @@ export function Distillation() {
       });
       setChargeAbvObserved(tank && tank.available_abv > 0 ? tank.available_abv.toString() : '');
       setChargeTempF('60');
+      clearChargeProof();
       setShowRunForm(true);
     } else if (plan) {
       openNewRun('wash', plan.date ?? undefined);
@@ -312,6 +328,7 @@ export function Distillation() {
 
   const openEditRun = (run: DistillationRun) => {
     setEditRunId(run.id);
+    const proofed = (run.proof_water_gal ?? 0) > 0 && run.proof_spirit_gal != null;
     setRunForm({
       ...run,
       run_type: run.run_type ?? 'wash',
@@ -319,16 +336,23 @@ export function Distillation() {
       dest_holding_tank_equipment_id: (run.run_type ?? 'wash') === 'low_wines'
         ? null
         : run.dest_holding_tank_equipment_id ?? null,
-      charge_abv: run.charge_abv ?? null,
+      charge_volume_gal: proofed ? run.proof_spirit_gal! : run.charge_volume_gal,
+      charge_abv: proofed ? (run.proof_spirit_abv ?? run.charge_abv) : run.charge_abv ?? null,
     });
-    setChargeAbvObserved(run.charge_abv?.toString() ?? '');
+    setChargeAbvObserved(
+      proofed
+        ? (run.proof_spirit_abv?.toString() ?? '')
+        : (run.charge_abv?.toString() ?? ''),
+    );
     setChargeTempF('60');
+    setProofTarget(proofed && run.charge_abv != null ? String(run.charge_abv) : '');
+    setProofPlace(run.proof_place === 'before_still' ? 'before_still' : 'in_still');
     setShowRunForm(true);
   };
 
-  const validateStillChargeVolume = (): boolean => {
+  const validateStillChargeVolume = (chargeGal = runForm.charge_volume_gal): boolean => {
     if (!selectedStill) {
-      if (runForm.charge_volume_gal > 0) {
+      if (chargeGal > 0) {
         alert('Select a pot still before entering charge volume.');
         return false;
       }
@@ -349,7 +373,7 @@ export function Distillation() {
         return false;
       }
     }
-    if (chargeExceedsStillCapacity(runForm.charge_volume_gal, selectedStill.capacity_gal)) {
+    if (chargeExceedsStillCapacity(chargeGal, selectedStill.capacity_gal)) {
       alert(
         `Charge volume cannot exceed ${selectedStill.name} capacity (${selectedStill.capacity_gal} gal).`,
       );
@@ -357,6 +381,26 @@ export function Distillation() {
     }
     return true;
   };
+
+  const sourceTankFreeGal = (() => {
+    if (!runForm.source_holding_tank_equipment_id || !selectedLowWineAvailable) return null;
+    const tank = equipment.find((item) => item.id === runForm.source_holding_tank_equipment_id);
+    if (!tank || !(tank.capacity_gal > 0)) return null;
+    return Math.max(0, tank.capacity_gal - selectedLowWineAvailable.volume_gal);
+  })();
+
+  const spiritProofPlan = isTankSourcedRun(runForm.run_type) && proofTarget.trim()
+    ? planSpiritChargeProof({
+      spiritGal: runForm.charge_volume_gal,
+      spiritAbvPercent: runForm.charge_abv ?? selectedLowWineAvailable?.abv ?? 0,
+      targetAbvPercent: Number(proofTarget),
+      stillCapacityGal: selectedStill && selectedStill.capacity_gal > 0 ? selectedStill.capacity_gal : null,
+      sourceTankFreeGal,
+      place: proofPlace,
+      stillName: selectedStill?.name,
+      tankName: selectedSourceTank?.name ?? savedLowWineTankName,
+    })
+    : null;
 
   const handleSaveRun = () => {
     if (!runForm.assigned_user_id) {
@@ -373,7 +417,12 @@ export function Distillation() {
         return;
       }
     }
-    if (!validateStillChargeVolume()) return;
+    if (spiritProofPlan && !spiritProofPlan.ok) {
+      alert(spiritProofPlan.message ?? 'This proofed charge does not fit.');
+      return;
+    }
+    const stillChargeGal = spiritProofPlan?.ok ? spiritProofPlan.stillGal : runForm.charge_volume_gal;
+    if (!validateStillChargeVolume(stillChargeGal)) return;
     if (isFermenterSourcedRun(runForm.run_type)) {
       if (
         (runForm.run_type === 'heavy_rum' || runForm.run_type === 'wash')
@@ -431,8 +480,26 @@ export function Distillation() {
         return;
       }
       const chargeAbv = runForm.charge_abv ?? available.abv;
+      const savedRun = spiritProofPlan?.ok
+        ? {
+          ...runForm,
+          charge_volume_gal: spiritProofPlan.stillGal,
+          charge_abv: spiritProofPlan.targetAbvPercent,
+          proof_spirit_gal: spiritProofPlan.spiritGal,
+          proof_spirit_abv: spiritProofPlan.spiritAbvPercent,
+          proof_water_gal: spiritProofPlan.waterGal,
+          proof_place: spiritProofPlan.place,
+        }
+        : {
+          ...runForm,
+          charge_abv: chargeAbv,
+          proof_spirit_gal: null,
+          proof_spirit_abv: null,
+          proof_water_gal: 0,
+          proof_place: null,
+        };
       try {
-        saveDistillationRun({ ...runForm, charge_abv: chargeAbv }, editRunId);
+        saveDistillationRun(savedRun, editRunId);
         setShowRunForm(false);
         refresh();
       } catch (error) {
@@ -729,6 +796,9 @@ export function Distillation() {
                           <td>
                             {r.charge_volume_gal} gal
                             {isTankSourcedRun(runType) && r.charge_abv != null ? ` @ ${r.charge_abv.toFixed(1)}%` : ''}
+                            {spiritChargeDetail(r) && (
+                              <div className="field-hint">{spiritChargeDetail(r)}</div>
+                            )}
                           </td>
                           <td className="td-actions">
                             <button className="btn btn-sm btn-secondary" onClick={() => setSelectedRunId(r.id)}>
@@ -980,23 +1050,37 @@ export function Distillation() {
               />
             </div>
             <div className="form-group">
-              <label>Charge Volume (gal)</label>
+              <label>{isTankSourcedRun(runForm.run_type) ? 'Tails to charge (gal)' : 'Charge Volume (gal)'}</label>
               <input
                 type="number"
                 step="0.1"
                 min="0"
-                max={selectedStill && selectedStill.capacity_gal > 0 ? selectedStill.capacity_gal : undefined}
+                max={
+                  spiritProofPlan?.maxSpiritGal != null
+                    ? spiritProofPlan.maxSpiritGal
+                    : selectedStill && selectedStill.capacity_gal > 0
+                      ? selectedStill.capacity_gal
+                      : undefined
+                }
                 value={runForm.charge_volume_gal || ''}
                 onChange={(e) => setRunForm({ ...runForm, charge_volume_gal: parseFloat(e.target.value) || 0 })}
               />
+              {isTankSourcedRun(runForm.run_type) ? (
+                <p className="field-hint">Gallons of tails drawn from the tank, before any proofing water.</p>
+              ) : null}
               {selectedStill && selectedStill.capacity_gal > 0 && (
-                <p className="field-hint">Maximum charge for {selectedStill.name}: {selectedStill.capacity_gal} gal</p>
+                <p className="field-hint">
+                  {selectedStill.name} holds {selectedStill.capacity_gal} gal
+                  {spiritProofPlan?.maxSpiritGal != null
+                    ? `. At this target proof, charge at most ${spiritProofPlan.maxSpiritGal.toFixed(1)} gal of tails.`
+                    : '.'}
+                </p>
               )}
             </div>
             {isTankSourcedRun(runForm.run_type) && (
               <div className="form-group full-width">
                 <AbvTemperatureInput
-                  abvLabel="Observed charge ABV (% at sample temp)"
+                  abvLabel="Tails ABV (% at sample temp)"
                   abvValue={chargeAbvObserved}
                   temperatureValue={chargeTempF}
                   onAbvChange={(value) => syncChargeAbvFromObservation(value, chargeTempF)}
@@ -1007,6 +1091,60 @@ export function Distillation() {
                     ?? undefined
                   }
                 />
+              </div>
+            )}
+            {isTankSourcedRun(runForm.run_type) && (
+              <div className="form-group full-width">
+                <div className="spirit-proof-panel">
+                  <h4>Proof the charge</h4>
+                  <p className="field-hint">
+                    If the tails are too high a proof, blend them with water before the still runs.
+                    80 proof is 40% ABV. The proofed charge has to fit in the still.
+                  </p>
+                  <div className="form-grid">
+                    <div className="form-group">
+                      <label>Target charge ABV (%)</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        value={proofTarget}
+                        onChange={(e) => setProofTarget(e.target.value)}
+                        placeholder="Leave blank to charge as-is"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Where to add the water</label>
+                      <select
+                        value={proofPlace}
+                        onChange={(e) => setProofPlace(e.target.value as SpiritProofPlace)}
+                      >
+                        <option value="before_still">Blend before it goes in the still</option>
+                        <option value="in_still">Blend in the still</option>
+                      </select>
+                    </div>
+                  </div>
+                  {spiritProofPlan?.message && (
+                    <p
+                      className="field-hint"
+                      style={spiritProofPlan.ok ? undefined : { color: 'var(--danger, #dc2626)' }}
+                    >
+                      {spiritProofPlan.message}
+                    </p>
+                  )}
+                  {spiritProofPlan && !spiritProofPlan.ok && spiritProofPlan.maxSpiritGal != null && (
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-secondary"
+                      onClick={() => setRunForm({
+                        ...runForm,
+                        charge_volume_gal: spiritProofPlan.maxSpiritGal ?? runForm.charge_volume_gal,
+                      })}
+                    >
+                      Use {spiritProofPlan.maxSpiritGal.toFixed(1)} gal of tails
+                    </button>
+                  )}
+                </div>
               </div>
             )}
             <div className="form-group">
@@ -1039,7 +1177,9 @@ export function Distillation() {
               </>
             ) : (
               <>
-                Charging draws spirit from the source low wines tank. Choose
+                Charging draws tails from the source tank. Proof them before the run if they are too hot:
+                blend the water in the tank first, or add it after the tails are in the still.
+                The proofed volume cannot exceed the still. Choose
                 {' '}<strong>High Wines Storage Tank</strong> (or a collection vessel) when you record cuts.
               </>
             )}

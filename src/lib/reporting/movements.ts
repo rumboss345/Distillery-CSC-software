@@ -77,17 +77,27 @@ export function buildLiquidMovements(range: ReportDateRange): LiquidMovementRow[
     tank_name: string | null;
     charge_volume_gal: number;
     charge_abv: number | null;
+    proof_water_gal: number | null;
+    proof_spirit_gal: number | null;
+    proof_spirit_abv: number | null;
+    proof_place: string | null;
     operator: string;
   }>(`
     SELECT r.id, r.run_date, r.batch_number, r.still_name, src.name as tank_name,
-           r.charge_volume_gal, r.charge_abv, r.assigned_user_name as operator
+           r.charge_volume_gal, r.charge_abv, r.proof_water_gal, r.proof_spirit_gal,
+           r.proof_spirit_abv, r.proof_place, r.assigned_user_name as operator
     FROM distillation_runs r
     LEFT JOIN floor_equipment src ON src.id = r.source_holding_tank_equipment_id
     WHERE r.source_holding_tank_equipment_id IS NOT NULL AND r.charge_volume_gal > 0
   `);
   for (const r of charges) {
     if (!eventInReportRange(r.run_date, range)) continue;
-    const abv = r.charge_abv ?? 0;
+    const proofed = (r.proof_water_gal ?? 0) > 0.001 && r.proof_spirit_gal != null;
+    const volume = proofed ? r.proof_spirit_gal! : r.charge_volume_gal;
+    const abv = proofed ? (r.proof_spirit_abv ?? 0) : (r.charge_abv ?? 0);
+    const proofNote = proofed
+      ? `Proofed to ${r.charge_abv?.toFixed(1) ?? '—'}% ABV with ${r.proof_water_gal!.toFixed(1)} gal water ${r.proof_place === 'before_still' ? 'before the still' : 'in the still'}`
+      : '';
     rows.push({
       row_key: `charge:${r.id}`,
       occurred_at: r.run_date,
@@ -96,12 +106,12 @@ export function buildLiquidMovements(range: ReportDateRange): LiquidMovementRow[
       dest_label: r.still_name,
       product_liquid: 'Charge',
       batch_ref: r.batch_number,
-      volume_gal: r.charge_volume_gal,
+      volume_gal: volume,
       abv,
-      laa_gal: laaGalFromVolumeAbv(r.charge_volume_gal, abv),
+      laa_gal: laaGalFromVolumeAbv(volume, abv),
       user_label: r.operator || '—',
       reference: `Run ${r.id}`,
-      notes: '',
+      notes: proofNote,
     });
   }
 

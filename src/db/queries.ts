@@ -883,6 +883,24 @@ function assertSpiritTransferVessel(equipmentId: number, role: 'source' | 'desti
   }
 }
 
+/** Gallons of tails removed from a source tank. Proofing water stays out of that total. */
+const TANK_CHARGE_DRAWN_GAL_SQL = `
+  CASE
+    WHEN COALESCE(proof_water_gal, 0) > 0.001 AND proof_spirit_gal IS NOT NULL
+    THEN proof_spirit_gal
+    ELSE charge_volume_gal
+  END
+`;
+
+/** Alcohol gallons removed from a source tank, using the tails ABV before proofing water. */
+const TANK_CHARGE_DRAWN_GPA_SQL = `
+  CASE
+    WHEN COALESCE(proof_water_gal, 0) > 0.001 AND proof_spirit_gal IS NOT NULL
+    THEN proof_spirit_gal * COALESCE(proof_spirit_abv, 0) / 100.0
+    ELSE charge_volume_gal * COALESCE(charge_abv, 0) / 100.0
+  END
+`;
+
 export function getHoldingTankContents(
   tankId: number,
   excludeRunId?: number,
@@ -901,8 +919,8 @@ export function getHoldingTankContents(
 
   const runOuts = queryOne<{ volume_gal: number; gpa: number }>(`
     SELECT
-      COALESCE(SUM(charge_volume_gal), 0) as volume_gal,
-      COALESCE(SUM(charge_volume_gal * COALESCE(charge_abv, 0) / 100), 0) as gpa
+      COALESCE(SUM(${TANK_CHARGE_DRAWN_GAL_SQL}), 0) as volume_gal,
+      COALESCE(SUM(${TANK_CHARGE_DRAWN_GPA_SQL}), 0) as gpa
     FROM distillation_runs
     WHERE source_holding_tank_equipment_id = ?
       AND status IN ('planned', 'running', 'complete')
@@ -1421,7 +1439,9 @@ export function emptyAllHoldingTanks(): {
   `)?.count ?? 0;
   runQuery(`
     UPDATE distillation_runs
-    SET charge_volume_gal = 0, charge_abv = NULL
+    SET charge_volume_gal = 0, charge_abv = NULL,
+        proof_spirit_gal = NULL, proof_spirit_abv = NULL,
+        proof_water_gal = 0, proof_place = NULL
     WHERE source_holding_tank_equipment_id IS NOT NULL AND charge_volume_gal > 0
   `);
 
@@ -1957,7 +1977,7 @@ export function saveDistillationRun(run: Omit<DistillationRun, 'id' | 'created_a
     : null;
   if (id) {
     runQuery(
-      `UPDATE distillation_runs SET batch_number=?, run_type=?, source_mash_batch_id=?, source_fermenter_equipment_id=?, source_holding_tank_equipment_id=?, dest_holding_tank_equipment_id=?, still_name=?, run_date=?, charge_volume_gal=?, charge_abv=?, status=?, assigned_user_id=?, assigned_user_name=?, notes=? WHERE id=?`,
+      `UPDATE distillation_runs SET batch_number=?, run_type=?, source_mash_batch_id=?, source_fermenter_equipment_id=?, source_holding_tank_equipment_id=?, dest_holding_tank_equipment_id=?, still_name=?, run_date=?, charge_volume_gal=?, charge_abv=?, proof_spirit_gal=?, proof_spirit_abv=?, proof_water_gal=?, proof_place=?, status=?, assigned_user_id=?, assigned_user_name=?, notes=? WHERE id=?`,
       [
         run.batch_number,
         runType,
@@ -1969,6 +1989,10 @@ export function saveDistillationRun(run: Omit<DistillationRun, 'id' | 'created_a
         run.run_date,
         run.charge_volume_gal,
         isTankSourcedRun(runType) ? run.charge_abv : null,
+        isTankSourcedRun(runType) ? run.proof_spirit_gal ?? null : null,
+        isTankSourcedRun(runType) ? run.proof_spirit_abv ?? null : null,
+        isTankSourcedRun(runType) ? run.proof_water_gal ?? 0 : 0,
+        isTankSourcedRun(runType) ? run.proof_place ?? null : null,
         run.status,
         run.assigned_user_id,
         run.assigned_user_name ?? '',
@@ -1978,7 +2002,7 @@ export function saveDistillationRun(run: Omit<DistillationRun, 'id' | 'created_a
     );
   } else {
     insertRow(
-      `INSERT INTO distillation_runs (batch_number, run_type, source_mash_batch_id, source_fermenter_equipment_id, source_holding_tank_equipment_id, dest_holding_tank_equipment_id, still_name, run_date, charge_volume_gal, charge_abv, status, assigned_user_id, assigned_user_name, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO distillation_runs (batch_number, run_type, source_mash_batch_id, source_fermenter_equipment_id, source_holding_tank_equipment_id, dest_holding_tank_equipment_id, still_name, run_date, charge_volume_gal, charge_abv, proof_spirit_gal, proof_spirit_abv, proof_water_gal, proof_place, status, assigned_user_id, assigned_user_name, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         run.batch_number,
         runType,
@@ -1990,6 +2014,10 @@ export function saveDistillationRun(run: Omit<DistillationRun, 'id' | 'created_a
         run.run_date,
         run.charge_volume_gal,
         isTankSourcedRun(runType) ? run.charge_abv : null,
+        isTankSourcedRun(runType) ? run.proof_spirit_gal ?? null : null,
+        isTankSourcedRun(runType) ? run.proof_spirit_abv ?? null : null,
+        isTankSourcedRun(runType) ? run.proof_water_gal ?? 0 : 0,
+        isTankSourcedRun(runType) ? run.proof_place ?? null : null,
         run.status,
         run.assigned_user_id,
         run.assigned_user_name ?? '',

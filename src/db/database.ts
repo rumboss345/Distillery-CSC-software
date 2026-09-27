@@ -82,6 +82,13 @@ const DEST_HOLDING_TANK_MIGRATION = `
 ALTER TABLE distillation_runs ADD COLUMN dest_holding_tank_equipment_id INTEGER REFERENCES floor_equipment(id);
 `;
 
+const SPIRIT_CHARGE_PROOF_MIGRATION = [
+  'ALTER TABLE distillation_runs ADD COLUMN proof_spirit_gal REAL',
+  'ALTER TABLE distillation_runs ADD COLUMN proof_spirit_abv REAL',
+  'ALTER TABLE distillation_runs ADD COLUMN proof_water_gal REAL NOT NULL DEFAULT 0',
+  'ALTER TABLE distillation_runs ADD COLUMN proof_place TEXT',
+];
+
 const TANK_TRANSFERS_MIGRATION = `
 CREATE TABLE IF NOT EXISTS holding_tank_transfers (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -281,6 +288,14 @@ function runMigrations(): void {
   );
   if (!hasDestHoldingTank) {
     db.run(DEST_HOLDING_TANK_MIGRATION);
+    persistDb();
+  }
+
+  const hasSpiritChargeProof = queryOne<{ name: string }>(
+    "SELECT name FROM pragma_table_info('distillation_runs') WHERE name='proof_water_gal'",
+  );
+  if (!hasSpiritChargeProof) {
+    for (const statement of SPIRIT_CHARGE_PROOF_MIGRATION) db.run(statement);
     persistDb();
   }
 

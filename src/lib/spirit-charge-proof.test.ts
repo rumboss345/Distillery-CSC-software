@@ -1,0 +1,92 @@
+import { describe, expect, it } from 'vitest';
+import { planSpiritChargeProof, spiritChargeDetail } from './spirit-charge-proof';
+
+describe('planSpiritChargeProof', () => {
+  it('waters high-proof tails down and keeps the proofed charge inside the still', () => {
+    const plan = planSpiritChargeProof({
+      spiritGal: 100,
+      spiritAbvPercent: 80,
+      targetAbvPercent: 40,
+      stillCapacityGal: 250,
+      sourceTankFreeGal: 0,
+      place: 'in_still',
+      stillName: 'Vendome',
+    });
+
+    expect(plan.ok).toBe(true);
+    expect(plan.stillGal).toBeCloseTo(200, 0);
+    expect(plan.waterGal).toBeGreaterThan(90);
+    expect(plan.waterGal).toBeLessThan(120);
+    expect(plan.stillGal).toBeLessThanOrEqual(250);
+    expect(plan.message).toMatch(/in the still/);
+  });
+
+  it('refuses a proofed charge that would overflow the still and names the max tails', () => {
+    const plan = planSpiritChargeProof({
+      spiritGal: 100,
+      spiritAbvPercent: 80,
+      targetAbvPercent: 40,
+      stillCapacityGal: 150,
+      sourceTankFreeGal: 500,
+      place: 'in_still',
+      stillName: 'Vendome',
+    });
+
+    expect(plan.ok).toBe(false);
+    expect(plan.stillGal).toBeGreaterThan(150);
+    expect(plan.maxSpiritGal).toBeCloseTo(75, 0);
+    expect(plan.message).toMatch(/Vendome holds 150/);
+    expect(plan.message).toMatch(/75\.0 gal of tails/);
+  });
+
+  it('refuses blending before the still when the tails tank has no room for the water', () => {
+    const blocked = planSpiritChargeProof({
+      spiritGal: 80,
+      spiritAbvPercent: 70,
+      targetAbvPercent: 40,
+      stillCapacityGal: 1200,
+      sourceTankFreeGal: 5,
+      place: 'before_still',
+      tankName: 'Tails tank',
+    });
+    expect(blocked.ok).toBe(false);
+    expect(blocked.message).toMatch(/Tails tank only has 5.0 gal free/);
+    expect(blocked.message).toMatch(/blend the water in the still/i);
+
+    const inStill = planSpiritChargeProof({
+      spiritGal: 80,
+      spiritAbvPercent: 70,
+      targetAbvPercent: 40,
+      stillCapacityGal: 1200,
+      sourceTankFreeGal: 5,
+      place: 'in_still',
+    });
+    expect(inStill.ok).toBe(true);
+  });
+
+  it('requires a lower target proof', () => {
+    const plan = planSpiritChargeProof({
+      spiritGal: 50,
+      spiritAbvPercent: 40,
+      targetAbvPercent: 45,
+      stillCapacityGal: 200,
+      sourceTankFreeGal: 100,
+      place: 'in_still',
+    });
+    expect(plan.ok).toBe(false);
+    expect(plan.message).toMatch(/lower than the tails/);
+  });
+});
+
+describe('spiritChargeDetail', () => {
+  it('describes tails and proofing water on a saved charge', () => {
+    expect(spiritChargeDetail({
+      charge_volume_gal: 140,
+      charge_abv: 40,
+      proof_water_gal: 62,
+      proof_spirit_gal: 80,
+      proof_spirit_abv: 70,
+      proof_place: 'before_still',
+    })).toBe('80.0 gal tails @ 70.0% + 62.0 gal water, blended before the still');
+  });
+});
