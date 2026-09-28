@@ -1,4 +1,5 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import type { PermissionKey } from '../lib/permissions';
 
@@ -52,8 +53,23 @@ function navItemVisible(item: NavItem, hasPermission: (key: PermissionKey) => bo
   return hasPermission(item.permission);
 }
 
+function currentPageLabel(pathname: string, groups: { items: NavItem[] }[], isAdmin: boolean): string {
+  if (isAdmin && pathname.startsWith('/admin')) return 'Administration';
+  const items = groups.flatMap((group) => group.items);
+  const match = items
+    .filter((item) => (
+      item.to === '/'
+        ? pathname === '/'
+        : pathname === item.to || pathname.startsWith(`${item.to}/`)
+    ))
+    .sort((a, b) => b.to.length - a.to.length)[0];
+  return match?.label ?? 'CSC Distillery';
+}
+
 export function Layout() {
   const { user, logout, hasPermission } = useAuth();
+  const location = useLocation();
+  const [navOpen, setNavOpen] = useState(false);
 
   const visibleGroups = navGroups
     .map((group) => ({
@@ -62,12 +78,52 @@ export function Layout() {
     }))
     .filter((group) => group.items.length > 0);
 
+  const pageLabel = currentPageLabel(location.pathname, visibleGroups, user?.role === 'admin');
+
+  useEffect(() => {
+    setNavOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    document.body.classList.toggle('nav-open', navOpen);
+    return () => document.body.classList.remove('nav-open');
+  }, [navOpen]);
+
   return (
-    <div className="app-layout">
-      <aside className="sidebar">
+    <div className={`app-layout${navOpen ? ' app-layout--nav-open' : ''}`}>
+      <header className="mobile-topbar">
+        <button
+          type="button"
+          className="mobile-menu-btn"
+          aria-expanded={navOpen}
+          aria-controls="app-sidebar"
+          onClick={() => setNavOpen((open) => !open)}
+        >
+          <span className="mobile-menu-icon" aria-hidden="true" />
+          Menu
+        </button>
+        <div className="mobile-topbar-title">{pageLabel}</div>
+      </header>
+      {navOpen && (
+        <button
+          type="button"
+          className="sidebar-backdrop"
+          aria-label="Close menu"
+          onClick={() => setNavOpen(false)}
+        />
+      )}
+      <aside id="app-sidebar" className={`sidebar${navOpen ? ' sidebar--open' : ''}`}>
         <div className="sidebar-brand">
           <h1>CSC Distillery Tracker</h1>
           <p>Production management</p>
+          <button
+            type="button"
+            className="sidebar-close"
+            aria-label="Close menu"
+            onClick={() => setNavOpen(false)}
+          >
+            Close
+          </button>
         </div>
         <nav className="sidebar-nav" aria-label="Main">
           {visibleGroups.map((group) => (
