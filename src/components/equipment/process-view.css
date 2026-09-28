@@ -144,7 +144,7 @@
   height: var(--process-node-height, 280px);
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
+  justify-content: flex-start;
   overflow: hidden;
   cursor: grab;
   touch-action: none;
@@ -433,7 +433,7 @@
   max-height: var(--process-visual-slot, 168px);
   flex: 0 0 var(--process-visual-slot, 168px);
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
   justify-content: center;
   overflow: hidden;
 }
@@ -944,7 +944,7 @@
   min-height: 0;
   padding: 0;
   gap: 0;
-  justify-content: flex-end;
+  justify-content: flex-start;
   align-items: stretch;
   overflow: hidden;
   transform: none;
