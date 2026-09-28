@@ -9,7 +9,13 @@ export const PROCESS_STAGE_HEADER = 44;
 export const PROCESS_STAGE_HEIGHT = 260;
 export const PROCESS_CANVAS_PAD = 32;
 export const PROCESS_ITEMS_PER_ROW = 5;
-export const PROCESS_ROW_STRIDE = 218;
+/** Drawing above the info card. Kept shorter than the raw SVG so the card stays in the section. */
+export const PROCESS_VISUAL_SLOT = 168;
+/** Name, contents, volume, and proof under the drawing. */
+export const PROCESS_LABEL_BLOCK = 112;
+/** Full card: drawing plus the info block under it. */
+export const PROCESS_NODE_HEIGHT = PROCESS_VISUAL_SLOT + PROCESS_LABEL_BLOCK;
+export const PROCESS_ROW_STRIDE = PROCESS_NODE_HEIGHT + 20;
 export const PROCESS_CELL_HEIGHT = PROCESS_ROW_STRIDE;
 export const PROCESS_STAGE_GAP = 14;
 /** Snap increment when dragging equipment in process view (matches layout gap). */
@@ -58,9 +64,6 @@ export function computeStageBands(
     return { top, height };
   });
 }
-
-/** Approximate node height for clamping drags within a stage band. */
-export const PROCESS_NODE_HEIGHT = 220;
 
 export function stageIndexForEquipmentId(
   equipmentId: number,

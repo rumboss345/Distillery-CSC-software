@@ -33,7 +33,7 @@ export function EquipmentVisualFrame({
     <button
       type="button"
       className={`equipment-visual${selected ? ' equipment-visual--selected' : ''}${onClick ? ' equipment-visual--interactive' : ''}${isProcess ? ' equipment-visual--process' : ''} ${className}`.trim()}
-      style={{ '--eq-scale': scale } as React.CSSProperties}
+      style={isProcess ? undefined : ({ '--eq-scale': scale } as React.CSSProperties)}
       onClick={onClick}
       title={tooltip}
       aria-label={`${data.name}, ${Math.round(data.fillPercent)} percent full`}
@@ -44,7 +44,10 @@ export function EquipmentVisualFrame({
           <TooltipContent data={data} />
         </div>
       )}
-      <div className="equipment-visual-svg-wrap" style={{ width: svgWidth * scale, height: svgHeight * scale }}>
+      <div
+        className="equipment-visual-svg-wrap"
+        style={isProcess ? undefined : { width: svgWidth * scale, height: svgHeight * scale }}
+      >
         {children}
       </div>
       {isProcess ? (

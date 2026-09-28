@@ -195,7 +195,7 @@ export function TankVisual({
           return (
             <div
               className="tank-visual-svg-wrap equipment-visual-svg-wrap"
-              style={{ width: svgWidth * scale, height: svgHeight * scale }}
+              style={isProcess ? undefined : { width: svgWidth * scale, height: svgHeight * scale }}
             >
               {svg}
             </div>
