@@ -10,6 +10,10 @@ import {
 } from '../../db/queries';
 import { buildEquipmentVisualData } from './equipment-visual-shared';
 import {
+  PROCESS_ITEM_WIDTH,
+  PROCESS_LABEL_BLOCK,
+  PROCESS_NODE_HEIGHT,
+  PROCESS_VISUAL_SLOT,
   computeFitToViewportTransform,
   computeMaxColumnsForViewport,
   computeProcessLayoutPlan,
@@ -335,6 +339,10 @@ export function ProcessEquipmentCanvas({
               width: canvasSize.width,
               height: canvasSize.height,
               transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`,
+              ['--process-item-width' as string]: `${PROCESS_ITEM_WIDTH}px`,
+              ['--process-node-height' as string]: `${PROCESS_NODE_HEIGHT}px`,
+              ['--process-visual-slot' as string]: `${PROCESS_VISUAL_SLOT}px`,
+              ['--process-label-block' as string]: `${PROCESS_LABEL_BLOCK}px`,
             }}
           >
             {stages.map(({ stage, items }, idx) => (

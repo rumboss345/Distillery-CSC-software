@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   PROCESS_GRID_SIZE,
+  PROCESS_NODE_HEIGHT,
+  PROCESS_STAGE_HEADER,
   clampEquipmentProcessPosition,
   clampProcessPositionToStage,
   computeProcessLayoutPlan,
@@ -116,5 +118,21 @@ describe('process slot layout', () => {
     });
     const keys = slots.map((s) => slotKey(s.col, s.row));
     expect(new Set(keys).size).toBe(items.length);
+  });
+
+  it('keeps each equipment card inside its stage section', () => {
+    const items = Array.from({ length: 6 }, (_, i) => ({
+      id: i + 1,
+      name: `Tank ${i + 1}`,
+      equipment_type: 'holding_tank',
+    })) as FloorEquipmentView[];
+
+    const plan = computeProcessLayoutPlan(items, 3);
+    const band = plan.stageBands[0];
+    expect(plan.positions.size).toBe(items.length);
+    for (const pos of plan.positions.values()) {
+      expect(pos.y).toBeGreaterThanOrEqual(band.top + PROCESS_STAGE_HEADER);
+      expect(pos.y + PROCESS_NODE_HEIGHT).toBeLessThanOrEqual(band.top + band.height);
+    }
   });
 });
