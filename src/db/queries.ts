@@ -4,6 +4,12 @@ import {
   packagingBottleCountsBySku,
   packagingInventoryAdjustments,
 } from '../lib/bottling-lines';
+import {
+  collectionVesselAcceptsIncomingCut,
+  collectionVesselCutMixMessage,
+  storedCutTypeFromInflows,
+  type StoredCutType,
+} from '../lib/collection-vessel-cuts';
 import { isFermenterSourcedRun, isTankSourcedRun, runUsesDestHoldingTank } from '../lib/distillation-run-types';
 import {
   chargeExceedsStillCapacity,
@@ -800,20 +806,73 @@ export function getCollectionVessels(): FloorEquipment[] {
   return onlyProductionUsable(getFloorEquipment().filter((e) => e.equipment_type === 'collection_vessel'));
 }
 
-/** Cut type already stored in a collection vessel (from distillation cuts with volume). */
+/** Cut type of the spirit still in the vessel. Empty vessels are not locked to a run or a cut. */
 export function getCollectionVesselStoredCutType(
   vesselId: number,
   excludeCutId?: number,
-): CutType | null {
-  const row = queryOne<{ cut_type: CutType }>(
-    `SELECT cut_type FROM distillation_cuts
+): StoredCutType | null {
+  let volume = getHoldingTankContents(vesselId).volume_gal;
+  if (excludeCutId) {
+    const excluded = queryOne<{ volume_gal: number; holding_tank_equipment_id: number | null }>(
+      'SELECT volume_gal, holding_tank_equipment_id FROM distillation_cuts WHERE id = ?',
+      [excludeCutId],
+    );
+    if (excluded?.holding_tank_equipment_id === vesselId) {
+      volume -= excluded.volume_gal;
+    }
+  }
+
+  const cuts = queryAll<{ cut_type: CutType; volume_gal: number; occurred_at: string }>(
+    `SELECT cut_type, volume_gal, start_time as occurred_at
+     FROM distillation_cuts
      WHERE holding_tank_equipment_id = ?
        AND volume_gal > 0
-       AND (? IS NULL OR id != ?)
-     LIMIT 1`,
+       AND (? IS NULL OR id != ?)`,
     [vesselId, excludeCutId ?? null, excludeCutId ?? 0],
   );
-  return row?.cut_type ?? null;
+  const transfers = queryAll<{
+    volume_gal: number;
+    occurred_at: string;
+    source_tank_equipment_id: number;
+  }>(
+    `SELECT volume_gal, transfer_date as occurred_at, source_tank_equipment_id
+     FROM holding_tank_transfers
+     WHERE dest_tank_equipment_id = ?
+       AND volume_gal > 0`,
+    [vesselId],
+  );
+
+  const inflows = [
+    ...cuts.map((cut) => ({
+      occurredAt: cut.occurred_at,
+      volumeGal: cut.volume_gal,
+      cutType: cut.cut_type as CutType,
+    })),
+    ...transfers.map((transfer) => ({
+      occurredAt: transfer.occurred_at,
+      volumeGal: transfer.volume_gal,
+      cutType: singleCutTypeOnEquipment(transfer.source_tank_equipment_id),
+    })),
+  ].sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
+
+  return storedCutTypeFromInflows(inflows, volume);
+}
+
+/** Cut type from cuts on a vessel, without following transfers (avoids a lookup loop). */
+function singleCutTypeOnEquipment(equipmentId: number): CutType | null {
+  const volume = getHoldingTankContents(equipmentId).volume_gal;
+  const cuts = queryAll<{ cut_type: CutType; volume_gal: number; occurred_at: string }>(
+    `SELECT cut_type, volume_gal, start_time as occurred_at
+     FROM distillation_cuts
+     WHERE holding_tank_equipment_id = ? AND volume_gal > 0
+     ORDER BY start_time DESC`,
+    [equipmentId],
+  );
+  const stored = storedCutTypeFromInflows(
+    cuts.map((cut) => ({ volumeGal: cut.volume_gal, cutType: cut.cut_type })),
+    volume,
+  );
+  return stored === 'mixed' || stored == null ? null : stored;
 }
 
 export function collectionVesselAcceptsCutType(
@@ -821,8 +880,10 @@ export function collectionVesselAcceptsCutType(
   cutType: CutType,
   excludeCutId?: number,
 ): boolean {
-  const stored = getCollectionVesselStoredCutType(vesselId, excludeCutId);
-  return stored == null || stored === cutType;
+  return collectionVesselAcceptsIncomingCut(
+    getCollectionVesselStoredCutType(vesselId, excludeCutId),
+    cutType,
+  );
 }
 
 /** Collection vessels that are empty or already hold this cut type only. */
@@ -1140,6 +1201,30 @@ function findCollectionVesselByKeywords(
   return match?.id ?? vessels[0]?.id ?? null;
 }
 
+function assertCollectionVesselCutTransfer(sourceId: number, destId: number): void {
+  if (!isCollectionVesselEquipmentId(destId)) return;
+  const destCut = getCollectionVesselStoredCutType(destId);
+  const sourceCut = getCollectionVesselStoredCutType(sourceId);
+  if (sourceCut === 'mixed') {
+    throw new Error(
+      'That source holds more than one cut. Do not transfer a mix of heads, hearts, and tails into a collection vessel.',
+    );
+  }
+  if (destCut === 'mixed') {
+    throw new Error(
+      'That collection vessel already holds more than one cut. Empty it before transferring into it.',
+    );
+  }
+  if (destCut && sourceCut && destCut !== sourceCut) {
+    throw new Error(collectionVesselCutMixMessage(destCut, sourceCut));
+  }
+  if (destCut && !sourceCut) {
+    throw new Error(
+      `This collection vessel already holds ${destCut}. Only transfer ${destCut} into it.`,
+    );
+  }
+}
+
 function isCollectionVesselEquipmentId(equipmentId: number): boolean {
   const row = queryOne<{ equipment_type: string }>(
     'SELECT equipment_type FROM floor_equipment WHERE id = ?',
@@ -1365,6 +1450,10 @@ export function saveHoldingTankTransfer(
   assertSpiritTransferVessel(transfer.dest_tank_equipment_id, 'destination');
   assertEquipmentUsableForProduction(transfer.source_tank_equipment_id, 'Source tank');
   assertEquipmentUsableForProduction(transfer.dest_tank_equipment_id, 'Destination tank');
+  assertCollectionVesselCutTransfer(
+    transfer.source_tank_equipment_id,
+    transfer.dest_tank_equipment_id,
+  );
   const available = getHoldingTankContents(transfer.source_tank_equipment_id);
   if (transfer.volume_gal > available.volume_gal + 0.01) {
     throw new Error(`Only ${available.volume_gal.toFixed(1)} gal available in the source tank.`);
@@ -2073,7 +2162,7 @@ export function saveDistillationCut(cut: Omit<DistillationCut, 'id'>, id?: numbe
       const stored = getCollectionVesselStoredCutType(cut.holding_tank_equipment_id, id);
       throw new Error(
         stored
-          ? `This collection vessel already contains ${stored} cuts. Choose another vessel for ${cut.cut_type}.`
+          ? collectionVesselCutMixMessage(stored, cut.cut_type)
           : `This collection vessel cannot accept ${cut.cut_type} cuts.`,
       );
     }
