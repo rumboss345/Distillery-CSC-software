@@ -1103,6 +1103,11 @@
 @media (max-width: 1100px) {
   .process-body {
     grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .process-viewport {
+    min-height: 22rem;
   }
 
   .process-sidebar {
@@ -1117,8 +1122,21 @@
     overflow-y: visible;
   }
 
-  .process-toolbar-hint,
-  .process-toolbar-links {
+  .process-toolbar-hint {
     display: none;
+  }
+
+  .process-toolbar-links {
+    flex: 1 1 100%;
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    order: 3;
+  }
+
+  .process-toolbar-link {
+    flex: 0 0 auto;
+    padding: 0.45rem 0.55rem;
   }
 }
