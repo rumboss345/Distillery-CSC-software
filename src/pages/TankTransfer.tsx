@@ -279,6 +279,9 @@ export function TankTransfer() {
                   return <option key={t.id} value={t.id}>{label}</option>;
                 })}
               </select>
+              <p className="field-hint">
+                A collection vessel can take spirit from any run, but not a different cut. Keep heads, hearts, and tails in separate vessels.
+              </p>
             </div>
             <div className="form-group full-width">
               <AbvVolumeTemperatureFields

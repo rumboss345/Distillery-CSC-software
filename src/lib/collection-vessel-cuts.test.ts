@@ -1,20 +1,40 @@
 import { describe, expect, it } from 'vitest';
-
-function vesselAcceptsCutType(stored: string | null, incoming: string): boolean {
-  return stored == null || stored === incoming;
-}
+import {
+  collectionVesselAcceptsIncomingCut,
+  storedCutTypeFromInflows,
+} from './collection-vessel-cuts';
 
 describe('collection vessel cut type rule', () => {
-  it('allows empty vessel for any cut type', () => {
-    expect(vesselAcceptsCutType(null, 'hearts')).toBe(true);
+  it('unlocks an empty vessel for any cut from any run', () => {
+    expect(storedCutTypeFromInflows(
+      [{ volumeGal: 40, cutType: 'hearts' }],
+      0,
+    )).toBeNull();
+    expect(collectionVesselAcceptsIncomingCut(null, 'tails')).toBe(true);
+    expect(collectionVesselAcceptsIncomingCut(null, 'heads')).toBe(true);
   });
 
-  it('allows same cut type as already stored', () => {
-    expect(vesselAcceptsCutType('hearts', 'hearts')).toBe(true);
+  it('keeps the cut that still fills the vessel', () => {
+    expect(storedCutTypeFromInflows(
+      [
+        { volumeGal: 20, cutType: 'tails' },
+        { volumeGal: 50, cutType: 'hearts' },
+      ],
+      20,
+    )).toBe('tails');
+    expect(collectionVesselAcceptsIncomingCut('tails', 'tails')).toBe(true);
+    expect(collectionVesselAcceptsIncomingCut('tails', 'hearts')).toBe(false);
   });
 
-  it('rejects mixing cut types in one vessel', () => {
-    expect(vesselAcceptsCutType('hearts', 'tails')).toBe(false);
-    expect(vesselAcceptsCutType('heads', 'hearts')).toBe(false);
+  it('rejects a vessel whose current gallons mix cut types', () => {
+    expect(storedCutTypeFromInflows(
+      [
+        { volumeGal: 20, cutType: 'tails' },
+        { volumeGal: 30, cutType: 'hearts' },
+      ],
+      50,
+    )).toBe('mixed');
+    expect(collectionVesselAcceptsIncomingCut('mixed', 'hearts')).toBe(false);
+    expect(collectionVesselAcceptsIncomingCut('heads', 'hearts')).toBe(false);
   });
 });

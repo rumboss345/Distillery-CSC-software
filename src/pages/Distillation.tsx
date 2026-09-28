@@ -705,7 +705,11 @@ export function Distillation() {
   const tankOptionLabel = (tank: { id: number; name: string; capacity_gal: number }) => {
     const contents = getHoldingTankContents(tank.id);
     const storedCut = getCollectionVesselStoredCutType(tank.id, editCutId);
-    const cutNote = storedCut ? ` · ${storedCut} only` : '';
+    const cutNote = storedCut === 'mixed'
+      ? ' · mixed cuts'
+      : storedCut
+        ? ` · holds ${storedCut}`
+        : '';
     if (contents.volume_gal <= 0) {
       return `${tank.name} (empty · ${tank.capacity_gal} gal cap${cutNote})`;
     }
@@ -1301,18 +1305,13 @@ export function Distillation() {
             </div>
           </div>
           <p className="form-hint">
-            {selectedRun?.run_type === 'low_wines' ? (
-              <>
-                On spirit runs, hearts and tails may go to <strong>High Wines Storage Tank</strong> or a collection vessel.
-                Heads may be discarded (no tank) or stored in a collection vessel.
-              </>
-            ) : (
-              <>
-                Hearts and tails must go to a collection vessel. Heads may be discarded (no tank) or stored in a collection vessel.
-                Each collection vessel may hold only one cut type at a time (heads, hearts, or tails).
-              </>
+            Any collection vessel can take cuts from a low wine run, spirit run, or heavy rum run.
+            A vessel can hold only one cut at a time — heads, hearts, or tails — including from later runs of the same cut.
+            Empty it before switching cuts.
+            {selectedRun?.run_type === 'low_wines' && (
+              <> Hearts and tails on a spirit run may also go to <strong>High Wines Storage Tank</strong>.</>
             )}
-            {' '}Transfer from collection vessels to holding tanks when ready.
+            {' '}Heads may be discarded with no vessel. Transfer from collection vessels to holding tanks when ready.
           </p>
           <div className="form-actions">
             <button type="button" className="btn btn-secondary" onClick={closeCutForm}>Cancel</button>
