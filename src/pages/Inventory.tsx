@@ -32,6 +32,7 @@ export function Inventory() {
   const [categoryName, setCategoryName] = useState('');
   const [categoryError, setCategoryError] = useState('');
   const [adjustAmount, setAdjustAmount] = useState('');
+  const [quantityInput, setQuantityInput] = useState('0');
   const [filter, setFilter] = useState<InventoryCategory | 'all'>('all');
 
   void key;
@@ -41,12 +42,14 @@ export function Inventory() {
   const openNew = () => {
     setEditId(undefined);
     setForm(emptyItem());
+    setQuantityInput('0');
     setShowForm(true);
   };
 
   const openEdit = (item: InventoryItem) => {
     setEditId(item.id);
     setForm({ ...item });
+    setQuantityInput(String(item.quantity));
     setShowForm(true);
   };
 
@@ -57,7 +60,11 @@ export function Inventory() {
   };
 
   const handleSave = () => {
-    saveInventoryItem(form, editId);
+    const quantity = parseFloat(quantityInput);
+    saveInventoryItem({
+      ...form,
+      quantity: Number.isFinite(quantity) ? quantity : 0,
+    }, editId);
     setShowForm(false);
     refresh();
   };
@@ -97,7 +104,7 @@ export function Inventory() {
     <div>
       <div className="page-header">
         <h2>Inventory</h2>
-        <p>Raw materials and supplies on hand</p>
+        <p>Raw materials and supplies. Counts can go below zero when a batch uses more than is on hand.</p>
         <div className="page-actions">
           <button className="btn btn-primary" onClick={openNew}>+ Add Item</button>
           <button className="btn btn-secondary" onClick={openNewCategory}>+ Add Category</button>
@@ -142,6 +149,7 @@ export function Inventory() {
             </thead>
             <tbody>
               {filtered.map((i) => {
+                const negative = i.quantity < 0;
                 const low = i.quantity <= i.reorder_level;
                 return (
                   <tr key={i.id}>
@@ -149,7 +157,13 @@ export function Inventory() {
                     <td>{i.category}</td>
                     <td className={low ? 'low-stock' : ''}>{i.quantity} {i.unit}</td>
                     <td>{i.reorder_level} {i.unit}</td>
-                    <td>{low ? <span className="badge badge-low-stock">Low Stock</span> : <span className="badge badge-complete">OK</span>}</td>
+                    <td>
+                      {negative
+                        ? <span className="badge badge-low-stock">Negative</span>
+                        : low
+                          ? <span className="badge badge-low-stock">Low Stock</span>
+                          : <span className="badge badge-complete">OK</span>}
+                    </td>
                     <td>{i.notes}</td>
                     <td className="td-actions">
                       <button className="btn btn-sm btn-secondary" onClick={() => { setShowAdjust(i.id); setAdjustAmount(''); }}>Adjust</button>
@@ -183,7 +197,12 @@ export function Inventory() {
             </div>
             <div className="form-group">
               <label>Quantity</label>
-              <input type="number" step="0.1" value={form.quantity || ''} onChange={(e) => setForm({ ...form, quantity: parseFloat(e.target.value) || 0 })} />
+              <input
+                type="number"
+                step="0.1"
+                value={quantityInput}
+                onChange={(e) => setQuantityInput(e.target.value)}
+              />
             </div>
             <div className="form-group">
               <label>Reorder Level</label>

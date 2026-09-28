@@ -396,47 +396,6 @@ export function MashFermentation() {
       }
     }
 
-    const previous = editId ? batches.find((b) => b.id === editId) : undefined;
-    const sugarItem = sugarItems.find((i) => i.name === form.grain_type);
-    const yeastItem = yeastItems.find((i) => i.name === form.yeast_strain);
-    const sugarNeeded = form.grain_lbs - (previous && previous.grain_type === form.grain_type ? previous.grain_lbs : 0);
-    const yeastNeeded = form.yeast_lbs - (previous && previous.yeast_strain === form.yeast_strain ? previous.yeast_lbs : 0);
-
-    if (sugarItem && sugarNeeded > sugarItem.quantity + 0.0001) {
-      if (!confirm(`${form.grain_type} inventory is ${sugarItem.quantity} ${sugarItem.unit}, but this batch uses ${form.grain_lbs} lbs. Save anyway?`)) {
-        return;
-      }
-    }
-    if (yeastItem && yeastNeeded > yeastItem.quantity + 0.0001) {
-      if (!confirm(`${form.yeast_strain} inventory is ${yeastItem.quantity} ${yeastItem.unit}, but this batch uses ${form.yeast_lbs} lbs. Save anyway?`)) {
-        return;
-      }
-    }
-
-    const prevNutrients = editId
-      ? getMashBatchNutrients(editId).map((n) => ({ name: n.name, lbs: n.lbs }))
-      : [];
-    const nutrientLbsByName = (rows: MashBatchNutrientInput[]) => {
-      const map = new Map<string, number>();
-      for (const row of rows) {
-        const name = row.name.trim();
-        if (!name || row.lbs <= 0) continue;
-        map.set(name, (map.get(name) ?? 0) + row.lbs);
-      }
-      return map;
-    };
-    const prevNutrientMap = nutrientLbsByName(prevNutrients);
-    const nextNutrientMap = nutrientLbsByName(batchNutrients);
-    for (const [name, nextLbs] of nextNutrientMap) {
-      const needed = nextLbs - (prevNutrientMap.get(name) ?? 0);
-      if (needed <= 0) continue;
-      const item = nutrientItems.find((i) => i.name === name);
-      if (item && needed > item.quantity + 0.0001) {
-        if (!confirm(`${name} inventory is ${item.quantity} ${item.unit}, but this batch needs ${needed.toFixed(2)} lbs more. Save anyway?`)) {
-          return;
-        }
-      }
-    }
     if (!form.assigned_user_id) {
       alert('Select the employee assigned to this wash batch.');
       return;

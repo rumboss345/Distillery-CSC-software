@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { BARREL_STOCK_CATEGORY, BARREL_STOCK_ITEM_NAME } from '../lib/barrel-inventory';
 import {
-  additionalPackagingNeeded,
   packagingBottleCountsBySku,
   packagingInventoryAdjustments,
 } from '../lib/bottling-lines';
@@ -315,25 +314,7 @@ function deductOneBarrelFromInventory(): void {
       `Inventory item "${BARREL_STOCK_ITEM_NAME}" was not found. Add it under the barrels category on Inventory.`,
     );
   }
-  if (item.quantity + 1e-9 < 1) {
-    throw new Error(
-      `Not enough empty barrels in inventory (${item.name}: ${item.quantity} on hand). Receive barrels on Inventory before adding a new barrel.`,
-    );
-  }
   adjustInventory(item.id, -1);
-}
-
-function assertPackagingInventoryAvailable(needBySku: Record<string, number>): void {
-  for (const [name, need] of Object.entries(needBySku)) {
-    if (need <= 0) continue;
-    const item = findInventoryItem('packaging', name);
-    if (!item) continue;
-    if (item.quantity + 1e-9 < need) {
-      throw new Error(
-        `Not enough ${name} in packaging inventory (on hand ${item.quantity}, need ${need} more for this bottling run).`,
-      );
-    }
-  }
 }
 
 function syncBottlingPackagingInventory(
@@ -342,7 +323,6 @@ function syncBottlingPackagingInventory(
 ): void {
   const prev = packagingBottleCountsBySku(previousLines);
   const next = packagingBottleCountsBySku(nextLines);
-  assertPackagingInventoryAvailable(additionalPackagingNeeded(prev, next));
   const adjustments = packagingInventoryAdjustments(prev, next);
   for (const [sku, delta] of Object.entries(adjustments)) {
     applyInventoryDelta('packaging', sku, delta);
@@ -3007,9 +2987,6 @@ export function executeBlendProduct(id: number, outputTankId: number): void {
         [ing.inventory_item_id],
       );
       if (!item) throw new Error(`Inventory item for ${ing.name} not found.`);
-      if (item.quantity < ing.amount - 0.001) {
-        throw new Error(`Insufficient ${item.name}: need ${ing.amount} ${ing.unit}, have ${item.quantity}.`);
-      }
       adjustInventory(ing.inventory_item_id, -ing.amount);
     }
   }
