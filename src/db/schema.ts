@@ -379,6 +379,20 @@ CREATE TABLE IF NOT EXISTS mash_fermenter_assignments (
 
 CREATE INDEX IF NOT EXISTS idx_mash_fermenter_mash ON mash_fermenter_assignments(mash_batch_id);
 CREATE INDEX IF NOT EXISTS idx_mash_fermenter_equipment ON mash_fermenter_assignments(floor_equipment_id);
+
+CREATE TABLE IF NOT EXISTS discarded_fermentations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  mash_batch_id INTEGER REFERENCES mash_batches(id),
+  source_fermenter_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
+  batch_number TEXT NOT NULL DEFAULT '',
+  fermenter_name TEXT NOT NULL DEFAULT '',
+  volume_gal REAL NOT NULL,
+  discarded_date TEXT NOT NULL,
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_discarded_fermentations_date ON discarded_fermentations(discarded_date);
 `;
 
 export const SEED_DATA = `

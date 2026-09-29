@@ -228,6 +228,9 @@ export function ProcessEquipmentDetailPanel({
                 <Link className="btn btn-sm btn-secondary" to={`/distillation?chargeFermenter=${equipment.id}&runType=heavy_rum`}>
                   Heavy rum
                 </Link>
+                <Link className="btn btn-sm btn-secondary" to={`/tank-transfer?source=${equipment.id}`}>
+                  Transfer
+                </Link>
               </>
             )}
             {isTransferVessel && hasLiquid && (

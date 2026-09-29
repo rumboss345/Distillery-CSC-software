@@ -7,17 +7,23 @@ import { correctedAbvFromInputs } from '../components/AbvTemperatureInput';
 import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
 import {
+  deleteDiscardedFermentation,
   deleteHoldingTankTransfer,
   getCollectionVesselStoredCutType,
+  getDiscardedFermentations,
+  getFermentersWithWash,
+  getFermenterTransferDestinations,
   getFloorEquipment,
   getHoldingTankContents,
   getHoldingTankIntakeHistory,
   getHoldingTankTransfers,
   getSpiritTransferVessels,
+  saveFermenterWashTransfer,
   saveHoldingTankTransfer,
   useRefreshKey,
 } from '../db/queries';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
+import { DISCARD_DESTINATION, fermenterTransferError } from '../lib/fermenter-transfer';
 const sourceTankVolumeGal = (tankId: number) => {
   if (!tankId) return 0;
   const contents = getHoldingTankContents(tankId);
@@ -43,6 +49,14 @@ const emptyTransferForm = () => ({
   notes: '',
 });
 
+const emptyFermenterForm = () => ({
+  source_equipment_id: 0,
+  dest_equipment_id: 0,
+  volume_gal: 0,
+  transfer_date: new Date().toISOString().slice(0, 10),
+  notes: '',
+});
+
 export function TankTransfer() {
   const [searchParams, setSearchParams] = useSearchParams();
   const calendarPlanHandled = useRef(false);
@@ -55,8 +69,12 @@ export function TankTransfer() {
       ...getHoldingTankContents(tank.id),
     }));
   const tankTransfers = getHoldingTankTransfers();
+  const fermentersWithWash = getFermentersWithWash();
+  const discardedFermentations = getDiscardedFermentations();
   const [showTransferForm, setShowTransferForm] = useState(false);
   const [transferForm, setTransferForm] = useState(emptyTransferForm);
+  const [showFermenterForm, setShowFermenterForm] = useState(false);
+  const [fermenterForm, setFermenterForm] = useState(emptyFermenterForm);
 
   void key;
 
@@ -118,6 +136,19 @@ export function TankTransfer() {
     setShowTransferForm(true);
   };
 
+  const openFermenterTransfer = (
+    fermenter: { floor_equipment_id: number; volume_gal: number },
+    transferDate?: string,
+  ) => {
+    setFermenterForm({
+      ...emptyFermenterForm(),
+      source_equipment_id: fermenter.floor_equipment_id,
+      volume_gal: fermenter.volume_gal,
+      transfer_date: transferDate ?? emptyFermenterForm().transfer_date,
+    });
+    setShowFermenterForm(true);
+  };
+
   useEffect(() => {
     if (calendarPlanHandled.current) return;
     const sourceId = parseInt(searchParams.get('source') ?? '', 10);
@@ -126,21 +157,28 @@ export function TankTransfer() {
     const fromCalendar = Boolean(plan?.transfer);
     if (!fromSource && !fromCalendar) return;
     calendarPlanHandled.current = true;
-    let form = {
-      ...emptyTransferForm(),
-      transfer_date: plan?.date ?? emptyTransferForm().transfer_date,
-    };
-    if (fromSource) {
-      form = applySourceTankToForm(form, sourceId);
-    } else if (sourceTanksForTransfer.length === 1) {
-      form = applySourceTankToForm(form, sourceTanksForTransfer[0].id);
+    const fermenter = fromSource
+      ? fermentersWithWash.find((item) => item.floor_equipment_id === sourceId)
+      : undefined;
+    if (fermenter) {
+      openFermenterTransfer(fermenter, plan?.date || undefined);
+    } else {
+      let form = {
+        ...emptyTransferForm(),
+        transfer_date: plan?.date ?? emptyTransferForm().transfer_date,
+      };
+      if (fromSource) {
+        form = applySourceTankToForm(form, sourceId);
+      } else if (sourceTanksForTransfer.length === 1) {
+        form = applySourceTankToForm(form, sourceTanksForTransfer[0].id);
+      }
+      setTransferForm(form);
+      setShowTransferForm(true);
     }
-    setTransferForm(form);
-    setShowTransferForm(true);
     const next = stripCalendarPlanQuery(searchParams);
     next.delete('source');
     setSearchParams(next, { replace: true });
-  }, [searchParams, setSearchParams, sourceTanksForTransfer]);
+  }, [searchParams, setSearchParams, sourceTanksForTransfer, fermentersWithWash]);
 
   const handleSourceTankChange = (tankId: number) => {
     setTransferForm((prev) => applySourceTankToForm(prev, tankId));
@@ -205,16 +243,188 @@ export function TankTransfer() {
     }
   };
 
+  const selectedFermenter = fermentersWithWash.find(
+    (item) => item.floor_equipment_id === fermenterForm.source_equipment_id,
+  );
+  const fermenterDestinations = selectedFermenter
+    ? getFermenterTransferDestinations(
+      selectedFermenter.floor_equipment_id,
+      selectedFermenter.mash_batch_id,
+    )
+    : [];
+
+  const handleFermenterSourceChange = (equipmentId: number) => {
+    const source = fermentersWithWash.find((item) => item.floor_equipment_id === equipmentId);
+    setFermenterForm((prev) => ({
+      ...prev,
+      source_equipment_id: equipmentId,
+      dest_equipment_id: prev.dest_equipment_id === equipmentId ? 0 : prev.dest_equipment_id,
+      volume_gal: source?.volume_gal ?? 0,
+    }));
+  };
+
+  const handleSaveFermenterTransfer = () => {
+    if (!selectedFermenter) {
+      alert('Select the fermenter.');
+      return;
+    }
+    const discarded = fermenterForm.dest_equipment_id === DISCARD_DESTINATION;
+    const dest = fermenterDestinations.find((item) => item.id === fermenterForm.dest_equipment_id);
+    if (!discarded && !dest) {
+      alert('Choose another fermenter, or discard the wash.');
+      return;
+    }
+    const error = fermenterTransferError({
+      volumeGal: fermenterForm.volume_gal,
+      availableGal: selectedFermenter.volume_gal,
+      discarded,
+      destId: discarded ? null : dest?.id ?? null,
+      sourceId: selectedFermenter.floor_equipment_id,
+      destType: discarded ? null : 'fermenter',
+      destName: dest?.name,
+      destVolumeGal: dest?.volume_gal ?? 0,
+      destCapacityGal: dest?.capacity_gal ?? 0,
+    });
+    if (error) {
+      alert(error);
+      return;
+    }
+    try {
+      saveFermenterWashTransfer({
+        sourceEquipmentId: selectedFermenter.floor_equipment_id,
+        destEquipmentId: discarded ? null : dest?.id ?? null,
+        discarded,
+        volumeGal: fermenterForm.volume_gal,
+        transferDate: fermenterForm.transfer_date,
+        notes: fermenterForm.notes,
+      });
+      setShowFermenterForm(false);
+      refresh();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Could not transfer fermenter wash.');
+    }
+  };
+
+  const handleDeleteDiscard = (id: number) => {
+    if (confirm('Delete this discarded fermentation? The gallons go back into the fermenter when it is empty or still holds this wash.')) {
+      try {
+        deleteDiscardedFermentation(id);
+        refresh();
+      } catch (err) {
+        alert(err instanceof Error ? err.message : 'Could not delete this discard.');
+      }
+    }
+  };
+
   return (
     <div>
       <div className="page-header">
         <h2>Tank Transfer</h2>
-        <p>Move spirit between holding tanks and collection vessels. Source volume is reduced and destination volume increases.</p>
+        <p>Move spirit between holding tanks and collection vessels. Fermenter wash moves only to another fermenter, or can be discarded without emptying the fermenter.</p>
         <div className="page-actions">
           <button type="button" className="btn btn-primary" onClick={() => openTransferForm()}>
             + New Transfer
           </button>
         </div>
+      </div>
+
+      <div className="detail-panel">
+        <h4>Fermenters</h4>
+        <p className="field-hint" style={{ marginTop: '-0.5rem' }}>
+          Select a fermenter with wash to move some or all of it to another fermenter, or discard it.
+        </p>
+        {fermentersWithWash.length === 0 ? (
+          <p style={{ color: 'var(--text-muted)' }}>No fermenters currently hold wash.</p>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Fermenter</th>
+                  <th>Wash</th>
+                  <th>Volume</th>
+                  <th>Brix</th>
+                  <th>Capacity</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {fermentersWithWash.map((fermenter) => (
+                  <tr
+                    key={`${fermenter.mash_batch_id}-${fermenter.floor_equipment_id}`}
+                    onClick={() => openFermenterTransfer(fermenter)}
+                    style={{ cursor: 'pointer' }}
+                    title={`Transfer from ${fermenter.equipment_name}`}
+                  >
+                    <td><strong>{fermenter.equipment_name}</strong></td>
+                    <td>{fermenter.batch_number} · {fermenter.recipe_name}</td>
+                    <td>{fermenter.volume_gal.toFixed(1)} gal</td>
+                    <td>{fermenter.latest_brix != null ? `${fermenter.latest_brix.toFixed(1)}°` : '—'}</td>
+                    <td>{fermenter.capacity_gal > 0 ? `${fermenter.capacity_gal} gal` : '—'}</td>
+                    <td>
+                      <StatusBadge
+                        status={fermenter.status === 'cleaning' || fermenter.status === 'offline'
+                          ? fermenter.status
+                          : 'in_use'}
+                      />
+                    </td>
+                    <td className="td-actions">
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-secondary"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openFermenterTransfer(fermenter);
+                        }}
+                      >
+                        Transfer
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="detail-panel">
+        <h4>Discarded fermentations</h4>
+        {discardedFermentations.length === 0 ? (
+          <p style={{ color: 'var(--text-muted)' }}>No discarded fermentations recorded yet.</p>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Fermenter</th>
+                  <th>Wash</th>
+                  <th>Volume</th>
+                  <th>Notes</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {discardedFermentations.map((row) => (
+                  <tr key={row.id}>
+                    <td>{format(new Date(row.discarded_date), 'MMM d, yyyy')}</td>
+                    <td>{row.fermenter_name}</td>
+                    <td>{row.batch_number || '—'}</td>
+                    <td>{row.volume_gal.toFixed(1)} gal</td>
+                    <td>{row.notes || '—'}</td>
+                    <td>
+                      <button type="button" className="btn btn-sm btn-ghost" onClick={() => handleDeleteDiscard(row.id)}>
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <div className="detail-panel">
@@ -421,6 +631,102 @@ export function TankTransfer() {
           <div className="form-actions">
             <button type="button" className="btn btn-secondary" onClick={() => setShowTransferForm(false)}>Cancel</button>
             <button type="button" className="btn btn-primary" onClick={handleSaveTransfer}>Transfer</button>
+          </div>
+        </Modal>
+      )}
+
+      {showFermenterForm && (
+        <Modal title="Transfer fermenter wash" onClose={() => setShowFermenterForm(false)}>
+          <div className="form-grid">
+            <div className="form-group">
+              <label>Transfer Date</label>
+              <DatePicker
+                value={fermenterForm.transfer_date}
+                onChange={(transfer_date) => setFermenterForm({ ...fermenterForm, transfer_date })}
+              />
+            </div>
+            <div className="form-group full-width">
+              <label>From Fermenter</label>
+              <select
+                value={fermenterForm.source_equipment_id || ''}
+                onChange={(e) => handleFermenterSourceChange(e.target.value ? parseInt(e.target.value, 10) : 0)}
+              >
+                <option value="">— Select fermenter —</option>
+                {fermentersWithWash.map((fermenter) => (
+                  <option key={fermenter.floor_equipment_id} value={fermenter.floor_equipment_id}>
+                    {fermenter.equipment_name} — {fermenter.volume_gal.toFixed(1)} gal · {fermenter.batch_number}
+                  </option>
+                ))}
+              </select>
+              {selectedFermenter && (
+                <p className="field-hint">
+                  In fermenter: {selectedFermenter.volume_gal.toFixed(1)} gal of {selectedFermenter.batch_number}
+                  {selectedFermenter.latest_brix != null ? ` · ${selectedFermenter.latest_brix.toFixed(1)}° Brix` : ''}
+                </p>
+              )}
+            </div>
+            <div className="form-group full-width">
+              <label>To</label>
+              <select
+                value={fermenterForm.dest_equipment_id ? String(fermenterForm.dest_equipment_id) : ''}
+                onChange={(e) => setFermenterForm({
+                  ...fermenterForm,
+                  dest_equipment_id: e.target.value ? parseInt(e.target.value, 10) : 0,
+                })}
+              >
+                <option value="">— Select destination —</option>
+                <option value={String(DISCARD_DESTINATION)}>Discarded</option>
+                {fermenterDestinations.map((dest) => {
+                  const label = dest.volume_gal > 0.01
+                    ? `${dest.name} (${dest.volume_gal.toFixed(1)} gal · ${dest.batch_number ?? 'same wash'})`
+                    : `${dest.name} (empty${dest.capacity_gal > 0 ? ` · ${dest.capacity_gal} gal cap` : ''})`;
+                  return <option key={dest.id} value={String(dest.id)}>{label}</option>;
+                })}
+              </select>
+              <p className="field-hint">
+                Wash moves only to another fermenter, or it is discarded. The fermenter does not have to be emptied.
+              </p>
+            </div>
+            <div className="form-group">
+              <label>Volume (gal)</label>
+              <input
+                type="number"
+                min={0}
+                step="0.1"
+                value={fermenterForm.volume_gal || ''}
+                onChange={(e) => setFermenterForm({
+                  ...fermenterForm,
+                  volume_gal: e.target.value === '' ? 0 : parseFloat(e.target.value),
+                })}
+              />
+              {selectedFermenter && (
+                <button
+                  type="button"
+                  className="btn btn-sm btn-ghost"
+                  style={{ marginTop: '0.35rem' }}
+                  onClick={() => setFermenterForm({
+                    ...fermenterForm,
+                    volume_gal: selectedFermenter.volume_gal,
+                  })}
+                >
+                  Use full fermenter ({selectedFermenter.volume_gal.toFixed(1)} gal)
+                </button>
+              )}
+            </div>
+            <div className="form-group full-width">
+              <label>Notes</label>
+              <input
+                value={fermenterForm.notes}
+                onChange={(e) => setFermenterForm({ ...fermenterForm, notes: e.target.value })}
+                placeholder="Optional"
+              />
+            </div>
+          </div>
+          <div className="form-actions">
+            <button type="button" className="btn btn-secondary" onClick={() => setShowFermenterForm(false)}>Cancel</button>
+            <button type="button" className="btn btn-primary" onClick={handleSaveFermenterTransfer}>
+              {fermenterForm.dest_equipment_id === DISCARD_DESTINATION ? 'Discard' : 'Transfer'}
+            </button>
           </div>
         </Modal>
       )}
