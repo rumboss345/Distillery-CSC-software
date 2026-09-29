@@ -509,6 +509,8 @@ export interface BlendFormulaVersion {
 
 export interface ProductionSummary {
   activeMashes: number;
+  /** Fermenters currently holding a fermenting wash. One fermenter counts as one. */
+  activeFermentations: number;
   activeRuns: number;
   barrelsAging: number;
   totalHeartsGal: number;

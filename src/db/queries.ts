@@ -25,7 +25,7 @@ import {
   maintenanceStatusLabel,
 } from '../lib/equipment-maintenance';
 import { equipmentCleaningStatusLabel, equipmentNeedsCleaning, equipmentStatusWhenReturningToPlanned } from '../lib/equipment-cleaning';
-import { fermenterShowsAssignedWash } from '../lib/mash-fermenter-fill';
+import { countActiveFermentations, fermenterShowsAssignedWash } from '../lib/mash-fermenter-fill';
 import { eventDateWhenLeavingPlanned } from '../lib/planned-event-date';
 import { normalizeNutrientUnit, nutrientAmountInUnit } from '../lib/wash-recipe-nutrients';
 import type {
@@ -3433,6 +3433,22 @@ export function getProductionSummary(reportMonth?: string): ProductionSummary {
     "SELECT COUNT(*) as count FROM mash_batches WHERE status IN ('mashing', 'fermenting')",
   )?.count ?? 0;
 
+  const activeFermentations = countActiveFermentations(queryAll<{
+    equipment_id: number;
+    volume_gal: number;
+    status: string;
+  }>(`
+    SELECT a.floor_equipment_id as equipment_id, a.volume_gal, m.status
+    FROM mash_fermenter_assignments a
+    JOIN mash_batches m ON m.id = a.mash_batch_id
+    JOIN floor_equipment fe ON fe.id = a.floor_equipment_id
+    WHERE fe.equipment_type = 'fermenter'
+  `).map((row) => ({
+    equipmentId: row.equipment_id,
+    volumeGal: row.volume_gal,
+    status: row.status,
+  })));
+
   const activeRuns = queryOne<{ count: number }>(
     "SELECT COUNT(*) as count FROM distillation_runs WHERE status IN ('planned', 'running')",
   )?.count ?? 0;
@@ -3475,7 +3491,7 @@ export function getProductionSummary(reportMonth?: string): ProductionSummary {
     'SELECT COUNT(*) as count FROM inventory_items WHERE quantity <= reorder_level',
   )?.count ?? 0;
 
-  return { activeMashes, activeRuns, barrelsAging, totalHeartsGal, bottlesThisMonth, lowStockItems };
+  return { activeMashes, activeFermentations, activeRuns, barrelsAging, totalHeartsGal, bottlesThisMonth, lowStockItems };
 }
 
 export function getYieldReports(reportMonth?: string): YieldReport[] {
