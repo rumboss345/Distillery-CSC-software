@@ -46,8 +46,8 @@ export function Dashboard() {
       <div className="card-grid">
         <div className="stat-card">
           <div className="label">Active Fermentations</div>
-          <div className="value accent">{summary.activeMashes}</div>
-          <div className="sub">Wash batches in progress</div>
+          <div className="value accent">{summary.activeFermentations}</div>
+          <div className="sub">One per fermenter</div>
         </div>
         <div className="stat-card">
           <div className="label">Distillation Runs</div>
