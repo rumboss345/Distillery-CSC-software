@@ -11,7 +11,10 @@ import { BlendRecipesTab } from '../components/BlendRecipesTab';
 import { useAuth } from '../context/AuthContext';
 import {
   emptyRecipeNutrient,
+  formatRecipeNutrientLine,
   formatRecipeNutrientsSummary,
+  NUTRIENT_UNITS,
+  normalizeNutrientUnit,
 } from '../lib/wash-recipe-nutrients';
 import type { Recipe, RecipeNutrientInput } from '../types';
 
@@ -210,7 +213,7 @@ export function Recipes() {
                   {selected.nutrients.length
                     ? selected.nutrients.map((n) => (
                       <div key={n.id}>
-                        {n.name || '—'} — {n.amount} lbs
+                        {formatRecipeNutrientLine(n)}
                       </div>
                     ))
                     : '—'}
@@ -327,14 +330,32 @@ export function Recipes() {
                     </select>
                   </div>
                   <div className="form-group">
-                    <label>{index === 0 ? 'Nutrient (lbs)' : `Nutrient ${index + 1} (lbs)`}</label>
+                    <label>Amount</label>
                     <input
                       type="number"
                       min="0"
-                      step="0.1"
+                      step="any"
                       value={row.amount || ''}
                       onChange={(e) => updateNutrient(index, { amount: parseFloat(e.target.value) || 0 })}
                     />
+                  </div>
+                  <div className="form-group">
+                    <label>Unit</label>
+                    <select
+                      value={normalizeNutrientUnit(row.unit)}
+                      onChange={(e) => updateNutrient(index, { unit: e.target.value })}
+                    >
+                      <optgroup label="Weight">
+                        {NUTRIENT_UNITS.filter((unit) => unit.kind === 'weight').map((unit) => (
+                          <option key={unit.value} value={unit.value}>{unit.label}</option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Volume">
+                        {NUTRIENT_UNITS.filter((unit) => unit.kind === 'volume').map((unit) => (
+                          <option key={unit.value} value={unit.value}>{unit.label}</option>
+                        ))}
+                      </optgroup>
+                    </select>
                   </div>
                 </div>
                 <button
@@ -354,6 +375,9 @@ export function Recipes() {
               >
                 + Add nutrient
               </button>
+              <p className="field-hint">
+                Measure each nutrient by weight (lbs, oz, grams, kg) or volume (ml, L).
+              </p>
             </div>
 
             <div className="form-group">

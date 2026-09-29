@@ -150,15 +150,16 @@ export interface RecipeView extends Recipe {
   nutrients: RecipeNutrient[];
 }
 
-/** Yeast-style nutrient line on a wash batch (name + lbs). */
+/** Nutrient line on a wash batch. `amount` is stored in the `lbs` column. */
 export interface MashBatchNutrient {
   id: number;
   mash_batch_id: number;
   name: string;
-  lbs: number;
+  amount: number;
+  unit: string;
 }
 
-export type MashBatchNutrientInput = Pick<MashBatchNutrient, 'name' | 'lbs'>;
+export type MashBatchNutrientInput = Pick<MashBatchNutrient, 'name' | 'amount' | 'unit'>;
 
 export interface MashBatch {
   id: number;

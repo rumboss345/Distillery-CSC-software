@@ -35,6 +35,8 @@ import {
   emptyMashBatchNutrient,
   formatMashBatchNutrientsSummary,
   formatRecipeNutrientsSummary,
+  NUTRIENT_UNITS,
+  normalizeNutrientUnit,
   recipeNutrientsToBatchInputs,
 } from '../lib/wash-recipe-nutrients';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
@@ -349,7 +351,7 @@ export function MashFermentation() {
     setEditId(batch.id);
     setForm({ ...batch, yeast_lbs: batch.yeast_lbs ?? 0 });
     setBatchNutrients(
-      getMashBatchNutrients(batch.id).map((n) => ({ name: n.name, lbs: n.lbs })),
+      getMashBatchNutrients(batch.id).map((n) => ({ name: n.name, amount: n.amount, unit: n.unit })),
     );
     loadFermenterForm(batch.id);
     setShowForm(true);
@@ -873,18 +875,39 @@ export function MashFermentation() {
                     </select>
                   </div>
                   <div className="form-group">
-                    <label>{index === 0 ? 'Nutrient (lbs)' : `Nutrient ${index + 1} (lbs)`}</label>
+                    <label>Amount</label>
                     <input
                       type="number"
                       min="0"
-                      step="0.01"
-                      value={row.lbs || ''}
+                      step="any"
+                      value={row.amount || ''}
                       onChange={(e) => {
-                        const lbs = parseFloat(e.target.value) || 0;
-                        setBatchNutrients((prev) => prev.map((n, i) => (i === index ? { ...n, lbs } : n)));
+                        const amount = parseFloat(e.target.value) || 0;
+                        setBatchNutrients((prev) => prev.map((n, i) => (i === index ? { ...n, amount } : n)));
                       }}
                       placeholder="5"
                     />
+                  </div>
+                  <div className="form-group">
+                    <label>Unit</label>
+                    <select
+                      value={normalizeNutrientUnit(row.unit)}
+                      onChange={(e) => {
+                        const unit = e.target.value;
+                        setBatchNutrients((prev) => prev.map((n, i) => (i === index ? { ...n, unit } : n)));
+                      }}
+                    >
+                      <optgroup label="Weight">
+                        {NUTRIENT_UNITS.filter((unit) => unit.kind === 'weight').map((unit) => (
+                          <option key={unit.value} value={unit.value}>{unit.label}</option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Volume">
+                        {NUTRIENT_UNITS.filter((unit) => unit.kind === 'volume').map((unit) => (
+                          <option key={unit.value} value={unit.value}>{unit.label}</option>
+                        ))}
+                      </optgroup>
+                    </select>
                   </div>
                 </div>
                 <button
