@@ -1,3 +1,13 @@
+/** A planned run does not occupy the still. Only a running run does. */
+export function stillRunOccupiesEquipment(status: string): boolean {
+  return status === 'running';
+}
+
+/** Wash and tank draws happen when a run is running or already complete, not while it is only planned. */
+export function runConsumesSource(status: string): boolean {
+  return status === 'running' || status === 'complete';
+}
+
 /** True when charge volume exceeds the still's rated capacity. */
 export function chargeExceedsStillCapacity(
   chargeGal: number,
