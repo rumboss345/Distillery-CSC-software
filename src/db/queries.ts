@@ -28,6 +28,7 @@ import {
 import { equipmentCleaningStatusLabel, equipmentNeedsCleaning, equipmentStatusWhenReturningToPlanned } from '../lib/equipment-cleaning';
 import { countActiveFermentations, fermenterShowsAssignedWash } from '../lib/mash-fermenter-fill';
 import { eventDateWhenLeavingPlanned } from '../lib/planned-event-date';
+import { DISCARD_DESTINATION, fermenterTransferError } from '../lib/fermenter-transfer';
 import { persistedStillage, stillageSaveError } from '../lib/stillage';
 import { normalizeNutrientUnit, nutrientAmountInUnit } from '../lib/wash-recipe-nutrients';
 import type {
@@ -60,6 +61,7 @@ import type {
   DistillationCutView,
   HoldingTankContents,
   HoldingTankIntakeEntry,
+  DiscardedFermentation,
   HoldingTankTransfer,
   HoldingTankTransferView,
   DistillationRun,
@@ -1605,6 +1607,305 @@ export function saveHoldingTankTransfer(
 export function deleteHoldingTankTransfer(id: number): void {
   runQuery('DELETE FROM holding_tank_transfers WHERE id = ?', [id]);
   syncHoldingTankStatuses();
+}
+
+export interface FermenterWithWash extends FermenterWashSourceOption {
+  capacity_gal: number;
+  status: FloorEquipment['status'];
+  latest_brix: number | null;
+}
+
+/** Fermenters that still hold fermenting or finished wash. */
+export function getFermentersWithWash(): FermenterWithWash[] {
+  const rows = queryAll<{
+    id: number;
+    mash_batch_id: number;
+    floor_equipment_id: number;
+    volume_gal: number;
+    equipment_name: string;
+    capacity_gal: number;
+    status: FloorEquipment['status'];
+    batch_number: string;
+    recipe_name: string;
+  }>(`
+    SELECT a.id, a.mash_batch_id, a.floor_equipment_id, a.volume_gal,
+           fe.name as equipment_name, fe.capacity_gal, fe.status,
+           m.batch_number, m.recipe_name
+    FROM mash_fermenter_assignments a
+    JOIN mash_batches m ON m.id = a.mash_batch_id
+    JOIN floor_equipment fe ON fe.id = a.floor_equipment_id
+    WHERE a.volume_gal > 0.01
+      AND m.status IN ('fermenting', 'complete')
+      AND fe.equipment_type = 'fermenter'
+    ORDER BY fe.name COLLATE NOCASE, m.batch_number COLLATE NOCASE
+  `);
+  return rows.map((row) => ({
+    ...row,
+    latest_brix: getLatestFermentationBrix(row.mash_batch_id, row.floor_equipment_id),
+  }));
+}
+
+export interface FermenterTransferDestination {
+  id: number;
+  name: string;
+  capacity_gal: number;
+  volume_gal: number;
+  batch_number: string | null;
+}
+
+/** Empty fermenters, or fermenters already holding this same wash. */
+export function getFermenterTransferDestinations(
+  sourceEquipmentId: number,
+  mashBatchId: number,
+): FermenterTransferDestination[] {
+  const fermenters = queryAll<FloorEquipment>(
+    `SELECT * FROM floor_equipment
+     WHERE equipment_type = 'fermenter' AND id != ?
+     ORDER BY name COLLATE NOCASE`,
+    [sourceEquipmentId],
+  );
+  const destinations: FermenterTransferDestination[] = [];
+  for (const fermenter of fermenters) {
+    if (fermenter.status === 'offline') continue;
+    if (equipmentNeedsCleaning(fermenter) || equipmentBlocksProduction(fermenter)) continue;
+    const other = queryOne<{ id: number }>(
+      `SELECT a.id FROM mash_fermenter_assignments a
+       WHERE a.floor_equipment_id = ? AND a.mash_batch_id != ? AND a.volume_gal > 0.01
+       LIMIT 1`,
+      [fermenter.id, mashBatchId],
+    );
+    if (other) continue;
+    const same = queryOne<{ volume_gal: number; batch_number: string }>(
+      `SELECT a.volume_gal, m.batch_number
+       FROM mash_fermenter_assignments a
+       JOIN mash_batches m ON m.id = a.mash_batch_id
+       WHERE a.floor_equipment_id = ? AND a.mash_batch_id = ?`,
+      [fermenter.id, mashBatchId],
+    );
+    destinations.push({
+      id: fermenter.id,
+      name: fermenter.name,
+      capacity_gal: fermenter.capacity_gal,
+      volume_gal: same?.volume_gal ?? 0,
+      batch_number: same?.batch_number ?? null,
+    });
+  }
+  return destinations;
+}
+
+export function getDiscardedFermentations(): DiscardedFermentation[] {
+  return queryAll(
+    `SELECT * FROM discarded_fermentations
+     ORDER BY discarded_date DESC, id DESC`,
+  );
+}
+
+/** Move wash to another fermenter, or record a partial or full discard. */
+export function saveFermenterWashTransfer(input: {
+  sourceEquipmentId: number;
+  destEquipmentId: number | null;
+  discarded: boolean;
+  volumeGal: number;
+  transferDate: string;
+  notes: string;
+}): void {
+  const sources = queryAll<{
+    id: number;
+    mash_batch_id: number;
+    volume_gal: number;
+    batch_number: string;
+    fermenter_name: string;
+  }>(`
+    SELECT a.id, a.mash_batch_id, a.volume_gal, m.batch_number,
+           fe.name as fermenter_name
+    FROM mash_fermenter_assignments a
+    JOIN mash_batches m ON m.id = a.mash_batch_id
+    JOIN floor_equipment fe ON fe.id = a.floor_equipment_id
+    WHERE a.floor_equipment_id = ?
+      AND a.volume_gal > 0.01
+      AND m.status IN ('fermenting', 'complete')
+      AND fe.equipment_type = 'fermenter'
+  `, [input.sourceEquipmentId]);
+  if (sources.length === 0) {
+    throw new Error('This fermenter has no wash to transfer.');
+  }
+  if (sources.length > 1) {
+    throw new Error('This fermenter holds more than one wash.');
+  }
+  const source = sources[0];
+  const discarded = input.discarded || input.destEquipmentId === DISCARD_DESTINATION;
+
+  let dest: FloorEquipment | null = null;
+  let destVolume = 0;
+  let destHoldsOtherMash = false;
+  if (!discarded && input.destEquipmentId) {
+    dest = queryOne<FloorEquipment>(
+      'SELECT * FROM floor_equipment WHERE id = ?',
+      [input.destEquipmentId],
+    );
+    if (dest) {
+      destHoldsOtherMash = !!queryOne<{ id: number }>(
+        `SELECT id FROM mash_fermenter_assignments
+         WHERE floor_equipment_id = ? AND mash_batch_id != ? AND volume_gal > 0.01
+         LIMIT 1`,
+        [dest.id, source.mash_batch_id],
+      );
+      destVolume = queryOne<{ volume_gal: number }>(
+        `SELECT volume_gal FROM mash_fermenter_assignments
+         WHERE floor_equipment_id = ? AND mash_batch_id = ?`,
+        [dest.id, source.mash_batch_id],
+      )?.volume_gal ?? 0;
+    }
+  }
+
+  const error = fermenterTransferError({
+    volumeGal: input.volumeGal,
+    availableGal: source.volume_gal,
+    discarded,
+    destId: discarded ? null : input.destEquipmentId,
+    sourceId: input.sourceEquipmentId,
+    destType: dest?.equipment_type ?? null,
+    destName: dest?.name,
+    destHoldsOtherMash,
+    destVolumeGal: destVolume,
+    destCapacityGal: dest?.capacity_gal,
+    destNeedsCleaning: dest ? equipmentNeedsCleaning(dest) : false,
+    destBlocked: dest ? equipmentBlocksProduction(dest) : false,
+    destOffline: dest?.status === 'offline',
+  });
+  if (error) throw new Error(error);
+  if (!input.transferDate.trim()) {
+    throw new Error('Enter the transfer date.');
+  }
+
+  const remaining = source.volume_gal - input.volumeGal;
+  if (remaining <= 0.01) {
+    releaseFermenterForMash(source.mash_batch_id, input.sourceEquipmentId);
+  } else {
+    runQuery(
+      'UPDATE mash_fermenter_assignments SET volume_gal = ? WHERE id = ?',
+      [remaining, source.id],
+    );
+  }
+
+  if (discarded) {
+    insertRow(
+      `INSERT INTO discarded_fermentations
+        (mash_batch_id, source_fermenter_equipment_id, batch_number, fermenter_name, volume_gal, discarded_date, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        source.mash_batch_id,
+        input.sourceEquipmentId,
+        source.batch_number,
+        source.fermenter_name,
+        input.volumeGal,
+        input.transferDate,
+        input.notes.trim(),
+      ],
+    );
+    const left = queryOne<{ volume: number }>(
+      `SELECT COALESCE(SUM(volume_gal), 0) as volume
+       FROM mash_fermenter_assignments WHERE mash_batch_id = ?`,
+      [source.mash_batch_id],
+    );
+    if ((left?.volume ?? 0) <= 0.01) {
+      runQuery(
+        `UPDATE mash_batches SET status = 'discarded'
+         WHERE id = ? AND status IN ('fermenting', 'complete')`,
+        [source.mash_batch_id],
+      );
+    }
+  } else if (dest) {
+    const same = queryOne<{ id: number; volume_gal: number }>(
+      `SELECT id, volume_gal FROM mash_fermenter_assignments
+       WHERE mash_batch_id = ? AND floor_equipment_id = ?`,
+      [source.mash_batch_id, dest.id],
+    );
+    if (same) {
+      runQuery(
+        'UPDATE mash_fermenter_assignments SET volume_gal = ? WHERE id = ?',
+        [same.volume_gal + input.volumeGal, same.id],
+      );
+    } else {
+      insertRow(
+        'INSERT INTO mash_fermenter_assignments (mash_batch_id, floor_equipment_id, volume_gal) VALUES (?, ?, ?)',
+        [source.mash_batch_id, dest.id, input.volumeGal],
+      );
+    }
+  }
+
+  syncFermenterAndStillStatuses();
+}
+
+/** Put discarded gallons back when the fermenter is empty or still holds that wash. */
+export function deleteDiscardedFermentation(id: number): void {
+  const row = queryOne<DiscardedFermentation>(
+    'SELECT * FROM discarded_fermentations WHERE id = ?',
+    [id],
+  );
+  if (!row) return;
+
+  const fermenter = queryOne<FloorEquipment>(
+    'SELECT * FROM floor_equipment WHERE id = ?',
+    [row.source_fermenter_equipment_id],
+  );
+  if (!fermenter) {
+    throw new Error('That fermenter no longer exists.');
+  }
+  if (!row.mash_batch_id) {
+    throw new Error('This discard record has no wash batch to restore.');
+  }
+  const mash = queryOne<{ id: number; status: string }>(
+    'SELECT id, status FROM mash_batches WHERE id = ?',
+    [row.mash_batch_id],
+  );
+  if (!mash) {
+    throw new Error('The wash batch for this discard no longer exists.');
+  }
+  if (fermenter.status === 'offline') {
+    throw new Error(`${fermenter.name} is offline and cannot receive the restored wash.`);
+  }
+  if (equipmentBlocksProduction(fermenter)) {
+    throw new Error(`${fermenter.name} is out of service and cannot receive the restored wash.`);
+  }
+  const other = queryOne<{ id: number }>(
+    `SELECT id FROM mash_fermenter_assignments
+     WHERE floor_equipment_id = ? AND mash_batch_id != ? AND volume_gal > 0.01
+     LIMIT 1`,
+    [fermenter.id, mash.id],
+  );
+  if (other) {
+    throw new Error(`${fermenter.name} now holds a different wash.`);
+  }
+
+  const same = queryOne<{ id: number; volume_gal: number }>(
+    `SELECT id, volume_gal FROM mash_fermenter_assignments
+     WHERE mash_batch_id = ? AND floor_equipment_id = ?`,
+    [mash.id, fermenter.id],
+  );
+  const nextVolume = (same?.volume_gal ?? 0) + row.volume_gal;
+  if (fermenter.capacity_gal > 0 && nextVolume > fermenter.capacity_gal + 0.01) {
+    throw new Error(
+      `${fermenter.name} does not have room to restore ${row.volume_gal.toFixed(1)} gal.`,
+    );
+  }
+
+  if (mash.status === 'discarded') {
+    runQuery(`UPDATE mash_batches SET status = 'fermenting' WHERE id = ?`, [mash.id]);
+  }
+  if (same) {
+    runQuery(
+      'UPDATE mash_fermenter_assignments SET volume_gal = ? WHERE id = ?',
+      [nextVolume, same.id],
+    );
+  } else {
+    insertRow(
+      'INSERT INTO mash_fermenter_assignments (mash_batch_id, floor_equipment_id, volume_gal) VALUES (?, ?, ?)',
+      [mash.id, fermenter.id, row.volume_gal],
+    );
+  }
+  runQuery('DELETE FROM discarded_fermentations WHERE id = ?', [id]);
+  syncFermenterAndStillStatuses();
 }
 
 /** Clear spirit from every holding tank (cuts, transfers, charges, blend draws). */

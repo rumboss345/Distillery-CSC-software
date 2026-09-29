@@ -95,6 +95,21 @@ const STILLAGE_MIGRATION = [
   'ALTER TABLE distillation_runs ADD COLUMN stillage_holding_tank_equipment_id INTEGER REFERENCES floor_equipment(id)',
 ];
 
+const DISCARDED_FERMENTATIONS_MIGRATION = [
+  `CREATE TABLE IF NOT EXISTS discarded_fermentations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    mash_batch_id INTEGER REFERENCES mash_batches(id),
+    source_fermenter_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
+    batch_number TEXT NOT NULL DEFAULT '',
+    fermenter_name TEXT NOT NULL DEFAULT '',
+    volume_gal REAL NOT NULL,
+    discarded_date TEXT NOT NULL,
+    notes TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_discarded_fermentations_date ON discarded_fermentations(discarded_date)',
+];
+
 const TANK_TRANSFERS_MIGRATION = `
 CREATE TABLE IF NOT EXISTS holding_tank_transfers (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -310,6 +325,14 @@ function runMigrations(): void {
   );
   if (!hasStillage) {
     for (const statement of STILLAGE_MIGRATION) db.run(statement);
+    persistDb();
+  }
+
+  const hasDiscardedFermentations = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='discarded_fermentations'",
+  );
+  if (!hasDiscardedFermentations) {
+    for (const statement of DISCARDED_FERMENTATIONS_MIGRATION) db.run(statement);
     persistDb();
   }
 
