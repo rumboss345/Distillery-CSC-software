@@ -1604,6 +1604,22 @@ tr:hover td {
   border: 1px solid var(--border);
 }
 
+.fermenter-metric-line {
+  display: flex;
+  align-items: center;
+  min-height: 1.7rem;
+  margin-bottom: 0.35rem;
+  white-space: nowrap;
+}
+
+.fermenter-metric-line:last-child {
+  margin-bottom: 0;
+}
+
+.fermenter-metric-line .fermenter-tag {
+  margin: 0;
+}
+
 .spirit-proof-panel {
   padding: 0.85rem 1rem;
   border: 1px solid var(--border);

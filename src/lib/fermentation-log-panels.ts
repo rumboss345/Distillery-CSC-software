@@ -25,6 +25,17 @@ export interface FermenterColumnTag {
   distilled: boolean;
 }
 
+export interface FermenterBrixReading {
+  key: string;
+  /** Short fermenter name, without volume or distilled suffix. */
+  name: string;
+  label: string;
+  distilled: boolean;
+  equipmentId: number | null;
+  startBrix: number | null;
+  currentBrix: number | null;
+}
+
 /**
  * Current fermenter assignments, then any fermenters that still have logs after
  * they were charged to a still. An empty result becomes one unassigned panel so
@@ -101,4 +112,58 @@ export function fermenterColumnTags(options: {
   }
 
   return tags;
+}
+
+/**
+ * One Start → Current Brix row per fermenter. Current Brix is that fermenter's
+ * latest log. A wash with no fermenter rows keeps a single batch-level reading.
+ */
+export function fermenterBrixReadings(options: {
+  assignments: (FermenterLogAssignment & { id: number })[];
+  logSources: FermentationLogSourceRef[];
+  startBrix: number | null;
+  batchCurrentBrix: number | null;
+  currentBrixForEquipment: (equipmentId: number) => number | null;
+}): FermenterBrixReading[] {
+  const rows: Omit<FermenterBrixReading, 'startBrix' | 'currentBrix'>[] = options.assignments.map((assignment) => ({
+    key: `assign-${assignment.id}`,
+    name: assignment.equipment_name,
+    label: `${assignment.equipment_name}${assignment.volume_gal > 0 ? ` (${assignment.volume_gal} gal)` : ''}`,
+    distilled: false,
+    equipmentId: assignment.floor_equipment_id,
+  }));
+
+  const assignedIds = new Set(options.assignments.map((assignment) => assignment.floor_equipment_id));
+  for (const source of options.logSources) {
+    if (source.floor_equipment_id == null) continue;
+    if (assignedIds.has(source.floor_equipment_id)) continue;
+    const name = source.equipment_name || `Fermenter ${source.floor_equipment_id}`;
+    rows.push({
+      key: `log-${source.floor_equipment_id}`,
+      name,
+      label: `${name} (distilled)`,
+      distilled: true,
+      equipmentId: source.floor_equipment_id,
+    });
+  }
+
+  if (rows.length === 0) {
+    return [{
+      key: 'batch',
+      name: '',
+      label: '',
+      distilled: false,
+      equipmentId: null,
+      startBrix: options.startBrix,
+      currentBrix: options.batchCurrentBrix,
+    }];
+  }
+
+  return rows.map((row) => ({
+    ...row,
+    startBrix: options.startBrix,
+    currentBrix: row.equipmentId != null
+      ? options.currentBrixForEquipment(row.equipmentId)
+      : null,
+  }));
 }

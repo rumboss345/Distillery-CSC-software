@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fermenterColumnTags, fermenterLogPanels } from './fermentation-log-panels';
+import { fermenterBrixReadings, fermenterColumnTags, fermenterLogPanels } from './fermentation-log-panels';
 
 const ferm1 = { floor_equipment_id: 11, equipment_name: 'Fermentation 1', volume_gal: 1100 };
 const ferm2 = { floor_equipment_id: 12, equipment_name: 'Fermentation 2', volume_gal: 1100 };
@@ -109,6 +109,96 @@ describe('fermenterColumnTags', () => {
     })).toEqual([
       { key: 'assign-4', label: 'Fermentation 2 (1100 gal)', distilled: false },
       { key: 'log-11', label: 'Fermentation 1 (distilled)', distilled: true },
+    ]);
+  });
+});
+
+describe('fermenterBrixReadings', () => {
+  const currentBrixForEquipment = (equipmentId: number) => (
+    equipmentId === 11 ? 4.2 : equipmentId === 12 ? 7.5 : null
+  );
+
+  it('uses each fermenter’s latest Brix instead of one batch reading', () => {
+    expect(fermenterBrixReadings({
+      assignments: [
+        { id: 1, ...ferm1 },
+        { id: 2, ...ferm2 },
+      ],
+      logSources: [],
+      startBrix: 18.5,
+      batchCurrentBrix: 4.2,
+      currentBrixForEquipment,
+    })).toEqual([
+      {
+        key: 'assign-1',
+        name: 'Fermentation 1',
+        label: 'Fermentation 1 (1100 gal)',
+        distilled: false,
+        equipmentId: 11,
+        startBrix: 18.5,
+        currentBrix: 4.2,
+      },
+      {
+        key: 'assign-2',
+        name: 'Fermentation 2',
+        label: 'Fermentation 2 (1100 gal)',
+        distilled: false,
+        equipmentId: 12,
+        startBrix: 18.5,
+        currentBrix: 7.5,
+      },
+    ]);
+  });
+
+  it('keeps a distilled fermenter’s last reading after it is released', () => {
+    expect(fermenterBrixReadings({
+      assignments: [{ id: 2, ...ferm2 }],
+      logSources: [
+        { floor_equipment_id: 11, equipment_name: 'Fermentation 1' },
+        { floor_equipment_id: 12, equipment_name: 'Fermentation 2' },
+      ],
+      startBrix: 18,
+      batchCurrentBrix: 7.5,
+      currentBrixForEquipment,
+    })).toEqual([
+      {
+        key: 'assign-2',
+        name: 'Fermentation 2',
+        label: 'Fermentation 2 (1100 gal)',
+        distilled: false,
+        equipmentId: 12,
+        startBrix: 18,
+        currentBrix: 7.5,
+      },
+      {
+        key: 'log-11',
+        name: 'Fermentation 1',
+        label: 'Fermentation 1 (distilled)',
+        distilled: true,
+        equipmentId: 11,
+        startBrix: 18,
+        currentBrix: 4.2,
+      },
+    ]);
+  });
+
+  it('falls back to one batch reading when no fermenter is assigned', () => {
+    expect(fermenterBrixReadings({
+      assignments: [],
+      logSources: [],
+      startBrix: 20,
+      batchCurrentBrix: 9,
+      currentBrixForEquipment,
+    })).toEqual([
+      {
+        key: 'batch',
+        name: '',
+        label: '',
+        distilled: false,
+        equipmentId: null,
+        startBrix: 20,
+        currentBrix: 9,
+      },
     ]);
   });
 });

@@ -39,7 +39,7 @@ import {
 } from '../lib/wash-recipe-nutrients';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
 import { equipmentUnavailableForProduction } from '../lib/equipment-maintenance';
-import { fermenterColumnTags, fermenterLogPanels } from '../lib/fermentation-log-panels';
+import { fermenterBrixReadings, fermenterLogPanels } from '../lib/fermentation-log-panels';
 import type { MashBatch, MashStatus } from '../types';
 
 const STATUSES: MashStatus[] = ['planned', 'mashing', 'fermenting', 'complete', 'discarded'];
@@ -583,15 +583,15 @@ export function MashFermentation() {
                   </thead>
                   <tbody>
                     {items.map((b) => {
-                      const fermenters = fermenterColumnTags({
+                      const startBrix = b.actual_brix ?? b.target_brix;
+                      const readings = fermenterBrixReadings({
                         assignments: getBatchFermenters(b.id),
                         logSources: getBatchLogSources(b.id),
+                        startBrix,
+                        batchCurrentBrix: getLatestFermentationBrix(b.id) ?? b.actual_final_brix ?? b.target_final_brix,
+                        currentBrixForEquipment: (equipmentId) => getLatestFermentationBrix(b.id, equipmentId),
                       });
-                      const startBrix = b.actual_brix ?? b.target_brix;
-                      const currentBrix = getLatestFermentationBrix(b.id) ?? b.actual_final_brix;
-                      const estAbv = startBrix != null && currentBrix != null
-                        ? estimateAbvFromBrix(startBrix, currentBrix)
-                        : null;
+                      const namedReadings = readings.filter((reading) => reading.label);
                       return (
                         <tr key={b.id}>
                           <td><strong>{b.batch_number}</strong></td>
@@ -599,23 +599,39 @@ export function MashFermentation() {
                           <td>{b.grain_lbs} lbs</td>
                           <td>{b.water_gal} gal</td>
                           <td>
-                            {fermenters.length === 0 ? (
+                            {namedReadings.length === 0 ? (
                               <span style={{ color: 'var(--text-muted)' }}>—</span>
                             ) : (
-                              fermenters.map((f) => (
-                                <span
-                                  key={f.key}
-                                  className={f.distilled ? 'fermenter-tag fermenter-tag--distilled' : 'fermenter-tag'}
-                                >
-                                  {f.label}
-                                </span>
+                              namedReadings.map((reading) => (
+                                <div key={reading.key} className="fermenter-metric-line">
+                                  <span
+                                    className={reading.distilled ? 'fermenter-tag fermenter-tag--distilled' : 'fermenter-tag'}
+                                  >
+                                    {reading.label}
+                                  </span>
+                                </div>
                               ))
                             )}
                           </td>
                           <td>
-                            {startBrix ?? '—'} → {currentBrix ?? b.target_final_brix ?? '—'}
+                            {readings.map((reading) => (
+                              <div key={reading.key} className="fermenter-metric-line">
+                                {reading.startBrix ?? '—'} → {reading.currentBrix ?? '—'}
+                              </div>
+                            ))}
                           </td>
-                          <td>{formatAbvEstimate(estAbv)}</td>
+                          <td>
+                            {readings.map((reading) => {
+                              const estAbv = reading.startBrix != null && reading.currentBrix != null
+                                ? estimateAbvFromBrix(reading.startBrix, reading.currentBrix)
+                                : null;
+                              return (
+                                <div key={reading.key} className="fermenter-metric-line">
+                                  {formatAbvEstimate(estAbv)}
+                                </div>
+                              );
+                            })}
+                          </td>
                           <td>{format(new Date(b.start_date), 'MMM d, yyyy')}</td>
                           <td><AssigneeCell name={b.assigned_user_name} /></td>
                           <td className="td-actions">
