@@ -47,6 +47,7 @@ import {
   runTypeLabel,
 } from '../lib/distillation-run-types';
 import { FERMENTATION_READY_MAX_BRIX, isBrixReadyForDistillation } from '../lib/fermentation';
+import { eventDateWhenLeavingPlanned } from '../lib/planned-event-date';
 import {
   chargeExceedsStillCapacity,
   plannedRecordSkipsEquipmentStatus,
@@ -108,6 +109,7 @@ export function Distillation() {
   const [editCutId, setEditCutId] = useState<number | undefined>();
   const [editRunId, setEditRunId] = useState<number | undefined>();
   const [runForm, setRunForm] = useState(emptyRun());
+  const [plannedScheduleDate, setPlannedScheduleDate] = useState<string | null>(null);
   const planOnly = plannedRecordSkipsEquipmentStatus(runForm.status);
   const equipmentListOptions = planOnly ? { includeUnavailable: true as const } : undefined;
   const stills = getPotStills(equipmentListOptions);
@@ -258,6 +260,18 @@ export function Distillation() {
     setRunForm({ ...runForm, dest_holding_tank_equipment_id: tankId });
   };
 
+  const handleRunStatusChange = (status: RunStatus) => {
+    let run_date = runForm.run_date;
+    if (runForm.status === 'planned' && status !== 'planned') {
+      setPlannedScheduleDate(runForm.run_date);
+      run_date = eventDateWhenLeavingPlanned(runForm.status, status, runForm.run_date);
+    } else if (status === 'planned' && plannedScheduleDate) {
+      run_date = plannedScheduleDate;
+      setPlannedScheduleDate(null);
+    }
+    setRunForm({ ...runForm, status, run_date });
+  };
+
   const handleStillChange = (stillId: number | '') => {
     const still = stillId ? stills.find((s) => s.id === stillId) : null;
     setRunForm({ ...runForm, still_name: still?.name ?? '' });
@@ -265,6 +279,7 @@ export function Distillation() {
 
   const openNewRun = (runType: DistillationRunType = 'wash', planDate?: string) => {
     setEditRunId(undefined);
+    setPlannedScheduleDate(null);
     setRunForm({
       ...emptyRun(runType),
       ...defaultAssignee(user),
@@ -296,6 +311,7 @@ export function Distillation() {
           : row.volume_gal
         : 0;
       setEditRunId(undefined);
+      setPlannedScheduleDate(null);
       setRunForm({
         ...emptyRun(runType),
         ...defaultAssignee(user),
@@ -310,6 +326,7 @@ export function Distillation() {
     } else if (fromTank) {
       const tank = getChargeableHoldingTanks().find((t) => t.id === tankId);
       setEditRunId(undefined);
+      setPlannedScheduleDate(null);
       setRunForm({
         ...emptyRun('low_wines'),
         ...defaultAssignee(user),
@@ -335,6 +352,7 @@ export function Distillation() {
 
   const openEditRun = (run: DistillationRun) => {
     setEditRunId(run.id);
+    setPlannedScheduleDate(null);
     const proofed = (run.proof_water_gal ?? 0) > 0 && run.proof_spirit_gal != null;
     setRunForm({
       ...run,
@@ -1053,6 +1071,9 @@ export function Distillation() {
                 value={runForm.run_date}
                 onChange={(run_date) => setRunForm({ ...runForm, run_date })}
               />
+              {runForm.status !== 'planned' && plannedScheduleDate && (
+                <p className="field-hint">Date set to today because this left planned.</p>
+              )}
             </div>
             <div className="form-group">
               <label>Assigned employee</label>
@@ -1165,7 +1186,7 @@ export function Distillation() {
             )}
             <div className="form-group">
               <label>Status</label>
-              <select value={runForm.status} onChange={(e) => setRunForm({ ...runForm, status: e.target.value as RunStatus })}>
+              <select value={runForm.status} onChange={(e) => handleRunStatusChange(e.target.value as RunStatus)}>
                 {RUN_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
