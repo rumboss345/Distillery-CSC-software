@@ -40,6 +40,7 @@ import {
   recipeNutrientsToBatchInputs,
 } from '../lib/wash-recipe-nutrients';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
+import { formatRecordedAt } from '../lib/date-input';
 import { equipmentUnavailableForProduction } from '../lib/equipment-maintenance';
 import { fermenterBrixReadings, fermenterLogPanels } from '../lib/fermentation-log-panels';
 import { eventDateWhenLeavingPlanned } from '../lib/planned-event-date';
@@ -189,12 +190,12 @@ function FermenterLogPanel({
         <div className="table-wrap" style={{ marginTop: '1rem' }}>
           <table>
             <thead>
-              <tr><th>Time</th><th>Temp (°F)</th><th>Brix</th><th>Est. ABV</th><th>pH</th><th>Notes</th></tr>
+              <tr><th>Date</th><th>Temp (°F)</th><th>Brix</th><th>Est. ABV</th><th>pH</th><th>Notes</th></tr>
             </thead>
             <tbody>
               {logs.map((l) => (
                 <tr key={l.id}>
-                  <td>{format(new Date(l.logged_at), 'MMM d HH:mm')}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{formatRecordedAt(l.logged_at)}</td>
                   <td>{l.temperature_f ?? '—'}°F</td>
                   <td>{l.brix ?? '—'}°</td>
                   <td>
@@ -736,7 +737,7 @@ export function MashFermentation() {
       {selectedId && selectedBatch && canViewFermentationLogs && (
         <Modal
           wide
-          title={`Fermentation Logs — ${selectedBatch.batch_number}${fermentationLogsReadOnly ? ' (read-only)' : ''}`}
+          title={`Fermentation Logs — ${selectedBatch.batch_number} · ${format(new Date(selectedBatch.start_date), 'MMM d, yyyy')}${fermentationLogsReadOnly ? ' (read-only)' : ''}`}
           onClose={() => setSelectedId(null)}
         >
           {selectedLogPanels.length > 1 ? (

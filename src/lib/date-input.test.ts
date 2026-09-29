@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  formatRecordedAt,
   isIsoDate,
   isIsoDateTime,
   isIsoMonth,
@@ -49,5 +50,12 @@ describe('date-input', () => {
   it('splits and joins datetime values', () => {
     expect(splitDateTime('2025-06-15T08:30')).toEqual({ date: '2025-06-15', time: '08:30' });
     expect(joinDateTime('2025-06-15', '08:30')).toBe('2025-06-15T08:30');
+  });
+
+  it('shows the date and time for logs and cuts', () => {
+    expect(formatRecordedAt('2025-06-10T08:45')).toBe('Jun 10, 2025 08:45');
+    expect(formatRecordedAt('2025-06-15T08:00:00')).toBe('Jun 15, 2025 08:00');
+    expect(formatRecordedAt('')).toBe('—');
+    expect(formatRecordedAt(null)).toBe('—');
   });
 });
