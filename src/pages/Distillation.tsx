@@ -47,7 +47,12 @@ import {
   runTypeLabel,
 } from '../lib/distillation-run-types';
 import { FERMENTATION_READY_MAX_BRIX, isBrixReadyForDistillation } from '../lib/fermentation';
-import { chargeExceedsStillCapacity, stillAlreadyOccupiedMessage } from '../lib/still-charge';
+import {
+  chargeExceedsStillCapacity,
+  plannedRecordSkipsEquipmentStatus,
+  stillAlreadyOccupiedMessage,
+  stillRunOccupiesEquipment,
+} from '../lib/still-charge';
 import {
   planSpiritChargeProof,
   spiritChargeDetail,
@@ -95,7 +100,6 @@ export function Distillation() {
   const { key, refresh } = useRefreshKey();
   const runs = getDistillationRuns();
   const mashes = getMashBatches();
-  const stills = getPotStills();
   const collectionVessels = getCollectionVessels();
   const tanksWithContents = getSpiritTransferVesselsWithContents();
   const equipment = getFloorEquipment();
@@ -104,6 +108,9 @@ export function Distillation() {
   const [editCutId, setEditCutId] = useState<number | undefined>();
   const [editRunId, setEditRunId] = useState<number | undefined>();
   const [runForm, setRunForm] = useState(emptyRun());
+  const planOnly = plannedRecordSkipsEquipmentStatus(runForm.status);
+  const equipmentListOptions = planOnly ? { includeUnavailable: true as const } : undefined;
+  const stills = getPotStills(equipmentListOptions);
   const [selectedRunId, setSelectedRunId] = useState<number | null>(null);
   const [adminDeleteRunId, setAdminDeleteRunId] = useState<number | null>(null);
   const [cutForm, setCutForm] = useState({
@@ -164,7 +171,7 @@ export function Distillation() {
     : [];
 
   const chargeableSourceTanks = isTankSourcedRun(runForm.run_type)
-    ? getChargeableHoldingTanks(editRunId)
+    ? getChargeableHoldingTanks(editRunId, equipmentListOptions)
     : [];
 
   const selectedSourceTank = chargeableSourceTanks.find(
@@ -358,10 +365,7 @@ export function Distillation() {
       }
       return true;
     }
-    if (
-      (runForm.status === 'planned' || runForm.status === 'running')
-      && runForm.still_name.trim()
-    ) {
+    if (stillRunOccupiesEquipment(runForm.status) && runForm.still_name.trim()) {
       const occupied = getActiveDistillationRunOnStill(runForm.still_name, editRunId);
       if (occupied) {
         alert(stillAlreadyOccupiedMessage(
@@ -590,7 +594,12 @@ export function Distillation() {
   };
 
   const handleCutTypeChange = (cutType: CutType) => {
-    const allowed = getCutDestinationsForRun(cutType, selectedRun?.run_type, editCutId);
+    const allowed = getCutDestinationsForRun(
+      cutType,
+      selectedRun?.run_type,
+      editCutId,
+      plannedRecordSkipsEquipmentStatus(selectedRun?.status) ? { includeUnavailable: true } : undefined,
+    );
     let tankId = cutForm.holding_tank_equipment_id;
     if (!tankId || !allowed.some((t) => t.id === tankId)) {
       tankId = suggestCutTank(cutType, selectedRun);
@@ -731,6 +740,7 @@ export function Distillation() {
     cutForm.cut_type,
     selectedRun?.run_type,
     editCutId,
+    plannedRecordSkipsEquipmentStatus(selectedRun?.status) ? { includeUnavailable: true } : undefined,
   );
 
   const heartsTotal = cuts.filter((c) => c.cut_type === 'hearts').reduce((s, c) => s + c.volume_gal, 0);
@@ -1019,7 +1029,9 @@ export function Distillation() {
               >
                 <option value="">— Select still —</option>
                 {stills.map((s) => {
-                  const occupied = getActiveDistillationRunOnStill(s.name, editRunId);
+                  const occupied = planOnly
+                    ? undefined
+                    : getActiveDistillationRunOnStill(s.name, editRunId);
                   return (
                     <option key={s.id} value={s.id} disabled={occupied != null}>
                       {s.name}
@@ -1029,7 +1041,7 @@ export function Distillation() {
                   );
                 })}
               </select>
-              {runForm.still_name && getActiveDistillationRunOnStill(runForm.still_name, editRunId) && (
+              {!planOnly && runForm.still_name && getActiveDistillationRunOnStill(runForm.still_name, editRunId) && (
                 <p className="field-hint" style={{ color: 'var(--danger, #dc2626)' }}>
                   This still already has an active run. Complete it or pick another still.
                 </p>
@@ -1187,7 +1199,7 @@ export function Distillation() {
                 {' '}<strong>High Wines Storage Tank</strong> (or a collection vessel) when you record cuts.
               </>
             )}
-            {' '}Setting status to <strong>planned</strong> or <strong>running</strong> marks the still as in use.
+            {' '}A <strong>planned</strong> run is view-only and does not lock the still, fermenter, or tanks. Setting status to <strong>running</strong> marks the still as in use.
           </p>
           <div className="form-actions">
             <button className="btn btn-secondary" onClick={() => setShowRunForm(false)}>Cancel</button>
