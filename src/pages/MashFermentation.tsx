@@ -42,6 +42,7 @@ import {
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
 import { equipmentUnavailableForProduction } from '../lib/equipment-maintenance';
 import { fermenterBrixReadings, fermenterLogPanels } from '../lib/fermentation-log-panels';
+import { eventDateWhenLeavingPlanned } from '../lib/planned-event-date';
 import type { MashBatch, MashStatus } from '../types';
 
 const STATUSES: MashStatus[] = ['planned', 'mashing', 'fermenting', 'complete', 'discarded'];
@@ -260,6 +261,7 @@ export function MashFermentation() {
   const [adminEditBatchId, setAdminEditBatchId] = useState<number | null>(null);
   const [adminSaveEditBatchId, setAdminSaveEditBatchId] = useState<number | null>(null);
   const completeEditUnlockedRef = useRef<number | null>(null);
+  const [plannedScheduleDate, setPlannedScheduleDate] = useState<string | null>(null);
 
   void key;
 
@@ -276,7 +278,15 @@ export function MashFermentation() {
   const fermenterControlsDisabled = !canAssignFermenters;
 
   const handleStatusChange = (status: MashStatus) => {
-    setForm({ ...form, status });
+    let start_date = form.start_date;
+    if (form.status === 'planned' && status !== 'planned') {
+      setPlannedScheduleDate(form.start_date);
+      start_date = eventDateWhenLeavingPlanned(form.status, status, form.start_date);
+    } else if (status === 'planned' && plannedScheduleDate) {
+      start_date = plannedScheduleDate;
+      setPlannedScheduleDate(null);
+    }
+    setForm({ ...form, status, start_date });
     if (status !== 'fermenting') {
       if (!editId) {
         setFermenterForm(emptyFermenterForm());
@@ -328,6 +338,7 @@ export function MashFermentation() {
 
   const openNew = (planDate?: string) => {
     setEditId(undefined);
+    setPlannedScheduleDate(null);
     setForm({
       ...emptyBatch(),
       ...defaultAssignee(user),
@@ -349,6 +360,7 @@ export function MashFermentation() {
 
   const openEditForm = (batch: MashBatch) => {
     setEditId(batch.id);
+    setPlannedScheduleDate(null);
     setForm({ ...batch, yeast_lbs: batch.yeast_lbs ?? 0 });
     setBatchNutrients(
       getMashBatchNutrients(batch.id).map((n) => ({ name: n.name, amount: n.amount, unit: n.unit })),
@@ -938,6 +950,9 @@ export function MashFermentation() {
                 value={form.start_date}
                 onChange={(start_date) => setForm({ ...form, start_date })}
               />
+              {form.status !== 'planned' && plannedScheduleDate && (
+                <p className="field-hint">Date set to today because this left planned.</p>
+              )}
             </div>
             <div className="form-group">
               <label>Assigned employee</label>

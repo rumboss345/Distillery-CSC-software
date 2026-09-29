@@ -26,6 +26,7 @@ import {
 } from '../lib/equipment-maintenance';
 import { equipmentCleaningStatusLabel, equipmentNeedsCleaning } from '../lib/equipment-cleaning';
 import { fermenterShowsAssignedWash } from '../lib/mash-fermenter-fill';
+import { eventDateWhenLeavingPlanned } from '../lib/planned-event-date';
 import { normalizeNutrientUnit, nutrientAmountInUnit } from '../lib/wash-recipe-nutrients';
 import type {
   EquipmentMaintenanceLogEventType,
@@ -1740,9 +1741,13 @@ export function saveMashBatchWithFermenters(
   const previousNutrients = id
     ? getMashBatchNutrients(id).map((n) => ({ name: n.name, amount: n.amount, unit: n.unit }))
     : [];
-  assertMashBatchCompleteHasLogs(batch, id);
-  assertMashBatchEquipmentUsable(batch, assignments);
-  const mashId = saveMashBatch(batch, id);
+  const datedBatch = {
+    ...batch,
+    start_date: eventDateWhenLeavingPlanned(previous?.status, batch.status, batch.start_date),
+  };
+  assertMashBatchCompleteHasLogs(datedBatch, id);
+  assertMashBatchEquipmentUsable(datedBatch, assignments);
+  const mashId = saveMashBatch(datedBatch, id);
   let assignmentsToPersist = assignments;
   if (assignmentsToPersist.length === 0 && batch.status === 'complete' && id) {
     assignmentsToPersist = getMashFermenterAssignments(id).map((a) => ({
@@ -1753,8 +1758,8 @@ export function saveMashBatchWithFermenters(
   try {
     saveMashFermenterAssignments(mashId, assignmentsToPersist);
     persistMashBatchNutrients(mashId, nutrients);
-    applyMashInventoryUsage(batch, previous, previousNutrients, nutrients);
-    syncWashTankForMashBatch(mashId, batch.status);
+    applyMashInventoryUsage(datedBatch, previous, previousNutrients, nutrients);
+    syncWashTankForMashBatch(mashId, datedBatch.status);
   } catch (err) {
     if (!id) {
       runQuery('DELETE FROM mash_batches WHERE id = ?', [mashId]);
@@ -2134,6 +2139,7 @@ export function saveDistillationRun(run: Omit<DistillationRun, 'id' | 'created_a
   const previousRun = id
     ? queryOne<DistillationRun>('SELECT * FROM distillation_runs WHERE id = ?', [id])
     : null;
+  const runDate = eventDateWhenLeavingPlanned(previousRun?.status, run.status, run.run_date);
   if (id) {
     runQuery(
       `UPDATE distillation_runs SET batch_number=?, run_type=?, source_mash_batch_id=?, source_fermenter_equipment_id=?, source_holding_tank_equipment_id=?, dest_holding_tank_equipment_id=?, still_name=?, run_date=?, charge_volume_gal=?, charge_abv=?, proof_spirit_gal=?, proof_spirit_abv=?, proof_water_gal=?, proof_place=?, status=?, assigned_user_id=?, assigned_user_name=?, notes=? WHERE id=?`,
@@ -2145,7 +2151,7 @@ export function saveDistillationRun(run: Omit<DistillationRun, 'id' | 'created_a
         isTankSourcedRun(runType) ? run.source_holding_tank_equipment_id : null,
         runUsesDestHoldingTank(runType) ? run.dest_holding_tank_equipment_id : null,
         run.still_name,
-        run.run_date,
+        runDate,
         run.charge_volume_gal,
         isTankSourcedRun(runType) ? run.charge_abv : null,
         isTankSourcedRun(runType) ? run.proof_spirit_gal ?? null : null,
@@ -2170,7 +2176,7 @@ export function saveDistillationRun(run: Omit<DistillationRun, 'id' | 'created_a
         isTankSourcedRun(runType) ? run.source_holding_tank_equipment_id : null,
         runUsesDestHoldingTank(runType) ? run.dest_holding_tank_equipment_id : null,
         run.still_name,
-        run.run_date,
+        runDate,
         run.charge_volume_gal,
         isTankSourcedRun(runType) ? run.charge_abv : null,
         isTankSourcedRun(runType) ? run.proof_spirit_gal ?? null : null,
