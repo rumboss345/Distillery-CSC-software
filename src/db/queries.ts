@@ -23,6 +23,7 @@ import {
 } from '../lib/equipment-maintenance';
 import { equipmentCleaningStatusLabel, equipmentNeedsCleaning } from '../lib/equipment-cleaning';
 import { fermenterShowsAssignedWash } from '../lib/mash-fermenter-fill';
+import { normalizeNutrientUnit, nutrientAmountInUnit } from '../lib/wash-recipe-nutrients';
 import type {
   EquipmentMaintenanceLogEventType,
   EquipmentMaintenanceLogView,
@@ -434,7 +435,7 @@ function persistRecipeNutrients(recipeId: number, nutrients: RecipeNutrientInput
           recipeId,
           name,
           n.amount,
-          'lbs',
+          normalizeNutrientUnit(n.unit),
           item?.id ?? n.inventory_item_id ?? null,
           n.notes ?? '',
         ],
@@ -444,7 +445,11 @@ function persistRecipeNutrients(recipeId: number, nutrients: RecipeNutrientInput
 
 export function getMashBatchNutrients(mashBatchId: number): MashBatchNutrient[] {
   return queryAll<MashBatchNutrient>(
-    'SELECT * FROM mash_batch_nutrients WHERE mash_batch_id = ? ORDER BY id',
+    `SELECT id, mash_batch_id, name, lbs AS amount,
+            COALESCE(NULLIF(unit, ''), 'lbs') AS unit
+     FROM mash_batch_nutrients
+     WHERE mash_batch_id = ?
+     ORDER BY id`,
     [mashBatchId],
   );
 }
@@ -452,11 +457,11 @@ export function getMashBatchNutrients(mashBatchId: number): MashBatchNutrient[] 
 function persistMashBatchNutrients(mashBatchId: number, nutrients: MashBatchNutrientInput[]): void {
   runQuery('DELETE FROM mash_batch_nutrients WHERE mash_batch_id = ?', [mashBatchId]);
   nutrients
-    .filter((n) => n.lbs > 0 && n.name.trim())
+    .filter((n) => n.amount > 0 && n.name.trim())
     .forEach((n) => {
       insertRow(
-        'INSERT INTO mash_batch_nutrients (mash_batch_id, name, lbs) VALUES (?, ?, ?)',
-        [mashBatchId, n.name.trim(), n.lbs],
+        'INSERT INTO mash_batch_nutrients (mash_batch_id, name, lbs, unit) VALUES (?, ?, ?, ?)',
+        [mashBatchId, n.name.trim(), n.amount, normalizeNutrientUnit(n.unit)],
       );
     });
 }
@@ -465,8 +470,11 @@ function nutrientUsageByName(rows: MashBatchNutrientInput[]): Map<string, number
   const map = new Map<string, number>();
   for (const row of rows) {
     const name = row.name.trim();
-    if (!name || row.lbs <= 0) continue;
-    map.set(name, (map.get(name) ?? 0) + row.lbs);
+    if (!name || row.amount <= 0) continue;
+    const item = findInventoryItem('nutrients', name);
+    const inventoryUnit = item?.unit?.trim() || 'lbs';
+    const qty = nutrientAmountInUnit(row.amount, row.unit || 'lbs', inventoryUnit);
+    map.set(name, (map.get(name) ?? 0) + qty);
   }
   return map;
 }
@@ -1674,7 +1682,9 @@ export function saveMashBatchWithFermenters(
   id?: number,
 ): number {
   const previous = id ? getMashBatch(id) : undefined;
-  const previousNutrients = id ? getMashBatchNutrients(id).map((n) => ({ name: n.name, lbs: n.lbs })) : [];
+  const previousNutrients = id
+    ? getMashBatchNutrients(id).map((n) => ({ name: n.name, amount: n.amount, unit: n.unit }))
+    : [];
   assertMashBatchCompleteHasLogs(batch, id);
   assertMashBatchEquipmentUsable(batch, assignments);
   const mashId = saveMashBatch(batch, id);

@@ -560,12 +560,19 @@ function migrateMashBatchNutrients(): void {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       mash_batch_id INTEGER NOT NULL REFERENCES mash_batches(id) ON DELETE CASCADE,
       name TEXT NOT NULL DEFAULT '',
-      lbs REAL NOT NULL DEFAULT 0
+      lbs REAL NOT NULL DEFAULT 0,
+      unit TEXT NOT NULL DEFAULT 'lbs'
     )
   `);
   db.run(`
     CREATE INDEX IF NOT EXISTS idx_mash_batch_nutrients_batch ON mash_batch_nutrients(mash_batch_id)
   `);
+  const hasUnit = queryOne<{ name: string }>(
+    "SELECT name FROM pragma_table_info('mash_batch_nutrients') WHERE name='unit'",
+  );
+  if (!hasUnit) {
+    db.run("ALTER TABLE mash_batch_nutrients ADD COLUMN unit TEXT NOT NULL DEFAULT 'lbs'");
+  }
 }
 
 function migrateRecipeNutrients(): void {
