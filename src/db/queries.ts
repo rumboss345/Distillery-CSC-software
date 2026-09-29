@@ -15,6 +15,7 @@ import {
   chargeExceedsStillCapacity,
   stillAlreadyOccupiedMessage,
   stillChargeCapacityMessage,
+  stillRunOccupiesEquipment,
 } from '../lib/still-charge';
 import {
   equipmentBlocksProduction,
@@ -721,7 +722,7 @@ export function getChargeableFermentersForMash(
        WHERE source_mash_batch_id = ?
          AND source_fermenter_equipment_id = ?
          AND run_type = 'wash'
-         AND status IN ('planned', 'running', 'complete')
+         AND status IN ('running', 'complete')
          AND (? IS NULL OR id != ?)
        LIMIT 1`,
       [mashBatchId, a.floor_equipment_id, excludeRunId ?? null, excludeRunId ?? -1],
@@ -784,7 +785,7 @@ export function getActiveDistillationRunOnStill(
   if (!trimmed) return undefined;
   return queryOne<{ id: number; batch_number: string; status: string; charge_volume_gal: number }>(
     `SELECT id, batch_number, status, charge_volume_gal FROM distillation_runs
-     WHERE still_name = ? AND status IN ('planned', 'running')
+     WHERE still_name = ? AND status = 'running'
      AND (? IS NULL OR id != ?)
      LIMIT 1`,
     [trimmed, excludeRunId ?? null, excludeRunId ?? -1],
@@ -802,6 +803,42 @@ function assertStillAvailableForCharge(stillName: string, excludeRunId?: number)
       occupied.charge_volume_gal,
     ),
   );
+}
+
+function stillEquipmentByName(stillName: string): FloorEquipment | undefined {
+  const trimmed = stillName.trim();
+  if (!trimmed) return undefined;
+  return queryOne<FloorEquipment>(
+    `SELECT * FROM floor_equipment
+     WHERE name = ? AND equipment_type IN ('pot_still', 'column_still')`,
+    [trimmed],
+  ) ?? undefined;
+}
+
+/** When a running charge leaves a still, that still needs cleaning. A planned run does not. */
+function releaseStillAfterRunningRun(
+  previous: DistillationRun | null | undefined,
+  nextStillName: string,
+  nextStatus: string,
+): void {
+  if (!previous || previous.status !== 'running') return;
+  const leftThisStill = previous.still_name !== nextStillName || nextStatus !== 'running';
+  if (!leftThisStill) return;
+  const still = stillEquipmentByName(previous.still_name);
+  if (still?.status === 'in_use') {
+    markEquipmentNeedsCleaningAfterUse(still.id);
+  }
+}
+
+function releaseStillHeldOnlyByPlan(stillName: string): void {
+  const still = stillEquipmentByName(stillName);
+  if (!still || still.status !== 'in_use') return;
+  const running = queryOne<{ id: number }>(
+    "SELECT id FROM distillation_runs WHERE still_name = ? AND status = 'running' LIMIT 1",
+    [still.name],
+  );
+  if (running) return;
+  runQuery(`UPDATE floor_equipment SET status='empty' WHERE id=?`, [still.id]);
 }
 
 export function getHoldingTanks(): FloorEquipment[] {
@@ -972,7 +1009,7 @@ export function getHoldingTankContents(
       COALESCE(SUM(${TANK_CHARGE_DRAWN_GPA_SQL}), 0) as gpa
     FROM distillation_runs
     WHERE source_holding_tank_equipment_id = ?
-      AND status IN ('planned', 'running', 'complete')
+      AND status IN ('running', 'complete')
       AND (? IS NULL OR id != ?)
   `, [tankId, excludeRunId ?? null, excludeRunId ?? -1]);
 
@@ -1588,12 +1625,19 @@ export function syncFermenterAndStillStatuses(): void {
   );
   for (const s of stills) {
     if (s.status === 'offline') continue;
-    const activeRun = queryOne<{ id: number }>(
-      "SELECT id FROM distillation_runs WHERE still_name = ? AND status IN ('running', 'planned') LIMIT 1",
+    const runningRun = queryOne<{ id: number }>(
+      "SELECT id FROM distillation_runs WHERE still_name = ? AND status = 'running' LIMIT 1",
       [s.name],
     );
-    if (activeRun) {
+    const plannedRun = queryOne<{ id: number }>(
+      "SELECT id FROM distillation_runs WHERE still_name = ? AND status = 'planned' LIMIT 1",
+      [s.name],
+    );
+    if (runningRun) {
       runQuery(`UPDATE floor_equipment SET status='in_use' WHERE id=?`, [s.id]);
+    } else if (s.status === 'in_use' && plannedRun) {
+      // A plan does not occupy the still. Release it without a cleaning hold.
+      runQuery(`UPDATE floor_equipment SET status='empty' WHERE id=?`, [s.id]);
     } else if (s.status === 'in_use') {
       markEquipmentNeedsCleaningAfterUse(s.id);
     }
@@ -2044,10 +2088,7 @@ export function saveDistillationRun(run: Omit<DistillationRun, 'id' | 'created_a
       stillChargeCapacityMessage(run.charge_volume_gal, run.still_name, stillCapacity!),
     );
   }
-  if (
-    run.still_name.trim()
-    && (run.status === 'planned' || run.status === 'running')
-  ) {
+  if (run.still_name.trim() && stillRunOccupiesEquipment(run.status)) {
     assertStillAvailableForCharge(run.still_name, id);
   }
   assertDistillationRunCompleteHasCuts(id, run.status);
@@ -2106,6 +2147,7 @@ export function saveDistillationRun(run: Omit<DistillationRun, 'id' | 'created_a
   }
 
   applyFermenterChargeChanges(run, runType, id, previousRun);
+  releaseStillAfterRunningRun(previousRun, run.still_name, run.status);
 
   syncHoldingTankStatuses();
   syncFermenterAndStillStatuses();
@@ -2115,6 +2157,11 @@ export function deleteDistillationRun(id: number): void {
   const run = queryOne<DistillationRun>('SELECT * FROM distillation_runs WHERE id = ?', [id]);
   if (run && distillationRunActivelyChargesFermenter(run.status)) {
     revertFermenterChargeFromRun(run);
+  }
+  if (run?.status === 'running') {
+    releaseStillAfterRunningRun(run, '', 'complete');
+  } else if (run?.status === 'planned') {
+    releaseStillHeldOnlyByPlan(run.still_name);
   }
   runQuery('DELETE FROM distillation_runs WHERE id = ?', [id]);
   syncHoldingTankStatuses();

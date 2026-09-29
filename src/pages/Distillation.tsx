@@ -47,7 +47,7 @@ import {
   runTypeLabel,
 } from '../lib/distillation-run-types';
 import { FERMENTATION_READY_MAX_BRIX, isBrixReadyForDistillation } from '../lib/fermentation';
-import { chargeExceedsStillCapacity, stillAlreadyOccupiedMessage } from '../lib/still-charge';
+import { chargeExceedsStillCapacity, stillAlreadyOccupiedMessage, stillRunOccupiesEquipment } from '../lib/still-charge';
 import {
   planSpiritChargeProof,
   spiritChargeDetail,
@@ -358,10 +358,7 @@ export function Distillation() {
       }
       return true;
     }
-    if (
-      (runForm.status === 'planned' || runForm.status === 'running')
-      && runForm.still_name.trim()
-    ) {
+    if (stillRunOccupiesEquipment(runForm.status) && runForm.still_name.trim()) {
       const occupied = getActiveDistillationRunOnStill(runForm.still_name, editRunId);
       if (occupied) {
         alert(stillAlreadyOccupiedMessage(
@@ -1019,7 +1016,9 @@ export function Distillation() {
               >
                 <option value="">— Select still —</option>
                 {stills.map((s) => {
-                  const occupied = getActiveDistillationRunOnStill(s.name, editRunId);
+                  const occupied = stillRunOccupiesEquipment(runForm.status)
+                    ? getActiveDistillationRunOnStill(s.name, editRunId)
+                    : undefined;
                   return (
                     <option key={s.id} value={s.id} disabled={occupied != null}>
                       {s.name}
@@ -1029,7 +1028,7 @@ export function Distillation() {
                   );
                 })}
               </select>
-              {runForm.still_name && getActiveDistillationRunOnStill(runForm.still_name, editRunId) && (
+              {stillRunOccupiesEquipment(runForm.status) && runForm.still_name && getActiveDistillationRunOnStill(runForm.still_name, editRunId) && (
                 <p className="field-hint" style={{ color: 'var(--danger, #dc2626)' }}>
                   This still already has an active run. Complete it or pick another still.
                 </p>
@@ -1187,7 +1186,7 @@ export function Distillation() {
                 {' '}<strong>High Wines Storage Tank</strong> (or a collection vessel) when you record cuts.
               </>
             )}
-            {' '}Setting status to <strong>planned</strong> or <strong>running</strong> marks the still as in use.
+            {' '}A <strong>planned</strong> run does not lock the still, fermenter, or source tank. Setting status to <strong>running</strong> marks the still as in use.
           </p>
           <div className="form-actions">
             <button className="btn btn-secondary" onClick={() => setShowRunForm(false)}>Cancel</button>
