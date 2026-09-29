@@ -195,7 +195,7 @@ function FermenterLogPanel({
             <tbody>
               {logs.map((l) => (
                 <tr key={l.id}>
-                  <td>{formatRecordedAt(l.logged_at)}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{formatRecordedAt(l.logged_at)}</td>
                   <td>{l.temperature_f ?? '—'}°F</td>
                   <td>{l.brix ?? '—'}°</td>
                   <td>

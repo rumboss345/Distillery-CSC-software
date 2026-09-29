@@ -895,8 +895,8 @@ export function Distillation() {
                     <tr key={c.id}>
                       <td><StatusBadge status={c.cut_type} /></td>
                       <td>{c.holding_tank_name ?? (c.cut_type === 'heads' ? 'Discarded' : '—')}</td>
-                      <td>{formatRecordedAt(c.start_time)}</td>
-                      <td>{c.end_time ? formatRecordedAt(c.end_time) : '—'}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{formatRecordedAt(c.start_time)}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{c.end_time ? formatRecordedAt(c.end_time) : '—'}</td>
                       <td>{c.volume_gal} gal</td>
                       <td>{c.abv}%</td>
                       <td>{(c.volume_gal * c.abv / 100).toFixed(2)} gal</td>
