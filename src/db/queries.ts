@@ -14,6 +14,7 @@ import { isFermenterSourcedRun, isTankSourcedRun, runUsesDestHoldingTank } from 
 import {
   chargeExceedsStillCapacity,
   plannedRecordSkipsEquipmentStatus,
+  fermenterChargeSkipsCleaningGate,
   runConsumesSource,
   stillAlreadyOccupiedMessage,
   stillChargeCapacityMessage,
@@ -2300,9 +2301,20 @@ function releaseDistillationEquipmentForReturnToPlan(run: DistillationRun, runId
 export function saveDistillationRun(run: Omit<DistillationRun, 'id' | 'created_at'>, id?: number): void {
   const runType = (run.run_type ?? 'wash') as DistillationRunType;
   const planOnly = plannedRecordSkipsEquipmentStatus(run.status);
+  const previousRun = id
+    ? queryOne<DistillationRun>('SELECT * FROM distillation_runs WHERE id = ?', [id])
+    : null;
   if (!planOnly) {
     assertStillUsableByName(run.still_name);
-    if (isFermenterSourcedRun(runType) && run.source_fermenter_equipment_id) {
+    if (
+      isFermenterSourcedRun(runType)
+      && run.source_fermenter_equipment_id
+      && !fermenterChargeSkipsCleaningGate(
+        previousRun?.status,
+        previousRun?.source_fermenter_equipment_id,
+        run.source_fermenter_equipment_id,
+      )
+    ) {
       assertEquipmentUsableForProduction(run.source_fermenter_equipment_id, 'Fermenter');
     }
     if (isTankSourcedRun(runType) && run.source_holding_tank_equipment_id) {
@@ -2340,9 +2352,6 @@ export function saveDistillationRun(run: Omit<DistillationRun, 'id' | 'created_a
   if (stillage.tankId && stillage.volumeGal && stillage.volumeGal > 0) {
     assertStillageFitsTank(stillage.tankId, stillage.volumeGal, id);
   }
-  const previousRun = id
-    ? queryOne<DistillationRun>('SELECT * FROM distillation_runs WHERE id = ?', [id])
-    : null;
   const runDate = eventDateWhenLeavingPlanned(previousRun?.status, run.status, run.run_date);
   if (id) {
     runQuery(

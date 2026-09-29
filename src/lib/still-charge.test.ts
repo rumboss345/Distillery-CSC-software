@@ -3,6 +3,7 @@ import {
   chargeExceedsStillCapacity,
   plannedRecordSkipsEquipmentStatus,
   runConsumesSource,
+  fermenterChargeSkipsCleaningGate,
   stillAlreadyOccupiedMessage,
   stillChargeCapacityMessage,
   stillRunOccupiesEquipment,
@@ -31,6 +32,14 @@ describe('still-charge', () => {
     expect(runConsumesSource('planned')).toBe(false);
     expect(runConsumesSource('running')).toBe(true);
     expect(runConsumesSource('complete')).toBe(true);
+  });
+
+  it('lets a charged fermenter stay dirty while the distillation is completed', () => {
+    expect(fermenterChargeSkipsCleaningGate('running', 4, 4)).toBe(true);
+    expect(fermenterChargeSkipsCleaningGate('complete', 4, 4)).toBe(true);
+    expect(fermenterChargeSkipsCleaningGate('planned', 4, 4)).toBe(false);
+    expect(fermenterChargeSkipsCleaningGate('running', 4, 5)).toBe(false);
+    expect(fermenterChargeSkipsCleaningGate(null, 4, 4)).toBe(false);
   });
 
   it('formats still occupied error message', () => {
