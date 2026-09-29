@@ -49,6 +49,15 @@ export function formatDateTimeDisplay(value: DateTimeValue): string {
   return format(parseISO(value), 'MMM d, yyyy h:mm a');
 }
 
+/** Date and time for a fermentation log or distillation cut. */
+export function formatRecordedAt(value: string | null | undefined): string {
+  const trimmed = value?.trim() ?? '';
+  if (!trimmed) return '—';
+  const parsed = parseISO(trimmed);
+  if (!isValid(parsed)) return trimmed;
+  return format(parsed, 'MMM d, yyyy HH:mm');
+}
+
 /** Normalize typed date input to ISO date or return null if invalid. */
 export function normalizeDateInput(input: string): DateValue | null {
   const trimmed = input.trim();

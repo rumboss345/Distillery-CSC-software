@@ -6,6 +6,7 @@ import { DatePicker, DateTimePicker } from '../components/DatePicker';
 import { useAuth } from '../context/AuthContext';
 import { defaultAssignee } from '../lib/assignee';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
+import { formatRecordedAt } from '../lib/date-input';
 import {
   getDistillationRuns,
   distillationRunHasRecordedCuts,
@@ -860,7 +861,7 @@ export function Distillation() {
       {selectedRunId && (
         <Modal
           wide
-          title={`${selectedRunIsComplete ? 'View cuts' : 'Cuts'} — ${runs.find((r) => r.id === selectedRunId)?.batch_number ?? ''}`}
+          title={`${selectedRunIsComplete ? 'View cuts' : 'Cuts'} — ${runs.find((r) => r.id === selectedRunId)?.batch_number ?? ''}${selectedRun ? ` · ${format(new Date(selectedRun.run_date), 'MMM d, yyyy')}` : ''}`}
           onClose={() => setSelectedRunId(null)}
         >
           <div className="cuts-modal-toolbar">
@@ -894,8 +895,8 @@ export function Distillation() {
                     <tr key={c.id}>
                       <td><StatusBadge status={c.cut_type} /></td>
                       <td>{c.holding_tank_name ?? (c.cut_type === 'heads' ? 'Discarded' : '—')}</td>
-                      <td>{format(new Date(c.start_time), 'HH:mm')}</td>
-                      <td>{c.end_time ? format(new Date(c.end_time), 'HH:mm') : '—'}</td>
+                      <td>{formatRecordedAt(c.start_time)}</td>
+                      <td>{c.end_time ? formatRecordedAt(c.end_time) : '—'}</td>
                       <td>{c.volume_gal} gal</td>
                       <td>{c.abv}%</td>
                       <td>{(c.volume_gal * c.abv / 100).toFixed(2)} gal</td>
