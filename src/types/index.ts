@@ -216,6 +216,11 @@ export interface DistillationRun {
   /** Water blended into the charge. Zero when the charge is not proofed. */
   proof_water_gal?: number | null;
   proof_place?: SpiritProofPlace | null;
+  /** Gallons of spent wash left in the still when a low wine or heavy rum run is completed. */
+  stillage_volume_gal?: number | null;
+  /** 1 when that stillage was discarded instead of stored. */
+  stillage_discarded?: number | null;
+  stillage_holding_tank_equipment_id?: number | null;
   status: RunStatus;
   assigned_user_id: number | null;
   assigned_user_name: string | null;
@@ -226,6 +231,7 @@ export interface DistillationRun {
 export interface DistillationRunView extends DistillationRun {
   source_holding_tank_name?: string;
   dest_holding_tank_name?: string;
+  stillage_tank_name?: string;
 }
 
 export interface DistillationCut {
@@ -251,7 +257,7 @@ export interface HoldingTankContents {
   cut_count: number;
 }
 
-export type HoldingTankIntakeKind = 'cut' | 'transfer' | 'blend';
+export type HoldingTankIntakeKind = 'cut' | 'transfer' | 'blend' | 'stillage';
 
 /** A single distillation cut, transfer, or blend that added spirit to a holding tank. */
 export interface HoldingTankIntakeEntry {
