@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { equipmentNeedsCleaning } from './equipment-cleaning';
+import { equipmentNeedsCleaning, equipmentStatusWhenReturningToPlanned } from './equipment-cleaning';
 import { equipmentUnavailableForProduction } from './equipment-maintenance';
 import type { FloorEquipment } from '../types';
 
@@ -36,5 +36,14 @@ describe('equipment cleaning', () => {
   it('blocks production use when cleaning is required', () => {
     expect(equipmentUnavailableForProduction(base({ status: 'cleaning' }))).toBe(true);
     expect(equipmentUnavailableForProduction(base({ status: 'empty' }))).toBe(false);
+  });
+
+  it('does not require cleaning when a record returns to planned', () => {
+    expect(equipmentStatusWhenReturningToPlanned('in_use', false)).toBe('empty');
+    expect(equipmentStatusWhenReturningToPlanned('cleaning', false)).toBe('empty');
+    expect(equipmentStatusWhenReturningToPlanned('cleaning', true)).toBe('in_use');
+    expect(equipmentStatusWhenReturningToPlanned('in_use', true)).toBe('in_use');
+    expect(equipmentStatusWhenReturningToPlanned('empty', false)).toBeNull();
+    expect(equipmentStatusWhenReturningToPlanned('offline', false)).toBeNull();
   });
 });

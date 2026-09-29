@@ -24,7 +24,7 @@ import {
   equipmentUnavailableForProduction,
   maintenanceStatusLabel,
 } from '../lib/equipment-maintenance';
-import { equipmentCleaningStatusLabel, equipmentNeedsCleaning } from '../lib/equipment-cleaning';
+import { equipmentCleaningStatusLabel, equipmentNeedsCleaning, equipmentStatusWhenReturningToPlanned } from '../lib/equipment-cleaning';
 import { fermenterShowsAssignedWash } from '../lib/mash-fermenter-fill';
 import { eventDateWhenLeavingPlanned } from '../lib/planned-event-date';
 import { normalizeNutrientUnit, nutrientAmountInUnit } from '../lib/wash-recipe-nutrients';
@@ -123,6 +123,32 @@ function appendEquipmentMaintenanceLog(entry: {
       entry.recorded_by_user_id ?? null,
       entry.recorded_by_user_name?.trim() ?? '',
     ],
+  );
+}
+
+/** Drop an in-use or cleaning hold created by a record that is planned again. */
+function releaseEquipmentWithoutCleaningHold(equipmentId: number, hasContents = false): void {
+  const eq = queryOne<{ status: string }>(
+    'SELECT status FROM floor_equipment WHERE id = ?',
+    [equipmentId],
+  );
+  if (!eq) return;
+  const next = equipmentStatusWhenReturningToPlanned(eq.status, hasContents);
+  if (!next || next === eq.status) return;
+  if (eq.status === 'cleaning') {
+    runQuery(
+      `DELETE FROM equipment_maintenance_log
+       WHERE id = (
+         SELECT id FROM equipment_maintenance_log
+         WHERE floor_equipment_id = ? AND event_type = 'needs_cleaning'
+         ORDER BY id DESC LIMIT 1
+       )`,
+      [equipmentId],
+    );
+  }
+  runQuery(
+    `UPDATE floor_equipment SET status=?, linked_mash_batch_id=NULL WHERE id=?`,
+    [next, equipmentId],
   );
 }
 
@@ -1659,6 +1685,15 @@ export function saveMashFermenterAssignments(
 ): void {
   const batchStatus = getMashBatch(mashBatchId)?.status;
   const planOnly = plannedRecordSkipsEquipmentStatus(batchStatus);
+  if (planOnly) {
+    const fermenters = queryAll<{ floor_equipment_id: number }>(
+      'SELECT floor_equipment_id FROM mash_fermenter_assignments WHERE mash_batch_id = ?',
+      [mashBatchId],
+    );
+    for (const fermenter of fermenters) {
+      releaseEquipmentWithoutCleaningHold(fermenter.floor_equipment_id, false);
+    }
+  }
   runQuery('DELETE FROM mash_fermenter_assignments WHERE mash_batch_id = ?', [mashBatchId]);
   for (const a of assignments) {
     if (a.equipmentId <= 0) continue;
@@ -1680,13 +1715,21 @@ function getPrimaryWashTank(): FloorEquipment | undefined {
   ) ?? undefined;
 }
 
-function releaseWashTankForMashBatch(mashBatchId: number): void {
+function releaseWashTankForMashBatch(mashBatchId: number, returningToPlanned = false): void {
   const tanks = queryAll<{ id: number; status: string }>(
     `SELECT id, status FROM floor_equipment
      WHERE equipment_type='mash_tun' AND linked_mash_batch_id=?`,
     [mashBatchId],
   );
   for (const tank of tanks) {
+    if (returningToPlanned) {
+      releaseEquipmentWithoutCleaningHold(tank.id, false);
+      runQuery(
+        `UPDATE floor_equipment SET linked_mash_batch_id=NULL WHERE id=? AND linked_mash_batch_id=?`,
+        [tank.id, mashBatchId],
+      );
+      continue;
+    }
     if (tank.status === 'in_use') {
       markEquipmentNeedsCleaningAfterUse(tank.id);
     } else {
@@ -1699,7 +1742,7 @@ function releaseWashTankForMashBatch(mashBatchId: number): void {
 }
 
 function syncWashTankForMashBatch(mashBatchId: number, status: MashStatus): void {
-  releaseWashTankForMashBatch(mashBatchId);
+  releaseWashTankForMashBatch(mashBatchId, plannedRecordSkipsEquipmentStatus(status));
   if (status !== 'mashing') return;
   const tun = getPrimaryWashTank();
   if (!tun) return;
@@ -2106,8 +2149,54 @@ function releaseStillAfterRunningRun(
   const leftThisStill = previous.still_name !== nextStillName || !stillRunOccupiesEquipment(nextStatus);
   if (!leftThisStill) return;
   const still = stillEquipmentByName(previous.still_name);
-  if (still?.status === 'in_use') {
+  if (!still) return;
+  if (plannedRecordSkipsEquipmentStatus(nextStatus)) {
+    releaseEquipmentWithoutCleaningHold(still.id, false);
+    return;
+  }
+  if (still.status === 'in_use') {
     markEquipmentNeedsCleaningAfterUse(still.id);
+  }
+}
+
+function tankHasLiquid(equipmentId: number): boolean {
+  return getHoldingTankContents(equipmentId).volume_gal > 0.01;
+}
+
+/** Equipment touched by a run that is planned again is not left needing cleaning. */
+function releaseDistillationEquipmentForReturnToPlan(run: DistillationRun, runId?: number): void {
+  const still = stillEquipmentByName(run.still_name);
+  if (still) releaseEquipmentWithoutCleaningHold(still.id, false);
+  if (run.source_fermenter_equipment_id) {
+    const stillHoldingWash = queryOne<{ volume_gal: number }>(
+      `SELECT a.volume_gal
+       FROM mash_fermenter_assignments a
+       JOIN mash_batches m ON m.id = a.mash_batch_id
+       WHERE a.floor_equipment_id = ?
+         AND m.status IN ('fermenting', 'complete')
+         AND a.volume_gal > 0.01
+       LIMIT 1`,
+      [run.source_fermenter_equipment_id],
+    );
+    releaseEquipmentWithoutCleaningHold(
+      run.source_fermenter_equipment_id,
+      (stillHoldingWash?.volume_gal ?? 0) > 0.01,
+    );
+  }
+  const tankIds = new Set<number>();
+  if (run.source_holding_tank_equipment_id) tankIds.add(run.source_holding_tank_equipment_id);
+  if (run.dest_holding_tank_equipment_id) tankIds.add(run.dest_holding_tank_equipment_id);
+  if (runId) {
+    const cuts = queryAll<{ holding_tank_equipment_id: number | null }>(
+      'SELECT holding_tank_equipment_id FROM distillation_cuts WHERE distillation_run_id = ?',
+      [runId],
+    );
+    for (const cut of cuts) {
+      if (cut.holding_tank_equipment_id) tankIds.add(cut.holding_tank_equipment_id);
+    }
+  }
+  for (const tankId of tankIds) {
+    releaseEquipmentWithoutCleaningHold(tankId, tankHasLiquid(tankId));
   }
 }
 
@@ -2192,6 +2281,30 @@ export function saveDistillationRun(run: Omit<DistillationRun, 'id' | 'created_a
   }
 
   applyFermenterChargeChanges(run, runType, id, previousRun);
+  if (
+    id
+    && previousRun
+    && planOnly
+    && !plannedRecordSkipsEquipmentStatus(previousRun.status)
+  ) {
+    releaseDistillationEquipmentForReturnToPlan({
+      ...previousRun,
+      still_name: previousRun.still_name || run.still_name,
+      source_fermenter_equipment_id: previousRun.source_fermenter_equipment_id ?? run.source_fermenter_equipment_id,
+      source_holding_tank_equipment_id: previousRun.source_holding_tank_equipment_id ?? run.source_holding_tank_equipment_id,
+      dest_holding_tank_equipment_id: previousRun.dest_holding_tank_equipment_id ?? run.dest_holding_tank_equipment_id,
+    }, id);
+    if (run.still_name.trim() && run.still_name !== previousRun.still_name) {
+      const movedStill = stillEquipmentByName(run.still_name);
+      if (movedStill) releaseEquipmentWithoutCleaningHold(movedStill.id, false);
+    }
+    if (run.source_holding_tank_equipment_id && run.source_holding_tank_equipment_id !== previousRun.source_holding_tank_equipment_id) {
+      releaseEquipmentWithoutCleaningHold(run.source_holding_tank_equipment_id, tankHasLiquid(run.source_holding_tank_equipment_id));
+    }
+    if (run.dest_holding_tank_equipment_id && run.dest_holding_tank_equipment_id !== previousRun.dest_holding_tank_equipment_id) {
+      releaseEquipmentWithoutCleaningHold(run.dest_holding_tank_equipment_id, tankHasLiquid(run.dest_holding_tank_equipment_id));
+    }
+  }
   releaseStillAfterRunningRun(previousRun, run.still_name, run.status);
 
   syncHoldingTankStatuses();
