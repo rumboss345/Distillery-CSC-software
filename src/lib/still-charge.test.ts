@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   chargeExceedsStillCapacity,
+  plannedRecordSkipsEquipmentStatus,
+  runConsumesSource,
   stillAlreadyOccupiedMessage,
   stillChargeCapacityMessage,
+  stillRunOccupiesEquipment,
 } from './still-charge';
 
 describe('still-charge', () => {
@@ -17,6 +20,17 @@ describe('still-charge', () => {
     expect(stillChargeCapacityMessage(250, 'Pot Still #1', 200)).toBe(
       'Charge volume (250 gal) exceeds Pot Still #1 capacity (200 gal).',
     );
+  });
+
+  it('lets a planned run ignore equipment status', () => {
+    expect(plannedRecordSkipsEquipmentStatus('planned')).toBe(true);
+    expect(plannedRecordSkipsEquipmentStatus('running')).toBe(false);
+    expect(plannedRecordSkipsEquipmentStatus('mashing')).toBe(false);
+    expect(stillRunOccupiesEquipment('planned')).toBe(false);
+    expect(stillRunOccupiesEquipment('running')).toBe(true);
+    expect(runConsumesSource('planned')).toBe(false);
+    expect(runConsumesSource('running')).toBe(true);
+    expect(runConsumesSource('complete')).toBe(true);
   });
 
   it('formats still occupied error message', () => {
