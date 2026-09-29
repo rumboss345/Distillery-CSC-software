@@ -16,6 +16,19 @@ export function runConsumesSource(status: string): boolean {
   return status === 'running' || status === 'complete';
 }
 
+/**
+ * A running or completed charge already emptied this fermenter.
+ * Finishing or editing that run must not wait for the fermenter to be cleaned.
+ */
+export function fermenterChargeSkipsCleaningGate(
+  previousStatus: string | null | undefined,
+  previousFermenterId: number | null | undefined,
+  nextFermenterId: number | null | undefined,
+): boolean {
+  if (!nextFermenterId || previousFermenterId !== nextFermenterId) return false;
+  return previousStatus === 'running' || previousStatus === 'complete';
+}
+
 /** True when charge volume exceeds the still's rated capacity. */
 export function chargeExceedsStillCapacity(
   chargeGal: number,

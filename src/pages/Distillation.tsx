@@ -1328,12 +1328,14 @@ export function Distillation() {
                   <>
                     {' '}Heavy rum deducts the recorded <strong>charge volume</strong> when the run is <strong>running</strong> or <strong>complete</strong>; remaining wash stays in the fermenter.
                     Hearts cuts go into the <strong>Heavy Rum Storage Tank</strong> you select.
+                    {' '}The fermenter can stay dirty until it is cleaned; that does not block marking this run complete.
                   </>
                 ) : (
                   <>
                     {' '}The fermenter stays full while the run is <strong>planned</strong>. Wash is removed when status is
                     {' '}<strong>running</strong> or <strong>complete</strong>
                     {fermenterSourceOptions.length > 1 ? ' (charge each fermenter in its own run)' : ''}.
+                    {' '}The fermenter can stay dirty until it is cleaned; that does not block marking this run complete.
                   </>
                 )}
               </>
