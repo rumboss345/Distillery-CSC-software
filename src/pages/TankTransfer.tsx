@@ -23,6 +23,7 @@ import {
   useRefreshKey,
 } from '../db/queries';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
+import { formatDateDisplay } from '../lib/date-input';
 import { DISCARD_DESTINATION, fermenterTransferError } from '../lib/fermenter-transfer';
 const sourceTankVolumeGal = (tankId: number) => {
   if (!tankId) return 0;
@@ -409,7 +410,7 @@ export function TankTransfer() {
               <tbody>
                 {discardedFermentations.map((row) => (
                   <tr key={row.id}>
-                    <td>{format(new Date(row.discarded_date), 'MMM d, yyyy')}</td>
+                    <td>{formatDateDisplay(row.discarded_date)}</td>
                     <td>{row.fermenter_name}</td>
                     <td>{row.batch_number || '—'}</td>
                     <td>{row.volume_gal.toFixed(1)} gal</td>
