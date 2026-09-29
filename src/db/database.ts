@@ -89,6 +89,12 @@ const SPIRIT_CHARGE_PROOF_MIGRATION = [
   'ALTER TABLE distillation_runs ADD COLUMN proof_place TEXT',
 ];
 
+const STILLAGE_MIGRATION = [
+  'ALTER TABLE distillation_runs ADD COLUMN stillage_volume_gal REAL',
+  'ALTER TABLE distillation_runs ADD COLUMN stillage_discarded INTEGER NOT NULL DEFAULT 0',
+  'ALTER TABLE distillation_runs ADD COLUMN stillage_holding_tank_equipment_id INTEGER REFERENCES floor_equipment(id)',
+];
+
 const TANK_TRANSFERS_MIGRATION = `
 CREATE TABLE IF NOT EXISTS holding_tank_transfers (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -296,6 +302,14 @@ function runMigrations(): void {
   );
   if (!hasSpiritChargeProof) {
     for (const statement of SPIRIT_CHARGE_PROOF_MIGRATION) db.run(statement);
+    persistDb();
+  }
+
+  const hasStillage = queryOne<{ name: string }>(
+    "SELECT name FROM pragma_table_info('distillation_runs') WHERE name='stillage_volume_gal'",
+  );
+  if (!hasStillage) {
+    for (const statement of STILLAGE_MIGRATION) db.run(statement);
     persistDb();
   }
 

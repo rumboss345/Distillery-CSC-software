@@ -27,6 +27,7 @@ import {
 import { equipmentCleaningStatusLabel, equipmentNeedsCleaning, equipmentStatusWhenReturningToPlanned } from '../lib/equipment-cleaning';
 import { countActiveFermentations, fermenterShowsAssignedWash } from '../lib/mash-fermenter-fill';
 import { eventDateWhenLeavingPlanned } from '../lib/planned-event-date';
+import { persistedStillage, stillageSaveError } from '../lib/stillage';
 import { normalizeNutrientUnit, nutrientAmountInUnit } from '../lib/wash-recipe-nutrients';
 import type {
   EquipmentMaintenanceLogEventType,
@@ -903,6 +904,15 @@ export function getCollectionVesselStoredCutType(
     [vesselId],
   );
 
+  const stillage = queryAll<{ volume_gal: number; occurred_at: string }>(`
+    SELECT stillage_volume_gal as volume_gal, run_date as occurred_at
+    FROM distillation_runs
+    WHERE stillage_holding_tank_equipment_id = ?
+      AND status = 'complete'
+      AND COALESCE(stillage_discarded, 0) = 0
+      AND stillage_volume_gal > 0
+  `, [vesselId]);
+
   const inflows = [
     ...cuts.map((cut) => ({
       occurredAt: cut.occurred_at,
@@ -913,6 +923,11 @@ export function getCollectionVesselStoredCutType(
       occurredAt: transfer.occurred_at,
       volumeGal: transfer.volume_gal,
       cutType: singleCutTypeOnEquipment(transfer.source_tank_equipment_id),
+    })),
+    ...stillage.map((row) => ({
+      occurredAt: row.occurred_at,
+      volumeGal: row.volume_gal,
+      cutType: null as CutType | null,
     })),
   ].sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
 
@@ -1084,7 +1099,17 @@ export function getHoldingTankContents(
       AND final_volume_gal > 0
   `, [tankId]);
 
-  const volumeIn = (ins?.volume_gal ?? 0) + (transferIns?.volume_gal ?? 0) + (blendIns?.volume_gal ?? 0);
+  const stillageIns = queryOne<{ volume_gal: number }>(`
+    SELECT COALESCE(SUM(stillage_volume_gal), 0) as volume_gal
+    FROM distillation_runs
+    WHERE stillage_holding_tank_equipment_id = ?
+      AND status = 'complete'
+      AND COALESCE(stillage_discarded, 0) = 0
+      AND stillage_volume_gal > 0
+  `, [tankId]);
+
+  const volumeIn = (ins?.volume_gal ?? 0) + (transferIns?.volume_gal ?? 0) + (blendIns?.volume_gal ?? 0)
+    + (stillageIns?.volume_gal ?? 0);
   const volumeOut = (runOuts?.volume_gal ?? 0) + (blendOuts?.volume_gal ?? 0)
     + (bottlingOuts?.volume_gal ?? 0) + (barrelFillOuts?.volume_gal ?? 0) + (transferOuts?.volume_gal ?? 0);
   const gpaIn = (ins?.gpa ?? 0) + (transferIns?.gpa ?? 0) + (blendIns?.gpa ?? 0);
@@ -1485,6 +1510,30 @@ export function getHoldingTankIntakeHistory(
       summary: `Blend ${b.batch_number} — ${b.product_name}`,
       detail: 'Finished batch',
     })),
+    ...queryAll<{
+      id: number;
+      occurred_at: string;
+      volume_gal: number;
+      batch_number: string;
+      run_type: string;
+      still_name: string;
+    }>(`
+      SELECT id, run_date as occurred_at, stillage_volume_gal as volume_gal,
+             batch_number, run_type, still_name
+      FROM distillation_runs
+      WHERE stillage_holding_tank_equipment_id = ?
+        AND status = 'complete'
+        AND COALESCE(stillage_discarded, 0) = 0
+        AND stillage_volume_gal > 0
+    `, [tankId]).map((row) => ({
+      kind: 'stillage' as const,
+      id: row.id,
+      occurred_at: row.occurred_at,
+      volume_gal: row.volume_gal,
+      abv: 0,
+      summary: `Stillage from ${row.batch_number} (${runTypeLabels[row.run_type] ?? row.run_type})`,
+      detail: row.still_name || undefined,
+    })),
   ];
 
   entries.sort(
@@ -1589,6 +1638,12 @@ export function emptyAllHoldingTanks(): {
         proof_spirit_gal = NULL, proof_spirit_abv = NULL,
         proof_water_gal = 0, proof_place = NULL
     WHERE source_holding_tank_equipment_id IS NOT NULL AND charge_volume_gal > 0
+  `);
+  runQuery(`
+    UPDATE distillation_runs
+    SET stillage_volume_gal = 0, stillage_holding_tank_equipment_id = NULL, stillage_discarded = 1
+    WHERE stillage_holding_tank_equipment_id IS NOT NULL
+      AND COALESCE(stillage_volume_gal, 0) > 0
   `);
 
   const blendsCleared = queryOne<{ count: number }>(`
@@ -2031,6 +2086,46 @@ export function distillationRunHasRecordedCuts(runId: number): boolean {
   return (row?.count ?? 0) > 0;
 }
 
+function assertStillageFitsTank(tankId: number, volumeGal: number, runId?: number): void {
+  const tank = queryOne<{ name: string; capacity_gal: number; equipment_type: string }>(
+    'SELECT name, capacity_gal, equipment_type FROM floor_equipment WHERE id = ?',
+    [tankId],
+  );
+  if (!tank) throw new Error('Stillage tank not found.');
+  if (tank.equipment_type !== 'holding_tank' && tank.equipment_type !== 'collection_vessel') {
+    throw new Error(`${tank.name} cannot store stillage. Choose a holding tank or collection vessel, or discard it.`);
+  }
+  if (!(tank.capacity_gal > 0)) return;
+  const contents = getHoldingTankContents(tankId);
+  let already = 0;
+  if (runId) {
+    const prev = queryOne<{
+      stillage_volume_gal: number | null;
+      stillage_holding_tank_equipment_id: number | null;
+      status: string;
+      stillage_discarded: number | null;
+    }>(
+      `SELECT stillage_volume_gal, stillage_holding_tank_equipment_id, status, stillage_discarded
+       FROM distillation_runs WHERE id = ?`,
+      [runId],
+    );
+    if (
+      prev
+      && prev.status === 'complete'
+      && prev.stillage_holding_tank_equipment_id === tankId
+      && !prev.stillage_discarded
+    ) {
+      already = prev.stillage_volume_gal ?? 0;
+    }
+  }
+  const occupied = Math.max(0, contents.volume_gal - already);
+  if (occupied + volumeGal > tank.capacity_gal + 0.01) {
+    throw new Error(
+      `Stillage (${volumeGal} gal) does not fit in ${tank.name} (${tank.capacity_gal} gal capacity, ${occupied.toFixed(1)} gal already there).`,
+    );
+  }
+}
+
 function assertDistillationRunCompleteHasCuts(runId: number | undefined, status: string): void {
   if (status !== 'complete') return;
   if (!runId) {
@@ -2121,10 +2216,12 @@ export function getDistillationRuns(): DistillationRunView[] {
   return queryAll(
     `SELECT r.*,
        src.name as source_holding_tank_name,
-       dest.name as dest_holding_tank_name
+       dest.name as dest_holding_tank_name,
+       stillage_tank.name as stillage_tank_name
      FROM distillation_runs r
      LEFT JOIN floor_equipment src ON src.id = r.source_holding_tank_equipment_id
      LEFT JOIN floor_equipment dest ON dest.id = r.dest_holding_tank_equipment_id
+     LEFT JOIN floor_equipment stillage_tank ON stillage_tank.id = r.stillage_holding_tank_equipment_id
      ORDER BY r.run_date DESC`,
   );
 }
@@ -2225,13 +2322,31 @@ export function saveDistillationRun(run: Omit<DistillationRun, 'id' | 'created_a
     assertStillAvailableForCharge(run.still_name, id);
   }
   assertDistillationRunCompleteHasCuts(id, run.status);
+  const stillageError = stillageSaveError({
+    status: run.status,
+    runType,
+    volumeGal: run.stillage_volume_gal,
+    discarded: Boolean(run.stillage_discarded),
+    tankId: run.stillage_holding_tank_equipment_id,
+  });
+  if (stillageError) throw new Error(stillageError);
+  const stillage = persistedStillage({
+    status: run.status,
+    runType,
+    volumeGal: run.stillage_volume_gal,
+    discarded: Boolean(run.stillage_discarded),
+    tankId: run.stillage_holding_tank_equipment_id,
+  });
+  if (stillage.tankId && stillage.volumeGal && stillage.volumeGal > 0) {
+    assertStillageFitsTank(stillage.tankId, stillage.volumeGal, id);
+  }
   const previousRun = id
     ? queryOne<DistillationRun>('SELECT * FROM distillation_runs WHERE id = ?', [id])
     : null;
   const runDate = eventDateWhenLeavingPlanned(previousRun?.status, run.status, run.run_date);
   if (id) {
     runQuery(
-      `UPDATE distillation_runs SET batch_number=?, run_type=?, source_mash_batch_id=?, source_fermenter_equipment_id=?, source_holding_tank_equipment_id=?, dest_holding_tank_equipment_id=?, still_name=?, run_date=?, charge_volume_gal=?, charge_abv=?, proof_spirit_gal=?, proof_spirit_abv=?, proof_water_gal=?, proof_place=?, status=?, assigned_user_id=?, assigned_user_name=?, notes=? WHERE id=?`,
+      `UPDATE distillation_runs SET batch_number=?, run_type=?, source_mash_batch_id=?, source_fermenter_equipment_id=?, source_holding_tank_equipment_id=?, dest_holding_tank_equipment_id=?, still_name=?, run_date=?, charge_volume_gal=?, charge_abv=?, proof_spirit_gal=?, proof_spirit_abv=?, proof_water_gal=?, proof_place=?, stillage_volume_gal=?, stillage_discarded=?, stillage_holding_tank_equipment_id=?, status=?, assigned_user_id=?, assigned_user_name=?, notes=? WHERE id=?`,
       [
         run.batch_number,
         runType,
@@ -2247,6 +2362,9 @@ export function saveDistillationRun(run: Omit<DistillationRun, 'id' | 'created_a
         isTankSourcedRun(runType) ? run.proof_spirit_abv ?? null : null,
         isTankSourcedRun(runType) ? run.proof_water_gal ?? 0 : 0,
         isTankSourcedRun(runType) ? run.proof_place ?? null : null,
+        stillage.volumeGal,
+        stillage.discarded,
+        stillage.tankId,
         run.status,
         run.assigned_user_id,
         run.assigned_user_name ?? '',
@@ -2256,7 +2374,7 @@ export function saveDistillationRun(run: Omit<DistillationRun, 'id' | 'created_a
     );
   } else {
     insertRow(
-      `INSERT INTO distillation_runs (batch_number, run_type, source_mash_batch_id, source_fermenter_equipment_id, source_holding_tank_equipment_id, dest_holding_tank_equipment_id, still_name, run_date, charge_volume_gal, charge_abv, proof_spirit_gal, proof_spirit_abv, proof_water_gal, proof_place, status, assigned_user_id, assigned_user_name, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO distillation_runs (batch_number, run_type, source_mash_batch_id, source_fermenter_equipment_id, source_holding_tank_equipment_id, dest_holding_tank_equipment_id, still_name, run_date, charge_volume_gal, charge_abv, proof_spirit_gal, proof_spirit_abv, proof_water_gal, proof_place, stillage_volume_gal, stillage_discarded, stillage_holding_tank_equipment_id, status, assigned_user_id, assigned_user_name, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         run.batch_number,
         runType,
@@ -2272,6 +2390,9 @@ export function saveDistillationRun(run: Omit<DistillationRun, 'id' | 'created_a
         isTankSourcedRun(runType) ? run.proof_spirit_abv ?? null : null,
         isTankSourcedRun(runType) ? run.proof_water_gal ?? 0 : 0,
         isTankSourcedRun(runType) ? run.proof_place ?? null : null,
+        stillage.volumeGal,
+        stillage.discarded,
+        stillage.tankId,
         run.status,
         run.assigned_user_id,
         run.assigned_user_name ?? '',

@@ -23,6 +23,7 @@ import {
   getFermenterChargeCapacityGal,
   getLatestFermentationBrix,
   getChargeableHoldingTanks,
+  getHoldingTanks,
   getHighWinesDestinationTanks,
   defaultDestTankIdForRunType,
   defaultTankForCutType,
@@ -60,10 +61,12 @@ import {
   spiritChargeDetail,
   type SpiritProofPlace,
 } from '../lib/spirit-charge-proof';
+import { runAsksForStillage, stillageSaveError, stillageSummary } from '../lib/stillage';
 import type {
   DistillationCutView,
   DistillationRun,
   DistillationRunType,
+  DistillationRunView,
   RunStatus,
   CutType,
 } from '../types';
@@ -89,6 +92,9 @@ const emptyRun = (runType: DistillationRunType = 'wash'): Omit<DistillationRun, 
   run_date: new Date().toISOString().slice(0, 10),
   charge_volume_gal: 0,
   charge_abv: null,
+  stillage_volume_gal: null,
+  stillage_discarded: 0,
+  stillage_holding_tank_equipment_id: null,
   status: 'planned',
   assigned_user_id: null,
   assigned_user_name: null,
@@ -103,6 +109,8 @@ export function Distillation() {
   const runs = getDistillationRuns();
   const mashes = getMashBatches();
   const collectionVessels = getCollectionVessels();
+  const stillageHoldingTanks = getHoldingTanks({ includeUnavailable: true });
+  const stillageCollectionVessels = getCollectionVessels({ includeUnavailable: true });
   const tanksWithContents = getSpiritTransferVesselsWithContents();
   const equipment = getFloorEquipment();
   const [showRunForm, setShowRunForm] = useState(false);
@@ -364,6 +372,9 @@ export function Distillation() {
         : run.dest_holding_tank_equipment_id ?? null,
       charge_volume_gal: proofed ? run.proof_spirit_gal! : run.charge_volume_gal,
       charge_abv: proofed ? (run.proof_spirit_abv ?? run.charge_abv) : run.charge_abv ?? null,
+      stillage_volume_gal: run.stillage_volume_gal ?? null,
+      stillage_discarded: run.stillage_discarded ?? 0,
+      stillage_holding_tank_equipment_id: run.stillage_holding_tank_equipment_id ?? null,
     });
     setChargeAbvObserved(
       proofed
@@ -437,6 +448,19 @@ export function Distillation() {
       }
       if (!distillationRunHasRecordedCuts(editRunId)) {
         alert('Record at least one cut with volume before marking this distillation run complete.');
+        return;
+      }
+    }
+    if (runForm.status === 'complete' && runAsksForStillage(runForm.run_type)) {
+      const stillageError = stillageSaveError({
+        status: runForm.status,
+        runType: runForm.run_type,
+        volumeGal: runForm.stillage_volume_gal,
+        discarded: Boolean(runForm.stillage_discarded),
+        tankId: runForm.stillage_holding_tank_equipment_id,
+      });
+      if (stillageError) {
+        alert(stillageError);
         return;
       }
     }
@@ -546,8 +570,8 @@ export function Distillation() {
 
   const runsByStatus = useMemo(() => {
     const byStatus = Object.fromEntries(
-      RUN_STATUSES.map((status) => [status, [] as DistillationRun[]]),
-    ) as Record<RunStatus, DistillationRun[]>;
+      RUN_STATUSES.map((status) => [status, [] as DistillationRunView[]]),
+    ) as Record<RunStatus, DistillationRunView[]>;
     for (const run of runs) {
       byStatus[run.status].push(run);
     }
@@ -558,6 +582,15 @@ export function Distillation() {
 
   const selectedRun = runs.find((r) => r.id === selectedRunId);
   const selectedRunIsComplete = selectedRun?.status === 'complete';
+  const selectedStillageLabel = selectedRun
+    ? stillageSummary({
+      status: selectedRun.status,
+      runType: selectedRun.run_type,
+      volumeGal: selectedRun.stillage_volume_gal,
+      discarded: Boolean(selectedRun.stillage_discarded),
+      tankName: selectedRun.stillage_tank_name,
+    })
+    : null;
   const cuts = selectedRunId ? getDistillationCuts(selectedRunId) : [];
   const hasHeadsCut = cuts.some((c) => c.cut_type === 'heads');
   const availableCutTypes = hasHeadsCut
@@ -818,6 +851,13 @@ export function Distillation() {
                   <tbody>
                     {items.map((r) => {
                       const runType = r.run_type ?? 'wash';
+                      const stillageLabel = stillageSummary({
+                        status: r.status,
+                        runType,
+                        volumeGal: r.stillage_volume_gal,
+                        discarded: Boolean(r.stillage_discarded),
+                        tankName: r.stillage_tank_name,
+                      });
                       return (
                         <tr key={r.id}>
                           <td><strong>{r.batch_number}</strong></td>
@@ -831,6 +871,9 @@ export function Distillation() {
                             {isTankSourcedRun(runType) && r.charge_abv != null ? ` @ ${r.charge_abv.toFixed(1)}%` : ''}
                             {spiritChargeDetail(r) && (
                               <div className="field-hint">{spiritChargeDetail(r)}</div>
+                            )}
+                            {stillageLabel && (
+                              <div className="field-hint">{stillageLabel}</div>
                             )}
                           </td>
                           <td className="td-actions">
@@ -869,6 +912,9 @@ export function Distillation() {
               <span className="text-muted">
                 Hearts: {heartsTotal.toFixed(1)} gal · GPA: {gpa.toFixed(2)} gal
               </span>
+            )}
+            {selectedStillageLabel && (
+              <span className="text-muted">{selectedStillageLabel}</span>
             )}
             {selectedRunIsComplete ? (
               <span className="text-muted">This run is complete — cuts are read-only.</span>
@@ -1191,6 +1237,84 @@ export function Distillation() {
                 {RUN_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
+            {runForm.status === 'complete' && runAsksForStillage(runForm.run_type) && (
+              <div className="form-group full-width">
+                <label>Stillage left in the still</label>
+                <p className="field-hint">
+                  Spent wash left after this {runForm.run_type === 'heavy_rum' ? 'heavy rum' : 'low wine'} run.
+                  Enter 0 if none is left. Any volume has to be stored in a tank or discarded.
+                </p>
+                <div className="form-grid">
+                  <div className="form-group">
+                    <label>Stillage volume (gal)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      value={runForm.stillage_volume_gal == null || Number.isNaN(runForm.stillage_volume_gal)
+                        ? ''
+                        : runForm.stillage_volume_gal}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        setRunForm({
+                          ...runForm,
+                          stillage_volume_gal: raw === '' ? null : Number(raw),
+                        });
+                      }}
+                      placeholder="Gallons"
+                    />
+                  </div>
+                  {(runForm.stillage_volume_gal ?? 0) > 0.001 && (
+                    <div className="form-group">
+                      <label>Store or discard</label>
+                      <select
+                        value={runForm.stillage_discarded
+                          ? 'discarded'
+                          : runForm.stillage_holding_tank_equipment_id
+                            ? String(runForm.stillage_holding_tank_equipment_id)
+                            : ''}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          if (value === 'discarded') {
+                            setRunForm({
+                              ...runForm,
+                              stillage_discarded: 1,
+                              stillage_holding_tank_equipment_id: null,
+                            });
+                            return;
+                          }
+                          setRunForm({
+                            ...runForm,
+                            stillage_discarded: 0,
+                            stillage_holding_tank_equipment_id: value ? Number(value) : null,
+                          });
+                        }}
+                      >
+                        <option value="">Choose…</option>
+                        <option value="discarded">Discarded</option>
+                        {runForm.stillage_holding_tank_equipment_id
+                          && !stillageHoldingTanks.some((tank) => tank.id === runForm.stillage_holding_tank_equipment_id)
+                          && !stillageCollectionVessels.some((tank) => tank.id === runForm.stillage_holding_tank_equipment_id) && (
+                          <option value={runForm.stillage_holding_tank_equipment_id}>
+                            {equipment.find((item) => item.id === runForm.stillage_holding_tank_equipment_id)?.name ?? 'Selected tank'}
+                          </option>
+                        )}
+                        <optgroup label="Holding tanks">
+                          {stillageHoldingTanks.map((tank) => (
+                            <option key={tank.id} value={tank.id}>{tank.name}</option>
+                          ))}
+                        </optgroup>
+                        <optgroup label="Collection vessels">
+                          {stillageCollectionVessels.map((tank) => (
+                            <option key={tank.id} value={tank.id}>{tank.name}</option>
+                          ))}
+                        </optgroup>
+                      </select>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
             <div className="form-group full-width">
               <label>Notes</label>
               <textarea value={runForm.notes} onChange={(e) => setRunForm({ ...runForm, notes: e.target.value })} />
