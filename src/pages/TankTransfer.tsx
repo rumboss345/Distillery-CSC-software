@@ -9,11 +9,11 @@ import { StatusBadge } from '../components/StatusBadge';
 import {
   deleteHoldingTankTransfer,
   getCollectionVesselStoredCutType,
+  getFloorEquipment,
   getHoldingTankContents,
   getHoldingTankIntakeHistory,
   getHoldingTankTransfers,
   getSpiritTransferVessels,
-  getSpiritTransferVesselsWithContents,
   saveHoldingTankTransfer,
   useRefreshKey,
 } from '../db/queries';
@@ -48,7 +48,12 @@ export function TankTransfer() {
   const calendarPlanHandled = useRef(false);
   const { key, refresh } = useRefreshKey();
   const spiritTransferVessels = getSpiritTransferVessels();
-  const tanksWithContents = getSpiritTransferVesselsWithContents();
+  const tanksWithContents = getFloorEquipment()
+    .filter((item) => item.equipment_type === 'holding_tank' || item.equipment_type === 'collection_vessel')
+    .map((tank) => ({
+      ...tank,
+      ...getHoldingTankContents(tank.id),
+    }));
   const tankTransfers = getHoldingTankTransfers();
   const [showTransferForm, setShowTransferForm] = useState(false);
   const [transferForm, setTransferForm] = useState(emptyTransferForm);
@@ -248,7 +253,13 @@ export function TankTransfer() {
                       <td>{canTransfer ? `${tank.abv.toFixed(1)}%` : '—'}</td>
                       <td>{tank.capacity_gal > 0 ? `${tank.capacity_gal} gal` : '—'}</td>
                       <td>{tankContentsSummary(tank.id, tank.volume_gal)}</td>
-                      <td><StatusBadge status={canTransfer ? 'in_use' : 'empty'} /></td>
+                      <td>
+                        <StatusBadge
+                          status={tank.status === 'cleaning' || tank.status === 'offline'
+                            ? tank.status
+                            : canTransfer ? 'in_use' : 'empty'}
+                        />
+                      </td>
                       <td className="td-actions">
                         {canTransfer && (
                           <button
