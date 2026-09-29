@@ -5,6 +5,7 @@ import { DatePicker } from '../components/DatePicker';
 import { AbvVolumeTemperatureFields } from '../components/AbvVolumeTemperatureFields';
 import { correctedAbvFromInputs } from '../components/AbvTemperatureInput';
 import { Modal } from '../components/Modal';
+import { StatusBadge } from '../components/StatusBadge';
 import {
   deleteHoldingTankTransfer,
   getCollectionVesselStoredCutType,
@@ -21,6 +22,15 @@ const sourceTankVolumeGal = (tankId: number) => {
   if (!tankId) return 0;
   const contents = getHoldingTankContents(tankId);
   return contents.volume_gal > 0 ? contents.volume_gal : 0;
+};
+
+const tankContentsSummary = (tankId: number, volumeGal: number): string => {
+  if (volumeGal <= 0.001) return '—';
+  const intake = getHoldingTankIntakeHistory(tankId, 1)[0]?.summary;
+  if (intake) return intake;
+  const cutType = getCollectionVesselStoredCutType(tankId);
+  if (!cutType) return '—';
+  return cutType.charAt(0).toUpperCase() + cutType.slice(1);
 };
 
 const emptyTransferForm = () => ({
@@ -94,6 +104,12 @@ export function TankTransfer() {
       form = applySourceTankToForm(form, sourceTanksForTransfer[0].id);
     }
     setTransferForm(form);
+    setShowTransferForm(true);
+  };
+
+  const openTransferFromTank = (tankId: number) => {
+    if (sourceTankVolumeGal(tankId) <= 0) return;
+    setTransferForm(applySourceTankToForm(emptyTransferForm(), tankId));
     setShowTransferForm(true);
   };
 
@@ -197,6 +213,67 @@ export function TankTransfer() {
       </div>
 
       <div className="detail-panel">
+        <h4>Tanks</h4>
+        <p className="field-hint" style={{ marginTop: '-0.5rem' }}>
+          Select a tank with spirit to transfer it.
+        </p>
+        {tanksWithContents.length === 0 ? (
+          <p style={{ color: 'var(--text-muted)' }}>No holding tanks or collection vessels on the floor plan.</p>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Tank</th>
+                  <th>Volume</th>
+                  <th>ABV</th>
+                  <th>Capacity</th>
+                  <th>Contents</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {tanksWithContents.map((tank) => {
+                  const canTransfer = tank.volume_gal > 0.001;
+                  return (
+                    <tr
+                      key={tank.id}
+                      onClick={canTransfer ? () => openTransferFromTank(tank.id) : undefined}
+                      style={canTransfer ? { cursor: 'pointer' } : undefined}
+                      title={canTransfer ? `Transfer from ${tank.name}` : undefined}
+                    >
+                      <td><strong>{tank.name}</strong></td>
+                      <td>{canTransfer ? `${tank.volume_gal.toFixed(1)} gal` : '—'}</td>
+                      <td>{canTransfer ? `${tank.abv.toFixed(1)}%` : '—'}</td>
+                      <td>{tank.capacity_gal > 0 ? `${tank.capacity_gal} gal` : '—'}</td>
+                      <td>{tankContentsSummary(tank.id, tank.volume_gal)}</td>
+                      <td><StatusBadge status={canTransfer ? 'in_use' : 'empty'} /></td>
+                      <td className="td-actions">
+                        {canTransfer && (
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-secondary"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              openTransferFromTank(tank.id);
+                            }}
+                          >
+                            Transfer
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="detail-panel">
+        <h4>Transfers</h4>
         {tankTransfers.length === 0 ? (
           <p style={{ color: 'var(--text-muted)' }}>No tank-to-tank transfers recorded yet.</p>
         ) : (
