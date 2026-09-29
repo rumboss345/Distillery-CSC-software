@@ -20,9 +20,18 @@ import {
   applyAbvTemperatureCorrection,
   STANDARD_GAUGING_TEMP_F,
 } from '../services/temperature-correction';
+import {
+  convertVolume,
+  convertWeight,
+  formatConvertedAmount,
+  VOLUME_UNITS,
+  WEIGHT_UNITS,
+  type VolumeUnitId,
+  type WeightUnitId,
+} from '../lib/unit-converter';
 import { ML_PER_GALLON } from '../types';
 
-type CalculatorTab = 'gauging' | 'dilution';
+type CalculatorTab = 'gauging' | 'dilution' | 'volume' | 'weight';
 type InputMode = 'weight' | 'volume';
 type WeightUnit = 'lb' | 'kg';
 type VolumeUnit = 'gal' | 'l';
@@ -334,6 +343,90 @@ function AlcoholDilutionCalculator() {
   );
 }
 
+function UnitConverterCard<T extends string>({
+  title,
+  hint,
+  units,
+  initialUnit,
+  convert,
+}: {
+  title: string;
+  hint: string;
+  units: readonly { id: T; label: string; short: string }[];
+  initialUnit: T;
+  convert: (amount: number, from: T) => Record<T, number> | null;
+}) {
+  const [amount, setAmount] = useState('1');
+  const [from, setFrom] = useState<T>(initialUnit);
+  const parsed = amount.trim() === '' ? null : Number(amount);
+  const result = parsed != null && Number.isFinite(parsed) ? convert(parsed, from) : null;
+
+  return (
+    <div className="card">
+      <h3>{title}</h3>
+      <p className="field-hint" style={{ marginTop: 0 }}>{hint}</p>
+      <div className="form-grid">
+        <div className="form-group">
+          <label>Amount</label>
+          <input
+            type="number"
+            step="any"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+          />
+        </div>
+        <div className="form-group">
+          <label>From</label>
+          <select value={from} onChange={(e) => setFrom(e.target.value as T)}>
+            {units.map((unit) => (
+              <option key={unit.id} value={unit.id}>{unit.label}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+      {result ? (
+        <dl className="unit-converter-results">
+          {units.map((unit) => (
+            <span key={unit.id} style={{ display: 'contents' }}>
+              <dt className={unit.id === from ? 'unit-converter-entered' : undefined}>{unit.label}</dt>
+              <dd className={unit.id === from ? 'unit-converter-entered' : undefined}>
+                <strong>{formatConvertedAmount(result[unit.id])}</strong> {unit.short}
+                {unit.id === from ? ' (entered)' : ''}
+              </dd>
+            </span>
+          ))}
+        </dl>
+      ) : (
+        <p className="field-hint" style={{ marginTop: '1rem' }}>Enter an amount to convert.</p>
+      )}
+    </div>
+  );
+}
+
+function VolumeConverter() {
+  return (
+    <UnitConverterCard
+      title="Volume converter"
+      hint="Convert US gallons, liters, milliliters, and US fluid ounces. This is measure only and does not apply proof or temperature."
+      units={VOLUME_UNITS}
+      initialUnit={'gal' satisfies VolumeUnitId}
+      convert={convertVolume}
+    />
+  );
+}
+
+function WeightConverter() {
+  return (
+    <UnitConverterCard
+      title="Weight converter"
+      hint="Convert pounds, ounces, kilograms, and grams. Spirit weight at a proof is on Weight & gauging; this converter does not use Table No. 3."
+      units={WEIGHT_UNITS}
+      initialUnit={'lb' satisfies WeightUnitId}
+      convert={convertWeight}
+    />
+  );
+}
+
 export function SpiritWeightCalculator() {
   const [tab, setTab] = useState<CalculatorTab>('gauging');
   const [inputMode, setInputMode] = useState<InputMode>('weight');
@@ -407,7 +500,7 @@ export function SpiritWeightCalculator() {
         <div>
           <h1>Spirit Calculator</h1>
           <p className="page-subtitle">
-            TTB Table No. 3 gauging and alcohol dilution for proofing. Enter observed ABV and sample temperature where applicable; values are corrected to 60 °F before use.
+            TTB Table No. 3 gauging, alcohol dilution, and plain volume and weight conversion. Enter observed ABV and sample temperature where applicable; gauging values are corrected to 60 °F before use.
           </p>
         </div>
       </div>
@@ -427,10 +520,28 @@ export function SpiritWeightCalculator() {
         >
           Alcohol dilution
         </button>
+        <button
+          type="button"
+          className={`btn btn-sm ${tab === 'volume' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => setTab('volume')}
+        >
+          Volume converter
+        </button>
+        <button
+          type="button"
+          className={`btn btn-sm ${tab === 'weight' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => setTab('weight')}
+        >
+          Weight converter
+        </button>
       </div>
 
       {tab === 'dilution' ? (
         <AlcoholDilutionCalculator />
+      ) : tab === 'volume' ? (
+        <VolumeConverter />
+      ) : tab === 'weight' ? (
+        <WeightConverter />
       ) : (
         <>
           <div className="card">

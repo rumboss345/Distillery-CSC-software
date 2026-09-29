@@ -1953,6 +1953,27 @@ tr:hover td {
   position: relative;
 }
 
+.unit-converter-results {
+  display: grid;
+  grid-template-columns: minmax(10rem, 16rem) 1fr;
+  gap: 0.45rem 1rem;
+  margin: 1rem 0 0;
+}
+
+.unit-converter-results dt {
+  margin: 0;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.unit-converter-results dd {
+  margin: 0;
+}
+
+.unit-converter-results .unit-converter-entered {
+  color: var(--text);
+}
+
 .measure-best-tag {
   margin-left: 0.35rem;
   padding: 0.1rem 0.35rem;
@@ -2338,7 +2359,8 @@ tr:hover td {
   .correct-batch-inputs,
   .wizard-lab-inputs,
   .blend-recipe-additive-fields,
-  .blend-recipe-spirit-amount-row {
+  .blend-recipe-spirit-amount-row,
+  .unit-converter-results {
     grid-template-columns: 1fr;
   }
 }
