@@ -291,7 +291,7 @@ export interface HoldingTankTransferView extends HoldingTankTransfer {
   dest_tank_name?: string;
 }
 
-/** Gallons of wash dumped from a fermenter instead of moved to another fermenter. */
+/** Gallons from a fermenter that cannot be used. The fermentation itself stays. */
 export interface DiscardedFermentation {
   id: number;
   mash_batch_id: number | null;

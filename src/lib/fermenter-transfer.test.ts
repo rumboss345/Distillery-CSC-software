@@ -41,9 +41,9 @@ describe('fermenter wash transfers', () => {
     expect(fermenterTransferError({ ...base, volumeGal: 0 })).toMatch(/volume/);
     expect(fermenterTransferError({ ...base, volumeGal: 200 })).toMatch(/Only 112.5 gal/);
     expect(fermenterTransferError({ ...base, destType: 'holding_tank', destName: 'Stillage Storage tank' }))
-      .toMatch(/another fermenter or be discarded/);
+      .toMatch(/leftovers/);
     expect(fermenterTransferError({ ...base, destId: null, discarded: false }))
-      .toMatch(/another fermenter, or discard/);
+      .toMatch(/leftovers/);
     expect(fermenterTransferError({ ...base, destId: 1 })).toMatch(/must be different/);
   });
 
