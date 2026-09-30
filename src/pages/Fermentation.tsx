@@ -6,24 +6,19 @@ import { FermenterLogPanel } from '../components/FermenterLogPanel';
 import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
 import {
-  deleteMashBatch,
+  deleteOneFermentation,
   getAllFermentationLogSources,
   getAllMashFermenterAssignments,
   getAvailableFermenters,
   getLatestFermentationBrix,
-  getMashBatchNutrients,
   getMashBatches,
-  getMashFermenterAssignments,
-  mashBatchHasFermentationLogs,
-  saveMashBatchWithFermenters,
+  saveFermentationSet,
   useRefreshKey,
 } from '../db/queries';
 import { formatDateDisplay } from '../lib/date-input';
 import { estimateAbvFromBrix, formatAbvEstimate } from '../lib/fermentation';
-import { fermenterBrixReadings, fermenterLogPanels } from '../lib/fermentation-log-panels';
-import { eventDateWhenLeavingPlanned } from '../lib/planned-event-date';
 import { FERMENTATION_PAGE_STATUSES, washRecordKind } from '../lib/wash-stage';
-import type { MashBatch, MashStatus } from '../types';
+import type { FermentationAssignmentStatus, MashBatch, MashFermenterAssignment, MashStatus } from '../types';
 
 const STATUS_LABELS: Record<MashStatus, string> = {
   planned: 'planned',
@@ -41,13 +36,42 @@ const STATUS_GROUP_HEADINGS: Record<MashStatus, string> = {
   discarded: 'Discarded',
 };
 
-const emptyFermenterForm = () => ({
-  split: false,
-  fermenter1Id: '' as number | '',
-  fermenter2Id: '' as number | '',
-  volume1: 0,
-  volume2: 0,
-});
+type AssignmentRow = MashFermenterAssignment & { equipment_name: string; batch_number: string };
+
+interface FermentationRow {
+  key: string;
+  batch: MashBatch;
+  status: FermentationAssignmentStatus;
+  equipmentId: number | null;
+  fermenterName: string;
+  label: string;
+  volumeGal: number;
+  distilled: boolean;
+  assignment: AssignmentRow | null;
+  startBrix: number | null;
+  currentBrix: number | null;
+}
+
+interface LogTarget {
+  batchId: number;
+  batchNumber: string;
+  startDate: string;
+  equipmentId: number | null;
+  equipmentName: string;
+  volumeGal?: number;
+  startBrix: number | null;
+  readOnly: boolean;
+  distilled: boolean;
+}
+
+function assignmentStatus(status: string | null | undefined): FermentationAssignmentStatus {
+  if (status === 'complete' || status === 'discarded') return status;
+  return 'fermenting';
+}
+
+function unlockKeyFor(batchId: number, equipmentId: number | null): string {
+  return `${batchId}:${equipmentId ?? 'batch'}`;
+}
 
 export function Fermentation() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -57,14 +81,19 @@ export function Fermentation() {
   const allAssignments = getAllMashFermenterAssignments();
   const allLogSources = getAllFermentationLogSources();
   const [showForm, setShowForm] = useState(false);
+  const [formMode, setFormMode] = useState<'start' | 'edit'>('start');
   const [editBatch, setEditBatch] = useState<MashBatch | null>(null);
-  const [status, setStatus] = useState<MashStatus>('fermenting');
-  const [fermenterForm, setFermenterForm] = useState(emptyFermenterForm());
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [adminDeleteBatchId, setAdminDeleteBatchId] = useState<number | null>(null);
-  const [adminEditBatchId, setAdminEditBatchId] = useState<number | null>(null);
-  const [adminSaveEditBatchId, setAdminSaveEditBatchId] = useState<number | null>(null);
-  const completeEditUnlockedRef = useRef<number | null>(null);
+  const [editEquipmentId, setEditEquipmentId] = useState<number | null>(null);
+  const [editFermenterName, setEditFermenterName] = useState('');
+  const [originalStatus, setOriginalStatus] = useState<FermentationAssignmentStatus>('fermenting');
+  const [status, setStatus] = useState<FermentationAssignmentStatus>('fermenting');
+  const [fermenterId, setFermenterId] = useState<number | ''>('');
+  const [volumeGal, setVolumeGal] = useState(0);
+  const [logTarget, setLogTarget] = useState<LogTarget | null>(null);
+  const [adminDelete, setAdminDelete] = useState<FermentationRow | null>(null);
+  const [adminEdit, setAdminEdit] = useState<FermentationRow | null>(null);
+  const [adminSave, setAdminSave] = useState(false);
+  const completeEditUnlockedRef = useRef<string | null>(null);
 
   void key;
 
@@ -82,63 +111,126 @@ export function Fermentation() {
     hasAssignments: assignmentBatchIds.has(batch.id),
   }) === 'fermentation');
 
-  const washChoices = batches.filter((batch) => batch.status === 'planned' || batch.status === 'mashing');
-
-  const availableFermenters = getAvailableFermenters(editBatch?.id);
-  const availableFermenters2 = availableFermenters.filter((f) => f.id !== fermenterForm.fermenter1Id);
-
-  const getBatchFermenters = (mashId: number) =>
+  const assignmentsFor = (mashId: number) =>
     allAssignments.filter((assignment) => assignment.mash_batch_id === mashId);
 
-  const getBatchLogSources = (mashId: number) =>
-    allLogSources.filter((source) => source.mash_batch_id === mashId);
+  const assignedGallons = (mashId: number) =>
+    assignmentsFor(mashId).reduce((sum, assignment) => sum + assignment.volume_gal, 0);
 
-  const loadFermenterForm = (mashId?: number, batchGallons = 0) => {
-    if (!mashId) {
-      setFermenterForm({
-        ...emptyFermenterForm(),
-        volume1: batchGallons,
-      });
-      return;
-    }
-    const assignments = getMashFermenterAssignments(mashId);
-    if (assignments.length === 0) {
-      setFermenterForm({
-        ...emptyFermenterForm(),
-        volume1: batchGallons,
-      });
-      return;
-    }
-    if (assignments.length >= 2) {
-      setFermenterForm({
-        split: true,
-        fermenter1Id: assignments[0].floor_equipment_id,
-        fermenter2Id: assignments[1].floor_equipment_id,
-        volume1: assignments[0].volume_gal,
-        volume2: assignments[1].volume_gal,
-      });
-    } else {
-      setFermenterForm({
-        split: false,
-        fermenter1Id: assignments[0].floor_equipment_id,
-        fermenter2Id: '',
-        volume1: assignments[0].volume_gal || batchGallons,
-        volume2: 0,
-      });
-    }
+  const canStartFrom = (batch: MashBatch) => {
+    if (batch.status === 'planned' || batch.status === 'mashing') return true;
+    if (batch.status !== 'fermenting') return false;
+    return batch.water_gal - assignedGallons(batch.id) > 0.5;
   };
 
-  const openFermentation = (batch: MashBatch, nextStatus: MashStatus = 'fermenting') => {
-    setEditBatch(batch);
-    setStatus(batch.status === 'planned' || batch.status === 'mashing' ? 'fermenting' : nextStatus);
-    loadFermenterForm(batch.id, batch.water_gal);
-    setShowForm(true);
-  };
+  const washChoices = batches.filter(canStartFrom);
+
+  const rows = fermentationBatches.flatMap((batch): FermentationRow[] => {
+    const startBrix = batch.actual_brix ?? batch.target_brix;
+    const assignments = assignmentsFor(batch.id);
+    const sources = allLogSources.filter((source) => source.mash_batch_id === batch.id);
+    const next: FermentationRow[] = assignments.map((assignment) => ({
+      key: `assign-${assignment.id}`,
+      batch,
+      status: assignmentStatus(assignment.status),
+      equipmentId: assignment.floor_equipment_id,
+      fermenterName: assignment.equipment_name,
+      label: `${assignment.equipment_name}${assignment.volume_gal > 0 ? ` (${assignment.volume_gal} gal)` : ''}`,
+      volumeGal: assignment.volume_gal,
+      distilled: false,
+      assignment,
+      startBrix,
+      currentBrix: getLatestFermentationBrix(batch.id, assignment.floor_equipment_id),
+    }));
+    const assignedIds = new Set(assignments.map((assignment) => assignment.floor_equipment_id));
+    for (const source of sources) {
+      if (source.floor_equipment_id == null || assignedIds.has(source.floor_equipment_id)) continue;
+      const name = source.equipment_name || `Fermenter ${source.floor_equipment_id}`;
+      next.push({
+        key: `log-${batch.id}-${source.floor_equipment_id}`,
+        batch,
+        status: 'complete',
+        equipmentId: source.floor_equipment_id,
+        fermenterName: name,
+        label: `${name} (distilled)`,
+        volumeGal: 0,
+        distilled: true,
+        assignment: null,
+        startBrix,
+        currentBrix: getLatestFermentationBrix(batch.id, source.floor_equipment_id),
+      });
+    }
+    if (next.length === 0) {
+      const rowStatus = batch.status === 'complete' || batch.status === 'discarded' ? batch.status : 'fermenting';
+      next.push({
+        key: `batch-${batch.id}`,
+        batch,
+        status: rowStatus,
+        equipmentId: null,
+        fermenterName: '',
+        label: '',
+        volumeGal: batch.water_gal,
+        distilled: false,
+        assignment: null,
+        startBrix,
+        currentBrix: getLatestFermentationBrix(batch.id) ?? batch.actual_final_brix ?? batch.target_final_brix,
+      });
+    }
+    return next;
+  });
+
+  const rowsByStatus = FERMENTATION_PAGE_STATUSES
+    .map((groupStatus) => ({
+      status: groupStatus,
+      items: rows.filter((row) => row.status === groupStatus),
+    }))
+    .filter((group) => group.items.length > 0);
+
+  const siblingAssignments = editBatch
+    ? assignmentsFor(editBatch.id).filter((assignment) => (
+      formMode === 'start' || assignment.floor_equipment_id !== editEquipmentId
+    ))
+    : [];
+  const otherGallons = siblingAssignments.reduce((sum, assignment) => sum + assignment.volume_gal, 0);
+  const takenFermenterIds = new Set(siblingAssignments.map((assignment) => assignment.floor_equipment_id));
+  const availableFermenters = getAvailableFermenters(editBatch?.id)
+    .filter((fermenter) => !takenFermenterIds.has(fermenter.id));
+  const fermenterOptions = editEquipmentId && !availableFermenters.some((fermenter) => fermenter.id === editEquipmentId)
+    ? [{ id: editEquipmentId, name: editFermenterName || `Fermenter ${editEquipmentId}`, capacity_gal: 0 }, ...availableFermenters]
+    : availableFermenters;
 
   const closeForm = () => {
     setShowForm(false);
     setEditBatch(null);
+    setEditEquipmentId(null);
     completeEditUnlockedRef.current = null;
+  };
+
+  const openNew = (batch: MashBatch) => {
+    const assigned = assignedGallons(batch.id);
+    const remaining = Math.max(0, Math.round((batch.water_gal - assigned) * 10) / 10);
+    setFormMode('start');
+    setEditBatch(batch);
+    setEditEquipmentId(null);
+    setEditFermenterName('');
+    setOriginalStatus('fermenting');
+    setStatus('fermenting');
+    setFermenterId('');
+    setVolumeGal(remaining > 0 ? remaining : batch.water_gal);
+    completeEditUnlockedRef.current = null;
+    setShowForm(true);
+  };
+
+  const beginEdit = (row: FermentationRow) => {
+    setFormMode('edit');
+    setEditBatch(row.batch);
+    setEditEquipmentId(row.equipmentId);
+    setEditFermenterName(row.fermenterName);
+    setOriginalStatus(row.status);
+    setStatus(row.status);
+    setFermenterId(row.equipmentId ?? '');
+    setVolumeGal(row.assignment?.volume_gal || row.batch.water_gal);
+    setShowForm(true);
   };
 
   useEffect(() => {
@@ -147,76 +239,46 @@ export function Fermentation() {
     if (!washId) return;
     const batch = batches.find((item) => item.id === washId);
     washParamHandled.current = true;
-    if (batch && (batch.status === 'planned' || batch.status === 'mashing')) {
-      openFermentation(batch);
-    }
+    if (batch && canStartFrom(batch)) openNew(batch);
     const next = new URLSearchParams(searchParams);
     next.delete('wash');
     setSearchParams(next, { replace: true });
   }, [batches, searchParams, setSearchParams]);
 
-  useEffect(() => {
-    if (!editBatch) return;
-    if (fermenterForm.split && editBatch.water_gal > 0) {
-      const half = Math.round((editBatch.water_gal / 2) * 10) / 10;
-      setFermenterForm((prev) => ({
-        ...prev,
-        volume1: prev.volume1 || half,
-        volume2: prev.volume2 || editBatch.water_gal - half,
-      }));
-    } else if (!fermenterForm.split && editBatch.water_gal > 0 && fermenterForm.fermenter1Id) {
-      setFermenterForm((prev) => ({ ...prev, volume1: prev.volume1 || editBatch.water_gal }));
-    }
-  }, [fermenterForm.split, fermenterForm.fermenter1Id, editBatch]);
-
-  const buildAssignments = () => {
-    if (!editBatch || status === 'discarded') return [];
-    const assignments = [];
-    if (fermenterForm.fermenter1Id) {
-      assignments.push({
-        equipmentId: Number(fermenterForm.fermenter1Id),
-        volumeGal: fermenterForm.split ? fermenterForm.volume1 : (fermenterForm.volume1 || editBatch.water_gal),
-      });
-    }
-    if (fermenterForm.split && fermenterForm.fermenter2Id) {
-      assignments.push({
-        equipmentId: Number(fermenterForm.fermenter2Id),
-        volumeGal: fermenterForm.volume2,
-      });
-    }
-    return assignments;
-  };
-
   const performSave = () => {
     if (!editBatch) return;
-    if (status !== 'discarded' && !fermenterForm.fermenter1Id) {
+    const equipmentId = fermenterId ? Number(fermenterId) : 0;
+    if (!equipmentId) {
       alert('Select a fermenter for this fermentation.');
       return;
     }
-    if (fermenterForm.split && fermenterForm.fermenter1Id && fermenterForm.fermenter2Id) {
-      const total = fermenterForm.volume1 + fermenterForm.volume2;
-      if (editBatch.water_gal > 0 && Math.abs(total - editBatch.water_gal) > 0.5) {
-        if (!confirm(`Split volumes (${total} gal) don't match the wash batch size (${editBatch.water_gal} gal). Save anyway?`)) {
-          return;
-        }
-      }
-    }
-    if (status === 'complete' && !mashBatchHasFermentationLogs(editBatch.id)) {
-      alert('Add at least one fermentation log before marking this fermentation complete.');
+    if (!(volumeGal > 0)) {
+      alert('Enter the gallons in this fermenter.');
       return;
     }
-    const nutrients = getMashBatchNutrients(editBatch.id).map((n) => ({
-      name: n.name,
-      amount: n.amount,
-      unit: n.unit,
-    }));
-    const next = {
-      ...editBatch,
-      status,
-      start_date: eventDateWhenLeavingPlanned(editBatch.status, status, editBatch.start_date),
-    };
+    const room = editBatch.water_gal - otherGallons;
+    if (editBatch.water_gal > 0 && volumeGal > room + 0.5) {
+      const left = Math.max(0, room);
+      if (!confirm(`Only ${left.toFixed(1)} gal of this wash is left for this fermenter (${volumeGal} gal entered). Save anyway?`)) {
+        return;
+      }
+    }
+    const previousEquipmentId = formMode === 'edit' ? editEquipmentId : null;
+    const others = assignmentsFor(editBatch.id).filter((assignment) => (
+      assignment.floor_equipment_id !== previousEquipmentId && assignment.floor_equipment_id !== equipmentId
+    ));
+    const moveLogs = previousEquipmentId && previousEquipmentId !== equipmentId
+      ? { fromEquipmentId: previousEquipmentId, toEquipmentId: equipmentId }
+      : undefined;
     try {
-      saveMashBatchWithFermenters(next, buildAssignments(), nutrients, editBatch.id);
+      saveFermentationSet(editBatch.id, [
+        ...others.map((assignment) => ({
+          equipmentId: assignment.floor_equipment_id,
+          volumeGal: assignment.volume_gal,
+          status: assignmentStatus(assignment.status),
+        })),
+        { equipmentId, volumeGal, status },
+      ], moveLogs);
       closeForm();
       refresh();
     } catch (error) {
@@ -226,78 +288,83 @@ export function Fermentation() {
 
   const handleSave = () => {
     if (!editBatch) return;
-    if (editBatch.status === 'complete' && completeEditUnlockedRef.current !== editBatch.id) {
-      setAdminSaveEditBatchId(editBatch.id);
+    const unlockKey = unlockKeyFor(editBatch.id, formMode === 'edit' ? editEquipmentId : null);
+    if (formMode === 'edit' && originalStatus === 'complete' && completeEditUnlockedRef.current !== unlockKey) {
+      setAdminSave(true);
       return;
     }
     performSave();
   };
 
-  const openEdit = (batch: MashBatch) => {
-    if (batch.status === 'complete') {
-      setAdminEditBatchId(batch.id);
+  const openEdit = (row: FermentationRow) => {
+    if (row.distilled) return;
+    if (row.status === 'complete') {
+      setAdminEdit(row);
       return;
     }
     completeEditUnlockedRef.current = null;
-    openFermentation(batch, batch.status);
+    beginEdit(row);
   };
 
-  const performDelete = (id: number) => {
-    deleteMashBatch(id);
-    if (selectedId === id) setSelectedId(null);
+  const performDelete = (row: FermentationRow) => {
+    deleteOneFermentation(row.batch.id, row.assignment || row.distilled ? row.equipmentId : null);
+    if (logTarget?.batchId === row.batch.id && logTarget.equipmentId === row.equipmentId) setLogTarget(null);
     refresh();
   };
 
-  const handleDelete = (batch: MashBatch) => {
-    if (batch.status === 'complete') {
-      setAdminDeleteBatchId(batch.id);
+  const handleDelete = (row: FermentationRow) => {
+    if (row.status === 'complete') {
+      setAdminDelete(row);
       return;
     }
-    if (confirm(`Delete fermentation for wash ${batch.batch_number}? The wash batch is deleted with it.`)) {
-      performDelete(batch.id);
-    }
+    const name = row.fermenterName || 'this fermenter';
+    const message = row.distilled
+      ? `Delete the distilled logs for ${name} on wash ${row.batch.batch_number}? The wash batch stays.`
+      : row.assignment
+        ? `Delete the fermentation in ${name} for wash ${row.batch.batch_number}? Other fermenters on this wash stay.`
+        : `Delete the fermentation record for wash ${row.batch.batch_number}? This wash batch is deleted with it.`;
+    if (confirm(message)) performDelete(row);
   };
 
-  const batchesByStatus = FERMENTATION_PAGE_STATUSES
-    .map((groupStatus) => ({
-      status: groupStatus,
-      items: fermentationBatches.filter((batch) => batch.status === groupStatus),
-    }))
-    .filter((group) => group.items.length > 0);
+  const openLogs = (row: FermentationRow) => {
+    setLogTarget({
+      batchId: row.batch.id,
+      batchNumber: row.batch.batch_number,
+      startDate: row.batch.start_date,
+      equipmentId: row.equipmentId,
+      equipmentName: row.fermenterName,
+      volumeGal: row.volumeGal || undefined,
+      startBrix: row.startBrix,
+      readOnly: row.status !== 'fermenting' || row.distilled,
+      distilled: row.distilled,
+    });
+  };
 
-  const selectedBatch = batches.find((batch) => batch.id === selectedId);
-  const selectedAssignments = selectedId ? getMashFermenterAssignments(selectedId) : [];
-  const selectedLogPanels = selectedId
-    ? fermenterLogPanels({
-      batchComplete: selectedBatch?.status === 'complete',
-      assignments: selectedAssignments,
-      logSources: getBatchLogSources(selectedId),
-    })
-    : [];
-  const selectedStartBrix = selectedBatch
-    ? selectedBatch.actual_brix ?? selectedBatch.target_brix
-    : null;
-  const canViewLogs = selectedBatch?.status === 'fermenting' || selectedBatch?.status === 'complete';
-
-  const adminDeleteBatch = batches.find((batch) => batch.id === adminDeleteBatchId);
-  const adminEditBatch = batches.find((batch) => batch.id === adminEditBatchId);
-  const adminSaveEditBatch = batches.find((batch) => batch.id === adminSaveEditBatchId);
+  const deleteMessage = (row: FermentationRow) => {
+    if (row.distilled) {
+      return `${row.fermenterName} on wash ${row.batch.batch_number} was distilled. Enter an administrator email and password to delete its logs. The wash batch stays.`;
+    }
+    if (row.assignment) {
+      return `The fermentation in ${row.fermenterName} for wash ${row.batch.batch_number} is complete. Enter an administrator email and password to delete it. Other fermenters on this wash stay.`;
+    }
+    return `The fermentation record for wash ${row.batch.batch_number} is complete. Enter an administrator email and password to permanently delete the wash batch and its logs.`;
+  };
 
   return (
     <div>
       <div className="page-header">
         <h2>Fermentation</h2>
-        <p>Fermenters, logs, and completion stay separate from the wash batch.</p>
+        <p>Each fermenter is its own fermentation, with its own logs and status.</p>
         <div className="page-actions">
           <button
             className="btn btn-primary"
             onClick={() => {
               const batch = washChoices[0];
               if (!batch) {
-                alert('Create a wash batch first, then start a fermentation from it.');
+                alert('Create a wash batch first, or leave some of a fermenting wash unassigned.');
                 return;
               }
-              openFermentation(batch);
+              openNew(batch);
             }}
             disabled={washChoices.length === 0}
           >
@@ -306,14 +373,14 @@ export function Fermentation() {
         </div>
       </div>
 
-      {fermentationBatches.length === 0 ? (
+      {rows.length === 0 ? (
         <div className="empty-state">
           <p>No fermentations yet.</p>
-          <p className="form-hint">Start one from a planned or washing batch. The wash recipe stays on the Wash page.</p>
+          <p className="form-hint">Start one fermenter from a wash. A second fermenter is another fermentation.</p>
         </div>
       ) : (
         <div className="wash-status-groups">
-          {batchesByStatus.map(({ status: groupStatus, items }) => (
+          {rowsByStatus.map(({ status: groupStatus, items }) => (
             <section key={groupStatus} className="card wash-status-group">
               <header className="wash-status-group-header">
                 <h3 className="wash-status-group-title">{STATUS_GROUP_HEADINGS[groupStatus]}</h3>
@@ -336,54 +403,37 @@ export function Fermentation() {
                     </tr>
                   </thead>
                   <tbody>
-                    {items.flatMap((batch) => {
-                      const startBrix = batch.actual_brix ?? batch.target_brix;
-                      const readings = fermenterBrixReadings({
-                        assignments: getBatchFermenters(batch.id),
-                        logSources: getBatchLogSources(batch.id),
-                        startBrix,
-                        batchCurrentBrix: getLatestFermentationBrix(batch.id) ?? batch.actual_final_brix ?? batch.target_final_brix,
-                        currentBrixForEquipment: (equipmentId) => getLatestFermentationBrix(batch.id, equipmentId),
-                      });
-                      const lines = readings.some((reading) => reading.label) ? readings.filter((reading) => reading.label) : readings;
-                      return lines.map((reading, index) => {
-                        const estAbv = reading.startBrix != null && reading.currentBrix != null
-                          ? estimateAbvFromBrix(reading.startBrix, reading.currentBrix)
-                          : null;
-                        return (
-                          <tr key={`${batch.id}-${reading.key}`}>
-                            <td>{index === 0 ? <strong>{batch.batch_number}</strong> : null}</td>
-                            <td>
-                              {reading.label ? (
-                                <span className={reading.distilled ? 'fermenter-tag fermenter-tag--distilled' : 'fermenter-tag'}>
-                                  {reading.label}
-                                </span>
-                              ) : (
-                                <span style={{ color: 'var(--text-muted)' }}>Not assigned</span>
-                              )}
-                            </td>
-                            <td>{reading.startBrix ?? '—'} → {reading.currentBrix ?? '—'}</td>
-                            <td>{formatAbvEstimate(estAbv)}</td>
-                            <td>{index === 0 ? formatDateDisplay(batch.start_date) : null}</td>
-                            <td>{index === 0 ? <AssigneeCell name={batch.assigned_user_name} /> : null}</td>
-                            <td className="td-actions">
-                              {index === 0 && (
-                                <>
-                                  <button
-                                    className="btn btn-sm btn-secondary"
-                                    disabled={batch.status !== 'fermenting' && batch.status !== 'complete'}
-                                    onClick={() => setSelectedId(batch.id)}
-                                  >
-                                    {batch.status === 'complete' ? 'View logs' : 'Logs'}
-                                  </button>
-                                  <button className="btn btn-sm btn-ghost" onClick={() => openEdit(batch)}>Edit</button>
-                                  <button className="btn btn-sm btn-ghost" onClick={() => handleDelete(batch)}>Delete</button>
-                                </>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      });
+                    {items.map((row) => {
+                      const estAbv = row.startBrix != null && row.currentBrix != null
+                        ? estimateAbvFromBrix(row.startBrix, row.currentBrix)
+                        : null;
+                      return (
+                        <tr key={row.key}>
+                          <td><strong>{row.batch.batch_number}</strong></td>
+                          <td>
+                            {row.label ? (
+                              <span className={row.distilled ? 'fermenter-tag fermenter-tag--distilled' : 'fermenter-tag'}>
+                                {row.label}
+                              </span>
+                            ) : (
+                              <span style={{ color: 'var(--text-muted)' }}>Not assigned</span>
+                            )}
+                          </td>
+                          <td>{row.startBrix ?? '—'} → {row.currentBrix ?? '—'}</td>
+                          <td>{formatAbvEstimate(estAbv)}</td>
+                          <td>{formatDateDisplay(row.batch.start_date)}</td>
+                          <td><AssigneeCell name={row.batch.assigned_user_name} /></td>
+                          <td className="td-actions">
+                            <button className="btn btn-sm btn-secondary" onClick={() => openLogs(row)}>
+                              {row.status === 'fermenting' && !row.distilled ? 'Logs' : 'View logs'}
+                            </button>
+                            {!row.distilled && (
+                              <button className="btn btn-sm btn-ghost" onClick={() => openEdit(row)}>Edit</button>
+                            )}
+                            <button className="btn btn-sm btn-ghost" onClick={() => handleDelete(row)}>Delete</button>
+                          </td>
+                        </tr>
+                      );
                     })}
                   </tbody>
                 </table>
@@ -393,100 +443,98 @@ export function Fermentation() {
         </div>
       )}
 
-      {adminDeleteBatch && (
+      {adminDelete && (
         <AdminCredentialConfirmModal
           title="Delete completed fermentation"
-          message={`Fermentation for wash ${adminDeleteBatch.batch_number} is complete. Enter an administrator email and password to permanently delete the wash batch and its logs.`}
+          message={deleteMessage(adminDelete)}
           confirmLabel="Delete fermentation"
-          onClose={() => setAdminDeleteBatchId(null)}
+          onClose={() => setAdminDelete(null)}
           onConfirmed={() => {
-            const id = adminDeleteBatch.id;
-            setAdminDeleteBatchId(null);
-            performDelete(id);
+            const row = adminDelete;
+            setAdminDelete(null);
+            performDelete(row);
           }}
         />
       )}
 
-      {adminEditBatch && (
+      {adminEdit && (
         <AdminCredentialConfirmModal
           title="Edit completed fermentation"
-          message={`Fermentation for wash ${adminEditBatch.batch_number} is complete. Enter an administrator email and password to edit it.`}
+          message={`The fermentation${adminEdit.fermenterName ? ` in ${adminEdit.fermenterName}` : ''} for wash ${adminEdit.batch.batch_number} is complete. Enter an administrator email and password to edit it. Other fermenters stay as they are.`}
           confirmLabel="Continue to edit"
-          onClose={() => setAdminEditBatchId(null)}
+          onClose={() => setAdminEdit(null)}
           onConfirmed={() => {
-            const batch = adminEditBatch;
-            setAdminEditBatchId(null);
-            completeEditUnlockedRef.current = batch.id;
-            openFermentation(batch, batch.status);
+            const row = adminEdit;
+            setAdminEdit(null);
+            completeEditUnlockedRef.current = unlockKeyFor(row.batch.id, row.equipmentId);
+            beginEdit(row);
           }}
         />
       )}
 
-      {adminSaveEditBatch && (
+      {adminSave && editBatch && (
         <AdminCredentialConfirmModal
           title="Save completed fermentation"
-          message={`Fermentation for wash ${adminSaveEditBatch.batch_number} is complete. Enter an administrator email and password to save your changes.`}
+          message={`This fermentation for wash ${editBatch.batch_number} is complete. Enter an administrator email and password to save your changes.`}
           confirmLabel="Save changes"
-          onClose={() => setAdminSaveEditBatchId(null)}
+          onClose={() => setAdminSave(false)}
           onConfirmed={() => {
-            const id = adminSaveEditBatch.id;
-            setAdminSaveEditBatchId(null);
-            completeEditUnlockedRef.current = id;
+            completeEditUnlockedRef.current = unlockKeyFor(editBatch.id, editEquipmentId);
+            setAdminSave(false);
             performSave();
           }}
         />
       )}
 
-      {selectedId && selectedBatch && canViewLogs && (
+      {logTarget && (
         <Modal
           wide
-          title={`Fermentation logs — ${selectedBatch.batch_number} · ${formatDateDisplay(selectedBatch.start_date)}${selectedBatch.status === 'complete' ? ' (read-only)' : ''}`}
-          onClose={() => setSelectedId(null)}
+          title={`Fermentation logs — ${logTarget.batchNumber}${logTarget.equipmentName ? ` · ${logTarget.equipmentName}` : ''} · ${formatDateDisplay(logTarget.startDate)}${logTarget.readOnly ? ' (read-only)' : ''}`}
+          onClose={() => setLogTarget(null)}
         >
-          <div className="fermenter-log-stack">
-            {selectedLogPanels.map((panel) => (
-              <FermenterLogPanel
-                key={panel.equipmentId ?? 'unassigned'}
-                mashBatchId={selectedId}
-                equipmentId={panel.equipmentId}
-                equipmentName={panel.equipmentName}
-                volumeGal={panel.volumeGal}
-                startBrix={selectedStartBrix}
-                refreshKey={key}
-                onAdded={refresh}
-                readOnly={panel.readOnly}
-                distilled={panel.distilled}
-              />
-            ))}
-          </div>
+          <FermenterLogPanel
+            mashBatchId={logTarget.batchId}
+            equipmentId={logTarget.equipmentId}
+            equipmentName={logTarget.equipmentName}
+            volumeGal={logTarget.volumeGal}
+            startBrix={logTarget.startBrix}
+            refreshKey={key}
+            onAdded={refresh}
+            readOnly={logTarget.readOnly}
+            distilled={logTarget.distilled}
+          />
         </Modal>
       )}
 
       {showForm && editBatch && (
-        <Modal title={editBatch.status === 'planned' || editBatch.status === 'mashing' ? 'Start fermentation' : 'Edit fermentation'} onClose={closeForm}>
+        <Modal title={formMode === 'start' ? 'Start fermentation' : 'Edit fermentation'} onClose={closeForm}>
           <div className="form-grid">
             <div className="form-group">
               <label>Wash batch</label>
-              {editBatch.status === 'planned' || editBatch.status === 'mashing' ? (
+              {formMode === 'start' ? (
                 <select
                   value={editBatch.id}
                   onChange={(e) => {
                     const batch = washChoices.find((item) => item.id === Number(e.target.value));
-                    if (batch) openFermentation(batch);
+                    if (batch) openNew(batch);
                   }}
                 >
-                  {washChoices.map((batch) => (
-                    <option key={batch.id} value={batch.id}>
-                      {batch.batch_number} · {batch.recipe_name || 'Wash'} · {batch.water_gal} gal
-                    </option>
-                  ))}
+                  {washChoices.map((batch) => {
+                    const left = Math.max(0, Math.round((batch.water_gal - assignedGallons(batch.id)) * 10) / 10);
+                    return (
+                      <option key={batch.id} value={batch.id}>
+                        {batch.batch_number} · {batch.recipe_name || 'Wash'} · {left} gal left
+                      </option>
+                    );
+                  })}
                 </select>
               ) : (
                 <input value={`${editBatch.batch_number} · ${editBatch.recipe_name || 'Wash'}`} readOnly />
               )}
               <p className="field-hint">
                 Recipe, sugar, and batch size stay on the <Link to="/wash">Wash</Link> page.
-                {' '}{editBatch.water_gal} gal
+                {' '}{editBatch.water_gal} gal total
+                {otherGallons > 0 ? ` · ${otherGallons} gal already in other fermenters` : ''}
                 {editBatch.actual_brix != null ? ` · start Brix ${editBatch.actual_brix}` : editBatch.target_brix != null ? ` · target Brix ${editBatch.target_brix}` : ''}.
               </p>
             </div>
@@ -494,93 +542,41 @@ export function Fermentation() {
               <label>Status</label>
               <select
                 value={status}
-                onChange={(e) => setStatus(e.target.value as MashStatus)}
+                onChange={(e) => setStatus(e.target.value as FermentationAssignmentStatus)}
               >
                 <option value="fermenting">fermenting</option>
                 <option value="complete">complete</option>
                 <option value="discarded">discarded</option>
               </select>
             </div>
-            <div className="form-group full-width fermenter-section">
+            <div className="form-group">
               <label>Fermenter</label>
-              {status === 'discarded' ? (
-                <p className="field-hint">Discarding this fermentation releases its fermenters.</p>
-              ) : (
-                <label className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={fermenterForm.split}
-                    onChange={(e) => setFermenterForm({
-                      ...fermenterForm,
-                      split: e.target.checked,
-                      fermenter2Id: '',
-                      volume2: 0,
-                    })}
-                  />
-                  Split this wash across 2 fermenters
-                </label>
-              )}
+              <select
+                value={fermenterId}
+                onChange={(e) => setFermenterId(e.target.value ? parseInt(e.target.value, 10) : '')}
+              >
+                <option value="">— Select fermenter —</option>
+                {fermenterOptions.map((fermenter) => (
+                  <option key={fermenter.id} value={fermenter.id}>
+                    {fermenter.name}{fermenter.capacity_gal ? ` (${fermenter.capacity_gal} gal)` : ''}
+                  </option>
+                ))}
+              </select>
             </div>
-            {status !== 'discarded' && (
-              <>
-                <div className="form-group">
-                  <label>{fermenterForm.split ? 'Fermenter 1' : 'Fermenter'}</label>
-                  <select
-                    value={fermenterForm.fermenter1Id}
-                    onChange={(e) => setFermenterForm({
-                      ...fermenterForm,
-                      fermenter1Id: e.target.value ? parseInt(e.target.value, 10) : '',
-                      volume1: fermenterForm.split ? fermenterForm.volume1 : editBatch.water_gal,
-                    })}
-                  >
-                    <option value="">— Select fermenter —</option>
-                    {availableFermenters.map((f) => (
-                      <option key={f.id} value={f.id}>{f.name} ({f.capacity_gal} gal)</option>
-                    ))}
-                  </select>
-                </div>
-                {fermenterForm.split && (
-                  <>
-                    <div className="form-group">
-                      <label>Volume in Fermenter 1 (gal)</label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={fermenterForm.volume1 || ''}
-                        onChange={(e) => setFermenterForm({ ...fermenterForm, volume1: parseFloat(e.target.value) || 0 })}
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label>Fermenter 2</label>
-                      <select
-                        value={fermenterForm.fermenter2Id}
-                        onChange={(e) => setFermenterForm({
-                          ...fermenterForm,
-                          fermenter2Id: e.target.value ? parseInt(e.target.value, 10) : '',
-                        })}
-                      >
-                        <option value="">— Select fermenter —</option>
-                        {availableFermenters2.map((f) => (
-                          <option key={f.id} value={f.id}>{f.name} ({f.capacity_gal} gal)</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="form-group">
-                      <label>Volume in Fermenter 2 (gal)</label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={fermenterForm.volume2 || ''}
-                        onChange={(e) => setFermenterForm({ ...fermenterForm, volume2: parseFloat(e.target.value) || 0 })}
-                      />
-                    </div>
-                  </>
-                )}
-              </>
-            )}
+            <div className="form-group">
+              <label>Volume (gal)</label>
+              <input
+                type="number"
+                step="0.1"
+                value={volumeGal || ''}
+                onChange={(e) => setVolumeGal(parseFloat(e.target.value) || 0)}
+              />
+            </div>
           </div>
           <p className="form-hint">
-            Saving moves this wash out of the wash tank and into the fermenter. Mark it complete only after at least one log.
+            This fermenter is saved on its own. Completing, discarding, or deleting it leaves the other fermenters on this wash alone.
+            {status === 'complete' ? ' Mark it complete only after this fermenter has a log.' : ''}
+            {status === 'discarded' ? ' Discarding releases this fermenter.' : ''}
           </p>
           <div className="form-actions">
             <button className="btn btn-secondary" onClick={closeForm}>Cancel</button>

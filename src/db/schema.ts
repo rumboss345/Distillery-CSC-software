@@ -386,6 +386,7 @@ CREATE TABLE IF NOT EXISTS mash_fermenter_assignments (
   mash_batch_id INTEGER NOT NULL REFERENCES mash_batches(id) ON DELETE CASCADE,
   floor_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id) ON DELETE CASCADE,
   volume_gal REAL NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'fermenting',
   UNIQUE(mash_batch_id, floor_equipment_id)
 );
 

@@ -85,7 +85,7 @@ export function FermenterLogPanel({
         <p className="field-hint" style={{ marginBottom: '1rem' }}>
           {distilled
             ? 'This fermenter was distilled — its logs stay here and are read-only.'
-            : 'This fermentation is complete — logs are read-only.'}
+            : 'This fermentation is no longer fermenting — logs are read-only.'}
         </p>
       ) : (
         <>
