@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS mash_fermenter_assignments (
   mash_batch_id INTEGER NOT NULL REFERENCES mash_batches(id) ON DELETE CASCADE,
   floor_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id) ON DELETE CASCADE,
   volume_gal REAL NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'fermenting',
   UNIQUE(mash_batch_id, floor_equipment_id)
 );
 CREATE INDEX IF NOT EXISTS idx_mash_fermenter_mash ON mash_fermenter_assignments(mash_batch_id);
@@ -265,6 +266,22 @@ function runMigrations(): void {
       FROM floor_equipment fe
       JOIN mash_batches mb ON mb.id = fe.linked_mash_batch_id
       WHERE fe.equipment_type = 'fermenter' AND fe.linked_mash_batch_id IS NOT NULL
+    `);
+    persistDb();
+  }
+
+  const hasAssignmentStatus = queryOne<{ name: string }>(
+    "SELECT name FROM pragma_table_info('mash_fermenter_assignments') WHERE name='status'",
+  );
+  if (!hasAssignmentStatus) {
+    db.run(`ALTER TABLE mash_fermenter_assignments ADD COLUMN status TEXT NOT NULL DEFAULT 'fermenting'`);
+    db.run(`
+      UPDATE mash_fermenter_assignments
+      SET status = CASE
+        WHEN (SELECT status FROM mash_batches m WHERE m.id = mash_fermenter_assignments.mash_batch_id) = 'complete' THEN 'complete'
+        WHEN (SELECT status FROM mash_batches m WHERE m.id = mash_fermenter_assignments.mash_batch_id) = 'discarded' THEN 'discarded'
+        ELSE 'fermenting'
+      END
     `);
     persistDb();
   }

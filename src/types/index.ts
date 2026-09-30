@@ -7,6 +7,9 @@ export type MashStatus =
   | 'complete'
   | 'discarded';
 
+/** Status of one fermenter. A wash can have several of these at once. */
+export type FermentationAssignmentStatus = 'fermenting' | 'complete' | 'discarded';
+
 export type RunStatus = 'planned' | 'running' | 'complete';
 
 export type DistillationRunType = 'wash' | 'low_wines' | 'heavy_rum';
@@ -92,6 +95,7 @@ export interface MashFermenterAssignment {
   mash_batch_id: number;
   floor_equipment_id: number;
   volume_gal: number;
+  status: FermentationAssignmentStatus;
 }
 
 export interface FloorEquipmentView extends FloorEquipment {

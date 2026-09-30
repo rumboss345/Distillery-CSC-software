@@ -163,6 +163,7 @@ export function Distillation() {
         equipment_name: name,
         batch_number: mash?.batch_number ?? `Wash #${runForm.source_mash_batch_id}`,
         recipe_name: mash?.recipe_name ?? '',
+        status: 'fermenting',
       });
     }
     return list;

@@ -37,6 +37,7 @@ import {
   warehouseLocationNameError,
 } from '../lib/warehouse-locations';
 import { normalizeNutrientUnit, nutrientAmountInUnit } from '../lib/wash-recipe-nutrients';
+import { mashStatusFromFermentations } from '../lib/wash-stage';
 import type {
   EquipmentMaintenanceLogEventType,
   EquipmentMaintenanceLogView,
@@ -76,6 +77,7 @@ import type {
   DistillationRunView,
   FermentationLog,
   FermentationLogView,
+  FermentationAssignmentStatus,
   MashFermenterAssignment,
   FloorEquipment,
   FloorEquipmentView,
@@ -656,6 +658,12 @@ function applyMashInventoryUsage(
 export interface FermenterAssignmentInput {
   equipmentId: number;
   volumeGal: number;
+  status?: FermentationAssignmentStatus;
+}
+
+function assignmentStatus(status: string | null | undefined): FermentationAssignmentStatus {
+  if (status === 'complete' || status === 'discarded') return status;
+  return 'fermenting';
 }
 
 export function getMashFermenterAssignments(mashBatchId: number): (MashFermenterAssignment & { equipment_name: string })[] {
@@ -684,6 +692,8 @@ export function isFermenterAvailable(equipmentId: number, forMashBatchId?: numbe
     SELECT a.mash_batch_id FROM mash_fermenter_assignments a
     JOIN mash_batches m ON m.id = a.mash_batch_id
     WHERE a.floor_equipment_id = ?
+      AND a.volume_gal > 0.01
+      AND COALESCE(a.status, 'fermenting') != 'discarded'
       AND m.status IN ('fermenting', 'complete')
   `, [equipmentId]);
   if (!active) return true;
@@ -708,16 +718,18 @@ export function getFermenterWashSourceFermenters(
     mash_batch_id: number;
     floor_equipment_id: number;
     volume_gal: number;
+    status: FermentationAssignmentStatus;
     equipment_name: string;
     batch_number: string;
     recipe_name: string;
   }>(`
-    SELECT a.id, a.mash_batch_id, a.floor_equipment_id, a.volume_gal,
+    SELECT a.id, a.mash_batch_id, a.floor_equipment_id, a.volume_gal, a.status,
            fe.name as equipment_name, m.batch_number, m.recipe_name
     FROM mash_fermenter_assignments a
     JOIN mash_batches m ON m.id = a.mash_batch_id
     JOIN floor_equipment fe ON fe.id = a.floor_equipment_id
     WHERE a.volume_gal > 0.01
+      AND COALESCE(a.status, 'fermenting') != 'discarded'
       AND m.status IN ('fermenting', 'complete')
       AND fe.equipment_type = 'fermenter'
     ORDER BY fe.name COLLATE NOCASE, m.batch_number COLLATE NOCASE
@@ -736,6 +748,7 @@ export function getFermenterWashSourceFermenters(
       mash_batch_id: row.mash_batch_id,
       floor_equipment_id: row.floor_equipment_id,
       volume_gal: row.volume_gal,
+      status: assignmentStatus(row.status),
       equipment_name: row.equipment_name,
       batch_number: row.batch_number,
       recipe_name: row.recipe_name,
@@ -757,6 +770,7 @@ export function getChargeableFermentersForMash(
   const assignments = getMashFermenterAssignments(mashBatchId);
   return assignments.filter((a) => {
     if (a.volume_gal <= 0.01) return false;
+    if (assignmentStatus(a.status) === 'discarded') return false;
     const washRunUsingFermenter = queryOne<{ id: number }>(
       `SELECT id FROM distillation_runs
        WHERE source_mash_batch_id = ?
@@ -1614,7 +1628,7 @@ export function deleteHoldingTankTransfer(id: number): void {
   syncHoldingTankStatuses();
 }
 
-export interface FermenterWithWash extends FermenterWashSourceOption {
+export interface FermenterWithWash extends Omit<FermenterWashSourceOption, 'status'> {
   capacity_gal: number;
   status: FloorEquipment['status'];
   latest_brix: number | null;
@@ -1640,6 +1654,7 @@ export function getFermentersWithWash(): FermenterWithWash[] {
     JOIN mash_batches m ON m.id = a.mash_batch_id
     JOIN floor_equipment fe ON fe.id = a.floor_equipment_id
     WHERE a.volume_gal > 0.01
+      AND COALESCE(a.status, 'fermenting') != 'discarded'
       AND m.status IN ('fermenting', 'complete')
       AND fe.equipment_type = 'fermenter'
     ORDER BY fe.name COLLATE NOCASE, m.batch_number COLLATE NOCASE
@@ -1676,6 +1691,7 @@ export function getFermenterTransferDestinations(
     const other = queryOne<{ id: number }>(
       `SELECT a.id FROM mash_fermenter_assignments a
        WHERE a.floor_equipment_id = ? AND a.mash_batch_id != ? AND a.volume_gal > 0.01
+         AND COALESCE(a.status, 'fermenting') != 'discarded'
        LIMIT 1`,
       [fermenter.id, mashBatchId],
     );
@@ -1728,6 +1744,7 @@ export function saveFermenterWashTransfer(input: {
     JOIN floor_equipment fe ON fe.id = a.floor_equipment_id
     WHERE a.floor_equipment_id = ?
       AND a.volume_gal > 0.01
+      AND COALESCE(a.status, 'fermenting') != 'discarded'
       AND m.status IN ('fermenting', 'complete')
       AND fe.equipment_type = 'fermenter'
   `, [input.sourceEquipmentId]);
@@ -1752,6 +1769,7 @@ export function saveFermenterWashTransfer(input: {
       destHoldsOtherMash = !!queryOne<{ id: number }>(
         `SELECT id FROM mash_fermenter_assignments
          WHERE floor_equipment_id = ? AND mash_batch_id != ? AND volume_gal > 0.01
+           AND COALESCE(status, 'fermenting') != 'discarded'
          LIMIT 1`,
         [dest.id, source.mash_batch_id],
       );
@@ -1828,7 +1846,10 @@ export function saveFermenterWashTransfer(input: {
     );
     if (same) {
       runQuery(
-        'UPDATE mash_fermenter_assignments SET volume_gal = ? WHERE id = ?',
+        `UPDATE mash_fermenter_assignments
+         SET volume_gal = ?,
+             status = CASE WHEN status = 'discarded' THEN 'fermenting' ELSE status END
+         WHERE id = ?`,
         [same.volume_gal + input.volumeGal, same.id],
       );
     } else {
@@ -1998,6 +2019,7 @@ export function syncFermenterAndStillStatuses(): void {
       JOIN mash_batches m ON m.id = a.mash_batch_id
       WHERE a.floor_equipment_id = ?
         AND m.status IN ('fermenting', 'complete')
+        AND COALESCE(a.status, 'fermenting') != 'discarded'
       LIMIT 1
     `, [f.id]);
 
@@ -2059,10 +2081,11 @@ export function saveMashFermenterAssignments(
   runQuery('DELETE FROM mash_fermenter_assignments WHERE mash_batch_id = ?', [mashBatchId]);
   for (const a of assignments) {
     if (a.equipmentId <= 0) continue;
-    if (!planOnly) assertEquipmentUsableForProduction(a.equipmentId, 'Fermenter');
+    const status = assignmentStatus(a.status);
+    if (!planOnly && status !== 'discarded') assertEquipmentUsableForProduction(a.equipmentId, 'Fermenter');
     insertRow(
-      `INSERT INTO mash_fermenter_assignments (mash_batch_id, floor_equipment_id, volume_gal) VALUES (?, ?, ?)`,
-      [mashBatchId, a.equipmentId, a.volumeGal],
+      `INSERT INTO mash_fermenter_assignments (mash_batch_id, floor_equipment_id, volume_gal, status) VALUES (?, ?, ?, ?)`,
+      [mashBatchId, a.equipmentId, a.volumeGal, status],
     );
   }
   syncFermenterAndStillStatuses();
@@ -2123,6 +2146,7 @@ function assertMashBatchEquipmentUsable(
   if (plannedRecordSkipsEquipmentStatus(batch.status)) return;
   for (const a of assignments) {
     if (a.equipmentId <= 0) continue;
+    if (assignmentStatus(a.status) === 'discarded') continue;
     assertEquipmentUsableForProduction(a.equipmentId, 'Fermenter');
   }
   if (batch.status === 'mashing') {
@@ -2141,6 +2165,7 @@ export function saveMashBatchWithFermenters(
   assignments: FermenterAssignmentInput[],
   nutrients: MashBatchNutrientInput[] = [],
   id?: number,
+  options?: { replaceAssignments?: boolean },
 ): number {
   const previous = id ? getMashBatch(id) : undefined;
   const previousNutrients = id
@@ -2154,10 +2179,11 @@ export function saveMashBatchWithFermenters(
   assertMashBatchEquipmentUsable(datedBatch, assignments);
   const mashId = saveMashBatch(datedBatch, id);
   let assignmentsToPersist = assignments;
-  if (assignmentsToPersist.length === 0 && batch.status === 'complete' && id) {
+  if (!options?.replaceAssignments && assignmentsToPersist.length === 0 && batch.status === 'complete' && id) {
     assignmentsToPersist = getMashFermenterAssignments(id).map((a) => ({
       equipmentId: a.floor_equipment_id,
       volumeGal: a.volume_gal,
+      status: assignmentStatus(a.status),
     }));
   }
   try {
@@ -2172,6 +2198,102 @@ export function saveMashBatchWithFermenters(
     throw err;
   }
   return mashId;
+}
+
+export function fermenterHasFermentationLogs(mashBatchId: number, floorEquipmentId: number): boolean {
+  const row = queryOne<{ count: number }>(
+    `SELECT COUNT(*) as count FROM fermentation_logs
+     WHERE mash_batch_id = ? AND floor_equipment_id = ?`,
+    [mashBatchId, floorEquipmentId],
+  );
+  return (row?.count ?? 0) > 0;
+}
+
+/** Save one wash's fermenter rows. Mash status follows those fermenters. */
+export function saveFermentationSet(
+  mashBatchId: number,
+  assignments: FermenterAssignmentInput[],
+  moveLogs?: { fromEquipmentId: number; toEquipmentId: number },
+): void {
+  const batch = getMashBatch(mashBatchId);
+  if (!batch) throw new Error('Wash batch not found.');
+
+  for (const assignment of assignments) {
+    if (assignmentStatus(assignment.status) !== 'complete') continue;
+    const logEquipmentId = moveLogs && moveLogs.toEquipmentId === assignment.equipmentId
+      ? moveLogs.fromEquipmentId
+      : assignment.equipmentId;
+    if (!fermenterHasFermentationLogs(mashBatchId, logEquipmentId)) {
+      throw new Error('Add at least one fermentation log on this fermenter before marking it complete.');
+    }
+  }
+
+  if (moveLogs && moveLogs.fromEquipmentId !== moveLogs.toEquipmentId) {
+    const conflict = queryOne<{ count: number }>(
+      `SELECT COUNT(*) as count FROM fermentation_logs
+       WHERE mash_batch_id = ? AND floor_equipment_id = ?`,
+      [mashBatchId, moveLogs.toEquipmentId],
+    );
+    if ((conflict?.count ?? 0) > 0) {
+      throw new Error('That fermenter already has logs for this wash.');
+    }
+  }
+
+  const nextStatus = mashStatusFromFermentations(
+    batch.status,
+    assignments.map((assignment) => assignmentStatus(assignment.status)),
+  );
+
+  if (nextStatus === 'mashing' && assignments.length === 0) {
+    runQuery(`UPDATE mash_batches SET status = 'mashing' WHERE id = ?`, [mashBatchId]);
+    saveMashFermenterAssignments(mashBatchId, []);
+    return;
+  }
+
+  const nutrients = getMashBatchNutrients(mashBatchId).map((nutrient) => ({
+    name: nutrient.name,
+    amount: nutrient.amount,
+    unit: nutrient.unit,
+  }));
+  const { id: _id, created_at: _created, ...batchFields } = batch;
+  saveMashBatchWithFermenters(
+    { ...batchFields, status: nextStatus },
+    assignments,
+    nutrients,
+    mashBatchId,
+    { replaceAssignments: true },
+  );
+
+  if (moveLogs && moveLogs.fromEquipmentId !== moveLogs.toEquipmentId) {
+    runQuery(
+      `UPDATE fermentation_logs SET floor_equipment_id = ?
+       WHERE mash_batch_id = ? AND floor_equipment_id = ?`,
+      [moveLogs.toEquipmentId, mashBatchId, moveLogs.fromEquipmentId],
+    );
+  }
+}
+
+/** Remove one fermenter. Sibling fermenters and the wash batch stay. */
+export function deleteOneFermentation(mashBatchId: number, equipmentId: number | null): void {
+  if (equipmentId == null) {
+    deleteMashBatch(mashBatchId);
+    return;
+  }
+  const assignments = getMashFermenterAssignments(mashBatchId);
+  const remaining = assignments.filter((assignment) => assignment.floor_equipment_id !== equipmentId);
+  runQuery(
+    'DELETE FROM fermentation_logs WHERE mash_batch_id = ? AND floor_equipment_id = ?',
+    [mashBatchId, equipmentId],
+  );
+  if (remaining.length === assignments.length) return;
+  saveFermentationSet(
+    mashBatchId,
+    remaining.map((assignment) => ({
+      equipmentId: assignment.floor_equipment_id,
+      volumeGal: assignment.volume_gal,
+      status: assignmentStatus(assignment.status),
+    })),
+  );
 }
 
 export function releaseFermentersForMash(mashBatchId: number): void {
@@ -2470,8 +2592,21 @@ export function getFermentationLogs(
 
 export function addFermentationLog(log: Omit<FermentationLog, 'id'>): void {
   const batch = getMashBatch(log.mash_batch_id);
-  if (!batch || batch.status !== 'fermenting') {
-    throw new Error('Fermentation logs can only be added while batch status is fermenting.');
+  if (!batch) throw new Error('Wash batch not found.');
+  if (log.floor_equipment_id) {
+    const assignment = queryOne<{ status: string }>(
+      `SELECT status FROM mash_fermenter_assignments
+       WHERE mash_batch_id = ? AND floor_equipment_id = ?`,
+      [log.mash_batch_id, log.floor_equipment_id],
+    );
+    const open = assignment
+      ? assignmentStatus(assignment.status) === 'fermenting'
+      : batch.status === 'fermenting';
+    if (!open) {
+      throw new Error('Fermentation logs can only be added while this fermentation is fermenting.');
+    }
+  } else if (batch.status !== 'fermenting') {
+    throw new Error('Fermentation logs can only be added while this fermentation is fermenting.');
   }
   if (log.temperature_f == null || Number.isNaN(log.temperature_f)) {
     throw new Error('Temperature (°F) is required for fermentation logs.');
@@ -2578,6 +2713,7 @@ function releaseDistillationEquipmentForReturnToPlan(run: DistillationRun, runId
        JOIN mash_batches m ON m.id = a.mash_batch_id
        WHERE a.floor_equipment_id = ?
          AND m.status IN ('fermenting', 'complete')
+         AND COALESCE(a.status, 'fermenting') != 'discarded'
          AND a.volume_gal > 0.01
        LIMIT 1`,
       [run.source_fermenter_equipment_id],
@@ -3921,7 +4057,7 @@ export function getProductionSummary(reportMonth?: string): ProductionSummary {
     volume_gal: number;
     status: string;
   }>(`
-    SELECT a.floor_equipment_id as equipment_id, a.volume_gal, m.status
+    SELECT a.floor_equipment_id as equipment_id, a.volume_gal, COALESCE(a.status, m.status) as status
     FROM mash_fermenter_assignments a
     JOIN mash_batches m ON m.id = a.mash_batch_id
     JOIN floor_equipment fe ON fe.id = a.floor_equipment_id
@@ -4213,10 +4349,12 @@ export function getFloorEquipmentWithContext(planId = 1): FloorEquipmentView[] {
       actual_brix: number | null;
       target_brix: number | null;
     }>(`
-      SELECT m.id AS mash_batch_id, m.batch_number, a.volume_gal, m.status, m.actual_brix, m.target_brix
+      SELECT m.id AS mash_batch_id, m.batch_number, a.volume_gal,
+             COALESCE(a.status, m.status) as status, m.actual_brix, m.target_brix
       FROM mash_fermenter_assignments a
       JOIN mash_batches m ON m.id = a.mash_batch_id
       WHERE a.floor_equipment_id = ? AND a.volume_gal > 0.01
+        AND COALESCE(a.status, 'fermenting') != 'discarded'
       LIMIT 1
     `, [eq.id]);
     if (!info || !fermenterShowsAssignedWash(info.status as MashStatus)) return eq;
