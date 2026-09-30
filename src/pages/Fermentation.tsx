@@ -19,7 +19,7 @@ import {
   useRefreshKey,
 } from '../db/queries';
 import { formatDateDisplay } from '../lib/date-input';
-import { estimateAbvFromBrix, formatAbvEstimate } from '../lib/fermentation';
+import { actualStartBrixError, estimateAbvFromBrix, formatAbvEstimate, washMoveNeedsActualStartBrix } from '../lib/fermentation';
 import { FERMENTATION_PAGE_STATUSES, washRecordKind } from '../lib/wash-stage';
 import type { FermentationAssignmentStatus, MashBatch, MashFermenterAssignment, MashStatus } from '../types';
 
@@ -99,6 +99,7 @@ export function Fermentation() {
   const [volume2Gal, setVolume2Gal] = useState(0);
   const [leftoverGal, setLeftoverGal] = useState(0);
   const [leftoverNotes, setLeftoverNotes] = useState('');
+  const [actualStartBrix, setActualStartBrix] = useState<number | null>(null);
   const [logTarget, setLogTarget] = useState<LogTarget | null>(null);
   const [adminDelete, setAdminDelete] = useState<FermentationRow | null>(null);
   const [adminEdit, setAdminEdit] = useState<FermentationRow | null>(null);
@@ -156,6 +157,7 @@ export function Fermentation() {
     setVolume2Gal(0);
     setLeftoverGal(0);
     setLeftoverNotes('');
+    setActualStartBrix(queryBatch.actual_brix);
     completeEditUnlockedRef.current = null;
     setShowForm(true);
   }
@@ -267,6 +269,7 @@ export function Fermentation() {
     setVolume2Gal(0);
     setLeftoverGal(0);
     setLeftoverNotes('');
+    setActualStartBrix(batch.actual_brix);
     completeEditUnlockedRef.current = null;
     setShowForm(true);
   };
@@ -285,6 +288,7 @@ export function Fermentation() {
     setVolume2Gal(0);
     setLeftoverGal(0);
     setLeftoverNotes('');
+    setActualStartBrix(null);
     setShowForm(true);
   };
 
@@ -317,6 +321,14 @@ export function Fermentation() {
     if (leftover > volumeGal + 0.01) {
       alert(`Only ${volumeGal.toFixed(1)} gal is in this fermenter.`);
       return;
+    }
+    const askStartBrix = formMode === 'start' && washMoveNeedsActualStartBrix(editBatch.status, editBatch.actual_brix);
+    if (askStartBrix) {
+      const brixError = actualStartBrixError(actualStartBrix);
+      if (brixError) {
+        alert(brixError);
+        return;
+      }
     }
     const usable = Math.round((volumeGal - Math.max(0, leftover)) * 10) / 10;
     const totalGal = (usable > 0.01 ? usable : 0) + (startingTwo ? volume2Gal : 0);
@@ -353,7 +365,10 @@ export function Fermentation() {
         editBatch.id,
         nextAssignments,
         moveLogs,
-        leftover > 0.01 && nextAssignments.length === 0 ? { keepStatusWhenEmpty: true } : undefined,
+        {
+          ...(leftover > 0.01 && nextAssignments.length === 0 ? { keepStatusWhenEmpty: true } : {}),
+          ...(askStartBrix && actualStartBrix != null ? { actualStartBrix } : {}),
+        },
       );
       if (leftover > 0.01) {
         const sourceId = previousEquipmentId ?? equipmentId;
@@ -663,6 +678,26 @@ export function Fermentation() {
                 {editBatch.actual_brix != null ? ` · start Brix ${editBatch.actual_brix}` : editBatch.target_brix != null ? ` · target Brix ${editBatch.target_brix}` : ''}.
               </p>
             </div>
+            {formMode === 'start' && washMoveNeedsActualStartBrix(editBatch.status, editBatch.actual_brix) && (
+              <div className="form-group">
+                <label>Actual Start Brix</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min={0}
+                  required
+                  value={actualStartBrix ?? ''}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setActualStartBrix(next === '' ? null : parseFloat(next));
+                  }}
+                />
+                <p className="field-hint">
+                  Required to move this wash into fermenting.
+                  {editBatch.target_brix != null ? ` Target start Brix is ${editBatch.target_brix}.` : ''}
+                </p>
+              </div>
+            )}
             <div className="form-group">
               <label>Status</label>
               <select

@@ -1,3 +1,19 @@
+/** Moving a wash into fermenting requires the measured start Brix. */
+export function washMoveNeedsActualStartBrix(
+  status: string,
+  actualBrix: number | null | undefined,
+): boolean {
+  if (status === 'planned' || status === 'mashing') return true;
+  return actualBrix == null;
+}
+
+export function actualStartBrixError(value: number | null | undefined): string | null {
+  if (value == null || !Number.isFinite(value) || value <= 0) {
+    return 'Enter the actual start Brix.';
+  }
+  return null;
+}
+
 /** Fermentations must reach this Brix before charging a fermenter to the still. */
 export const FERMENTATION_READY_MAX_BRIX = 10;
 
