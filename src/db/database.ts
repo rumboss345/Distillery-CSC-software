@@ -95,6 +95,18 @@ const STILLAGE_MIGRATION = [
   'ALTER TABLE distillation_runs ADD COLUMN stillage_holding_tank_equipment_id INTEGER REFERENCES floor_equipment(id)',
 ];
 
+const WAREHOUSE_LOCATIONS_MIGRATION = [
+  `CREATE TABLE IF NOT EXISTS warehouse_locations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+  `INSERT OR IGNORE INTO warehouse_locations (name)
+   SELECT warehouse_location FROM barrels
+   WHERE TRIM(warehouse_location) != ''
+   GROUP BY warehouse_location COLLATE NOCASE`,
+];
+
 const DISCARDED_FERMENTATIONS_MIGRATION = [
   `CREATE TABLE IF NOT EXISTS discarded_fermentations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -333,6 +345,14 @@ function runMigrations(): void {
   );
   if (!hasDiscardedFermentations) {
     for (const statement of DISCARDED_FERMENTATIONS_MIGRATION) db.run(statement);
+    persistDb();
+  }
+
+  const hasWarehouseLocations = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='warehouse_locations'",
+  );
+  if (!hasWarehouseLocations) {
+    for (const statement of WAREHOUSE_LOCATIONS_MIGRATION) db.run(statement);
     persistDb();
   }
 

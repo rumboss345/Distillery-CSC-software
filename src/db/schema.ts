@@ -142,6 +142,12 @@ CREATE TABLE IF NOT EXISTS barrels (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS warehouse_locations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS barrel_fills (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   barrel_id INTEGER NOT NULL REFERENCES barrels(id) ON DELETE CASCADE,
@@ -322,6 +328,12 @@ CREATE INDEX IF NOT EXISTS idx_cuts_run ON distillation_cuts(distillation_run_id
 CREATE INDEX IF NOT EXISTS idx_cuts_holding_tank ON distillation_cuts(holding_tank_equipment_id);
 CREATE INDEX IF NOT EXISTS idx_barrels_status ON barrels(status);
 
+CREATE TABLE IF NOT EXISTS warehouse_locations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS floor_plans (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL DEFAULT 'Production Floor',
@@ -449,6 +461,9 @@ INSERT OR IGNORE INTO distillation_cuts (id, distillation_run_id, cut_type, hold
 
 INSERT OR IGNORE INTO barrels (id, barrel_number, wood_type, capacity_gal, fill_date, spirit_type, source_run_id, initial_abv, current_volume_gal, warehouse_location, status, notes) VALUES
   (1, 'B-001', 'American Oak', 53, '2025-06-11', 'New Make Spirit', 1, 63.5, 50, 'Warehouse A - Row 1', 'aging', 'Filled from D-2025-001 hearts');
+
+INSERT OR IGNORE INTO warehouse_locations (name) VALUES
+  ('Warehouse A - Row 1');
 
 INSERT OR IGNORE INTO bottling_runs (id, batch_number, source_barrel_id, bottling_date, bottle_size_ml, bottle_count, final_abv, product_name, lot_number, notes) VALUES
   (1, 'BT-2024-012', NULL, '2025-05-20', 750, 480, 43, 'Island Reserve Rum', 'L-2405', 'Previous season bottling');

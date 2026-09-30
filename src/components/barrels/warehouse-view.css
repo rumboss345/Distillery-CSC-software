@@ -1,0 +1,81 @@
+.warehouse-view .process-viewport {
+  overflow: auto;
+  cursor: default;
+  padding: 12px;
+}
+
+.warehouse-view .warehouse-location {
+  position: relative;
+  left: auto;
+  width: auto;
+  pointer-events: auto;
+  margin: 0 0 12px;
+}
+
+.warehouse-view .warehouse-location-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 0.35rem;
+  pointer-events: auto;
+}
+
+.warehouse-view .warehouse-location-actions .btn {
+  background: #fff;
+  color: #1e293b;
+  border: 1px solid #94a3b8;
+}
+
+.warehouse-view .warehouse-location-actions .btn:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.warehouse-view .process-viewport .empty-state {
+  color: #334155;
+}
+
+.warehouse-view .warehouse-barrel-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 20px;
+  padding: 12px 14px 16px;
+}
+
+.warehouse-view .process-equipment-node.warehouse-barrel {
+  position: relative;
+  width: 150px;
+  height: auto;
+  overflow: visible;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  text-align: inherit;
+}
+
+.warehouse-view .barrel-visual-svg-wrap {
+  height: 150px;
+  border-radius: 4px;
+}
+
+.warehouse-view .barrel-visual-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.warehouse-view .warehouse-barrel--selected .barrel-visual-svg-wrap {
+  outline: 2px solid #2563eb;
+  outline-offset: 3px;
+}
+
+.warehouse-view .warehouse-location-empty {
+  margin: 0;
+  padding: 0.35rem 0.9rem 0.9rem;
+  color: #64748b;
+  font-size: 0.8rem;
+}
+
+.warehouse-view .barrel-visual-liquid {
+  transition: y 0.45s ease, height 0.45s ease;
+}

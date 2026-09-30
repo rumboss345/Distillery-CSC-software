@@ -1,23 +1,36 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { format, differenceInDays } from 'date-fns';
+import { differenceInDays, parseISO } from 'date-fns';
 import {
   createBarrelFromHoldingTank,
-  getBarrels,
-  getHoldingTanksWithContents,
-  saveBarrel,
   deleteBarrel,
+  deleteWarehouseLocation,
+  getBarrels,
   getDistillationRuns,
+  getHoldingTanksWithContents,
+  getWarehouseLocations,
+  saveBarrel,
+  saveWarehouseLocation,
   useRefreshKey,
 } from '../db/queries';
 import { DatePicker } from '../components/DatePicker';
 import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
+import { BarrelVisual } from '../components/barrels/BarrelVisual';
 import { BARREL_STOCK_ITEM_NAME } from '../lib/barrel-inventory';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
+import { formatDateDisplay, isIsoDate } from '../lib/date-input';
+import { formatGal } from '../components/equipment/equipment-visual-shared';
+import {
+  UNASSIGNED_WAREHOUSE_LOCATION,
+  groupBarrelsByLocation,
+} from '../lib/warehouse-locations';
 import type { Barrel, BarrelStatus } from '../types';
+import '../components/equipment/process-view.css';
+import '../components/barrels/warehouse-view.css';
 
 const STATUSES: BarrelStatus[] = ['aging', 'empty', 'dumped'];
+const NEW_LOCATION = '__new__';
 
 const emptyBarrel = (): Omit<Barrel, 'id' | 'created_at'> => ({
   barrel_number: '',
@@ -34,18 +47,39 @@ const emptyBarrel = (): Omit<Barrel, 'id' | 'created_at'> => ({
   notes: '',
 });
 
+function barrelAgeDays(fillDate: string): number | null {
+  if (!isIsoDate(fillDate)) return null;
+  return differenceInDays(new Date(), parseISO(fillDate));
+}
+
+function barrelVolumeLabel(barrel: Barrel): string {
+  if (barrel.status === 'empty' || barrel.current_volume_gal <= 0) {
+    return `EMPTY · ${formatGal(barrel.capacity_gal)} gal`;
+  }
+  if (barrel.status === 'dumped') return `DUMPED · ${formatGal(barrel.current_volume_gal)} gal`;
+  return `${formatGal(barrel.current_volume_gal)} gal`;
+}
+
 export function Barrels() {
   const [searchParams, setSearchParams] = useSearchParams();
   const calendarPlanHandled = useRef(false);
   const { key, refresh } = useRefreshKey();
   const barrels = getBarrels();
+  const locations = getWarehouseLocations();
   const runs = getDistillationRuns();
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<number | undefined>();
   const [form, setForm] = useState(emptyBarrel());
+  const [addingLocation, setAddingLocation] = useState(false);
+  const [newLocationName, setNewLocationName] = useState('');
+  const [showLocationForm, setShowLocationForm] = useState(false);
+  const [locationName, setLocationName] = useState('');
+  const [selectedId, setSelectedId] = useState<number | null>(null);
 
   const holdingTanks = getHoldingTanksWithContents();
   const tanksWithSpirit = holdingTanks.filter((t) => t.volume_gal > 0);
+  const groups = groupBarrelsByLocation(barrels, locations);
+  const selected = barrels.find((barrel) => barrel.id === selectedId) ?? null;
 
   void key;
 
@@ -56,14 +90,20 @@ export function Barrels() {
     ? Math.min(selectedNewSourceTank.volume_gal, form.capacity_gal)
     : form.capacity_gal;
 
-  const openNew = (planDate?: string) => {
+  const agingCount = barrels.filter((b) => b.status === 'aging').length;
+  const totalVolume = barrels.filter((b) => b.status === 'aging').reduce((s, b) => s + b.current_volume_gal, 0);
+
+  const openNew = (planDate?: string, warehouseLocation?: string) => {
     setEditId(undefined);
+    setAddingLocation(false);
+    setNewLocationName('');
     const num = String(barrels.length + 1).padStart(3, '0');
     const firstTank = tanksWithSpirit[0];
     setForm({
       ...emptyBarrel(),
       barrel_number: `B-${num}`,
       fill_date: planDate ?? emptyBarrel().fill_date,
+      warehouse_location: warehouseLocation ?? '',
       source_holding_tank_equipment_id: firstTank?.id ?? null,
       initial_abv: firstTank?.abv ?? 0,
       current_volume_gal: firstTank
@@ -84,42 +124,53 @@ export function Barrels() {
 
   const openEdit = (barrel: Barrel) => {
     setEditId(barrel.id);
+    setAddingLocation(false);
+    setNewLocationName('');
     setForm({ ...barrel, source_holding_tank_equipment_id: barrel.source_holding_tank_equipment_id ?? null });
     setShowForm(true);
   };
 
   const handleSave = () => {
     try {
+      let warehouse_location = form.warehouse_location;
+      if (addingLocation) {
+        warehouse_location = saveWarehouseLocation(newLocationName).name;
+      }
+      const next = { ...form, warehouse_location };
       if (!editId) {
-        const tankId = form.source_holding_tank_equipment_id;
-        const volumeGal = form.current_volume_gal;
+        const tankId = next.source_holding_tank_equipment_id;
+        const volumeGal = next.current_volume_gal;
         if (tankId && volumeGal > 0) {
-          createBarrelFromHoldingTank(
+          const id = createBarrelFromHoldingTank(
             {
-              barrel_number: form.barrel_number,
-              wood_type: form.wood_type,
-              capacity_gal: form.capacity_gal,
-              fill_date: form.fill_date,
-              spirit_type: form.spirit_type,
+              barrel_number: next.barrel_number,
+              wood_type: next.wood_type,
+              capacity_gal: next.capacity_gal,
+              fill_date: next.fill_date,
+              spirit_type: next.spirit_type,
               source_run_id: null,
               source_holding_tank_equipment_id: tankId,
-              warehouse_location: form.warehouse_location,
-              status: form.status,
-              notes: form.notes,
+              warehouse_location: next.warehouse_location,
+              status: next.status,
+              notes: next.notes,
             },
             tankId,
             volumeGal,
           );
+          setSelectedId(id);
         } else if (tankId && volumeGal <= 0) {
           alert('Enter initial fill volume when filling from a holding tank.');
           return;
         } else {
-          saveBarrel(form, undefined);
+          const id = saveBarrel(next, undefined);
+          if (typeof id === 'number') setSelectedId(id);
         }
       } else {
-        saveBarrel(form, editId);
+        saveBarrel(next, editId);
+        setSelectedId(editId);
       }
       setShowForm(false);
+      setAddingLocation(false);
       refresh();
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Could not save barrel.');
@@ -129,89 +180,253 @@ export function Barrels() {
   const handleDelete = (id: number) => {
     if (confirm('Delete this barrel record?')) {
       deleteBarrel(id);
+      if (selectedId === id) setSelectedId(null);
       refresh();
     }
   };
 
-  const agingCount = barrels.filter((b) => b.status === 'aging').length;
-  const totalVolume = barrels.filter((b) => b.status === 'aging').reduce((s, b) => s + b.current_volume_gal, 0);
+  const handleAddLocation = () => {
+    try {
+      saveWarehouseLocation(locationName, { rejectDuplicate: true });
+      setLocationName('');
+      setShowLocationForm(false);
+      refresh();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Could not add location.');
+    }
+  };
+
+  const handleRemoveLocation = (id: number, name: string) => {
+    if (!confirm(`Remove ${name}?`)) return;
+    try {
+      deleteWarehouseLocation(id);
+      refresh();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Could not remove location.');
+    }
+  };
+
+  const selectedAge = selected ? barrelAgeDays(selected.fill_date) : null;
+  const selectedRun = selected ? runs.find((run) => run.id === selected.source_run_id) : undefined;
+  const selectedTank = selected?.source_holding_tank_equipment_id
+    ? holdingTanks.find((tank) => tank.id === selected.source_holding_tank_equipment_id)
+    : undefined;
 
   return (
     <div>
       <div className="page-header">
         <h2>Barrel Aging</h2>
-        <p>Track spirit maturation in warehouse</p>
-        <div className="page-actions">
-          <button type="button" className="btn btn-primary" onClick={() => openNew()}>+ New Barrel</button>
+        <p>Warehouse locations group the barrels. Add a location, then place barrels in it.</p>
+      </div>
+
+      <div className="process-view warehouse-view">
+        <div className="process-toolbar">
+          <span className="process-toolbar-title">Warehouse</span>
+          <span className="process-toolbar-hint">
+            Each section is a location. Select a barrel for fill, age, and proof.
+          </span>
+          <div className="process-toolbar-actions">
+            <button type="button" className="btn btn-sm btn-secondary" onClick={() => { setLocationName(''); setShowLocationForm(true); }}>
+              + Location
+            </button>
+            <button type="button" className="btn btn-sm btn-primary" onClick={() => openNew()}>
+              + New Barrel
+            </button>
+          </div>
+        </div>
+
+        <div className="process-body">
+          <div
+            className="process-viewport"
+            onClick={(event) => {
+              const target = event.target as HTMLElement;
+              if (target.closest('.warehouse-barrel, .warehouse-location-actions')) return;
+              setSelectedId(null);
+            }}
+          >
+            {groups.length === 0 ? (
+              <div className="empty-state">
+                <p>No warehouse locations yet.</p>
+                <button type="button" className="btn btn-primary" onClick={() => { setLocationName(''); setShowLocationForm(true); }} style={{ marginTop: '1rem' }}>
+                  Add a location
+                </button>
+              </div>
+            ) : groups.map((group, index) => {
+              const gallons = group.barrels
+                .filter((barrel) => barrel.status === 'aging')
+                .reduce((sum, barrel) => sum + barrel.current_volume_gal, 0);
+              return (
+                <section
+                  key={group.locationId ?? group.name}
+                  className={`process-stage-zone warehouse-location${index % 2 === 0 ? ' process-stage-zone--alt' : ''}`}
+                >
+                  <div className="process-stage-header">
+                    <span className="process-stage-label">{group.name}</span>
+                    <span className="process-stage-count">
+                      {group.barrels.length} barrel{group.barrels.length === 1 ? '' : 's'}
+                      {gallons > 0 ? ` · ${formatGal(gallons)} gal` : ''}
+                    </span>
+                    <div className="warehouse-location-actions">
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-secondary"
+                        onClick={() => openNew(undefined, group.name === UNASSIGNED_WAREHOUSE_LOCATION ? '' : group.name)}
+                      >
+                        + Barrel
+                      </button>
+                      {group.locationId != null && group.barrels.length === 0 && (
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-ghost"
+                          onClick={() => handleRemoveLocation(group.locationId as number, group.name)}
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  {group.barrels.length === 0 ? (
+                    <p className="warehouse-location-empty">No barrels in this location yet.</p>
+                  ) : (
+                    <div className="warehouse-barrel-row">
+                      {group.barrels.map((barrel) => {
+                        const fillPercent = barrel.capacity_gal > 0
+                          ? (barrel.current_volume_gal / barrel.capacity_gal) * 100
+                          : 0;
+                        const contents = barrel.spirit_type || barrel.wood_type;
+                        return (
+                          <button
+                            key={barrel.id}
+                            type="button"
+                            className={`process-equipment-node warehouse-barrel${selectedId === barrel.id ? ' warehouse-barrel--selected' : ''}`}
+                            onClick={() => setSelectedId(barrel.id)}
+                          >
+                            <div className="barrel-visual-svg-wrap">
+                              <BarrelVisual
+                                barrelNumber={barrel.barrel_number}
+                                status={barrel.status}
+                                fillPercent={fillPercent}
+                              />
+                            </div>
+                            <div className="process-equipment-labels">
+                              <div className="process-equipment-id">{barrel.barrel_number}</div>
+                              {contents && <div className="process-equipment-contents">{contents}</div>}
+                              <div className={`process-equipment-status${barrel.current_volume_gal <= 0 ? ' process-equipment-status--empty' : ''}`}>
+                                {barrelVolumeLabel(barrel)}
+                              </div>
+                              {barrel.initial_abv > 0 && barrel.current_volume_gal > 0 && (
+                                <div className="process-equipment-abv">{barrel.initial_abv.toFixed(1)}% ABV</div>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
+              );
+            })}
+          </div>
+
+          <aside className="process-sidebar">
+            <section className="process-sidebar-section process-sidebar-section--summary">
+              <div className="process-stat-grid process-stat-grid--compact">
+                <div className="process-stat">
+                  <span className="process-stat-value">{agingCount}</span>
+                  <span className="process-stat-label">Aging</span>
+                </div>
+                <div className="process-stat">
+                  <span className="process-stat-value">{formatGal(totalVolume)}</span>
+                  <span className="process-stat-label">Gallons</span>
+                </div>
+                <div className="process-stat">
+                  <span className="process-stat-value">{locations.length}</span>
+                  <span className="process-stat-label">Locations</span>
+                </div>
+                <div className="process-stat">
+                  <span className="process-stat-value">{barrels.length}</span>
+                  <span className="process-stat-label">Barrels</span>
+                </div>
+              </div>
+            </section>
+            <section className="process-sidebar-section process-sidebar-section--detail">
+              <div className="process-panel process-panel--detail">
+                {!selected ? (
+                  <>
+                    <h4 className="process-panel-title">Selected barrel</h4>
+                    <p className="process-panel-empty">
+                      Select a barrel to see its fill, age, and warehouse location.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <h4 className="process-panel-title">{selected.barrel_number}</h4>
+                    <p className="process-equipment-detail-code">
+                      {selected.wood_type}
+                      {selected.spirit_type ? ` · ${selected.spirit_type}` : ''}
+                    </p>
+                    <dl className="process-equipment-detail-list">
+                      <dt>Status</dt>
+                      <dd><StatusBadge status={selected.status} /></dd>
+                      <dt>Location</dt>
+                      <dd>{selected.warehouse_location || UNASSIGNED_WAREHOUSE_LOCATION}</dd>
+                      <dt>Fill</dt>
+                      <dd>
+                        {formatGal(selected.current_volume_gal)} / {formatGal(selected.capacity_gal)} gal
+                        {selected.capacity_gal > 0
+                          ? ` (${Math.round((selected.current_volume_gal / selected.capacity_gal) * 100)}%)`
+                          : ''}
+                      </dd>
+                      <dt>ABV</dt>
+                      <dd>{selected.initial_abv > 0 ? `${selected.initial_abv.toFixed(1)}%` : '—'}</dd>
+                      <dt>Filled</dt>
+                      <dd>{formatDateDisplay(selected.fill_date)}</dd>
+                      <dt>Age</dt>
+                      <dd>{selectedAge == null ? '—' : `${selectedAge} days`}</dd>
+                      {(selectedTank || selectedRun) && (
+                        <>
+                          <dt>Source</dt>
+                          <dd>{selectedTank?.name ?? selectedRun?.batch_number}</dd>
+                        </>
+                      )}
+                      {selected.notes ? (
+                        <>
+                          <dt>Notes</dt>
+                          <dd>{selected.notes}</dd>
+                        </>
+                      ) : null}
+                    </dl>
+                    <div className="process-next-actions-row" style={{ marginTop: '0.85rem' }}>
+                      <button type="button" className="btn btn-sm btn-secondary" onClick={() => openEdit(selected)}>Edit</button>
+                      <button type="button" className="btn btn-sm btn-ghost" onClick={() => handleDelete(selected.id)}>Delete</button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </section>
+          </aside>
         </div>
       </div>
 
-      <div className="card-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
-        <div className="stat-card">
-          <div className="label">Barrels Aging</div>
-          <div className="value accent">{agingCount}</div>
-        </div>
-        <div className="stat-card">
-          <div className="label">Total Volume Aging</div>
-          <div className="value">{totalVolume.toFixed(0)} gal</div>
-        </div>
-        <div className="stat-card">
-          <div className="label">Total Barrels</div>
-          <div className="value">{barrels.length}</div>
-        </div>
-      </div>
-
-      {barrels.length === 0 ? (
-        <div className="empty-state">
-          <p>No barrels registered yet.</p>
-          <button className="btn btn-primary" onClick={() => openNew()} style={{ marginTop: '1rem' }}>Register first barrel</button>
-        </div>
-      ) : (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Barrel #</th>
-                <th>Spirit</th>
-                <th>Wood</th>
-                <th>Fill Date</th>
-                <th>Age (days)</th>
-                <th>Volume</th>
-                <th>ABV</th>
-                <th>Location</th>
-                <th>Status</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {barrels.map((b) => {
-                const age = differenceInDays(new Date(), new Date(b.fill_date));
-                const run = runs.find((r) => r.id === b.source_run_id);
-                const sourceTank = b.source_holding_tank_equipment_id
-                  ? holdingTanks.find((t) => t.id === b.source_holding_tank_equipment_id)
-                  : undefined;
-                const sourceLabel = sourceTank?.name ?? (run ? run.batch_number : '');
-                return (
-                  <tr key={b.id}>
-                    <td><strong>{b.barrel_number}</strong></td>
-                    <td>{b.spirit_type}{sourceLabel ? ` (${sourceLabel})` : ''}</td>
-                    <td>{b.wood_type}</td>
-                    <td>{format(new Date(b.fill_date), 'MMM d, yyyy')}</td>
-                    <td>{age}</td>
-                    <td>{b.current_volume_gal} / {b.capacity_gal} gal</td>
-                    <td>{b.initial_abv}%</td>
-                    <td>{b.warehouse_location}</td>
-                    <td><StatusBadge status={b.status} /></td>
-                    <td className="td-actions">
-                      <button className="btn btn-sm btn-ghost" onClick={() => openEdit(b)}>Edit</button>
-                      <button className="btn btn-sm btn-ghost" onClick={() => handleDelete(b.id)}>Delete</button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+      {showLocationForm && (
+        <Modal title="Add warehouse location" onClose={() => setShowLocationForm(false)}>
+          <div className="form-grid">
+            <div className="form-group full-width">
+              <label>Location name</label>
+              <input
+                value={locationName}
+                onChange={(e) => setLocationName(e.target.value)}
+                placeholder="Rickhouse B"
+                autoFocus
+              />
+              <p className="field-hint">The location shows on the warehouse floor even before a barrel is placed there.</p>
+            </div>
+          </div>
+          <div className="form-actions">
+            <button type="button" className="btn btn-secondary" onClick={() => setShowLocationForm(false)}>Cancel</button>
+            <button type="button" className="btn btn-primary" onClick={handleAddLocation}>Add location</button>
+          </div>
+        </Modal>
       )}
 
       {showForm && (
@@ -312,7 +527,37 @@ export function Barrels() {
             </div>
             <div className="form-group">
               <label>Warehouse Location</label>
-              <input value={form.warehouse_location} onChange={(e) => setForm({ ...form, warehouse_location: e.target.value })} />
+              <select
+                value={addingLocation ? NEW_LOCATION : form.warehouse_location}
+                onChange={(e) => {
+                  if (e.target.value === NEW_LOCATION) {
+                    setAddingLocation(true);
+                    setNewLocationName('');
+                    return;
+                  }
+                  setAddingLocation(false);
+                  setForm({ ...form, warehouse_location: e.target.value });
+                }}
+              >
+                <option value="">{UNASSIGNED_WAREHOUSE_LOCATION}</option>
+                {locations.map((location) => (
+                  <option key={location.id} value={location.name}>{location.name}</option>
+                ))}
+                {form.warehouse_location
+                  && !locations.some((location) => location.name.toLocaleLowerCase() === form.warehouse_location.toLocaleLowerCase())
+                  && (
+                    <option value={form.warehouse_location}>{form.warehouse_location}</option>
+                  )}
+                <option value={NEW_LOCATION}>+ Add location…</option>
+              </select>
+              {addingLocation && (
+                <input
+                  style={{ marginTop: '0.4rem' }}
+                  value={newLocationName}
+                  onChange={(e) => setNewLocationName(e.target.value)}
+                  placeholder="New location name"
+                />
+              )}
             </div>
             <div className="form-group">
               <label>Status</label>

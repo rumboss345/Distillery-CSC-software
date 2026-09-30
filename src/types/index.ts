@@ -311,6 +311,12 @@ export interface BarrelFill {
   created_at: string;
 }
 
+export interface WarehouseLocation {
+  id: number;
+  name: string;
+  created_at: string;
+}
+
 export interface Barrel {
   id: number;
   barrel_number: string;
