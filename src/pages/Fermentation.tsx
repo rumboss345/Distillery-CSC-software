@@ -78,6 +78,20 @@ function unlockKeyFor(batchId: number, equipmentId: number | null): string {
   return `${batchId}:${equipmentId ?? 'batch'}`;
 }
 
+function logTargetFromRow(row: FermentationRow): LogTarget {
+  return {
+    batchId: row.batch.id,
+    batchNumber: row.batch.batch_number,
+    startDate: row.batch.start_date,
+    equipmentId: row.equipmentId,
+    equipmentName: row.fermenterName,
+    volumeGal: row.volumeGal || undefined,
+    startBrix: row.startBrix,
+    readOnly: row.status !== 'fermenting' || row.distilled,
+    distilled: row.distilled,
+  };
+}
+
 export function Fermentation() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { key, refresh } = useRefreshKey();
@@ -140,6 +154,7 @@ export function Fermentation() {
   const queryWashId = Number(searchParams.get('wash')) || 0;
   const queryBatch = queryWashId ? batches.find((batch) => batch.id === queryWashId) : undefined;
   const [appliedQueryWashId, setAppliedQueryWashId] = useState(0);
+  const [appliedLogsEquipmentId, setAppliedLogsEquipmentId] = useState(0);
   if (!queryWashId && appliedQueryWashId !== 0) {
     setAppliedQueryWashId(0);
   } else if (queryWashId && appliedQueryWashId !== queryWashId && queryBatch && canStartFrom(queryBatch)) {
@@ -220,6 +235,16 @@ export function Fermentation() {
     }
     return next;
   });
+
+  const queryLogsEquipmentId = Number(searchParams.get('logsEquipment')) || 0;
+  if (!queryLogsEquipmentId && appliedLogsEquipmentId !== 0) {
+    setAppliedLogsEquipmentId(0);
+  } else if (queryLogsEquipmentId && appliedLogsEquipmentId !== queryLogsEquipmentId) {
+    const logRow = rows.find((row) => row.equipmentId === queryLogsEquipmentId && !row.distilled)
+      ?? rows.find((row) => row.equipmentId === queryLogsEquipmentId);
+    setAppliedLogsEquipmentId(queryLogsEquipmentId);
+    if (logRow) setLogTarget(logTargetFromRow(logRow));
+  }
 
   const rowsByStatus = FERMENTATION_PAGE_STATUSES
     .map((groupStatus) => {
@@ -437,17 +462,16 @@ export function Fermentation() {
   };
 
   const openLogs = (row: FermentationRow) => {
-    setLogTarget({
-      batchId: row.batch.id,
-      batchNumber: row.batch.batch_number,
-      startDate: row.batch.start_date,
-      equipmentId: row.equipmentId,
-      equipmentName: row.fermenterName,
-      volumeGal: row.volumeGal || undefined,
-      startBrix: row.startBrix,
-      readOnly: row.status !== 'fermenting' || row.distilled,
-      distilled: row.distilled,
-    });
+    setLogTarget(logTargetFromRow(row));
+  };
+
+  const closeLogs = () => {
+    setLogTarget(null);
+    if (searchParams.has('logsEquipment')) {
+      const next = new URLSearchParams(searchParams);
+      next.delete('logsEquipment');
+      setSearchParams(next, { replace: true });
+    }
   };
 
   const deleteMessage = (row: FermentationRow) => {
@@ -641,7 +665,7 @@ export function Fermentation() {
         <Modal
           wide
           title={`Fermentation logs — ${logTarget.batchNumber}${logTarget.equipmentName ? ` · ${logTarget.equipmentName}` : ''} · ${formatDateDisplay(logTarget.startDate)}${logTarget.readOnly ? ' (read-only)' : ''}`}
-          onClose={() => setLogTarget(null)}
+          onClose={closeLogs}
         >
           <FermenterLogPanel
             mashBatchId={logTarget.batchId}

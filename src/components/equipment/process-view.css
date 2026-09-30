@@ -345,6 +345,78 @@
   text-decoration: underline;
 }
 
+.process-context-menu {
+  position: fixed;
+  z-index: 201;
+  min-width: 220px;
+  max-width: min(320px, calc(100vw - 16px));
+  max-height: calc(100vh - 16px);
+  overflow: auto;
+  padding: 0.45rem 0 0.35rem;
+  background: #1e293b;
+  border: 1px solid #475569;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.process-context-menu-title {
+  margin: 0;
+  padding: 0.15rem 0.85rem 0.35rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.process-context-menu-section + .process-context-menu-section {
+  border-top: 1px solid #334155;
+  margin-top: 0.2rem;
+  padding-top: 0.2rem;
+}
+
+.process-context-menu-label {
+  padding: 0.25rem 0.85rem 0.1rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #94a3b8;
+}
+
+.process-context-menu-hint,
+.process-context-menu-status,
+.process-context-menu-notes {
+  margin: 0.15rem 0.85rem 0.35rem;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: #cbd5e1;
+}
+
+.process-context-menu-notes {
+  white-space: pre-wrap;
+  color: #e2e8f0;
+}
+
+.process-context-menu-notes--empty {
+  color: #64748b;
+  font-style: italic;
+}
+
+.process-context-menu-item {
+  display: block;
+  padding: 0.4rem 0.85rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #e2e8f0;
+  text-decoration: none;
+}
+
+.process-context-menu-item:hover,
+.process-context-menu-item:focus-visible {
+  background: #334155;
+  color: #f8fafc;
+  outline: none;
+}
+
 .process-equipment-labels {
   box-sizing: border-box;
   width: 100%;

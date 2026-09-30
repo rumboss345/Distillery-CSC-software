@@ -3103,6 +3103,13 @@ tr:hover td {
   padding-bottom: 0;
 }
 
+.equipment-maintenance-row--focus {
+  background: rgba(56, 189, 248, 0.12);
+  border-radius: 6px;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+
 .equipment-maintenance-name {
   font-weight: 600;
   display: block;

@@ -124,6 +124,7 @@ export function Distillation() {
   const equipmentListOptions = planOnly ? { includeUnavailable: true as const } : undefined;
   const stills = getPotStills(equipmentListOptions);
   const [selectedRunId, setSelectedRunId] = useState<number | null>(null);
+  const [appliedCutsRunId, setAppliedCutsRunId] = useState(0);
   const [adminDeleteRunId, setAdminDeleteRunId] = useState<number | null>(null);
   const [cutForm, setCutForm] = useState({
     cut_type: 'heads' as CutType,
@@ -139,6 +140,13 @@ export function Distillation() {
   const [chargeTempF, setChargeTempF] = useState('60');
   const [proofTarget, setProofTarget] = useState('');
   const [proofPlace, setProofPlace] = useState<SpiritProofPlace>('in_still');
+  const cutsRunId = Number(searchParams.get('cutsRun')) || 0;
+  if (!cutsRunId && appliedCutsRunId !== 0) {
+    setAppliedCutsRunId(0);
+  } else if (cutsRunId && appliedCutsRunId !== cutsRunId && runs.some((run) => run.id === cutsRunId)) {
+    setAppliedCutsRunId(cutsRunId);
+    setSelectedRunId(cutsRunId);
+  }
 
   void key;
 
@@ -919,7 +927,14 @@ export function Distillation() {
         <Modal
           wide
           title={`${selectedRunIsComplete ? 'View cuts' : 'Cuts'} — ${runs.find((r) => r.id === selectedRunId)?.batch_number ?? ''}${selectedRun ? ` · ${formatDateDisplay(selectedRun.run_date)}` : ''}`}
-          onClose={() => setSelectedRunId(null)}
+          onClose={() => {
+            setSelectedRunId(null);
+            if (searchParams.has('cutsRun')) {
+              const next = new URLSearchParams(searchParams);
+              next.delete('cutsRun');
+              setSearchParams(next, { replace: true });
+            }
+          }}
         >
           <div className="cuts-modal-toolbar">
             {heartsTotal > 0 && (

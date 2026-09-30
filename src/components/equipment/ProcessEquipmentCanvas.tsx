@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { fetchProcessAssignments, type ProcessAssignmentEntry } from '../../lib/auth-api';
 import {
   getAllFloorEquipmentWithContext,
+  getDistillationRunForCuts,
   getEquipmentVolumeReport,
   getFloorPlans,
   getProductionSummary,
@@ -31,7 +32,8 @@ import {
   equipmentHasMaintenanceTag,
   equipmentShowsRepairNoteIndicator,
 } from '../../lib/equipment-maintenance';
-import { ProcessEquipmentMaintenancePopover } from './ProcessEquipmentMaintenancePopover';
+import { ProcessEquipmentContextMenu } from './ProcessEquipmentContextMenu';
+import { buildProcessEquipmentContextMenu } from './process-equipment-menu';
 import './process-view.css';
 
 interface ProcessEquipmentCanvasProps {
@@ -70,7 +72,7 @@ export function ProcessEquipmentCanvas({
   const [assignmentsByStage, setAssignmentsByStage] = useState<
     Record<string, ProcessAssignmentEntry[]>
   >({});
-  const [maintenancePopover, setMaintenancePopover] = useState<{
+  const [contextMenu, setContextMenu] = useState<{
     equipmentId: number;
     x: number;
     y: number;
@@ -151,8 +153,25 @@ export function ProcessEquipmentCanvas({
     : null;
   const selectedVisual = selectedId != null ? visualById.get(selectedId) ?? null : null;
   const selectedPlanName = selectedEquipment?.plan_name ?? '';
-  const maintenancePopoverEquipment = maintenancePopover
-    ? allEquipment.find((e) => e.id === maintenancePopover.equipmentId) ?? null
+  const contextMenuEquipment = contextMenu
+    ? allEquipment.find((e) => e.id === contextMenu.equipmentId) ?? null
+    : null;
+  const contextMenuModel = contextMenuEquipment
+    ? buildProcessEquipmentContextMenu({
+      id: contextMenuEquipment.id,
+      name: contextMenuEquipment.name,
+      equipment_type: contextMenuEquipment.equipment_type,
+      active_batch_number: contextMenuEquipment.active_batch_number,
+      active_latest_brix: contextMenuEquipment.active_latest_brix,
+      active_mash_status: contextMenuEquipment.active_mash_status,
+      linked_mash_batch_id: contextMenuEquipment.linked_mash_batch_id,
+      volumeGal: visualById.get(contextMenuEquipment.id)?.currentVolumeGal ?? contextMenuEquipment.active_volume_gal ?? 0,
+      abv: visualById.get(contextMenuEquipment.id)?.abv ?? contextMenuEquipment.active_abv ?? null,
+      liquidName: visualById.get(contextMenuEquipment.id)?.liquidName ?? null,
+      distillationRunId: (contextMenuEquipment.equipment_type === 'pot_still' || contextMenuEquipment.equipment_type === 'column_still')
+        ? getDistillationRunForCuts(contextMenuEquipment.name)?.id ?? null
+        : null,
+    })
     : null;
 
   const getCanvasPoint = useCallback(
@@ -242,13 +261,13 @@ export function ProcessEquipmentCanvas({
   const onViewportPointerUp = () => setPanning(false);
 
   useEffect(() => {
-    if (!maintenancePopover) return undefined;
+    if (!contextMenu) return undefined;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setMaintenancePopover(null);
+      if (e.key === 'Escape') setContextMenu(null);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [maintenancePopover]);
+  }, [contextMenu]);
 
   const onEquipmentContextMenu = (e: React.MouseEvent, item: EquipmentItem) => {
     const fromRealGesture = contextMenuGestureRef.current;
@@ -257,10 +276,9 @@ export function ProcessEquipmentCanvas({
       e.preventDefault();
       return;
     }
-    if (!equipmentHasMaintenanceTag(item)) return;
     e.preventDefault();
     e.stopPropagation();
-    setMaintenancePopover({ equipmentId: item.id, x: e.clientX, y: e.clientY });
+    setContextMenu({ equipmentId: item.id, x: e.clientX, y: e.clientY });
     onSelect(item.id);
   };
 
@@ -269,7 +287,7 @@ export function ProcessEquipmentCanvas({
     contextMenuGestureRef.current = isEquipmentContextMenuPointer(e.button, e.ctrlKey);
     if (contextMenuGestureRef.current) return;
     e.preventDefault();
-    setMaintenancePopover(null);
+    setContextMenu(null);
     dragMovedRef.current = false;
     dragStartRef.current = { x: e.clientX, y: e.clientY };
     const pos = resolvePosition(item);
@@ -393,7 +411,7 @@ export function ProcessEquipmentCanvas({
                     visual.currentVolumeGal > 0 ? `${visual.currentVolumeGal.toFixed(1)} gal` : 'Empty',
                     visual.abv != null && visual.abv > 0 ? `${visual.abv.toFixed(1)}% ABV` : null,
                     visual.fermenterLatestBrix != null ? `${visual.fermenterLatestBrix.toFixed(1)}° Brix` : null,
-                    hasMaintenanceTag ? 'Right-click to view maintenance' : null,
+                    'Right-click for next step, logs, cuts, or maintenance',
                   ].filter(Boolean).join(' · ')}
                 >
                   <EquipmentVisual
@@ -434,12 +452,13 @@ export function ProcessEquipmentCanvas({
           </div>
         </div>
 
-        {maintenancePopover && maintenancePopoverEquipment && (
-          <ProcessEquipmentMaintenancePopover
-            equipment={maintenancePopoverEquipment}
-            x={maintenancePopover.x}
-            y={maintenancePopover.y}
-            onClose={() => setMaintenancePopover(null)}
+        {contextMenu && contextMenuEquipment && contextMenuModel && (
+          <ProcessEquipmentContextMenu
+            equipment={contextMenuEquipment}
+            menu={contextMenuModel}
+            x={contextMenu.x}
+            y={contextMenu.y}
+            onClose={() => setContextMenu(null)}
           />
         )}
 
