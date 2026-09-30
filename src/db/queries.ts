@@ -6,6 +6,7 @@ import {
 } from '../lib/bottling-lines';
 import {
   collectionVesselAcceptsIncomingCut,
+  collectionVesselContentsLabel,
   collectionVesselCutMixMessage,
   storedCutTypeFromInflows,
   type StoredCutType,
@@ -4009,14 +4010,32 @@ export function getAllFloorEquipmentWithContext(): FloorEquipmentView[] {
   return getFloorPlans().flatMap((plan) => getFloorEquipmentWithContext(plan.id));
 }
 
+function collectionVesselContentsDetail(vesselId: number, volumeGal: number): string {
+  if (!(volumeGal > 0.05)) return '';
+  const stored = getCollectionVesselStoredCutType(vesselId);
+  const stillageGal = queryOne<{ volume: number }>(`
+    SELECT COALESCE(SUM(stillage_volume_gal), 0) as volume
+    FROM distillation_runs
+    WHERE stillage_holding_tank_equipment_id = ?
+      AND status = 'complete'
+      AND COALESCE(stillage_discarded, 0) = 0
+      AND COALESCE(stillage_volume_gal, 0) > 0
+  `, [vesselId])?.volume ?? 0;
+  return collectionVesselContentsLabel({ volumeGal, stored, stillageGal })
+    ?? getHoldingTankIntakeHistory(vesselId, 1)[0]?.summary
+    ?? '';
+}
+
 export function getEquipmentVolumeReport(): EquipmentVolumeReport[] {
   const equipment = getAllFloorEquipmentWithContext();
   return equipment.map((eq) => {
     if (eq.equipment_type === 'holding_tank' || eq.equipment_type === 'collection_vessel') {
       const contents = getHoldingTankContents(eq.id);
-      const detail = contents.run_count > 0
-        ? `${contents.run_count} distillation run${contents.run_count === 1 ? '' : 's'} · ${contents.cut_count} cut${contents.cut_count === 1 ? '' : 's'}`
-        : '';
+      const detail = eq.equipment_type === 'collection_vessel'
+        ? collectionVesselContentsDetail(eq.id, contents.volume_gal)
+        : contents.run_count > 0
+          ? `${contents.run_count} distillation run${contents.run_count === 1 ? '' : 's'} · ${contents.cut_count} cut${contents.cut_count === 1 ? '' : 's'}`
+          : '';
       return {
         id: eq.id,
         name: eq.name,

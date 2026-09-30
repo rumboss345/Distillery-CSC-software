@@ -457,7 +457,8 @@ INSERT OR IGNORE INTO distillation_runs (id, batch_number, source_mash_batch_id,
 INSERT OR IGNORE INTO distillation_cuts (id, distillation_run_id, cut_type, holding_tank_equipment_id, start_time, end_time, volume_gal, abv, notes) VALUES
   (1, 1, 'heads', NULL, '2025-06-10T08:00', '2025-06-10T08:45', 2.1, 82, 'Discarded'),
   (2, 1, 'hearts', 12, '2025-06-10T08:45', '2025-06-10T14:30', 25.1, 68, 'Clean hearts cut'),
-  (3, 1, 'tails', 17, '2025-06-10T14:30', '2025-06-10T16:00', 5.8, 25, 'Set aside for re-distillation');
+  (3, 1, 'tails', 17, '2025-06-10T14:30', '2025-06-10T16:00', 5.8, 25, 'Set aside for re-distillation'),
+  (4, 1, 'heads', 18, '2025-06-10T16:00', '2025-06-10T16:20', 3.2, 78, 'Collected in Latina 500L');
 
 INSERT OR IGNORE INTO barrels (id, barrel_number, wood_type, capacity_gal, fill_date, spirit_type, source_run_id, initial_abv, current_volume_gal, warehouse_location, status, notes) VALUES
   (1, 'B-001', 'American Oak', 53, '2025-06-11', 'New Make Spirit', 1, 63.5, 50, 'Warehouse A - Row 1', 'aging', 'Filled from D-2025-001 hearts'),

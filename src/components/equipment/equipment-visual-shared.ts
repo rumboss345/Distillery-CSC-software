@@ -96,7 +96,15 @@ export function buildEquipmentVisualData(
   if (!liquidName && item.active_batch_number) {
     liquidName = `Wash ${item.active_batch_number}`;
   }
-  if ((item.equipment_type === 'holding_tank' || item.equipment_type === 'collection_vessel') && !liquidName && item.notes) {
+  if (item.equipment_type === 'holding_tank' && !liquidName && item.notes) {
+    liquidName = item.notes;
+  }
+  if (
+    item.equipment_type === 'collection_vessel'
+    && !liquidName
+    && currentVolumeGal > 0.05
+    && item.notes
+  ) {
     liquidName = item.notes;
   }
 
