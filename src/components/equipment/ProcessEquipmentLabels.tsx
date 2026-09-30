@@ -35,7 +35,7 @@ export function ProcessEquipmentLabels({ data }: { data: LabelData | TankVisualD
   const showEstimate = !isEmpty && 'estimatedAbv' in data && data.estimatedAbv !== undefined;
   const abvText = showEstimate
     ? `Est. ${data.estimatedAbv != null ? `${data.estimatedAbv.toFixed(1)}%` : '—'} ABV`
-    : (!isEmpty && data.abv != null && data.abv > 0 ? `${data.abv.toFixed(1)}% ABV` : null);
+    : (!isEmpty && data.abv != null ? `${data.abv.toFixed(1)}% ABV` : null);
 
   return (
     <div className="process-equipment-labels">

@@ -43,6 +43,21 @@ export function collectionVesselAcceptsIncomingCut(
   return stored == null || stored === incoming;
 }
 
+/** What a collection vessel currently holds, for the process-view label. */
+export function collectionVesselContentsLabel(input: {
+  volumeGal: number;
+  stored: StoredCutType | null;
+  stillageGal: number;
+}): string | null {
+  if (!(input.volumeGal > 0.05)) return null;
+  if (input.stored === 'heads' || input.stored === 'hearts' || input.stored === 'tails') {
+    return input.stored.charAt(0).toUpperCase() + input.stored.slice(1);
+  }
+  if (input.stillageGal >= input.volumeGal - 0.05) return 'Stillage';
+  if (input.stored === 'mixed') return 'Mixed';
+  return null;
+}
+
 export function collectionVesselCutMixMessage(stored: StoredCutType, incoming: CutType): string {
   if (stored === 'mixed') {
     return 'This collection vessel already holds more than one cut. Empty it before adding heads, hearts, or tails.';
