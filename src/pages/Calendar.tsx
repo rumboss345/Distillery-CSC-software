@@ -25,7 +25,7 @@ import {
   buildCalendarEvents,
   CALENDAR_DATA_LIMITATIONS,
   CALENDAR_KIND_LABELS,
-  CALENDAR_KIND_ROUTES,
+  calendarEventPath,
   CALENDAR_STATUS_LABELS,
   eventEndDate,
   eventOccursOnDate,
@@ -401,7 +401,7 @@ function WeekEventChip({ event, day }: { event: CalendarEvent; day: Date }) {
 
   return (
     <Link
-      to={CALENDAR_KIND_ROUTES[event.kind]}
+      to={calendarEventPath(event)}
       className={[
         'calendar-week-event',
         `calendar-kind-${event.kind}`,
@@ -454,7 +454,7 @@ function CalendarDetailItem({ event }: { event: CalendarEvent }) {
         </span>
         <StatusBadge status={event.status} />
       </div>
-      <Link to={CALENDAR_KIND_ROUTES[event.kind]} className="calendar-detail-title">
+      <Link to={calendarEventPath(event)} className="calendar-detail-title">
         {event.title}
       </Link>
       <p className="calendar-detail-meta text-muted">

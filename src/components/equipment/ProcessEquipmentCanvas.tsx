@@ -306,6 +306,7 @@ export function ProcessEquipmentCanvas({
         </span>
         <nav className="process-toolbar-links" aria-label="Production shortcuts">
           <Link to="/wash" className="process-toolbar-link">Wash</Link>
+          <Link to="/fermentation" className="process-toolbar-link">Ferment</Link>
           <Link to="/distillation" className="process-toolbar-link">Distill</Link>
           <Link to="/blending" className="process-toolbar-link">Blend</Link>
           <Link to="/bottling" className="process-toolbar-link">Bottle</Link>

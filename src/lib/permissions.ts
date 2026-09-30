@@ -29,6 +29,7 @@ export const ROUTE_PERMISSIONS: Record<string, PermissionKey> = {
   '/calendar': 'dashboard',
   '/wash': 'wash',
   '/mash': 'wash',
+  '/fermentation': 'wash',
   '/recipes': 'wash',
   '/equipment-maintenance': 'equipment',
   '/distillation': 'distillation',
