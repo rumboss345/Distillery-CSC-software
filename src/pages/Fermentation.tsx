@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AssigneeCell } from '../components/AssigneeSelect';
 import { AdminCredentialConfirmModal } from '../components/AdminCredentialConfirmModal';
@@ -75,7 +75,6 @@ function unlockKeyFor(batchId: number, equipmentId: number | null): string {
 
 export function Fermentation() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const washParamHandled = useRef(false);
   const { key, refresh } = useRefreshKey();
   const batches = getMashBatches();
   const allAssignments = getAllMashFermenterAssignments();
@@ -124,6 +123,26 @@ export function Fermentation() {
   };
 
   const washChoices = batches.filter(canStartFrom);
+  const queryWashId = Number(searchParams.get('wash')) || 0;
+  const queryBatch = queryWashId ? batches.find((batch) => batch.id === queryWashId) : undefined;
+  const [appliedQueryWashId, setAppliedQueryWashId] = useState(0);
+  if (!queryWashId && appliedQueryWashId !== 0) {
+    setAppliedQueryWashId(0);
+  } else if (queryWashId && appliedQueryWashId !== queryWashId && queryBatch && canStartFrom(queryBatch)) {
+    const assigned = assignedGallons(queryBatch.id);
+    const remaining = Math.max(0, Math.round((queryBatch.water_gal - assigned) * 10) / 10);
+    setAppliedQueryWashId(queryWashId);
+    setFormMode('start');
+    setEditBatch(queryBatch);
+    setEditEquipmentId(null);
+    setEditFermenterName('');
+    setOriginalStatus('fermenting');
+    setStatus('fermenting');
+    setFermenterId('');
+    setVolumeGal(remaining > 0 ? remaining : queryBatch.water_gal);
+    completeEditUnlockedRef.current = null;
+    setShowForm(true);
+  }
 
   const rows = fermentationBatches.flatMap((batch): FermentationRow[] => {
     const startBrix = batch.actual_brix ?? batch.target_brix;
@@ -204,6 +223,11 @@ export function Fermentation() {
     setEditBatch(null);
     setEditEquipmentId(null);
     completeEditUnlockedRef.current = null;
+    if (searchParams.has('wash')) {
+      const next = new URLSearchParams(searchParams);
+      next.delete('wash');
+      setSearchParams(next, { replace: true });
+    }
   };
 
   const openNew = (batch: MashBatch) => {
@@ -232,18 +256,6 @@ export function Fermentation() {
     setVolumeGal(row.assignment?.volume_gal || row.batch.water_gal);
     setShowForm(true);
   };
-
-  useEffect(() => {
-    if (washParamHandled.current) return;
-    const washId = Number(searchParams.get('wash'));
-    if (!washId) return;
-    const batch = batches.find((item) => item.id === washId);
-    washParamHandled.current = true;
-    if (batch && canStartFrom(batch)) openNew(batch);
-    const next = new URLSearchParams(searchParams);
-    next.delete('wash');
-    setSearchParams(next, { replace: true });
-  }, [batches, searchParams, setSearchParams]);
 
   const performSave = () => {
     if (!editBatch) return;
