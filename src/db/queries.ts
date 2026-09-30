@@ -2203,7 +2203,7 @@ export function saveFermentationSet(
   mashBatchId: number,
   assignments: FermenterAssignmentInput[],
   moveLogs?: { fromEquipmentId: number; toEquipmentId: number },
-  options?: { keepStatusWhenEmpty?: boolean },
+  options?: { keepStatusWhenEmpty?: boolean; actualStartBrix?: number },
 ): void {
   const batch = getMashBatch(mashBatchId);
   if (!batch) throw new Error('Wash batch not found.');
@@ -2255,8 +2255,13 @@ export function saveFermentationSet(
     unit: nutrient.unit,
   }));
   const { id: _id, created_at: _created, ...batchFields } = batch;
+  const actualStartBrix = options?.actualStartBrix;
   saveMashBatchWithFermenters(
-    { ...batchFields, status: nextStatus },
+    {
+      ...batchFields,
+      status: nextStatus,
+      ...(actualStartBrix != null && Number.isFinite(actualStartBrix) ? { actual_brix: actualStartBrix } : {}),
+    },
     assignments,
     nutrients,
     mashBatchId,

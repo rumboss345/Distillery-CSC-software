@@ -2,10 +2,30 @@ import { describe, expect, it } from 'vitest';
 import {
   FERMENTATION_READY_MAX_BRIX,
   FERMENTER_LIQUID_GREEN_BELOW_BRIX,
+  actualStartBrixError,
   estimateAbvFromBrix,
   fermenterLiquidBrixPhase,
   isBrixReadyForDistillation,
+  washMoveNeedsActualStartBrix,
 } from './fermentation';
+
+describe('actual start Brix when a wash moves to fermenting', () => {
+  it('asks while the wash is still planned or washing', () => {
+    expect(washMoveNeedsActualStartBrix('planned', null)).toBe(true);
+    expect(washMoveNeedsActualStartBrix('mashing', 16.8)).toBe(true);
+  });
+
+  it('asks again only when a fermenting wash has no measured start Brix', () => {
+    expect(washMoveNeedsActualStartBrix('fermenting', null)).toBe(true);
+    expect(washMoveNeedsActualStartBrix('fermenting', 16.8)).toBe(false);
+  });
+
+  it('requires a measured Brix above zero', () => {
+    expect(actualStartBrixError(null)).toMatch(/actual start Brix/);
+    expect(actualStartBrixError(0)).toMatch(/actual start Brix/);
+    expect(actualStartBrixError(16.4)).toBeNull();
+  });
+});
 
 describe('fermentation readiness', () => {
   it('requires brix below the ready threshold', () => {
