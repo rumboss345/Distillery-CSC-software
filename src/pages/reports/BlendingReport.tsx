@@ -20,7 +20,7 @@ export function BlendingReport() {
   return (
     <ReportTableShell
       title="Blending"
-      description="Executed blends with spirit draws and final volume vs theoretical where recorded."
+      description="Executed blends with spirit draws and final volume vs theoretical where recorded. The Blending page keeps the latest 10 completed batches."
       periodLabel={range.label}
       csvFilename={`blending-${range.from ?? 'all'}`}
       csvHeaders={csvHeaders}

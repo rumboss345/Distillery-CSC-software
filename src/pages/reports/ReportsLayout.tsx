@@ -4,6 +4,7 @@ import { ReportProvider, useReportContext } from './report-context';
 
 const TABS = [
   { to: '/reports', end: true, label: 'Summary' },
+  { to: '/reports/fermentation', label: 'Fermentation' },
   { to: '/reports/distillation', label: 'Distillation' },
   { to: '/reports/tanks', label: 'Tanks' },
   { to: '/reports/blending', label: 'Blending' },

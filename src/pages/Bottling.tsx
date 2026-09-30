@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { RecentCompletedNote } from '../components/RecentCompletedNote';
 import {
   getBottlingRuns,
   saveBottlingRun,
@@ -14,6 +15,7 @@ import {
 } from '../db/queries';
 import { DatePicker } from '../components/DatePicker';
 import { formatDateDisplay } from '../lib/date-input';
+import { latestCompleted } from '../lib/recent-completed';
 import { localIsoDate } from '../lib/planned-event-date';
 import { Modal } from '../components/Modal';
 import {
@@ -78,6 +80,7 @@ export function Bottling() {
   const calendarPlanHandled = useRef(false);
   const { key, refresh } = useRefreshKey();
   const runs = getBottlingRuns();
+  const recentRuns = latestCompleted(runs, (run) => run.bottling_date, (run) => run.id);
   const barrels = getBarrels().filter((b) => b.status === 'aging' || b.status === 'empty');
   const holdingTanks = getHoldingTanks();
   const packagingInventory = getInventoryByCategory('packaging');
@@ -392,6 +395,8 @@ export function Bottling() {
           <button type="button" className="btn btn-primary" onClick={() => openNew()} style={{ marginTop: '1rem' }}>Record first bottling</button>
         </div>
       ) : (
+        <>
+        <RecentCompletedNote hiddenCount={recentRuns.hiddenCount} to="/reports/bottling" />
         <div className="table-wrap">
           <table>
             <thead>
@@ -411,7 +416,7 @@ export function Bottling() {
               </tr>
             </thead>
             <tbody>
-              {runs.map((r) => (
+              {recentRuns.shown.map((r) => (
                 <tr key={r.id}>
                   <td><strong>{r.batch_number}</strong></td>
                   <td>{r.product_name}</td>
@@ -437,6 +442,7 @@ export function Bottling() {
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {showForm && (
