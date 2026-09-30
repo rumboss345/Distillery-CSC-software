@@ -1706,7 +1706,10 @@ export function getDiscardedFermentations(): DiscardedFermentation[] {
   );
 }
 
-/** Move wash to another fermenter, or record a partial or full discard. */
+/**
+ * Move wash to another fermenter, or dump leftover gallons (yeast at the bottom).
+ * Only the dumped volume is recorded. The wash batch stays fermenting or complete.
+ */
 export function saveFermenterWashTransfer(input: {
   sourceEquipmentId: number;
   destEquipmentId: number | null;
@@ -1809,18 +1812,6 @@ export function saveFermenterWashTransfer(input: {
         input.notes.trim(),
       ],
     );
-    const left = queryOne<{ volume: number }>(
-      `SELECT COALESCE(SUM(volume_gal), 0) as volume
-       FROM mash_fermenter_assignments WHERE mash_batch_id = ?`,
-      [source.mash_batch_id],
-    );
-    if ((left?.volume ?? 0) <= 0.01) {
-      runQuery(
-        `UPDATE mash_batches SET status = 'discarded'
-         WHERE id = ? AND status IN ('fermenting', 'complete')`,
-        [source.mash_batch_id],
-      );
-    }
   } else if (dest) {
     const same = queryOne<{ id: number; volume_gal: number }>(
       `SELECT id, volume_gal FROM mash_fermenter_assignments
@@ -1896,6 +1887,7 @@ export function deleteDiscardedFermentation(id: number): void {
     );
   }
 
+  // Older dumps marked the whole batch discarded. Restoring those gallons puts it back.
   if (mash.status === 'discarded') {
     runQuery(`UPDATE mash_batches SET status = 'fermenting' WHERE id = ?`, [mash.id]);
   }
