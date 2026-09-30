@@ -30,6 +30,10 @@ import { countActiveFermentations, fermenterShowsAssignedWash } from '../lib/mas
 import { eventDateWhenLeavingPlanned } from '../lib/planned-event-date';
 import { DISCARD_DESTINATION, fermenterTransferError } from '../lib/fermenter-transfer';
 import { persistedStillage, stillageSaveError } from '../lib/stillage';
+import {
+  normalizeWarehouseLocationName,
+  warehouseLocationNameError,
+} from '../lib/warehouse-locations';
 import { normalizeNutrientUnit, nutrientAmountInUnit } from '../lib/wash-recipe-nutrients';
 import type {
   EquipmentMaintenanceLogEventType,
@@ -40,6 +44,7 @@ import { initDatabase, clearAllData } from './database';
 import type {
   Barrel,
   BarrelFill,
+  WarehouseLocation,
   BlendFormulaVersion,
   BlendIngredient,
   BlendIngredientInput,
@@ -2865,6 +2870,51 @@ export function deleteDistillationCut(id: number): void {
 
 // ── Barrels ────────────────────────────────────────────────
 
+export function getWarehouseLocations(): WarehouseLocation[] {
+  return queryAll<WarehouseLocation>(
+    'SELECT * FROM warehouse_locations ORDER BY name COLLATE NOCASE',
+  );
+}
+
+export function saveWarehouseLocation(name: string, options?: { rejectDuplicate?: boolean }): WarehouseLocation {
+  const error = warehouseLocationNameError(name);
+  if (error) throw new Error(error);
+  const normalized = normalizeWarehouseLocationName(name);
+  const existing = queryOne<WarehouseLocation>(
+    'SELECT * FROM warehouse_locations WHERE name = ? COLLATE NOCASE',
+    [normalized],
+  );
+  if (existing) {
+    if (options?.rejectDuplicate) {
+      throw new Error(`${existing.name} is already a warehouse location.`);
+    }
+    return existing;
+  }
+  const id = insertRow(
+    'INSERT INTO warehouse_locations (name) VALUES (?)',
+    [normalized],
+  );
+  return queryOne<WarehouseLocation>('SELECT * FROM warehouse_locations WHERE id = ?', [id])!;
+}
+
+export function deleteWarehouseLocation(id: number): void {
+  const location = queryOne<WarehouseLocation>(
+    'SELECT * FROM warehouse_locations WHERE id = ?',
+    [id],
+  );
+  if (!location) return;
+  const inUse = queryOne<{ count: number }>(
+    `SELECT COUNT(*) as count FROM barrels
+     WHERE TRIM(warehouse_location) != ''
+       AND warehouse_location = ? COLLATE NOCASE`,
+    [location.name],
+  );
+  if ((inUse?.count ?? 0) > 0) {
+    throw new Error(`${location.name} still has barrels. Move them before removing this location.`);
+  }
+  runQuery('DELETE FROM warehouse_locations WHERE id = ?', [id]);
+}
+
 export function getBarrels(): Barrel[] {
   return queryAll<Barrel>(
     'SELECT * FROM barrels ORDER BY fill_date DESC',
@@ -2877,6 +2927,8 @@ export function getBarrelsForBlend(): Barrel[] {
 }
 
 export function saveBarrel(barrel: Omit<Barrel, 'id' | 'created_at'>, id?: number): number | void {
+  const warehouse_location = normalizeWarehouseLocationName(barrel.warehouse_location);
+  if (warehouse_location) saveWarehouseLocation(warehouse_location);
   if (id) {
     runQuery(
       `UPDATE barrels SET barrel_number=?, wood_type=?, capacity_gal=?, fill_date=?, spirit_type=?, source_run_id=?, source_holding_tank_equipment_id=?, initial_abv=?, current_volume_gal=?, warehouse_location=?, status=?, notes=? WHERE id=?`,
@@ -2890,7 +2942,7 @@ export function saveBarrel(barrel: Omit<Barrel, 'id' | 'created_at'>, id?: numbe
         barrel.source_holding_tank_equipment_id,
         barrel.initial_abv,
         barrel.current_volume_gal,
-        barrel.warehouse_location,
+        warehouse_location,
         barrel.status,
         barrel.notes,
         id,
@@ -2911,7 +2963,7 @@ export function saveBarrel(barrel: Omit<Barrel, 'id' | 'created_at'>, id?: numbe
       barrel.source_holding_tank_equipment_id,
       barrel.initial_abv,
       barrel.current_volume_gal,
-      barrel.warehouse_location,
+      warehouse_location,
       barrel.status,
       barrel.notes,
     ],

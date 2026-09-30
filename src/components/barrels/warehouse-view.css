@@ -1,0 +1,92 @@
+.warehouse-view .process-viewport {
+  overflow: auto;
+  cursor: default;
+  padding: 12px;
+}
+
+.warehouse-view .warehouse-location {
+  position: relative;
+  left: auto;
+  width: auto;
+  pointer-events: auto;
+  margin: 0 0 12px;
+}
+
+.warehouse-view .warehouse-location-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 0.35rem;
+  pointer-events: auto;
+}
+
+.warehouse-view .warehouse-location-actions .btn {
+  background: #fff;
+  color: #1e293b;
+  border: 1px solid #94a3b8;
+}
+
+.warehouse-view .warehouse-location-actions .btn:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.warehouse-view .process-viewport .empty-state {
+  color: #334155;
+}
+
+.warehouse-view .warehouse-barrel-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 10px 12px;
+  align-items: flex-start;
+}
+
+.warehouse-view .warehouse-barrel {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  overflow: visible;
+  flex: 0 0 52px;
+}
+
+.warehouse-view .barrel-head-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.warehouse-view .warehouse-barrel--selected {
+  border-color: #c8956c;
+  box-shadow: 0 0 0 2px rgba(200, 149, 108, 0.55);
+}
+
+.warehouse-view .warehouse-barrel:hover {
+  border-color: #94a3b8;
+}
+
+.warehouse-view .warehouse-location-empty {
+  margin: 0;
+  padding: 0.35rem 0.9rem 0.9rem;
+  color: #64748b;
+  font-size: 0.8rem;
+}
+
+.warehouse-search {
+  background: #1f2937;
+  color: #f8fafc;
+  border: 1px solid #64748b;
+  border-radius: 6px;
+  padding: 0.28rem 0.55rem;
+  font-size: 0.8rem;
+  min-width: 11rem;
+}
+
+.warehouse-search::placeholder {
+  color: #94a3b8;
+}
