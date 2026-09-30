@@ -1,4 +1,5 @@
 import { queryAll } from '../../db/database';
+import { compareStoredDatesDesc } from '../date-input';
 
 export interface TraceabilityHit {
   domain: string;
@@ -124,6 +125,6 @@ export function searchTraceability(query: string, limit = 50): TraceabilityHit[]
     });
   }
 
-  hits.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  hits.sort((a, b) => compareStoredDatesDesc(a.date, b.date));
   return hits.slice(0, limit);
 }

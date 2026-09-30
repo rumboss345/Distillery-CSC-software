@@ -1,4 +1,4 @@
-import { format, parseISO } from 'date-fns';
+import { formatDateDisplay } from '../../lib/date-input';
 import { buildBottlingReportRows } from '../../lib/reporting/bottling-rows';
 import { useReportContext } from './report-context';
 import { ReportTableShell } from './ReportTableShell';
@@ -47,7 +47,7 @@ export function BottlingReportPage() {
             <tr key={r.bottling_id}>
               <td><strong>{r.batch_number}</strong></td>
               <td>{r.product_name}</td>
-              <td>{format(parseISO(r.bottling_date), 'MMM d, yyyy')}</td>
+              <td>{formatDateDisplay(r.bottling_date)}</td>
               <td>{r.bottled_gal.toFixed(2)} gal</td>
               <td>{r.final_abv.toFixed(1)}%</td>
               <td>{r.bottled_laa_gal.toFixed(2)}</td>

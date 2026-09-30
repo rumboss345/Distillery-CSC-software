@@ -1,4 +1,4 @@
-import { format, parseISO } from 'date-fns';
+import { formatDateDisplay } from '../../lib/date-input';
 import {
   getYieldReports,
   getProductionSummary,
@@ -214,7 +214,7 @@ export function SummaryReport() {
                     <tr key={run.id}>
                       <td><strong>{run.batch_number}</strong></td>
                       <td>{run.product_name}</td>
-                      <td>{format(parseISO(run.bottling_date), 'MMM d, yyyy')}</td>
+                      <td>{formatDateDisplay(run.bottling_date)}</td>
                       <td>{bottled.toFixed(2)}</td>
                       <td>
                         {run.source_holding_tank_equipment_id && run.source_volume_gal != null

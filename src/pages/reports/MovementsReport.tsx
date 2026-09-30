@@ -1,4 +1,4 @@
-import { format, parseISO } from 'date-fns';
+import { formatCalendarDay } from '../../lib/date-input';
 import { buildLiquidMovements } from '../../lib/reporting/movements';
 import { useReportContext } from './report-context';
 import { ReportTableShell } from './ReportTableShell';
@@ -42,7 +42,7 @@ export function MovementsReport() {
         <tbody>
           {rows.map((r) => (
             <tr key={r.row_key}>
-              <td>{format(parseISO(r.occurred_at.slice(0, 10)), 'MMM d, yyyy')}</td>
+              <td>{formatCalendarDay(r.occurred_at)}</td>
               <td>{r.movement_type.replace(/_/g, ' ')}</td>
               <td>{r.source_label}</td>
               <td>{r.dest_label}</td>

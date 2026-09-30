@@ -1,5 +1,5 @@
-import { format } from 'date-fns';
 import { describeEquipmentMaintenanceLogEntry } from '../../lib/equipment-maintenance-log';
+import { formatRecordedAt } from '../../lib/date-input';
 import { formatAssigneeLabel } from '../../lib/assignee';
 import type { EquipmentMaintenanceLogView } from '../../types';
 
@@ -33,7 +33,7 @@ export function EquipmentMaintenanceLogTable({
         <tbody>
           {entries.map((entry) => (
             <tr key={entry.id}>
-              <td>{format(new Date(entry.created_at), 'MMM d, yyyy HH:mm')}</td>
+              <td>{formatRecordedAt(entry.created_at)}</td>
               {showEquipment && <td>{entry.equipment_name}</td>}
               <td>{describeEquipmentMaintenanceLogEntry(entry)}</td>
               <td>

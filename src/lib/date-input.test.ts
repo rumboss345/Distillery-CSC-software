@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
+import { format, parseISO } from 'date-fns';
 import {
+  formatCalendarDay,
+  formatDateDisplay,
   formatRecordedAt,
   isIsoDate,
   isIsoDateTime,
   isIsoMonth,
   joinDateTime,
+  localCalendarDayKey,
   normalizeDateInput,
   normalizeDateTimeInput,
   normalizeMonthInput,
@@ -50,6 +54,22 @@ describe('date-input', () => {
   it('splits and joins datetime values', () => {
     expect(splitDateTime('2025-06-15T08:30')).toEqual({ date: '2025-06-15', time: '08:30' });
     expect(joinDateTime('2025-06-15', '08:30')).toBe('2025-06-15T08:30');
+  });
+
+  it('keeps a date-only value on the local calendar day', () => {
+    expect(formatDateDisplay('2026-09-30')).toBe('Sep 30, 2026');
+    expect(formatDateDisplay('2026-09-30')).toBe(format(new Date(2026, 8, 30), 'MMM d, yyyy'));
+    expect(formatCalendarDay('2026-09-30')).toBe('Sep 30, 2026');
+    expect(localCalendarDayKey('2026-09-30')).toBe('2026-09-30');
+    expect(formatCalendarDay('2026-09-30T23:30')).toBe('Sep 30, 2026');
+  });
+
+  it('shows UTC timestamps on the local calendar day and clock', () => {
+    const utcEvening = parseISO('2026-09-30T23:30:00Z');
+    expect(formatCalendarDay('2026-09-30 23:30:00')).toBe(format(utcEvening, 'MMM d, yyyy'));
+    expect(formatCalendarDay('2026-09-30T23:30:00.000Z')).toBe(format(utcEvening, 'MMM d, yyyy'));
+    expect(formatRecordedAt('2026-09-30 23:30:00')).toBe(format(utcEvening, 'MMM d, yyyy HH:mm'));
+    expect(localCalendarDayKey('2026-09-30T23:30:00.000Z')).toBe(format(utcEvening, 'yyyy-MM-dd'));
   });
 
   it('shows the date and time for logs and cuts', () => {

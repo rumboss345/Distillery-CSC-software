@@ -1,4 +1,5 @@
 import { getBottlingRuns } from '../../db/queries';
+import { compareStoredDatesDesc } from '../date-input';
 import { totalVolumeGal } from '../bottling-lines';
 import { laaGalFromVolumeAbv, roundVolume } from './alcohol-units';
 import { eventInReportRange, type ReportDateRange } from './period';
@@ -69,8 +70,6 @@ export function buildBottlingReportRows(range: ReportDateRange): BottlingReportR
     });
   }
 
-  rows.sort(
-    (a, b) => new Date(b.bottling_date).getTime() - new Date(a.bottling_date).getTime(),
-  );
+  rows.sort((a, b) => compareStoredDatesDesc(a.bottling_date, b.bottling_date));
   return rows;
 }

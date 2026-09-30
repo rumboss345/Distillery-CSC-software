@@ -20,6 +20,7 @@ import { BarrelVisual } from '../components/barrels/BarrelVisual';
 import { BARREL_STOCK_ITEM_NAME } from '../lib/barrel-inventory';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
 import { formatDateDisplay, isIsoDate } from '../lib/date-input';
+import { localIsoDate } from '../lib/planned-event-date';
 import { formatGal } from '../components/equipment/equipment-visual-shared';
 import {
   UNASSIGNED_WAREHOUSE_LOCATION,
@@ -36,7 +37,7 @@ const emptyBarrel = (): Omit<Barrel, 'id' | 'created_at'> => ({
   barrel_number: '',
   wood_type: 'American Oak',
   capacity_gal: 53,
-  fill_date: new Date().toISOString().slice(0, 10),
+  fill_date: localIsoDate(),
   spirit_type: '',
   source_run_id: null,
   source_holding_tank_equipment_id: null,

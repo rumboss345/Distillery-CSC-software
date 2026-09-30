@@ -1,5 +1,5 @@
-import { format } from 'date-fns';
 import { getHoldingTankIntakeHistory, holdingTankIntakeKey } from '../db/queries';
+import { formatCalendarDay } from '../lib/date-input';
 import type { HoldingTankIntakeEntry } from '../types';
 
 interface HoldingTankIntakeHistoryProps {
@@ -45,7 +45,7 @@ export function HoldingTankIntakeHistory({
         {history.map((entry) => {
           const key = holdingTankIntakeKey(entry);
           const selected = selectedKey === key;
-          const dateLabel = format(new Date(entry.occurred_at), 'MMM d, yyyy');
+          const dateLabel = formatCalendarDay(entry.occurred_at);
           return (
             <li key={key}>
               <button

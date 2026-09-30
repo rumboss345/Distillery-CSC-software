@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { eventDateWhenLeavingPlanned, localIsoDate } from './planned-event-date';
+import { eventDateWhenLeavingPlanned, localIsoDate, localIsoDateTime } from './planned-event-date';
 
 describe('eventDateWhenLeavingPlanned', () => {
   const today = '2026-09-29';
@@ -24,5 +24,6 @@ describe('eventDateWhenLeavingPlanned', () => {
 
   it('formats the local calendar day', () => {
     expect(localIsoDate(new Date(2026, 8, 29, 23, 30))).toBe('2026-09-29');
+    expect(localIsoDateTime(new Date(2026, 8, 29, 23, 30))).toBe('2026-09-29T23:30');
   });
 });

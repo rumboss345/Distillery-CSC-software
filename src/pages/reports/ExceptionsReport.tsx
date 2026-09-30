@@ -1,4 +1,4 @@
-import { format, parseISO } from 'date-fns';
+import { formatCalendarDay } from '../../lib/date-input';
 import { buildProductionExceptions } from '../../lib/reporting/exceptions';
 import { useReportContext } from './report-context';
 import { ReportTableShell } from './ReportTableShell';
@@ -38,7 +38,7 @@ export function ExceptionsReport() {
             <tr key={r.row_key}>
               <td><span className={`exception-badge exception-${r.severity}`}>{r.severity}</span></td>
               <td>{r.category}</td>
-              <td>{format(parseISO(r.occurred_at.slice(0, 10)), 'MMM d, yyyy')}</td>
+              <td>{formatCalendarDay(r.occurred_at)}</td>
               <td><strong>{r.reference}</strong></td>
               <td>{r.message}</td>
             </tr>

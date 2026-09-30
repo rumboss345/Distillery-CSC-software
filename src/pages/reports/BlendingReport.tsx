@@ -1,4 +1,4 @@
-import { format, parseISO } from 'date-fns';
+import { formatCalendarDay } from '../../lib/date-input';
 import { buildBlendReportRows } from '../../lib/reporting/blend-rows';
 import { useReportContext } from './report-context';
 import { ReportTableShell } from './ReportTableShell';
@@ -47,7 +47,7 @@ export function BlendingReport() {
             <tr key={r.blend_id}>
               <td><strong>{r.batch_number}</strong></td>
               <td>{r.product_name}</td>
-              <td>{format(parseISO((r.executed_at ?? r.blend_date).slice(0, 10)), 'MMM d, yyyy')}</td>
+              <td>{formatCalendarDay(r.executed_at ?? r.blend_date)}</td>
               <td>{r.status}</td>
               <td>{r.spirit_draw_gal.toFixed(1)} gal · {r.spirit_laa_gal.toFixed(2)} LAA</td>
               <td>{r.final_volume_gal.toFixed(1)} gal @ {r.final_abv.toFixed(1)}%</td>

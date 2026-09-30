@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { format } from 'date-fns';
 import { DatePicker } from '../components/DatePicker';
 import { AbvVolumeTemperatureFields } from '../components/AbvVolumeTemperatureFields';
 import { correctedAbvFromInputs } from '../components/AbvTemperatureInput';
@@ -24,6 +23,7 @@ import {
 } from '../db/queries';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
 import { formatDateDisplay } from '../lib/date-input';
+import { localIsoDate } from '../lib/planned-event-date';
 import { DISCARD_DESTINATION, fermenterTransferError } from '../lib/fermenter-transfer';
 const sourceTankVolumeGal = (tankId: number) => {
   if (!tankId) return 0;
@@ -46,7 +46,7 @@ const emptyTransferForm = () => ({
   volume_gal: 0,
   observed_abv: '',
   sample_temp_f: '60',
-  transfer_date: new Date().toISOString().slice(0, 10),
+  transfer_date: localIsoDate(),
   notes: '',
 });
 
@@ -54,7 +54,7 @@ const emptyFermenterForm = () => ({
   source_equipment_id: 0,
   dest_equipment_id: 0,
   volume_gal: 0,
-  transfer_date: new Date().toISOString().slice(0, 10),
+  transfer_date: localIsoDate(),
   notes: '',
 });
 
@@ -515,7 +515,7 @@ export function TankTransfer() {
               <tbody>
                 {tankTransfers.map((t) => (
                   <tr key={t.id}>
-                    <td>{format(new Date(t.transfer_date), 'MMM d, yyyy')}</td>
+                    <td>{formatDateDisplay(t.transfer_date)}</td>
                     <td>{t.source_tank_name}</td>
                     <td>{t.dest_tank_name}</td>
                     <td>{t.volume_gal.toFixed(1)} gal</td>
