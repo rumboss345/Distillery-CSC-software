@@ -29,7 +29,7 @@ import {
 import { equipmentCleaningStatusLabel, equipmentNeedsCleaning, equipmentStatusWhenReturningToPlanned } from '../lib/equipment-cleaning';
 import { countActiveFermentations, fermenterShowsAssignedWash } from '../lib/mash-fermenter-fill';
 import { compareStoredDatesDesc } from '../lib/date-input';
-import { eventDateWhenLeavingPlanned } from '../lib/planned-event-date';
+import { eventDateWhenLeavingPlanned, localIsoDate } from '../lib/planned-event-date';
 import { DISCARD_DESTINATION, fermenterTransferError } from '../lib/fermenter-transfer';
 import { persistedStillage, stillageSaveError } from '../lib/stillage';
 import {
@@ -1721,7 +1721,7 @@ export function getDiscardedFermentations(): DiscardedFermentation[] {
   );
 }
 
-/** Move wash to another fermenter, or record a partial or full discard. */
+/** Move wash to another fermenter, or record unusable gallons as leftovers. */
 export function saveFermenterWashTransfer(input: {
   sourceEquipmentId: number;
   destEquipmentId: number | null;
@@ -1823,21 +1823,10 @@ export function saveFermenterWashTransfer(input: {
         source.fermenter_name,
         input.volumeGal,
         input.transferDate,
-        input.notes.trim(),
+        input.notes.trim() || 'Leftovers',
       ],
     );
-    const left = queryOne<{ volume: number }>(
-      `SELECT COALESCE(SUM(volume_gal), 0) as volume
-       FROM mash_fermenter_assignments WHERE mash_batch_id = ?`,
-      [source.mash_batch_id],
-    );
-    if ((left?.volume ?? 0) <= 0.01) {
-      runQuery(
-        `UPDATE mash_batches SET status = 'discarded'
-         WHERE id = ? AND status IN ('fermenting', 'complete')`,
-        [source.mash_batch_id],
-      );
-    }
+    // Only these gallons are unusable. The fermentation is not discarded.
   } else if (dest) {
     const same = queryOne<{ id: number; volume_gal: number }>(
       `SELECT id, volume_gal FROM mash_fermenter_assignments
@@ -2214,6 +2203,7 @@ export function saveFermentationSet(
   mashBatchId: number,
   assignments: FermenterAssignmentInput[],
   moveLogs?: { fromEquipmentId: number; toEquipmentId: number },
+  options?: { keepStatusWhenEmpty?: boolean },
 ): void {
   const batch = getMashBatch(mashBatchId);
   if (!batch) throw new Error('Wash batch not found.');
@@ -2244,6 +2234,15 @@ export function saveFermentationSet(
     assignments.map((assignment) => assignmentStatus(assignment.status)),
   );
 
+  if (assignments.length === 0 && options?.keepStatusWhenEmpty) {
+    const status = batch.status === 'discarded' ? 'fermenting' : batch.status;
+    if (status !== batch.status) {
+      runQuery(`UPDATE mash_batches SET status = ? WHERE id = ?`, [status, mashBatchId]);
+    }
+    saveMashFermenterAssignments(mashBatchId, []);
+    return;
+  }
+
   if (nextStatus === 'mashing' && assignments.length === 0) {
     runQuery(`UPDATE mash_batches SET status = 'mashing' WHERE id = ?`, [mashBatchId]);
     saveMashFermenterAssignments(mashBatchId, []);
@@ -2271,6 +2270,33 @@ export function saveFermentationSet(
       [moveLogs.toEquipmentId, mashBatchId, moveLogs.fromEquipmentId],
     );
   }
+}
+
+/** Record gallons from one fermenter that cannot be used. The fermentation itself stays. */
+export function recordFermenterLeftover(input: {
+  mashBatchId: number;
+  equipmentId: number;
+  fermenterName: string;
+  volumeGal: number;
+  notes: string;
+}): void {
+  const batch = getMashBatch(input.mashBatchId);
+  if (!batch) throw new Error('Wash batch not found.');
+  if (!(input.volumeGal > 0)) return;
+  insertRow(
+    `INSERT INTO discarded_fermentations
+      (mash_batch_id, source_fermenter_equipment_id, batch_number, fermenter_name, volume_gal, discarded_date, notes)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [
+      input.mashBatchId,
+      input.equipmentId,
+      batch.batch_number,
+      input.fermenterName,
+      input.volumeGal,
+      localIsoDate(),
+      input.notes.trim() || 'Leftovers',
+    ],
+  );
 }
 
 /** Remove one fermenter. Sibling fermenters and the wash batch stay. */
@@ -2471,6 +2497,19 @@ export interface FermentationLogSource {
   mash_batch_id: number;
   floor_equipment_id: number | null;
   equipment_name: string;
+}
+
+/** Fermenters whose wash was charged to a still. Leftover gallons are not a charge. */
+export function getChargedFermenterPairs(): { mash_batch_id: number; floor_equipment_id: number }[] {
+  return queryAll(
+    `SELECT DISTINCT source_mash_batch_id as mash_batch_id,
+            source_fermenter_equipment_id as floor_equipment_id
+     FROM distillation_runs
+     WHERE source_mash_batch_id IS NOT NULL
+       AND source_fermenter_equipment_id IS NOT NULL
+       AND status IN ('running', 'complete')
+       AND charge_volume_gal > 0`,
+  );
 }
 
 /** One row per fermenter that has logs, including fermenters released after a still charge. */

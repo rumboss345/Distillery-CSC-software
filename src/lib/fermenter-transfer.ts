@@ -17,7 +17,7 @@ export interface FermenterTransferCheck {
   destOffline?: boolean;
 }
 
-/** Wash may move to another fermenter, or be discarded without emptying the source. */
+/** Wash may move to another fermenter, or unusable gallons may be recorded as leftovers. */
 export function fermenterTransferError(input: FermenterTransferCheck): string | null {
   if (!Number.isFinite(input.volumeGal) || !(input.volumeGal > 0)) {
     return 'Enter the volume to transfer.';
@@ -27,13 +27,13 @@ export function fermenterTransferError(input: FermenterTransferCheck): string | 
   }
   if (input.discarded) return null;
   if (!input.destId) {
-    return 'Choose another fermenter, or discard the wash.';
+    return 'Choose another fermenter, or record the leftovers that cannot be used.';
   }
   if (input.destId === input.sourceId) {
     return 'Source and destination fermenters must be different.';
   }
   if (input.destType !== 'fermenter') {
-    return 'Fermenter wash can only move to another fermenter or be discarded.';
+    return 'Fermenter wash can only move to another fermenter. Unusable gallons are recorded as leftovers.';
   }
   const name = input.destName?.trim() || 'That fermenter';
   if (input.destNeedsCleaning) {

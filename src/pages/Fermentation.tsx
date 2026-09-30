@@ -8,10 +8,13 @@ import { StatusBadge } from '../components/StatusBadge';
 import {
   deleteOneFermentation,
   getAllFermentationLogSources,
+  getChargedFermenterPairs,
   getAllMashFermenterAssignments,
   getAvailableFermenters,
+  getDiscardedFermentations,
   getLatestFermentationBrix,
   getMashBatches,
+  recordFermenterLeftover,
   saveFermentationSet,
   useRefreshKey,
 } from '../db/queries';
@@ -79,6 +82,9 @@ export function Fermentation() {
   const batches = getMashBatches();
   const allAssignments = getAllMashFermenterAssignments();
   const allLogSources = getAllFermentationLogSources();
+  const chargedFermenterKeys = new Set(
+    getChargedFermenterPairs().map((pair) => `${pair.mash_batch_id}:${pair.floor_equipment_id}`),
+  );
   const [showForm, setShowForm] = useState(false);
   const [formMode, setFormMode] = useState<'start' | 'edit'>('start');
   const [editBatch, setEditBatch] = useState<MashBatch | null>(null);
@@ -91,6 +97,8 @@ export function Fermentation() {
   const [useTwoFermenters, setUseTwoFermenters] = useState(false);
   const [fermenter2Id, setFermenter2Id] = useState<number | ''>('');
   const [volume2Gal, setVolume2Gal] = useState(0);
+  const [leftoverGal, setLeftoverGal] = useState(0);
+  const [leftoverNotes, setLeftoverNotes] = useState('');
   const [logTarget, setLogTarget] = useState<LogTarget | null>(null);
   const [adminDelete, setAdminDelete] = useState<FermentationRow | null>(null);
   const [adminEdit, setAdminEdit] = useState<FermentationRow | null>(null);
@@ -146,9 +154,13 @@ export function Fermentation() {
     setUseTwoFermenters(false);
     setFermenter2Id('');
     setVolume2Gal(0);
+    setLeftoverGal(0);
+    setLeftoverNotes('');
     completeEditUnlockedRef.current = null;
     setShowForm(true);
   }
+
+  const leftovers = getDiscardedFermentations();
 
   const rows = fermentationBatches.flatMap((batch): FermentationRow[] => {
     const startBrix = batch.actual_brix ?? batch.target_brix;
@@ -170,6 +182,7 @@ export function Fermentation() {
     const assignedIds = new Set(assignments.map((assignment) => assignment.floor_equipment_id));
     for (const source of sources) {
       if (source.floor_equipment_id == null || assignedIds.has(source.floor_equipment_id)) continue;
+      if (!chargedFermenterKeys.has(`${batch.id}:${source.floor_equipment_id}`)) continue;
       const name = source.equipment_name || `Fermenter ${source.floor_equipment_id}`;
       next.push({
         key: `log-${batch.id}-${source.floor_equipment_id}`,
@@ -252,6 +265,8 @@ export function Fermentation() {
     setUseTwoFermenters(false);
     setFermenter2Id('');
     setVolume2Gal(0);
+    setLeftoverGal(0);
+    setLeftoverNotes('');
     completeEditUnlockedRef.current = null;
     setShowForm(true);
   };
@@ -262,12 +277,14 @@ export function Fermentation() {
     setEditEquipmentId(row.equipmentId);
     setEditFermenterName(row.fermenterName);
     setOriginalStatus(row.status);
-    setStatus(row.status);
+    setStatus(row.status === 'discarded' ? 'fermenting' : row.status);
     setFermenterId(row.equipmentId ?? '');
     setVolumeGal(row.assignment?.volume_gal || row.batch.water_gal);
     setUseTwoFermenters(false);
     setFermenter2Id('');
     setVolume2Gal(0);
+    setLeftoverGal(0);
+    setLeftoverNotes('');
     setShowForm(true);
   };
 
@@ -292,7 +309,17 @@ export function Fermentation() {
       alert(startingTwo ? 'Enter the gallons in each fermenter.' : 'Enter the gallons in this fermenter.');
       return;
     }
-    const totalGal = volumeGal + (startingTwo ? volume2Gal : 0);
+    const leftover = formMode === 'edit' ? leftoverGal : 0;
+    if (leftover < 0) {
+      alert('Enter the leftover gallons that cannot be used.');
+      return;
+    }
+    if (leftover > volumeGal + 0.01) {
+      alert(`Only ${volumeGal.toFixed(1)} gal is in this fermenter.`);
+      return;
+    }
+    const usable = Math.round((volumeGal - Math.max(0, leftover)) * 10) / 10;
+    const totalGal = (usable > 0.01 ? usable : 0) + (startingTwo ? volume2Gal : 0);
     const room = editBatch.water_gal - otherGallons;
     if (editBatch.water_gal > 0 && totalGal > room + 0.5) {
       const left = Math.max(0, room);
@@ -301,26 +328,46 @@ export function Fermentation() {
       }
     }
     const previousEquipmentId = formMode === 'edit' ? editEquipmentId : null;
+    const savedStatus: FermentationAssignmentStatus = status === 'discarded' ? 'fermenting' : status;
     const additions = [
-      { equipmentId, volumeGal, status },
-      ...(startingTwo ? [{ equipmentId: equipmentId2, volumeGal: volume2Gal, status }] : []),
+      ...(usable > 0.01 ? [{ equipmentId, volumeGal: usable, status: savedStatus }] : []),
+      ...(startingTwo ? [{ equipmentId: equipmentId2, volumeGal: volume2Gal, status: savedStatus }] : []),
     ];
     const others = assignmentsFor(editBatch.id).filter((assignment) => (
       assignment.floor_equipment_id !== previousEquipmentId
       && !additions.some((addition) => addition.equipmentId === assignment.floor_equipment_id)
     ));
-    const moveLogs = previousEquipmentId && previousEquipmentId !== equipmentId
+    const nextAssignments = [
+      ...others.map((assignment) => ({
+        equipmentId: assignment.floor_equipment_id,
+        volumeGal: assignment.volume_gal,
+        status: assignmentStatus(assignment.status),
+      })),
+      ...additions,
+    ];
+    const moveLogs = previousEquipmentId && previousEquipmentId !== equipmentId && usable > 0.01
       ? { fromEquipmentId: previousEquipmentId, toEquipmentId: equipmentId }
       : undefined;
     try {
-      saveFermentationSet(editBatch.id, [
-        ...others.map((assignment) => ({
-          equipmentId: assignment.floor_equipment_id,
-          volumeGal: assignment.volume_gal,
-          status: assignmentStatus(assignment.status),
-        })),
-        ...additions,
-      ], moveLogs);
+      saveFermentationSet(
+        editBatch.id,
+        nextAssignments,
+        moveLogs,
+        leftover > 0.01 && nextAssignments.length === 0 ? { keepStatusWhenEmpty: true } : undefined,
+      );
+      if (leftover > 0.01) {
+        const sourceId = previousEquipmentId ?? equipmentId;
+        const sourceName = editFermenterName
+          || fermenterOptions.find((fermenter) => fermenter.id === sourceId)?.name
+          || 'Fermenter';
+        recordFermenterLeftover({
+          mashBatchId: editBatch.id,
+          equipmentId: sourceId,
+          fermenterName: sourceName,
+          volumeGal: leftover,
+          notes: leftoverNotes,
+        });
+      }
       closeForm();
       refresh();
     } catch (error) {
@@ -396,7 +443,7 @@ export function Fermentation() {
     <div>
       <div className="page-header">
         <h2>Fermentation</h2>
-        <p>Each fermenter is its own fermentation, with its own logs and status.</p>
+        <p>Each fermenter is its own fermentation, with its own logs and status. Unusable gallons are recorded as leftovers and do not discard the fermentation.</p>
         <div className="page-actions">
           <button
             className="btn btn-primary"
@@ -483,6 +530,42 @@ export function Fermentation() {
             </section>
           ))}
         </div>
+      )}
+
+      {leftovers.length > 0 && (
+        <section className="card wash-status-group" style={{ marginTop: '1rem' }}>
+          <header className="wash-status-group-header">
+            <h3 className="wash-status-group-title">Leftovers</h3>
+            <span className="text-muted wash-status-group-count">
+              {leftovers.length} {leftovers.length === 1 ? 'record' : 'records'}
+            </span>
+          </header>
+          <p className="field-hint">Gallons that cannot be used. The rest of each fermentation stays.</p>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Wash batch</th>
+                  <th>Fermenter</th>
+                  <th>Gallons</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {leftovers.map((row) => (
+                  <tr key={row.id}>
+                    <td>{formatDateDisplay(row.discarded_date)}</td>
+                    <td>{row.batch_number || '—'}</td>
+                    <td>{row.fermenter_name}</td>
+                    <td>{row.volume_gal.toFixed(1)} gal</td>
+                    <td>{row.notes || 'Leftovers'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
       )}
 
       {adminDelete && (
@@ -588,7 +671,6 @@ export function Fermentation() {
               >
                 <option value="fermenting">fermenting</option>
                 <option value="complete">complete</option>
-                <option value="discarded">discarded</option>
               </select>
             </div>
             {formMode === 'start' && (
@@ -645,6 +727,31 @@ export function Fermentation() {
                 onChange={(e) => setVolumeGal(parseFloat(e.target.value) || 0)}
               />
             </div>
+            {formMode === 'edit' && (
+              <>
+                <div className="form-group">
+                  <label>Leftovers (gal)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.1"
+                    value={leftoverGal || ''}
+                    onChange={(e) => setLeftoverGal(parseFloat(e.target.value) || 0)}
+                  />
+                  <p className="field-hint">
+                    Gallons in this fermenter that cannot be used. They are removed from the volume above. The rest of this fermentation stays.
+                  </p>
+                </div>
+                <div className="form-group">
+                  <label>Leftover notes</label>
+                  <input
+                    value={leftoverNotes}
+                    onChange={(e) => setLeftoverNotes(e.target.value)}
+                    placeholder="Leftovers"
+                  />
+                </div>
+              </>
+            )}
             {showTwoFermenters && (
               <>
                 <div className="form-group">
@@ -676,9 +783,11 @@ export function Fermentation() {
           <p className="form-hint">
             {showTwoFermenters
               ? 'Both fermenters are saved as their own fermentations. Completing or deleting one later leaves the other alone.'
-              : 'This fermenter is saved on its own. Completing, discarding, or deleting it leaves the other fermenters on this wash alone.'}
+              : 'This fermenter is saved on its own. Completing or deleting it leaves the other fermenters on this wash alone.'}
             {status === 'complete' ? ' Mark it complete only after this fermenter has a log.' : ''}
-            {status === 'discarded' ? ' Discarding releases this fermenter.' : ''}
+            {formMode === 'edit' && leftoverGal > 0
+              ? ' Leftovers are only the part that cannot be used. This fermentation is not discarded.'
+              : ''}
           </p>
           <div className="form-actions">
             <button className="btn btn-secondary" onClick={closeForm}>Cancel</button>

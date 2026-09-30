@@ -272,7 +272,7 @@ export function TankTransfer() {
     const discarded = fermenterForm.dest_equipment_id === DISCARD_DESTINATION;
     const dest = fermenterDestinations.find((item) => item.id === fermenterForm.dest_equipment_id);
     if (!discarded && !dest) {
-      alert('Choose another fermenter, or discard the wash.');
+      alert('Choose another fermenter, or record the leftovers that cannot be used.');
       return;
     }
     const error = fermenterTransferError({
@@ -307,12 +307,12 @@ export function TankTransfer() {
   };
 
   const handleDeleteDiscard = (id: number) => {
-    if (confirm('Delete this discarded fermentation? The gallons go back into the fermenter when it is empty or still holds this wash.')) {
+    if (confirm('Delete this leftover record? The gallons go back into the fermenter when it is empty or still holds this wash.')) {
       try {
         deleteDiscardedFermentation(id);
         refresh();
       } catch (err) {
-        alert(err instanceof Error ? err.message : 'Could not delete this discard.');
+        alert(err instanceof Error ? err.message : 'Could not delete this leftover record.');
       }
     }
   };
@@ -321,7 +321,7 @@ export function TankTransfer() {
     <div>
       <div className="page-header">
         <h2>Tank Transfer</h2>
-        <p>Move spirit between holding tanks and collection vessels. Fermenter wash moves only to another fermenter, or can be discarded without emptying the fermenter.</p>
+        <p>Move spirit between holding tanks and collection vessels. Fermenter wash moves to another fermenter, or the unusable gallons are recorded as leftovers.</p>
         <div className="page-actions">
           <button type="button" className="btn btn-primary" onClick={() => openTransferForm()}>
             + New Transfer
@@ -332,7 +332,7 @@ export function TankTransfer() {
       <div className="detail-panel">
         <h4>Fermenters</h4>
         <p className="field-hint" style={{ marginTop: '-0.5rem' }}>
-          Select a fermenter with wash to move some or all of it to another fermenter, or discard it.
+          Select a fermenter with wash to move some of it to another fermenter, or record leftovers that cannot be used.
         </p>
         {fermentersWithWash.length === 0 ? (
           <p style={{ color: 'var(--text-muted)' }}>No fermenters currently hold wash.</p>
@@ -391,9 +391,9 @@ export function TankTransfer() {
       </div>
 
       <div className="detail-panel">
-        <h4>Discarded fermentations</h4>
+        <h4>Fermenter leftovers</h4>
         {discardedFermentations.length === 0 ? (
-          <p style={{ color: 'var(--text-muted)' }}>No discarded fermentations recorded yet.</p>
+          <p style={{ color: 'var(--text-muted)' }}>No fermenter leftovers recorded yet.</p>
         ) : (
           <div className="table-wrap">
             <table>
@@ -676,7 +676,7 @@ export function TankTransfer() {
                 })}
               >
                 <option value="">— Select destination —</option>
-                <option value={String(DISCARD_DESTINATION)}>Discarded</option>
+                <option value={String(DISCARD_DESTINATION)}>Leftovers — cannot be used</option>
                 {fermenterDestinations.map((dest) => {
                   const label = dest.volume_gal > 0.01
                     ? `${dest.name} (${dest.volume_gal.toFixed(1)} gal · ${dest.batch_number ?? 'same wash'})`
@@ -685,7 +685,7 @@ export function TankTransfer() {
                 })}
               </select>
               <p className="field-hint">
-                Wash moves only to another fermenter, or it is discarded. The fermenter does not have to be emptied.
+                Only these gallons are recorded as leftovers. The rest of this fermentation stays.
               </p>
             </div>
             <div className="form-group">
@@ -719,14 +719,14 @@ export function TankTransfer() {
               <input
                 value={fermenterForm.notes}
                 onChange={(e) => setFermenterForm({ ...fermenterForm, notes: e.target.value })}
-                placeholder="Optional"
+                placeholder={fermenterForm.dest_equipment_id === DISCARD_DESTINATION ? 'Leftovers' : 'Optional'}
               />
             </div>
           </div>
           <div className="form-actions">
             <button type="button" className="btn btn-secondary" onClick={() => setShowFermenterForm(false)}>Cancel</button>
             <button type="button" className="btn btn-primary" onClick={handleSaveFermenterTransfer}>
-              {fermenterForm.dest_equipment_id === DISCARD_DESTINATION ? 'Discard' : 'Transfer'}
+              {fermenterForm.dest_equipment_id === DISCARD_DESTINATION ? 'Record leftovers' : 'Transfer'}
             </button>
           </div>
         </Modal>
