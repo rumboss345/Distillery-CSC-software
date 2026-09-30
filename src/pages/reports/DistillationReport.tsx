@@ -20,7 +20,7 @@ export function DistillationReport() {
   return (
     <ReportTableShell
       title="Distillation runs"
-      description="One row per distillation run with cut totals and hearts LAA."
+      description="One row per distillation run with cut totals and hearts LAA. The Distillation page keeps the latest 10 completed runs."
       periodLabel={range.label}
       csvFilename={`distillation-${range.from ?? 'all'}`}
       csvHeaders={csvHeaders}

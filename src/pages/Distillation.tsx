@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { defaultAssignee } from '../lib/assignee';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
 import { formatDateDisplay, formatRecordedAt } from '../lib/date-input';
+import { latestCompleted } from '../lib/recent-completed';
 import {
   getDistillationRuns,
   distillationRunHasRecordedCuts,
@@ -38,6 +39,7 @@ import { AbvVolumeTemperatureFields } from '../components/AbvVolumeTemperatureFi
 import { AbvTemperatureInput, correctedAbvFromInputs } from '../components/AbvTemperatureInput';
 import { AdminCredentialConfirmModal } from '../components/AdminCredentialConfirmModal';
 import { Modal } from '../components/Modal';
+import { RecentCompletedNote } from '../components/RecentCompletedNote';
 import { StatusBadge } from '../components/StatusBadge';
 import {
   ALL_RUN_TYPES,
@@ -576,7 +578,14 @@ export function Distillation() {
       byStatus[run.status].push(run);
     }
     return RUN_STATUSES
-      .map((status) => ({ status, items: byStatus[status] }))
+      .map((status) => {
+        const matching = byStatus[status];
+        if (status !== 'complete') {
+          return { status, items: matching, hiddenCount: 0 };
+        }
+        const recent = latestCompleted(matching, (run) => run.run_date, (run) => run.id);
+        return { status, items: recent.shown, hiddenCount: recent.hiddenCount };
+      })
       .filter((group) => group.items.length > 0);
   }, [runs]);
 
@@ -825,15 +834,20 @@ export function Distillation() {
         </div>
       ) : (
         <div className="wash-status-groups">
-          {runsByStatus.map(({ status, items }) => (
+          {runsByStatus.map(({ status, items, hiddenCount }) => (
             <section key={status} className="card wash-status-group">
               <header className="wash-status-group-header">
                 <h3 className="wash-status-group-title">{RUN_STATUS_GROUP_HEADINGS[status]}</h3>
                 <StatusBadge status={status} />
                 <span className="text-muted wash-status-group-count">
-                  {items.length} {items.length === 1 ? 'run' : 'runs'}
+                  {hiddenCount > 0 ? `${items.length} of ${items.length + hiddenCount}` : items.length}
+                  {' '}
+                  {(items.length + hiddenCount) === 1 ? 'run' : 'runs'}
                 </span>
               </header>
+              {status === 'complete' && (
+                <RecentCompletedNote hiddenCount={hiddenCount} to="/reports/distillation" />
+              )}
               <div className="table-wrap">
                 <table>
                   <thead>

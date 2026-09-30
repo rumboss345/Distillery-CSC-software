@@ -4,6 +4,7 @@ import { AssigneeCell } from '../components/AssigneeSelect';
 import { AdminCredentialConfirmModal } from '../components/AdminCredentialConfirmModal';
 import { FermenterLogPanel } from '../components/FermenterLogPanel';
 import { Modal } from '../components/Modal';
+import { RecentCompletedNote } from '../components/RecentCompletedNote';
 import { StatusBadge } from '../components/StatusBadge';
 import {
   deleteOneFermentation,
@@ -19,6 +20,7 @@ import {
   useRefreshKey,
 } from '../db/queries';
 import { formatDateDisplay } from '../lib/date-input';
+import { latestCompleted } from '../lib/recent-completed';
 import { actualStartBrixError, estimateAbvFromBrix, formatAbvEstimate, washMoveNeedsActualStartBrix } from '../lib/fermentation';
 import { FERMENTATION_PAGE_STATUSES, washRecordKind } from '../lib/wash-stage';
 import type { FermentationAssignmentStatus, MashBatch, MashFermenterAssignment, MashStatus } from '../types';
@@ -220,10 +222,14 @@ export function Fermentation() {
   });
 
   const rowsByStatus = FERMENTATION_PAGE_STATUSES
-    .map((groupStatus) => ({
-      status: groupStatus,
-      items: rows.filter((row) => row.status === groupStatus),
-    }))
+    .map((groupStatus) => {
+      const matching = rows.filter((row) => row.status === groupStatus);
+      if (groupStatus !== 'complete') {
+        return { status: groupStatus, items: matching, hiddenCount: 0 };
+      }
+      const recent = latestCompleted(matching, (row) => row.batch.start_date, (row) => row.batch.id);
+      return { status: groupStatus, items: recent.shown, hiddenCount: recent.hiddenCount };
+    })
     .filter((group) => group.items.length > 0);
 
   const siblingAssignments = editBatch
@@ -484,15 +490,20 @@ export function Fermentation() {
         </div>
       ) : (
         <div className="wash-status-groups">
-          {rowsByStatus.map(({ status: groupStatus, items }) => (
+          {rowsByStatus.map(({ status: groupStatus, items, hiddenCount }) => (
             <section key={groupStatus} className="card wash-status-group">
               <header className="wash-status-group-header">
                 <h3 className="wash-status-group-title">{STATUS_GROUP_HEADINGS[groupStatus]}</h3>
                 <StatusBadge status={STATUS_LABELS[groupStatus]} />
                 <span className="text-muted wash-status-group-count">
-                  {items.length} {items.length === 1 ? 'fermentation' : 'fermentations'}
+                  {hiddenCount > 0 ? `${items.length} of ${items.length + hiddenCount}` : items.length}
+                  {' '}
+                  {(items.length + hiddenCount) === 1 ? 'fermentation' : 'fermentations'}
                 </span>
               </header>
+              {groupStatus === 'complete' && (
+                <RecentCompletedNote hiddenCount={hiddenCount} to="/reports/fermentation" />
+              )}
               <div className="table-wrap">
                 <table>
                   <thead>

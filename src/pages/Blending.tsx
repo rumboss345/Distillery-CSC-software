@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { RecentCompletedNote } from '../components/RecentCompletedNote';
 import {
   computeBlendFormulation,
   defaultBlendingOutputTankId,
@@ -36,6 +37,7 @@ import { Modal } from '../components/Modal';
 import { useAuth } from '../context/AuthContext';
 import { defaultAssignee } from '../lib/assignee';
 import { localIsoDate } from '../lib/planned-event-date';
+import { latestCompleted } from '../lib/recent-completed';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
 import { downloadWorksheetPdf, worksheetPdfFilename } from '../lib/download-worksheet-pdf';
 import { StatusBadge } from '../components/StatusBadge';
@@ -251,8 +253,12 @@ function resumeStep(blend: BlendProduct): number {
   return 1;
 }
 
+function blendIsComplete(status: string): boolean {
+  return status === 'executed' || status === 'bottled' || status === 'blended';
+}
+
 function stepLabel(status: BlendProduct['status'], targetAbv: number | null): string {
-  if (status === 'executed' || status === 'bottled' || status === 'blended') return 'Complete';
+  if (blendIsComplete(status)) return 'Complete';
   if (status === 'approved') return 'Ready to produce';
   if (status === 'trial') return 'Lab testing';
   if (targetAbv != null) return 'Recipe ready';
@@ -2222,6 +2228,13 @@ export function Blending() {
     }
   };
 
+  const inProgressBlends = blends.filter((blend) => !blendIsComplete(blend.status));
+  const completedBlends = latestCompleted(
+    blends.filter((blend) => blendIsComplete(blend.status)),
+    (blend) => blend.executed_at || blend.blend_date,
+    (blend) => blend.id,
+  );
+  const listedBlends = [...inProgressBlends, ...completedBlends.shown];
   const currentStep = WIZARD_STEPS[wizardStep - 1];
   const isLocked = form.status === 'executed' || form.status === 'bottled';
 
@@ -2245,6 +2258,8 @@ export function Blending() {
           </div>
         </div>
       ) : (
+        <>
+        <RecentCompletedNote hiddenCount={completedBlends.hiddenCount} to="/reports/blending" />
         <div className="table-wrap">
           <table>
             <thead>
@@ -2261,7 +2276,7 @@ export function Blending() {
               </tr>
             </thead>
             <tbody>
-              {blends.map((b) => (
+              {listedBlends.map((b) => (
                 <tr key={b.id}>
                   <td><strong>{b.batch_number}</strong></td>
                   <td>{b.product_name}</td>
@@ -2293,6 +2308,7 @@ export function Blending() {
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {showWizard && (
