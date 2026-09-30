@@ -15,8 +15,24 @@ export interface WarehouseLocationGroup<T> {
   barrels: T[];
 }
 
+type LocatedBarrel = {
+  warehouse_location: string;
+  fill_date: string;
+  barrel_number: string;
+};
+
+/** Oldest fill date first. Same day falls back to barrel number. */
+export function compareBarrelsOldestFirst<T extends Pick<LocatedBarrel, 'fill_date' | 'barrel_number'>>(
+  a: T,
+  b: T,
+): number {
+  const date = a.fill_date.localeCompare(b.fill_date);
+  if (date !== 0) return date;
+  return a.barrel_number.localeCompare(b.barrel_number, undefined, { numeric: true, sensitivity: 'base' });
+}
+
 /** Catalog locations stay visible when empty. Barrels match a location by name, ignoring case. */
-export function groupBarrelsByLocation<T extends { warehouse_location: string }>(
+export function groupBarrelsByLocation<T extends LocatedBarrel>(
   barrels: T[],
   locations: { id: number; name: string }[],
 ): WarehouseLocationGroup<T>[] {
@@ -60,6 +76,9 @@ export function groupBarrelsByLocation<T extends { warehouse_location: string }>
       locationId: null,
       barrels: unassigned,
     });
+  }
+  for (const group of groups) {
+    group.barrels.sort(compareBarrelsOldestFirst);
   }
   return groups;
 }

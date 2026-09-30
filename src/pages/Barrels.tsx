@@ -75,10 +75,20 @@ export function Barrels() {
   const [showLocationForm, setShowLocationForm] = useState(false);
   const [locationName, setLocationName] = useState('');
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [search, setSearch] = useState('');
 
   const holdingTanks = getHoldingTanksWithContents();
   const tanksWithSpirit = holdingTanks.filter((t) => t.volume_gal > 0);
-  const groups = groupBarrelsByLocation(barrels, locations);
+  const barrelQuery = search.trim().toLocaleLowerCase();
+  const visibleBarrels = barrelQuery
+    ? barrels.filter((barrel) => (
+      barrel.barrel_number.toLocaleLowerCase().includes(barrelQuery)
+      || barrel.spirit_type.toLocaleLowerCase().includes(barrelQuery)
+      || barrel.wood_type.toLocaleLowerCase().includes(barrelQuery)
+      || barrel.warehouse_location.toLocaleLowerCase().includes(barrelQuery)
+    ))
+    : barrels;
+  const groups = groupBarrelsByLocation(visibleBarrels, barrelQuery ? [] : locations);
   const selected = barrels.find((barrel) => barrel.id === selectedId) ?? null;
 
   void key;
@@ -216,15 +226,23 @@ export function Barrels() {
     <div>
       <div className="page-header">
         <h2>Barrel Aging</h2>
-        <p>Warehouse locations group the barrels. Add a location, then place barrels in it.</p>
+        <p>Locations group the barrels. Each barrel shows only its head, and the oldest barrels sit at the top of a location.</p>
       </div>
 
       <div className="process-view warehouse-view">
         <div className="process-toolbar">
           <span className="process-toolbar-title">Warehouse</span>
           <span className="process-toolbar-hint">
-            Each section is a location. Select a barrel for fill, age, and proof.
+            Oldest heads are first in each location. Select one for fill, age, and proof.
           </span>
+          <input
+            className="warehouse-search"
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Find a barrel"
+            aria-label="Find a barrel"
+          />
           <div className="process-toolbar-actions">
             <button type="button" className="btn btn-sm btn-secondary" onClick={() => { setLocationName(''); setShowLocationForm(true); }}>
               + Location
@@ -246,10 +264,16 @@ export function Barrels() {
           >
             {groups.length === 0 ? (
               <div className="empty-state">
-                <p>No warehouse locations yet.</p>
-                <button type="button" className="btn btn-primary" onClick={() => { setLocationName(''); setShowLocationForm(true); }} style={{ marginTop: '1rem' }}>
-                  Add a location
-                </button>
+                {barrelQuery ? (
+                  <p>No barrels match “{search.trim()}”.</p>
+                ) : (
+                  <>
+                    <p>No warehouse locations yet.</p>
+                    <button type="button" className="btn btn-primary" onClick={() => { setLocationName(''); setShowLocationForm(true); }} style={{ marginTop: '1rem' }}>
+                      Add a location
+                    </button>
+                  </>
+                )}
               </div>
             ) : groups.map((group, index) => {
               const gallons = group.barrels
@@ -290,34 +314,29 @@ export function Barrels() {
                   ) : (
                     <div className="warehouse-barrel-row">
                       {group.barrels.map((barrel) => {
-                        const fillPercent = barrel.capacity_gal > 0
-                          ? (barrel.current_volume_gal / barrel.capacity_gal) * 100
-                          : 0;
                         const contents = barrel.spirit_type || barrel.wood_type;
+                        const age = barrelAgeDays(barrel.fill_date);
                         return (
                           <button
                             key={barrel.id}
                             type="button"
-                            className={`process-equipment-node warehouse-barrel${selectedId === barrel.id ? ' warehouse-barrel--selected' : ''}`}
+                            className={`warehouse-barrel${selectedId === barrel.id ? ' warehouse-barrel--selected' : ''}`}
+                            aria-label={barrel.barrel_number}
+                            title={[
+                              barrel.barrel_number,
+                              contents,
+                              barrelVolumeLabel(barrel),
+                              barrel.initial_abv > 0 && barrel.current_volume_gal > 0
+                                ? `${barrel.initial_abv.toFixed(1)}% ABV`
+                                : null,
+                              age == null ? null : `${age} days`,
+                            ].filter(Boolean).join(' · ')}
                             onClick={() => setSelectedId(barrel.id)}
                           >
-                            <div className="barrel-visual-svg-wrap">
-                              <BarrelVisual
-                                barrelNumber={barrel.barrel_number}
-                                status={barrel.status}
-                                fillPercent={fillPercent}
-                              />
-                            </div>
-                            <div className="process-equipment-labels">
-                              <div className="process-equipment-id">{barrel.barrel_number}</div>
-                              {contents && <div className="process-equipment-contents">{contents}</div>}
-                              <div className={`process-equipment-status${barrel.current_volume_gal <= 0 ? ' process-equipment-status--empty' : ''}`}>
-                                {barrelVolumeLabel(barrel)}
-                              </div>
-                              {barrel.initial_abv > 0 && barrel.current_volume_gal > 0 && (
-                                <div className="process-equipment-abv">{barrel.initial_abv.toFixed(1)}% ABV</div>
-                              )}
-                            </div>
+                            <BarrelVisual
+                              barrelNumber={barrel.barrel_number}
+                              status={barrel.status}
+                            />
                           </button>
                         );
                       })}

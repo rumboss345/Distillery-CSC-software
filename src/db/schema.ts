@@ -460,9 +460,14 @@ INSERT OR IGNORE INTO distillation_cuts (id, distillation_run_id, cut_type, hold
   (3, 1, 'tails', 17, '2025-06-10T14:30', '2025-06-10T16:00', 5.8, 25, 'Set aside for re-distillation');
 
 INSERT OR IGNORE INTO barrels (id, barrel_number, wood_type, capacity_gal, fill_date, spirit_type, source_run_id, initial_abv, current_volume_gal, warehouse_location, status, notes) VALUES
-  (1, 'B-001', 'American Oak', 53, '2025-06-11', 'New Make Spirit', 1, 63.5, 50, 'Warehouse A - Row 1', 'aging', 'Filled from D-2025-001 hearts');
+  (1, 'B-001', 'American Oak', 53, '2025-06-11', 'New Make Spirit', 1, 63.5, 50, 'Warehouse A - Row 1', 'aging', 'Filled from D-2025-001 hearts'),
+  (2, 'B-002', 'American Oak', 53, '2024-03-01', 'Aged Rum', NULL, 60, 51, 'Warehouse A - Row 1', 'aging', 'Oldest barrel in row 1'),
+  (3, 'B-003', 'French Oak', 53, '2026-01-15', 'New Make Spirit', NULL, 62, 0, 'Warehouse A - Row 1', 'empty', ''),
+  (4, 'B-010', 'American Oak', 53, '2023-09-01', 'Heavy Rum', NULL, 58, 49, 'Rickhouse B', 'aging', ''),
+  (5, 'B-011', 'American Oak', 53, '2025-12-01', 'Heavy Rum', NULL, 55, 0, 'Rickhouse B', 'dumped', '');
 
 INSERT OR IGNORE INTO warehouse_locations (name) VALUES
+  ('Rickhouse B'),
   ('Warehouse A - Row 1');
 
 INSERT OR IGNORE INTO bottling_runs (id, batch_number, source_barrel_id, bottling_date, bottle_size_ml, bottle_count, final_abv, product_name, lot_number, notes) VALUES
