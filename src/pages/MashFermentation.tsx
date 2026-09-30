@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { AssigneeCell, AssigneeSelect } from '../components/AssigneeSelect';
 import { DatePicker } from '../components/DatePicker';
 import { useAuth } from '../context/AuthContext';
@@ -9,26 +9,19 @@ import {
   getMashBatchNutrients,
   saveMashBatchWithFermenters,
   deleteMashBatch,
-  getFermentationLogs,
-  mashBatchHasFermentationLogs,
-  addFermentationLog,
   generateBatchNumber,
-  getAvailableFermenters,
-  getMashFermenterAssignments,
   getAllMashFermenterAssignments,
   getAllFermentationLogSources,
   getInventoryByCategory,
-  getLatestFermentationBrix,
   getRecipes,
   getPrimaryWashTankEquipment,
   useRefreshKey,
 } from '../db/queries';
 import { MashTunVisual } from '../components/equipment/MashTunVisual';
 import type { EquipmentVisualData } from '../components/equipment/equipment-visual.types';
-import { AdminCredentialConfirmModal } from '../components/AdminCredentialConfirmModal';
 import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
-import { estimateAbvFromBrix, estimateSugarWash, formatAbvEstimate } from '../lib/fermentation';
+import { estimateSugarWash } from '../lib/fermentation';
 import type { MashBatchNutrientInput } from '../types';
 import {
   emptyMashBatchNutrient,
@@ -39,13 +32,13 @@ import {
   recipeNutrientsToBatchInputs,
 } from '../lib/wash-recipe-nutrients';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
-import { formatDateDisplay, formatRecordedAt } from '../lib/date-input';
+import { formatDateDisplay } from '../lib/date-input';
 import { equipmentUnavailableForProduction } from '../lib/equipment-maintenance';
-import { fermenterBrixReadings, fermenterLogPanels } from '../lib/fermentation-log-panels';
 import { eventDateWhenLeavingPlanned, localIsoDate } from '../lib/planned-event-date';
+import { WASH_PAGE_STATUSES, washRecordKind } from '../lib/wash-stage';
 import type { MashBatch, MashStatus } from '../types';
 
-const STATUSES: MashStatus[] = ['planned', 'mashing', 'fermenting', 'complete', 'discarded'];
+const WASH_STATUSES: MashStatus[] = WASH_PAGE_STATUSES;
 
 const STATUS_LABELS: Record<MashStatus, string> = {
   planned: 'planned',
@@ -62,159 +55,6 @@ const STATUS_GROUP_HEADINGS: Record<MashStatus, string> = {
   complete: 'Complete',
   discarded: 'Discarded',
 };
-
-type LogFormState = { temperature_f: string; brix: string; ph: string; notes: string };
-
-const emptyLogForm = (): LogFormState => ({
-  temperature_f: '',
-  brix: '',
-  ph: '',
-  notes: '',
-});
-
-function FermenterLogPanel({
-  mashBatchId,
-  equipmentId,
-  equipmentName,
-  volumeGal,
-  startBrix,
-  refreshKey,
-  onAdded,
-  readOnly = false,
-  distilled = false,
-}: {
-  mashBatchId: number;
-  equipmentId: number | null;
-  equipmentName?: string;
-  volumeGal?: number;
-  startBrix: number | null;
-  refreshKey: number;
-  onAdded: () => void;
-  readOnly?: boolean;
-  distilled?: boolean;
-}) {
-  void refreshKey;
-  const [logForm, setLogForm] = useState(emptyLogForm());
-  const logs = getFermentationLogs(mashBatchId, equipmentId);
-  const currentBrix = logs.find((l) => l.brix != null)?.brix ?? null;
-  const currentAbv = startBrix != null && currentBrix != null
-    ? estimateAbvFromBrix(startBrix, currentBrix)
-    : null;
-
-  const temperature = logForm.temperature_f.trim() ? parseFloat(logForm.temperature_f) : null;
-  const brix = logForm.brix.trim() ? parseFloat(logForm.brix) : null;
-  const canAddLog = temperature != null && !Number.isNaN(temperature)
-    && brix != null && !Number.isNaN(brix);
-
-  const handleAddLog = () => {
-    if (!canAddLog) {
-      alert('Temperature (°F) and Brix are required for each fermentation log.');
-      return;
-    }
-    try {
-      addFermentationLog({
-        mash_batch_id: mashBatchId,
-        floor_equipment_id: equipmentId,
-        logged_at: new Date().toISOString(),
-        temperature_f: temperature,
-        brix,
-        ph: logForm.ph.trim() ? parseFloat(logForm.ph) : null,
-        notes: logForm.notes,
-      });
-      setLogForm(emptyLogForm());
-      onAdded();
-    } catch (error) {
-      alert(error instanceof Error ? error.message : 'Could not save fermentation log.');
-    }
-  };
-
-  return (
-    <div className="fermenter-log-panel">
-      {equipmentName && (
-        <h5 className="fermenter-log-title">
-          {equipmentName}
-          {volumeGal ? ` · ${volumeGal} gal` : ''}
-          {currentBrix != null ? ` · current ${currentBrix}° Brix` : ''}
-          {currentAbv != null ? ` · est. ${formatAbvEstimate(currentAbv)} ABV` : ''}
-        </h5>
-      )}
-      <p className="form-hint">
-        Estimated ABV uses starting Brix ({startBrix ?? 'set actual start Brix on the wash'}) vs each log’s Brix.
-      </p>
-      {readOnly ? (
-        <p className="field-hint" style={{ marginBottom: '1rem' }}>
-          {distilled
-            ? 'This fermenter was distilled — its logs stay here and are read-only.'
-            : 'This batch is complete — logs are read-only.'}
-        </p>
-      ) : (
-        <>
-          <div className="form-grid" style={{ marginBottom: '1rem' }}>
-            <div className="form-group">
-              <label>Temp (°F) *</label>
-              <input
-                value={logForm.temperature_f}
-                onChange={(e) => setLogForm({ ...logForm, temperature_f: e.target.value })}
-                placeholder="72"
-                inputMode="decimal"
-                required
-              />
-            </div>
-            <div className="form-group">
-              <label>Brix *</label>
-              <input
-                value={logForm.brix}
-                onChange={(e) => setLogForm({ ...logForm, brix: e.target.value })}
-                placeholder="10.5"
-                inputMode="decimal"
-                required
-              />
-            </div>
-            <div className="form-group">
-              <label>pH</label>
-              <input value={logForm.ph} onChange={(e) => setLogForm({ ...logForm, ph: e.target.value })} placeholder="4.2" />
-            </div>
-            <div className="form-group">
-              <label>Notes</label>
-              <input value={logForm.notes} onChange={(e) => setLogForm({ ...logForm, notes: e.target.value })} />
-            </div>
-          </div>
-          <button className="btn btn-primary btn-sm" onClick={handleAddLog} disabled={!canAddLog}>
-            + Log Reading
-          </button>
-        </>
-      )}
-
-      {logs.length > 0 ? (
-        <div className="table-wrap" style={{ marginTop: '1rem' }}>
-          <table>
-            <thead>
-              <tr><th>Date</th><th>Temp (°F)</th><th>Brix</th><th>Est. ABV</th><th>pH</th><th>Notes</th></tr>
-            </thead>
-            <tbody>
-              {logs.map((l) => (
-                <tr key={l.id}>
-                  <td style={{ whiteSpace: 'nowrap' }}>{formatRecordedAt(l.logged_at)}</td>
-                  <td>{l.temperature_f ?? '—'}°F</td>
-                  <td>{l.brix ?? '—'}°</td>
-                  <td>
-                    {startBrix != null && l.brix != null
-                      ? formatAbvEstimate(estimateAbvFromBrix(startBrix, l.brix))
-                      : '—'}
-                  </td>
-                  <td>{l.ph ?? '—'}</td>
-                  <td>{l.notes}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : readOnly ? (
-        <p className="field-hint" style={{ marginTop: '1rem' }}>No fermentation logs recorded for this batch.</p>
-      ) : null}
-    </div>
-  );
-}
 
 const emptyBatch = (): Omit<MashBatch, 'id' | 'created_at'> => ({
   batch_number: generateBatchNumber('W'),
@@ -235,14 +75,6 @@ const emptyBatch = (): Omit<MashBatch, 'id' | 'created_at'> => ({
   notes: '',
 });
 
-const emptyFermenterForm = () => ({
-  split: false,
-  fermenter1Id: '' as number | '',
-  fermenter2Id: '' as number | '',
-  volume1: 0,
-  volume2: 0,
-});
-
 export function MashFermentation() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -254,13 +86,7 @@ export function MashFermentation() {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<number | undefined>();
   const [form, setForm] = useState(emptyBatch());
-  const [fermenterForm, setFermenterForm] = useState(emptyFermenterForm());
   const [batchNutrients, setBatchNutrients] = useState<MashBatchNutrientInput[]>([]);
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [adminDeleteBatchId, setAdminDeleteBatchId] = useState<number | null>(null);
-  const [adminEditBatchId, setAdminEditBatchId] = useState<number | null>(null);
-  const [adminSaveEditBatchId, setAdminSaveEditBatchId] = useState<number | null>(null);
-  const completeEditUnlockedRef = useRef<number | null>(null);
   const [plannedScheduleDate, setPlannedScheduleDate] = useState<string | null>(null);
 
   void key;
@@ -269,13 +95,6 @@ export function MashFermentation() {
   const yeastItems = getInventoryByCategory('yeast');
   const nutrientItems = getInventoryByCategory('nutrients');
   const recipes = getRecipes();
-  const availableFermenters = getAvailableFermenters(editId);
-  const availableFermenters2 = getAvailableFermenters(editId).filter(
-    (f) => f.id !== fermenterForm.fermenter1Id,
-  );
-
-  const canAssignFermenters = form.status === 'fermenting';
-  const fermenterControlsDisabled = !canAssignFermenters;
 
   const handleStatusChange = (status: MashStatus) => {
     let start_date = form.start_date;
@@ -287,53 +106,6 @@ export function MashFermentation() {
       setPlannedScheduleDate(null);
     }
     setForm({ ...form, status, start_date });
-    if (status !== 'fermenting') {
-      if (!editId) {
-        setFermenterForm(emptyFermenterForm());
-      }
-    }
-  };
-
-  useEffect(() => {
-    if (fermenterForm.split && form.water_gal > 0) {
-      const half = Math.round((form.water_gal / 2) * 10) / 10;
-      setFermenterForm((prev) => ({
-        ...prev,
-        volume1: prev.volume1 || half,
-        volume2: prev.volume2 || form.water_gal - half,
-      }));
-    } else if (!fermenterForm.split && form.water_gal > 0 && fermenterForm.fermenter1Id) {
-      setFermenterForm((prev) => ({ ...prev, volume1: form.water_gal }));
-    }
-  }, [fermenterForm.split, form.water_gal, fermenterForm.fermenter1Id]);
-
-  const loadFermenterForm = (mashId?: number) => {
-    if (!mashId) {
-      setFermenterForm(emptyFermenterForm());
-      return;
-    }
-    const assignments = getMashFermenterAssignments(mashId);
-    if (assignments.length === 0) {
-      setFermenterForm(emptyFermenterForm());
-      return;
-    }
-    if (assignments.length >= 2) {
-      setFermenterForm({
-        split: true,
-        fermenter1Id: assignments[0].floor_equipment_id,
-        fermenter2Id: assignments[1].floor_equipment_id,
-        volume1: assignments[0].volume_gal,
-        volume2: assignments[1].volume_gal,
-      });
-    } else {
-      setFermenterForm({
-        split: false,
-        fermenter1Id: assignments[0].floor_equipment_id,
-        fermenter2Id: '',
-        volume1: assignments[0].volume_gal,
-        volume2: 0,
-      });
-    }
   };
 
   const openNew = (planDate?: string) => {
@@ -344,7 +116,6 @@ export function MashFermentation() {
       ...defaultAssignee(user),
       start_date: planDate ?? emptyBatch().start_date,
     });
-    loadFermenterForm();
     setBatchNutrients([]);
     setShowForm(true);
   };
@@ -358,87 +129,31 @@ export function MashFermentation() {
     setSearchParams(stripCalendarPlanQuery(searchParams), { replace: true });
   }, [searchParams, setSearchParams, user]);
 
-  const openEditForm = (batch: MashBatch) => {
+  const openEdit = (batch: MashBatch) => {
     setEditId(batch.id);
     setPlannedScheduleDate(null);
     setForm({ ...batch, yeast_lbs: batch.yeast_lbs ?? 0 });
     setBatchNutrients(
       getMashBatchNutrients(batch.id).map((n) => ({ name: n.name, amount: n.amount, unit: n.unit })),
     );
-    loadFermenterForm(batch.id);
     setShowForm(true);
   };
 
   const closeBatchForm = () => {
     setShowForm(false);
-    completeEditUnlockedRef.current = null;
-  };
-
-  const openEdit = (batch: MashBatch) => {
-    if (batch.status === 'complete') {
-      setAdminEditBatchId(batch.id);
-      return;
-    }
-    completeEditUnlockedRef.current = null;
-    openEditForm(batch);
-  };
-
-  const buildAssignments = () => {
-    const assignments = [];
-    if (fermenterForm.fermenter1Id) {
-      assignments.push({
-        equipmentId: Number(fermenterForm.fermenter1Id),
-        volumeGal: fermenterForm.split ? fermenterForm.volume1 : (form.water_gal || fermenterForm.volume1),
-      });
-    }
-    if (fermenterForm.split && fermenterForm.fermenter2Id) {
-      assignments.push({
-        equipmentId: Number(fermenterForm.fermenter2Id),
-        volumeGal: fermenterForm.volume2,
-      });
-    }
-    return assignments;
   };
 
   const performSave = () => {
-    if (fermenterForm.split && fermenterForm.fermenter1Id && fermenterForm.fermenter2Id) {
-      const total = fermenterForm.volume1 + fermenterForm.volume2;
-      if (form.water_gal > 0 && Math.abs(total - form.water_gal) > 0.5) {
-        if (!confirm(`Split volumes (${total} gal) don't match batch size (${form.water_gal} gal). Save anyway?`)) {
-          return;
-        }
-      }
-    }
-
     if (!form.assigned_user_id) {
       alert('Select the employee assigned to this wash batch.');
       return;
     }
-    if (form.status === 'complete') {
-      if (!editId) {
-        alert('Keep the batch fermenting, add fermentation logs, then mark it complete.');
-        return;
-      }
-      if (!mashBatchHasFermentationLogs(editId)) {
-        alert('Add at least one fermentation log before marking this wash batch complete.');
-        return;
-      }
+    if (form.status === 'fermenting' || form.status === 'complete') {
+      alert('Start or finish fermentation on the Fermentation page.');
+      return;
     }
-
-    const existingAssignments = editId
-      ? getMashFermenterAssignments(editId).map((a) => ({
-        equipmentId: a.floor_equipment_id,
-        volumeGal: a.volume_gal,
-      }))
-      : [];
-    const assignments =
-      form.status === 'fermenting'
-        ? buildAssignments()
-        : form.status === 'mashing' || form.status === 'complete'
-          ? existingAssignments
-          : [];
     try {
-      saveMashBatchWithFermenters(form, assignments, batchNutrients, editId);
+      saveMashBatchWithFermenters(form, [], batchNutrients, editId);
       closeBatchForm();
       refresh();
     } catch (error) {
@@ -453,77 +168,42 @@ export function MashFermentation() {
     }
   };
 
-  const handleSave = () => {
-    if (editId) {
-      const existing = batches.find((b) => b.id === editId);
-      if (existing?.status === 'complete' && completeEditUnlockedRef.current !== editId) {
-        setAdminSaveEditBatchId(editId);
-        return;
-      }
-    }
-    performSave();
-  };
-
   const performDelete = (id: number) => {
     deleteMashBatch(id);
-    if (selectedId === id) setSelectedId(null);
     refresh();
   };
 
   const handleDelete = (batch: MashBatch) => {
-    if (batch.status === 'complete') {
-      setAdminDeleteBatchId(batch.id);
-      return;
-    }
     if (confirm(`Delete wash batch ${batch.batch_number}?`)) {
       performDelete(batch.id);
     }
   };
 
-  const adminDeleteBatch = adminDeleteBatchId != null
-    ? batches.find((b) => b.id === adminDeleteBatchId)
-    : undefined;
-  const adminEditBatch = adminEditBatchId != null
-    ? batches.find((b) => b.id === adminEditBatchId)
-    : undefined;
-  const adminSaveEditBatch = adminSaveEditBatchId != null
-    ? batches.find((b) => b.id === adminSaveEditBatchId)
-    : undefined;
-
-  const getBatchFermenters = (mashId: number) =>
-    allAssignments.filter((a) => a.mash_batch_id === mashId);
-
-  const getBatchLogSources = (mashId: number) =>
-    allLogSources.filter((source) => source.mash_batch_id === mashId);
+  const assignmentBatchIds = useMemo(
+    () => new Set(allAssignments.map((assignment) => assignment.mash_batch_id)),
+    [allAssignments],
+  );
+  const logBatchIds = useMemo(
+    () => new Set(allLogSources.map((source) => source.mash_batch_id)),
+    [allLogSources],
+  );
+  const washBatches = batches.filter((batch) => washRecordKind(batch.status, {
+    hasLogs: logBatchIds.has(batch.id),
+    hasAssignments: assignmentBatchIds.has(batch.id),
+  }) === 'wash');
 
   const batchesByStatus = useMemo(() => {
     const byStatus = Object.fromEntries(
-      STATUSES.map((status) => [status, [] as MashBatch[]]),
+      WASH_STATUSES.map((status) => [status, [] as MashBatch[]]),
     ) as Record<MashStatus, MashBatch[]>;
-    for (const batch of batches) {
-      byStatus[batch.status].push(batch);
+    for (const batch of washBatches) {
+      if (byStatus[batch.status]) byStatus[batch.status].push(batch);
     }
-    return STATUSES
+    return WASH_STATUSES
       .map((status) => ({ status, items: byStatus[status] }))
       .filter((group) => group.items.length > 0);
-  }, [batches]);
+  }, [washBatches]);
 
-  const selectedAssignments = selectedId ? getMashFermenterAssignments(selectedId) : [];
-  const selectedLogPanels = selectedId
-    ? fermenterLogPanels({
-        batchComplete: batches.find((b) => b.id === selectedId)?.status === 'complete',
-        assignments: selectedAssignments,
-        logSources: getBatchLogSources(selectedId),
-      })
-    : [];
-  const selectedBatch = batches.find((b) => b.id === selectedId);
-  const canViewFermentationLogs = selectedBatch?.status === 'fermenting'
-    || selectedBatch?.status === 'complete';
-  const fermentationLogsReadOnly = selectedBatch?.status === 'complete';
-
-  const selectedStartBrix = selectedBatch
-    ? selectedBatch.actual_brix ?? selectedBatch.target_brix
-    : null;
   const sugarWash = estimateSugarWash(form.grain_lbs, form.water_gal);
   const washTank = useMemo(() => getPrimaryWashTankEquipment(), [key]);
   const washTankBlocksSave = form.status === 'mashing'
@@ -554,16 +234,20 @@ export function MashFermentation() {
   return (
     <div>
       <div className="page-header">
-        <h2>Wash & Fermentation</h2>
-        <p>Sugar type in lbs, wash in gallons, fermentation temperature in °F</p>
+        <h2>Wash</h2>
+        <p>Sugar, batch size, and the wash tank. Fermentations are recorded separately.</p>
         <div className="page-actions">
           <button className="btn btn-primary" onClick={() => openNew()}>+ New Wash Batch</button>
         </div>
       </div>
 
-      {batches.length === 0 ? (
+      {washBatches.length === 0 ? (
         <div className="empty-state">
-          <p>No wash batches recorded yet.</p>
+          <p>
+            {batches.length === 0
+              ? 'No wash batches recorded yet.'
+              : 'No washes are waiting. Fermentations are on the Fermentation page.'}
+          </p>
           <button className="btn btn-primary" onClick={() => openNew()} style={{ marginTop: '1rem' }}>
             Create your first batch
           </button>
@@ -587,189 +271,41 @@ export function MashFermentation() {
                       <th>Recipe</th>
                       <th>Sugar (lbs)</th>
                       <th>Batch Size</th>
-                      <th>Fermenter(s)</th>
-                      <th>Start → Current Brix</th>
-                      <th>Est. ABV</th>
                       <th>Started</th>
                       <th>Assigned to</th>
                       <th></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {items.map((b) => {
-                      const startBrix = b.actual_brix ?? b.target_brix;
-                      const readings = fermenterBrixReadings({
-                        assignments: getBatchFermenters(b.id),
-                        logSources: getBatchLogSources(b.id),
-                        startBrix,
-                        batchCurrentBrix: getLatestFermentationBrix(b.id) ?? b.actual_final_brix ?? b.target_final_brix,
-                        currentBrixForEquipment: (equipmentId) => getLatestFermentationBrix(b.id, equipmentId),
-                      });
-                      const namedReadings = readings.filter((reading) => reading.label);
-                      return (
-                        <tr key={b.id}>
-                          <td><strong>{b.batch_number}</strong></td>
-                          <td>{b.recipe_name}</td>
-                          <td>{b.grain_lbs} lbs</td>
-                          <td>{b.water_gal} gal</td>
-                          <td>
-                            {namedReadings.length === 0 ? (
-                              <span style={{ color: 'var(--text-muted)' }}>—</span>
-                            ) : (
-                              namedReadings.map((reading) => (
-                                <div key={reading.key} className="fermenter-metric-line">
-                                  <span
-                                    className={reading.distilled ? 'fermenter-tag fermenter-tag--distilled' : 'fermenter-tag'}
-                                  >
-                                    {reading.label}
-                                  </span>
-                                </div>
-                              ))
-                            )}
-                          </td>
-                          <td>
-                            {readings.map((reading) => (
-                              <div key={reading.key} className="fermenter-metric-line">
-                                {reading.startBrix ?? '—'} → {reading.currentBrix ?? '—'}
-                              </div>
-                            ))}
-                          </td>
-                          <td>
-                            {readings.map((reading) => {
-                              const estAbv = reading.startBrix != null && reading.currentBrix != null
-                                ? estimateAbvFromBrix(reading.startBrix, reading.currentBrix)
-                                : null;
-                              return (
-                                <div key={reading.key} className="fermenter-metric-line">
-                                  {formatAbvEstimate(estAbv)}
-                                </div>
-                              );
-                            })}
-                          </td>
-                          <td>{formatDateDisplay(b.start_date)}</td>
-                          <td><AssigneeCell name={b.assigned_user_name} /></td>
-                          <td className="td-actions">
-                            <button
-                              className="btn btn-sm btn-secondary"
-                              disabled={b.status !== 'fermenting' && b.status !== 'complete'}
-                              title={
-                                b.status === 'complete'
-                                  ? 'View fermentation logs (read-only)'
-                                  : b.status !== 'fermenting'
-                                    ? 'Logs available while fermenting or after completion'
-                                    : undefined
-                              }
-                              onClick={() => setSelectedId(b.id)}
-                            >
-                              {b.status === 'complete' ? 'View logs' : 'Logs'}
-                            </button>
-                            <button
-                              className="btn btn-sm btn-ghost"
-                              title={b.status === 'complete' ? 'Completed batches require administrator approval to edit' : undefined}
-                              onClick={() => openEdit(b)}
-                            >
-                              Edit
-                            </button>
-                            <button
-                              className="btn btn-sm btn-ghost"
-                              title={b.status === 'complete' ? 'Completed batches require administrator approval to delete' : undefined}
-                              onClick={() => handleDelete(b)}
-                            >
-                              Delete
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {items.map((b) => (
+                      <tr key={b.id}>
+                        <td><strong>{b.batch_number}</strong></td>
+                        <td>{b.recipe_name}</td>
+                        <td>{b.grain_lbs} lbs</td>
+                        <td>{b.water_gal} gal</td>
+                        <td>{formatDateDisplay(b.start_date)}</td>
+                        <td><AssigneeCell name={b.assigned_user_name} /></td>
+                        <td className="td-actions">
+                          {(b.status === 'planned' || b.status === 'mashing') && (
+                            <Link className="btn btn-sm btn-secondary" to={`/fermentation?wash=${b.id}`}>
+                              Ferment
+                            </Link>
+                          )}
+                          <button className="btn btn-sm btn-ghost" onClick={() => openEdit(b)}>
+                            Edit
+                          </button>
+                          <button className="btn btn-sm btn-ghost" onClick={() => handleDelete(b)}>
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
             </section>
           ))}
         </div>
-      )}
-
-      {adminDeleteBatch && (
-        <AdminCredentialConfirmModal
-          title="Delete completed fermentation"
-          message={`Wash batch ${adminDeleteBatch.batch_number} is complete. Enter an administrator email and password to permanently delete it.`}
-          confirmLabel="Delete batch"
-          onClose={() => setAdminDeleteBatchId(null)}
-          onConfirmed={() => {
-            const id = adminDeleteBatch.id;
-            setAdminDeleteBatchId(null);
-            performDelete(id);
-          }}
-        />
-      )}
-
-      {adminEditBatch && (
-        <AdminCredentialConfirmModal
-          title="Edit completed fermentation"
-          message={`Wash batch ${adminEditBatch.batch_number} is complete. Enter an administrator email and password to edit it.`}
-          confirmLabel="Continue to edit"
-          onClose={() => setAdminEditBatchId(null)}
-          onConfirmed={() => {
-            const batch = adminEditBatch;
-            setAdminEditBatchId(null);
-            completeEditUnlockedRef.current = batch.id;
-            openEditForm(batch);
-          }}
-        />
-      )}
-
-      {adminSaveEditBatch && (
-        <AdminCredentialConfirmModal
-          title="Save completed fermentation"
-          message={`Wash batch ${adminSaveEditBatch.batch_number} is complete. Enter an administrator email and password to save your changes.`}
-          confirmLabel="Save changes"
-          onClose={() => setAdminSaveEditBatchId(null)}
-          onConfirmed={() => {
-            const id = adminSaveEditBatch.id;
-            setAdminSaveEditBatchId(null);
-            completeEditUnlockedRef.current = id;
-            performSave();
-          }}
-        />
-      )}
-
-      {selectedId && selectedBatch && canViewFermentationLogs && (
-        <Modal
-          wide
-          title={`Fermentation Logs — ${selectedBatch.batch_number} · ${formatDateDisplay(selectedBatch.start_date)}${fermentationLogsReadOnly ? ' (read-only)' : ''}`}
-          onClose={() => setSelectedId(null)}
-        >
-          {selectedLogPanels.length > 1 ? (
-            <div className="fermenter-log-stack">
-              {selectedLogPanels.map((panel) => (
-                <FermenterLogPanel
-                  key={panel.equipmentId ?? 'unassigned'}
-                  mashBatchId={selectedId}
-                  equipmentId={panel.equipmentId}
-                  equipmentName={panel.equipmentName}
-                  volumeGal={panel.volumeGal}
-                  startBrix={selectedStartBrix}
-                  refreshKey={key}
-                  onAdded={refresh}
-                  readOnly={panel.readOnly}
-                  distilled={panel.distilled}
-                />
-              ))}
-            </div>
-          ) : (
-            <FermenterLogPanel
-              mashBatchId={selectedId}
-              equipmentId={selectedLogPanels[0]?.equipmentId ?? null}
-              equipmentName={selectedLogPanels[0]?.equipmentName}
-              volumeGal={selectedLogPanels[0]?.volumeGal}
-              startBrix={selectedStartBrix}
-              refreshKey={key}
-              onAdded={refresh}
-              readOnly={selectedLogPanels[0]?.readOnly ?? fermentationLogsReadOnly}
-              distilled={selectedLogPanels[0]?.distilled}
-            />
-          )}
-        </Modal>
       )}
 
       {showForm && (
@@ -968,7 +504,7 @@ export function MashFermentation() {
             <div className="form-group">
               <label>Status</label>
               <select value={form.status} onChange={(e) => handleStatusChange(e.target.value as MashStatus)}>
-                {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
+                {WASH_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
               </select>
               {washTankBlocksSave && (
                 <p className="field-hint" style={{ color: 'var(--danger, #dc2626)' }}>
@@ -985,88 +521,6 @@ export function MashFermentation() {
                 <MashTunVisual data={washTankPreview} size="md" />
               </div>
             )}
-
-            <div className="form-group full-width fermenter-section">
-              <label>Fermenter Assignment</label>
-              {fermenterControlsDisabled && (
-                <p className="field-hint">
-                  Set status to <strong>fermenting</strong> before assigning fermenters. While washing, wash stays in the wash tank only.
-                </p>
-              )}
-              <label className="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={fermenterForm.split}
-                  disabled={fermenterControlsDisabled}
-                  onChange={(e) => setFermenterForm({
-                    ...fermenterForm,
-                    split: e.target.checked,
-                    fermenter2Id: '',
-                    volume2: 0,
-                  })}
-                />
-                Split wash across 2 fermenters
-              </label>
-            </div>
-
-            <div className="form-group">
-              <label>{fermenterForm.split ? 'Fermenter 1' : 'Fermenter'}</label>
-              <select
-                value={fermenterForm.fermenter1Id}
-                disabled={fermenterControlsDisabled}
-                onChange={(e) => setFermenterForm({
-                  ...fermenterForm,
-                  fermenter1Id: e.target.value ? parseInt(e.target.value) : '',
-                  volume1: fermenterForm.split ? fermenterForm.volume1 : form.water_gal,
-                })}
-              >
-                <option value="">— Select fermenter —</option>
-                {availableFermenters.map((f) => (
-                  <option key={f.id} value={f.id}>{f.name} ({f.capacity_gal} gal)</option>
-                ))}
-              </select>
-            </div>
-
-            {fermenterForm.split ? (
-              <>
-                <div className="form-group">
-                  <label>Volume in Fermenter 1 (gal)</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    disabled={fermenterControlsDisabled}
-                    value={fermenterForm.volume1 || ''}
-                    onChange={(e) => setFermenterForm({ ...fermenterForm, volume1: parseFloat(e.target.value) || 0 })}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Fermenter 2</label>
-                  <select
-                    value={fermenterForm.fermenter2Id}
-                    disabled={fermenterControlsDisabled}
-                    onChange={(e) => setFermenterForm({
-                      ...fermenterForm,
-                      fermenter2Id: e.target.value ? parseInt(e.target.value) : '',
-                    })}
-                  >
-                    <option value="">— Select fermenter —</option>
-                    {availableFermenters2.map((f) => (
-                      <option key={f.id} value={f.id}>{f.name} ({f.capacity_gal} gal)</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label>Volume in Fermenter 2 (gal)</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    disabled={fermenterControlsDisabled}
-                    value={fermenterForm.volume2 || ''}
-                    onChange={(e) => setFermenterForm({ ...fermenterForm, volume2: parseFloat(e.target.value) || 0 })}
-                  />
-                </div>
-              </>
-            ) : null}
 
             <div className="form-group full-width sugar-wash-calc">
               <label>Sugar Wash Calculator</label>
@@ -1111,10 +565,10 @@ export function MashFermentation() {
               <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
             </div>
           </div>
-          <p className="form-hint">Saving deducts sugar, yeast, and nutrients from inventory. Fermenters show wash after status is <strong>fermenting</strong> (and stay filled when marked <strong>complete</strong> until charged on a still run).</p>
+          <p className="form-hint">Saving deducts sugar, yeast, and nutrients from inventory. Use Ferment to move a wash into fermenters.</p>
           <div className="form-actions">
             <button className="btn btn-secondary" onClick={closeBatchForm}>Cancel</button>
-            <button className="btn btn-primary" onClick={handleSave}>Save Batch</button>
+            <button className="btn btn-primary" onClick={performSave}>Save Batch</button>
           </div>
         </Modal>
       )}

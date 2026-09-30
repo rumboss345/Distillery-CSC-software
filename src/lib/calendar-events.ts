@@ -14,6 +14,7 @@ import {
   getAllFermentationLogs,
 } from '../db/queries';
 import { formatLinesSummary } from './bottling-lines';
+import { washRecordPath } from './wash-stage';
 import type {
   Barrel,
   BlendProduct,
@@ -131,6 +132,11 @@ export interface CalendarProductionData {
 function toDateOnly(value: string | null | undefined): string | undefined {
   const day = localCalendarDayKey(value);
   return day || undefined;
+}
+
+export function calendarEventPath(event: Pick<CalendarEvent, 'kind' | 'status'>): string {
+  if (event.kind === 'wash') return washRecordPath(event.status);
+  return CALENDAR_KIND_ROUTES[event.kind];
 }
 
 export function isMultiDayEvent(event: CalendarEvent): boolean {

@@ -19,7 +19,8 @@ const navGroups: { id: string; label: string; items: NavItem[] }[] = [
     id: 'make',
     label: 'Make',
     items: [
-      { to: '/wash', label: 'Wash & Ferment', icon: '◉', permission: 'wash' },
+      { to: '/wash', label: 'Wash', icon: '◉', permission: 'wash' },
+      { to: '/fermentation', label: 'Fermentation', icon: '◌', permission: 'wash' },
       { to: '/distillation', label: 'Distillation', icon: '△', permission: 'distillation' },
       { to: '/tank-transfer', label: 'Tank Transfer', icon: '⇄', permission: 'distillation' },
     ],

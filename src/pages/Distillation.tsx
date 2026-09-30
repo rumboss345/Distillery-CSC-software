@@ -1032,7 +1032,7 @@ export function Distillation() {
                   )}
                   {fermenterSourceOptions.length === 0 && (
                     <p className="field-hint">
-                      No fermenters with wash ready to charge. Assign fermenters while fermenting; wash stays until a low wine or heavy rum run is running or complete.
+                      No fermenters with wash ready to charge. Start a fermentation from a wash batch; wash stays in the fermenter until a low wine or heavy rum run is running or complete.
                     </p>
                   )}
                   {runForm.run_type === 'heavy_rum' && (
