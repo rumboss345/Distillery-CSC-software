@@ -8,6 +8,7 @@ import {
   startOfWeek,
   subDays,
 } from 'date-fns';
+import { localCalendarDayKey } from '../date-input';
 
 export type ReportPeriodPreset = 'today' | 'yesterday' | 'week' | 'month' | 'all' | 'custom';
 
@@ -77,7 +78,8 @@ export function eventInReportRange(
 ): boolean {
   if (!range.from && !range.to) return true;
   if (!occurredAt) return false;
-  const day = occurredAt.slice(0, 10);
+  const day = localCalendarDayKey(occurredAt);
+  if (!day) return false;
   if (range.from && day < range.from) return false;
   if (range.to && day > range.to) return false;
   return true;

@@ -35,6 +35,7 @@ import { DatePicker } from '../components/DatePicker';
 import { Modal } from '../components/Modal';
 import { useAuth } from '../context/AuthContext';
 import { defaultAssignee } from '../lib/assignee';
+import { localIsoDate } from '../lib/planned-event-date';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
 import { downloadWorksheetPdf, worksheetPdfFilename } from '../lib/download-worksheet-pdf';
 import { StatusBadge } from '../components/StatusBadge';
@@ -189,7 +190,7 @@ const emptyProduct = (): FormulaForm => ({
   source_holding_tank_equipment_id: 0,
   base_spirit_volume_gal: 0,
   base_spirit_abv: 0,
-  blend_date: new Date().toISOString().slice(0, 10),
+  blend_date: localIsoDate(),
   target_abv: null,
   target_brix: null,
   scale_factor: 1,

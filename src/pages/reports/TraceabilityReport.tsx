@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { format, parseISO } from 'date-fns';
+import { formatCalendarDay } from '../../lib/date-input';
 import { searchTraceability } from '../../lib/reporting/traceability';
 
 export function TraceabilityReport() {
@@ -51,7 +51,7 @@ export function TraceabilityReport() {
                 <tr key={`${h.domain}-${h.id}`}>
                   <td>{h.domain}</td>
                   <td><strong>{h.batch_or_ref}</strong></td>
-                  <td>{format(parseISO(h.date.slice(0, 10)), 'MMM d, yyyy')}</td>
+                  <td>{formatCalendarDay(h.date)}</td>
                   <td>{h.summary}</td>
                 </tr>
               ))}

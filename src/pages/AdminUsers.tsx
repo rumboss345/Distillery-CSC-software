@@ -11,6 +11,7 @@ import {
   type AuthUser,
 } from '../lib/auth-api';
 import { useAuth } from '../context/AuthContext';
+import { formatRecordedAt } from '../lib/date-input';
 import {
   PERMISSION_KEYS,
   PERMISSION_LABELS,
@@ -234,7 +235,7 @@ export function AdminUsers() {
                 <tr key={u.id}>
                   <td>{u.email}</td>
                   <td>{u.name ?? '—'}</td>
-                  <td>{new Date(u.created_at).toLocaleString()}</td>
+                  <td>{formatRecordedAt(u.created_at)}</td>
                   <td className="table-actions">
                     <button type="button" className="btn btn-primary btn-sm" onClick={() => handleApprove(u.id)}>
                       Approve

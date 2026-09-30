@@ -1,4 +1,4 @@
-import { format, parseISO } from 'date-fns';
+import { formatCalendarDay } from '../../lib/date-input';
 import { buildTankInventoryReportRows } from '../../lib/reporting/tank-rows';
 import { useReportContext } from './report-context';
 import { ReportTableShell } from './ReportTableShell';
@@ -54,7 +54,7 @@ export function TankInventoryReport() {
               <td>{r.fill_pct != null ? `${r.fill_pct}%` : '—'}</td>
               <td>
                 {r.last_movement_at
-                  ? `${format(parseISO(r.last_movement_at.slice(0, 10)), 'MMM d, yyyy')} (${r.last_movement_type?.replace(/_/g, ' ')})`
+                  ? `${formatCalendarDay(r.last_movement_at)} (${r.last_movement_type?.replace(/_/g, ' ')})`
                   : '—'}
               </td>
             </tr>

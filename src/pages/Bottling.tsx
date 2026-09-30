@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { format } from 'date-fns';
 import {
   getBottlingRuns,
   saveBottlingRun,
@@ -14,6 +13,8 @@ import {
   useRefreshKey,
 } from '../db/queries';
 import { DatePicker } from '../components/DatePicker';
+import { formatDateDisplay } from '../lib/date-input';
+import { localIsoDate } from '../lib/planned-event-date';
 import { Modal } from '../components/Modal';
 import {
   formatLinesSummary,
@@ -45,7 +46,7 @@ const emptyRun = (): RunHeaderForm => ({
   bottled_volume_gal: null,
   volume_variance_gal: null,
   source_run_id: null,
-  bottling_date: new Date().toISOString().slice(0, 10),
+  bottling_date: localIsoDate(),
   packaging_bottle: '',
   bottle_size_ml: 750,
   bottle_count: 0,
@@ -416,7 +417,7 @@ export function Bottling() {
                   <td>{r.product_name}</td>
                   <td>{formatLinesSummary(r.lines)}</td>
                   <td>{r.lot_number}</td>
-                  <td>{format(new Date(r.bottling_date), 'MMM d, yyyy')}</td>
+                  <td>{formatDateDisplay(r.bottling_date)}</td>
                   <td>{totalBottleCount(r.lines).toLocaleString()}</td>
                   <td>{totalVolumeGal(r.lines).toFixed(2)} gal</td>
                   <td>

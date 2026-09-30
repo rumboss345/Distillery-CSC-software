@@ -1,4 +1,5 @@
 import { getBlendProducts, getBlendSpiritSources } from '../../db/queries';
+import { compareStoredDatesDesc } from '../date-input';
 import { laaGalFromVolumeAbv, roundVolume, safePercent } from './alcohol-units';
 import { eventInReportRange, type ReportDateRange } from './period';
 
@@ -67,10 +68,6 @@ export function buildBlendReportRows(range: ReportDateRange): BlendReportRow[] {
     });
   }
 
-  rows.sort(
-    (a, b) =>
-      new Date(b.executed_at ?? b.blend_date).getTime()
-      - new Date(a.executed_at ?? a.blend_date).getTime(),
-  );
+  rows.sort((a, b) => compareStoredDatesDesc(a.executed_at ?? a.blend_date, b.executed_at ?? b.blend_date));
   return rows;
 }

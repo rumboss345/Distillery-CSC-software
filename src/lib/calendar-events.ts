@@ -3,6 +3,7 @@ import {
   format,
   parseISO,
 } from 'date-fns';
+import { localCalendarDayKey } from './date-input';
 import {
   getMashBatches,
   getDistillationRuns,
@@ -128,10 +129,8 @@ export interface CalendarProductionData {
 }
 
 function toDateOnly(value: string | null | undefined): string | undefined {
-  if (!value) return undefined;
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-  return trimmed.slice(0, 10);
+  const day = localCalendarDayKey(value);
+  return day || undefined;
 }
 
 export function isMultiDayEvent(event: CalendarEvent): boolean {

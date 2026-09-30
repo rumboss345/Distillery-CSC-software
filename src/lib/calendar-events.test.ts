@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { localCalendarDayKey } from './date-input';
 import type {
   Barrel,
   BlendProduct,
@@ -95,7 +96,7 @@ describe('buildWashCalendarEvent', () => {
     ];
     const event = buildWashCalendarEvent(baseMash({ status: 'complete' }), logs);
     expect(event?.startDate).toBe('2026-03-01');
-    expect(event?.endDate).toBe('2026-03-05');
+    expect(event?.endDate).toBe(localCalendarDayKey('2026-03-05T08:00:00Z'));
     expect(isMultiDayEvent(event!)).toBe(true);
   });
 

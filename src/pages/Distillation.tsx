@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { format } from 'date-fns';
 import { AssigneeCell, AssigneeSelect } from '../components/AssigneeSelect';
 import { DatePicker, DateTimePicker } from '../components/DatePicker';
 import { useAuth } from '../context/AuthContext';
 import { defaultAssignee } from '../lib/assignee';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
-import { formatRecordedAt } from '../lib/date-input';
+import { formatDateDisplay, formatRecordedAt } from '../lib/date-input';
 import {
   getDistillationRuns,
   distillationRunHasRecordedCuts,
@@ -49,7 +48,7 @@ import {
   runTypeLabel,
 } from '../lib/distillation-run-types';
 import { FERMENTATION_READY_MAX_BRIX, isBrixReadyForDistillation } from '../lib/fermentation';
-import { eventDateWhenLeavingPlanned } from '../lib/planned-event-date';
+import { eventDateWhenLeavingPlanned, localIsoDate, localIsoDateTime } from '../lib/planned-event-date';
 import {
   chargeExceedsStillCapacity,
   plannedRecordSkipsEquipmentStatus,
@@ -89,7 +88,7 @@ const emptyRun = (runType: DistillationRunType = 'wash'): Omit<DistillationRun, 
   source_holding_tank_equipment_id: null,
   dest_holding_tank_equipment_id: runType === 'low_wines' ? null : defaultDestTankIdForRunType(runType),
   still_name: '',
-  run_date: new Date().toISOString().slice(0, 10),
+  run_date: localIsoDate(),
   charge_volume_gal: 0,
   charge_abv: null,
   stillage_volume_gal: null,
@@ -127,7 +126,7 @@ export function Distillation() {
   const [cutForm, setCutForm] = useState({
     cut_type: 'heads' as CutType,
     holding_tank_equipment_id: null as number | null,
-    start_time: new Date().toISOString().slice(0, 16),
+    start_time: localIsoDateTime(),
     end_time: '',
     volume_gal: 0,
     observed_abv: '',
@@ -616,7 +615,7 @@ export function Distillation() {
     setCutForm({
       cut_type: initialCutType,
       holding_tank_equipment_id: suggestCutTank(initialCutType, run),
-      start_time: new Date().toISOString().slice(0, 16),
+      start_time: localIsoDateTime(),
       end_time: '',
       volume_gal: 0,
       observed_abv: '',
@@ -864,7 +863,7 @@ export function Distillation() {
                           <td>{runTypeLabel(runType)}</td>
                           <td>{runSourceSummary(r)}</td>
                           <td>{r.still_name}</td>
-                          <td>{format(new Date(r.run_date), 'MMM d, yyyy')}</td>
+                          <td>{formatDateDisplay(r.run_date)}</td>
                           <td><AssigneeCell name={r.assigned_user_name} /></td>
                           <td>
                             {r.charge_volume_gal} gal
@@ -904,7 +903,7 @@ export function Distillation() {
       {selectedRunId && (
         <Modal
           wide
-          title={`${selectedRunIsComplete ? 'View cuts' : 'Cuts'} — ${runs.find((r) => r.id === selectedRunId)?.batch_number ?? ''}${selectedRun ? ` · ${format(new Date(selectedRun.run_date), 'MMM d, yyyy')}` : ''}`}
+          title={`${selectedRunIsComplete ? 'View cuts' : 'Cuts'} — ${runs.find((r) => r.id === selectedRunId)?.batch_number ?? ''}${selectedRun ? ` · ${formatDateDisplay(selectedRun.run_date)}` : ''}`}
           onClose={() => setSelectedRunId(null)}
         >
           <div className="cuts-modal-toolbar">

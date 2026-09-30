@@ -1,4 +1,5 @@
 import { queryAll } from '../../db/database';
+import { compareStoredDatesDesc } from '../date-input';
 import { laaGalFromVolumeAbv } from './alcohol-units';
 import { eventInReportRange, type ReportDateRange } from './period';
 
@@ -295,8 +296,6 @@ export function buildLiquidMovements(range: ReportDateRange): LiquidMovementRow[
     });
   }
 
-  rows.sort(
-    (a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime(),
-  );
+  rows.sort((a, b) => compareStoredDatesDesc(a.occurred_at, b.occurred_at));
   return rows;
 }

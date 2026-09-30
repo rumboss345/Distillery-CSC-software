@@ -13,6 +13,7 @@ import {
   equipmentBlocksProduction,
   maintenanceStatusLabel,
 } from '../../lib/equipment-maintenance';
+import { formatRecordedAt } from '../../lib/date-input';
 import { FERMENTATION_READY_MAX_BRIX, isBrixReadyForDistillation } from '../../lib/fermentation';
 import type { AssignedEmployee } from '../../lib/assignee';
 
@@ -186,12 +187,7 @@ export function ProcessEquipmentDetailPanel({
             <dd>
               {equipment.cleaned_by_user_name || '—'}
               {' · '}
-              {new Date(equipment.cleaned_at).toLocaleString(undefined, {
-                month: 'short',
-                day: 'numeric',
-                hour: 'numeric',
-                minute: '2-digit',
-              })}
+              {formatRecordedAt(equipment.cleaned_at)}
             </dd>
           </>
         )}

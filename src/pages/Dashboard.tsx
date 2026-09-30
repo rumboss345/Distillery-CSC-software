@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { getProductionSummary, getMashBatches, getDistillationRuns, getBarrels, getInventoryItems, resetAllData } from '../db/queries';
 import { StatusBadge } from '../components/StatusBadge';
-import { format } from 'date-fns';
 import { useAuth } from '../context/AuthContext';
+import { formatDateDisplay } from '../lib/date-input';
 import { PROCESS_STAGE_LABELS } from '../lib/permissions';
 
 export function Dashboard() {
@@ -100,7 +100,7 @@ export function Dashboard() {
                     <td><strong>{m.batch_number}</strong></td>
                     <td>{m.recipe_name}</td>
                     <td>{m.grain_lbs} lbs · {m.grain_type}</td>
-                    <td>{format(new Date(m.start_date), 'MMM d, yyyy')}</td>
+                    <td>{formatDateDisplay(m.start_date)}</td>
                     <td><StatusBadge status={m.status} /></td>
                   </tr>
                 ))}
@@ -131,7 +131,7 @@ export function Dashboard() {
                   <tr key={r.id}>
                     <td><strong>{r.batch_number}</strong></td>
                     <td>{r.still_name}</td>
-                    <td>{format(new Date(r.run_date), 'MMM d, yyyy')}</td>
+                    <td>{formatDateDisplay(r.run_date)}</td>
                     <td>{r.charge_volume_gal} gal</td>
                     <td><StatusBadge status={r.status} /></td>
                   </tr>
@@ -161,7 +161,7 @@ export function Dashboard() {
                   <tr key={b.id}>
                     <td><strong>{b.barrel_number}</strong></td>
                     <td>{b.spirit_type} @ {b.initial_abv}%</td>
-                    <td>{format(new Date(b.fill_date), 'MMM d, yyyy')}</td>
+                    <td>{formatDateDisplay(b.fill_date)}</td>
                     <td>{b.current_volume_gal} gal</td>
                     <td>{b.warehouse_location}</td>
                   </tr>

@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { format } from 'date-fns';
 import { AssigneeCell, AssigneeSelect } from '../components/AssigneeSelect';
 import { DatePicker } from '../components/DatePicker';
 import { useAuth } from '../context/AuthContext';
@@ -40,10 +39,10 @@ import {
   recipeNutrientsToBatchInputs,
 } from '../lib/wash-recipe-nutrients';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
-import { formatRecordedAt } from '../lib/date-input';
+import { formatDateDisplay, formatRecordedAt } from '../lib/date-input';
 import { equipmentUnavailableForProduction } from '../lib/equipment-maintenance';
 import { fermenterBrixReadings, fermenterLogPanels } from '../lib/fermentation-log-panels';
-import { eventDateWhenLeavingPlanned } from '../lib/planned-event-date';
+import { eventDateWhenLeavingPlanned, localIsoDate } from '../lib/planned-event-date';
 import type { MashBatch, MashStatus } from '../types';
 
 const STATUSES: MashStatus[] = ['planned', 'mashing', 'fermenting', 'complete', 'discarded'];
@@ -225,7 +224,7 @@ const emptyBatch = (): Omit<MashBatch, 'id' | 'created_at'> => ({
   water_gal: 0,
   yeast_strain: '',
   yeast_lbs: 0,
-  start_date: new Date().toISOString().slice(0, 10),
+  start_date: localIsoDate(),
   target_brix: null,
   actual_brix: null,
   target_final_brix: null,
@@ -647,7 +646,7 @@ export function MashFermentation() {
                               );
                             })}
                           </td>
-                          <td>{format(new Date(b.start_date), 'MMM d, yyyy')}</td>
+                          <td>{formatDateDisplay(b.start_date)}</td>
                           <td><AssigneeCell name={b.assigned_user_name} /></td>
                           <td className="td-actions">
                             <button
@@ -737,7 +736,7 @@ export function MashFermentation() {
       {selectedId && selectedBatch && canViewFermentationLogs && (
         <Modal
           wide
-          title={`Fermentation Logs — ${selectedBatch.batch_number} · ${format(new Date(selectedBatch.start_date), 'MMM d, yyyy')}${fermentationLogsReadOnly ? ' (read-only)' : ''}`}
+          title={`Fermentation Logs — ${selectedBatch.batch_number} · ${formatDateDisplay(selectedBatch.start_date)}${fermentationLogsReadOnly ? ' (read-only)' : ''}`}
           onClose={() => setSelectedId(null)}
         >
           {selectedLogPanels.length > 1 ? (

@@ -1,4 +1,4 @@
-import { format, parseISO } from 'date-fns';
+import { formatDateDisplay } from '../../lib/date-input';
 import { buildDistillationReportRows } from '../../lib/reporting/distillation-rows';
 import { useReportContext } from './report-context';
 import { ReportTableShell } from './ReportTableShell';
@@ -49,7 +49,7 @@ export function DistillationReport() {
           {rows.map((r) => (
             <tr key={r.run_id}>
               <td><strong>{r.batch_number}</strong></td>
-              <td>{format(parseISO(r.run_date), 'MMM d, yyyy')}</td>
+              <td>{formatDateDisplay(r.run_date)}</td>
               <td>{r.still_name}</td>
               <td>{r.run_type}</td>
               <td>{r.status}</td>

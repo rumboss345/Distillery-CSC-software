@@ -28,6 +28,7 @@ import {
 } from '../lib/equipment-maintenance';
 import { equipmentCleaningStatusLabel, equipmentNeedsCleaning, equipmentStatusWhenReturningToPlanned } from '../lib/equipment-cleaning';
 import { countActiveFermentations, fermenterShowsAssignedWash } from '../lib/mash-fermenter-fill';
+import { compareStoredDatesDesc } from '../lib/date-input';
 import { eventDateWhenLeavingPlanned } from '../lib/planned-event-date';
 import { DISCARD_DESTINATION, fermenterTransferError } from '../lib/fermenter-transfer';
 import { persistedStillage, stillageSaveError } from '../lib/stillage';
@@ -1545,9 +1546,7 @@ export function getHoldingTankIntakeHistory(
     })),
   ];
 
-  entries.sort(
-    (a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime(),
-  );
+  entries.sort((a, b) => compareStoredDatesDesc(a.occurred_at, b.occurred_at));
   return entries.slice(0, limit);
 }
 

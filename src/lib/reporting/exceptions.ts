@@ -2,6 +2,8 @@ import { queryAll } from '../../db/database';
 import { getBottlingRuns, getEquipmentVolumeReport } from '../../db/queries';
 import { totalVolumeGal } from '../bottling-lines';
 import { buildBlendReportRows } from './blend-rows';
+import { compareStoredDatesDesc } from '../date-input';
+import { localIsoDate } from '../planned-event-date';
 import { eventInReportRange, type ReportDateRange } from './period';
 
 export type ExceptionSeverity = 'warning' | 'info';
@@ -87,7 +89,7 @@ export function buildProductionExceptions(range: ReportDateRange): ProductionExc
         row_key: `overfill:${eq.id}`,
         severity: 'info',
         category: 'Tank level',
-        occurred_at: new Date().toISOString().slice(0, 10),
+        occurred_at: localIsoDate(),
         reference: eq.name,
         message: `Current volume ${eq.volume_gal.toFixed(1)} gal exceeds nominal capacity (${pct.toFixed(0)}% of ${eq.capacity_gal} gal).`,
       });
@@ -129,8 +131,6 @@ export function buildProductionExceptions(range: ReportDateRange): ProductionExc
     }
   }
 
-  rows.sort(
-    (a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime(),
-  );
+  rows.sort((a, b) => compareStoredDatesDesc(a.occurred_at, b.occurred_at));
   return rows;
 }

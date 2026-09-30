@@ -5,6 +5,7 @@ import {
   parseISO,
   startOfMonth,
 } from 'date-fns';
+import { localIsoDate } from './planned-event-date';
 
 /** ISO date string `YYYY-MM-DD` or empty. */
 export type DateValue = string;
@@ -39,6 +40,52 @@ export function formatDateDisplay(value: DateValue): string {
   return format(parseISO(value), 'MMM d, yyyy');
 }
 
+/**
+ * SQLite `datetime('now')` is UTC and looks like `YYYY-MM-DD HH:mm:ss`
+ * (space, no zone). A `T` without a zone is a local wall-clock time the
+ * user entered. A date-only `YYYY-MM-DD` is a calendar day, not UTC midnight.
+ */
+const SQLITE_UTC_DATETIME = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)(Z|[+-]\d{2}:?\d{2})?$/;
+
+export function parseStoredDate(value: string): Date | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const sqlite = trimmed.match(SQLITE_UTC_DATETIME);
+  if (sqlite) {
+    const zone = sqlite[3] ?? 'Z';
+    const parsed = parseISO(`${sqlite[1]}T${sqlite[2]}${zone}`);
+    return isValid(parsed) ? parsed : null;
+  }
+  const parsed = parseISO(trimmed);
+  return isValid(parsed) ? parsed : null;
+}
+
+/** Local calendar day (`YYYY-MM-DD`) for a stored date or timestamp. */
+export function localCalendarDayKey(value: string | null | undefined): string {
+  const trimmed = value?.trim() ?? '';
+  if (!trimmed) return '';
+  if (isIsoDate(trimmed)) return trimmed;
+  const parsed = parseStoredDate(trimmed);
+  if (!parsed) return '';
+  return format(parsed, 'yyyy-MM-dd');
+}
+
+/**
+ * Calendar day for a stored date (`YYYY-MM-DD`) or datetime.
+ * A date-only value stays on that calendar day. Timestamps show the local day.
+ */
+export function formatCalendarDay(value: string | null | undefined): string {
+  const day = localCalendarDayKey(value);
+  if (!day) return value?.trim() ? value.trim() : '';
+  return formatDateDisplay(day);
+}
+
+export function compareStoredDatesDesc(a: string, b: string): number {
+  const aTime = parseStoredDate(a)?.getTime() ?? 0;
+  const bTime = parseStoredDate(b)?.getTime() ?? 0;
+  return bTime - aTime;
+}
+
 export function formatMonthDisplay(value: MonthValue): string {
   if (!isIsoMonth(value)) return value;
   return format(parseISO(`${value}-01`), 'MMMM yyyy');
@@ -49,12 +96,13 @@ export function formatDateTimeDisplay(value: DateTimeValue): string {
   return format(parseISO(value), 'MMM d, yyyy h:mm a');
 }
 
-/** Date and time for a fermentation log or distillation cut. */
+/** Date and time in the browser's local timezone. Date-only values stay on that day. */
 export function formatRecordedAt(value: string | null | undefined): string {
   const trimmed = value?.trim() ?? '';
   if (!trimmed) return '—';
-  const parsed = parseISO(trimmed);
-  if (!isValid(parsed)) return trimmed;
+  if (isIsoDate(trimmed)) return formatDateDisplay(trimmed);
+  const parsed = parseStoredDate(trimmed);
+  if (!parsed) return trimmed;
   return format(parsed, 'MMM d, yyyy HH:mm');
 }
 
@@ -69,6 +117,11 @@ export function normalizeDateInput(input: string): DateValue | null {
   for (const pattern of patterns) {
     const parsed = parse(trimmed, pattern, new Date());
     if (isValid(parsed)) return format(parsed, 'yyyy-MM-dd');
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
+    const day = localCalendarDayKey(trimmed);
+    return isIsoDate(day) ? day : null;
   }
 
   const loose = new Date(trimmed);
@@ -116,6 +169,12 @@ export function normalizeDateTimeInput(input: string): DateTimeValue | null {
     if (isValid(parsed)) return format(parsed, "yyyy-MM-dd'T'HH:mm");
   }
 
+  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
+    const parsed = parseStoredDate(trimmed);
+    if (!parsed) return null;
+    return format(parsed, "yyyy-MM-dd'T'HH:mm");
+  }
+
   const loose = new Date(trimmed);
   if (isValid(loose) && !Number.isNaN(loose.getTime())) {
     return format(loose, "yyyy-MM-dd'T'HH:mm");
@@ -126,8 +185,7 @@ export function normalizeDateTimeInput(input: string): DateTimeValue | null {
 
 export function splitDateTime(value: DateTimeValue): { date: DateValue; time: string } {
   if (!isIsoDateTime(value)) {
-    const today = format(new Date(), 'yyyy-MM-dd');
-    return { date: today, time: '08:00' };
+    return { date: localIsoDate(), time: '08:00' };
   }
   const [date, time] = value.split('T');
   return { date, time };
