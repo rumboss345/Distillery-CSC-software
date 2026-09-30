@@ -88,6 +88,9 @@ export function Fermentation() {
   const [status, setStatus] = useState<FermentationAssignmentStatus>('fermenting');
   const [fermenterId, setFermenterId] = useState<number | ''>('');
   const [volumeGal, setVolumeGal] = useState(0);
+  const [useTwoFermenters, setUseTwoFermenters] = useState(false);
+  const [fermenter2Id, setFermenter2Id] = useState<number | ''>('');
+  const [volume2Gal, setVolume2Gal] = useState(0);
   const [logTarget, setLogTarget] = useState<LogTarget | null>(null);
   const [adminDelete, setAdminDelete] = useState<FermentationRow | null>(null);
   const [adminEdit, setAdminEdit] = useState<FermentationRow | null>(null);
@@ -140,6 +143,9 @@ export function Fermentation() {
     setStatus('fermenting');
     setFermenterId('');
     setVolumeGal(remaining > 0 ? remaining : queryBatch.water_gal);
+    setUseTwoFermenters(false);
+    setFermenter2Id('');
+    setVolume2Gal(0);
     completeEditUnlockedRef.current = null;
     setShowForm(true);
   }
@@ -217,6 +223,8 @@ export function Fermentation() {
   const fermenterOptions = editEquipmentId && !availableFermenters.some((fermenter) => fermenter.id === editEquipmentId)
     ? [{ id: editEquipmentId, name: editFermenterName || `Fermenter ${editEquipmentId}`, capacity_gal: 0 }, ...availableFermenters]
     : availableFermenters;
+  const fermenterOptions2 = fermenterOptions.filter((fermenter) => fermenter.id !== fermenterId);
+  const showTwoFermenters = formMode === 'start' && useTwoFermenters;
 
   const closeForm = () => {
     setShowForm(false);
@@ -241,6 +249,9 @@ export function Fermentation() {
     setStatus('fermenting');
     setFermenterId('');
     setVolumeGal(remaining > 0 ? remaining : batch.water_gal);
+    setUseTwoFermenters(false);
+    setFermenter2Id('');
+    setVolume2Gal(0);
     completeEditUnlockedRef.current = null;
     setShowForm(true);
   };
@@ -254,30 +265,49 @@ export function Fermentation() {
     setStatus(row.status);
     setFermenterId(row.equipmentId ?? '');
     setVolumeGal(row.assignment?.volume_gal || row.batch.water_gal);
+    setUseTwoFermenters(false);
+    setFermenter2Id('');
+    setVolume2Gal(0);
     setShowForm(true);
   };
 
   const performSave = () => {
     if (!editBatch) return;
+    const startingTwo = formMode === 'start' && useTwoFermenters;
     const equipmentId = fermenterId ? Number(fermenterId) : 0;
+    const equipmentId2 = startingTwo && fermenter2Id ? Number(fermenter2Id) : 0;
     if (!equipmentId) {
       alert('Select a fermenter for this fermentation.');
       return;
     }
-    if (!(volumeGal > 0)) {
-      alert('Enter the gallons in this fermenter.');
+    if (startingTwo && !equipmentId2) {
+      alert('Select the second fermenter.');
       return;
     }
+    if (startingTwo && equipmentId2 === equipmentId) {
+      alert('Choose two different fermenters.');
+      return;
+    }
+    if (!(volumeGal > 0) || (startingTwo && !(volume2Gal > 0))) {
+      alert(startingTwo ? 'Enter the gallons in each fermenter.' : 'Enter the gallons in this fermenter.');
+      return;
+    }
+    const totalGal = volumeGal + (startingTwo ? volume2Gal : 0);
     const room = editBatch.water_gal - otherGallons;
-    if (editBatch.water_gal > 0 && volumeGal > room + 0.5) {
+    if (editBatch.water_gal > 0 && totalGal > room + 0.5) {
       const left = Math.max(0, room);
-      if (!confirm(`Only ${left.toFixed(1)} gal of this wash is left for this fermenter (${volumeGal} gal entered). Save anyway?`)) {
+      if (!confirm(`Only ${left.toFixed(1)} gal of this wash is left (${totalGal} gal entered). Save anyway?`)) {
         return;
       }
     }
     const previousEquipmentId = formMode === 'edit' ? editEquipmentId : null;
+    const additions = [
+      { equipmentId, volumeGal, status },
+      ...(startingTwo ? [{ equipmentId: equipmentId2, volumeGal: volume2Gal, status }] : []),
+    ];
     const others = assignmentsFor(editBatch.id).filter((assignment) => (
-      assignment.floor_equipment_id !== previousEquipmentId && assignment.floor_equipment_id !== equipmentId
+      assignment.floor_equipment_id !== previousEquipmentId
+      && !additions.some((addition) => addition.equipmentId === assignment.floor_equipment_id)
     ));
     const moveLogs = previousEquipmentId && previousEquipmentId !== equipmentId
       ? { fromEquipmentId: previousEquipmentId, toEquipmentId: equipmentId }
@@ -289,7 +319,7 @@ export function Fermentation() {
           volumeGal: assignment.volume_gal,
           status: assignmentStatus(assignment.status),
         })),
-        { equipmentId, volumeGal, status },
+        ...additions,
       ], moveLogs);
       closeForm();
       refresh();
@@ -561,11 +591,42 @@ export function Fermentation() {
                 <option value="discarded">discarded</option>
               </select>
             </div>
+            {formMode === 'start' && (
+              <div className="form-group full-width">
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={useTwoFermenters}
+                    disabled={fermenterOptions.length < 2}
+                    onChange={(e) => {
+                      const on = e.target.checked;
+                      if (!on) {
+                        setUseTwoFermenters(false);
+                        setVolumeGal(Math.round((volumeGal + volume2Gal) * 10) / 10);
+                        setFermenter2Id('');
+                        setVolume2Gal(0);
+                        return;
+                      }
+                      const first = Math.round((volumeGal / 2) * 10) / 10;
+                      setUseTwoFermenters(true);
+                      setVolumeGal(first);
+                      setVolume2Gal(Math.round((volumeGal - first) * 10) / 10);
+                      setFermenter2Id('');
+                    }}
+                  />
+                  Use 2 fermenters
+                </label>
+              </div>
+            )}
             <div className="form-group">
-              <label>Fermenter</label>
+              <label>{showTwoFermenters ? 'Fermenter 1' : 'Fermenter'}</label>
               <select
                 value={fermenterId}
-                onChange={(e) => setFermenterId(e.target.value ? parseInt(e.target.value, 10) : '')}
+                onChange={(e) => {
+                  const nextId = e.target.value ? parseInt(e.target.value, 10) : '';
+                  setFermenterId(nextId);
+                  if (nextId && nextId === fermenter2Id) setFermenter2Id('');
+                }}
               >
                 <option value="">— Select fermenter —</option>
                 {fermenterOptions.map((fermenter) => (
@@ -576,7 +637,7 @@ export function Fermentation() {
               </select>
             </div>
             <div className="form-group">
-              <label>Volume (gal)</label>
+              <label>{showTwoFermenters ? 'Fermenter 1 volume (gal)' : 'Volume (gal)'}</label>
               <input
                 type="number"
                 step="0.1"
@@ -584,9 +645,38 @@ export function Fermentation() {
                 onChange={(e) => setVolumeGal(parseFloat(e.target.value) || 0)}
               />
             </div>
+            {showTwoFermenters && (
+              <>
+                <div className="form-group">
+                  <label>Fermenter 2</label>
+                  <select
+                    value={fermenter2Id}
+                    onChange={(e) => setFermenter2Id(e.target.value ? parseInt(e.target.value, 10) : '')}
+                  >
+                    <option value="">— Select fermenter —</option>
+                    {fermenterOptions2.map((fermenter) => (
+                      <option key={fermenter.id} value={fermenter.id}>
+                        {fermenter.name}{fermenter.capacity_gal ? ` (${fermenter.capacity_gal} gal)` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Fermenter 2 volume (gal)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={volume2Gal || ''}
+                    onChange={(e) => setVolume2Gal(parseFloat(e.target.value) || 0)}
+                  />
+                </div>
+              </>
+            )}
           </div>
           <p className="form-hint">
-            This fermenter is saved on its own. Completing, discarding, or deleting it leaves the other fermenters on this wash alone.
+            {showTwoFermenters
+              ? 'Both fermenters are saved as their own fermentations. Completing or deleting one later leaves the other alone.'
+              : 'This fermenter is saved on its own. Completing, discarding, or deleting it leaves the other fermenters on this wash alone.'}
             {status === 'complete' ? ' Mark it complete only after this fermenter has a log.' : ''}
             {status === 'discarded' ? ' Discarding releases this fermenter.' : ''}
           </p>
