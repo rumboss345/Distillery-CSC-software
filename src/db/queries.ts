@@ -855,6 +855,21 @@ export function getActiveDistillationRunOnStill(
   ) ?? undefined;
 }
 
+/** Running run first, otherwise a planned run, so the process menu can open cuts. */
+export function getDistillationRunForCuts(
+  stillName: string,
+): { id: number; batch_number: string; status: string } | undefined {
+  const trimmed = stillName.trim();
+  if (!trimmed) return undefined;
+  return queryOne<{ id: number; batch_number: string; status: string }>(
+    `SELECT id, batch_number, status FROM distillation_runs
+     WHERE still_name = ? AND status IN ('running', 'planned')
+     ORDER BY CASE status WHEN 'running' THEN 0 ELSE 1 END, id DESC
+     LIMIT 1`,
+    [trimmed],
+  ) ?? undefined;
+}
+
 function assertStillAvailableForCharge(stillName: string, excludeRunId?: number): void {
   const occupied = getActiveDistillationRunOnStill(stillName, excludeRunId);
   if (!occupied) return;

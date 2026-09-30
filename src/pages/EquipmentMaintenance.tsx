@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   getAllEquipmentMaintenanceLog,
   getAllFloorEquipment,
@@ -27,6 +28,8 @@ const emptyAssignee = (): AssignedEmployee => ({
 });
 
 export function EquipmentMaintenance() {
+  const [searchParams] = useSearchParams();
+  const focusEquipmentId = Number(searchParams.get('equipment')) || 0;
   const { key, refresh } = useRefreshKey();
   const equipment = getAllFloorEquipment();
   const planNameById = useMemo(
@@ -36,6 +39,10 @@ export function EquipmentMaintenance() {
   void key;
 
   const groups = useMemo(() => groupEquipmentByCategory(equipment), [equipment]);
+  useEffect(() => {
+    if (!focusEquipmentId) return;
+    document.getElementById(`equipment-row-${focusEquipmentId}`)?.scrollIntoView({ block: 'center' });
+  }, [focusEquipmentId, groups]);
   const allLogEntries = useMemo(() => getAllEquipmentMaintenanceLog(300), [key]);
 
   const [editItem, setEditItem] = useState<FloorEquipment | null>(null);
@@ -121,7 +128,13 @@ export function EquipmentMaintenance() {
                 ? equipmentCleaningStatusLabel()
                 : maintenanceStatusLabel(item.maintenance_status);
               return (
-                <li key={item.id} className="equipment-maintenance-row">
+                <li
+                  key={item.id}
+                  id={`equipment-row-${item.id}`}
+                  className={`equipment-maintenance-row${
+                    item.id === focusEquipmentId ? ' equipment-maintenance-row--focus' : ''
+                  }`}
+                >
                   <div className="equipment-maintenance-row-main">
                     <span className="equipment-maintenance-name">{item.name}</span>
                     <span className="equipment-maintenance-meta">
