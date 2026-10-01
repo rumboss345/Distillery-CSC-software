@@ -29,6 +29,7 @@ import {
   type VolumeUnitId,
   type WeightUnitId,
 } from '../lib/unit-converter';
+import { limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
 import { ML_PER_GALLON } from '../types';
 
 type CalculatorTab = 'gauging' | 'dilution' | 'volume' | 'weight';
@@ -184,9 +185,9 @@ function AlcoholDilutionCalculator() {
               type="number"
               step="0.1"
               min="0"
-              max="100"
+              max={MAX_ENTERED_ABV}
               value={targetAbv}
-              onChange={(e) => setTargetAbv(e.target.value)}
+              onChange={(e) => setTargetAbv(limitAbvInput(e.target.value))}
             />
           </div>
         </div>

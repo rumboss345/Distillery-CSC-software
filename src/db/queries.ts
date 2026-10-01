@@ -27,6 +27,7 @@ import {
   maintenanceStatusLabel,
 } from '../lib/equipment-maintenance';
 import { equipmentCleaningStatusLabel, equipmentNeedsCleaning, equipmentStatusWhenReturningToPlanned } from '../lib/equipment-cleaning';
+import { assertEnteredAbv } from '../lib/abv-limits';
 import { EQUIPMENT_TYPES, resolveEquipmentIcon } from '../lib/equipment';
 import { equipmentTypeNameError, normalizeEquipmentTypeName } from '../lib/equipment-type';
 import { countActiveFermentations, fermenterShowsAssignedWash } from '../lib/mash-fermenter-fill';
@@ -1230,9 +1231,10 @@ export function saveHoldingTankOnHand(input: {
   if (!Number.isFinite(input.volumeGal) || input.volumeGal < 0) {
     throw new Error('Enter the gallons on hand.');
   }
-  if (!Number.isFinite(input.abv) || input.abv < 0 || input.abv > 100) {
-    throw new Error('Enter an ABV from 0 to 100.');
+  if (!Number.isFinite(input.abv) || input.abv < 0) {
+    throw new Error('Enter an ABV from 0 to 99.');
   }
+  assertEnteredAbv(input.abv, 'ABV');
   if (!input.recordedAt?.trim()) {
     throw new Error('Enter the date of this reading.');
   }
@@ -1752,6 +1754,7 @@ export function saveHoldingTankTransfer(
   if (transfer.volume_gal <= 0) {
     throw new Error('Transfer volume must be greater than zero.');
   }
+  assertEnteredAbv(transfer.abv, 'Transfer ABV');
   assertSpiritTransferVessel(transfer.source_tank_equipment_id, 'source');
   assertSpiritTransferVessel(transfer.dest_tank_equipment_id, 'destination');
   assertEquipmentUsableForProduction(transfer.source_tank_equipment_id, 'Source tank');
@@ -2943,6 +2946,8 @@ function releaseDistillationEquipmentForReturnToPlan(run: DistillationRun, runId
 }
 
 export function saveDistillationRun(run: Omit<DistillationRun, 'id' | 'created_at'>, id?: number): void {
+  assertEnteredAbv(run.charge_abv, 'Charge ABV');
+  assertEnteredAbv(run.proof_spirit_abv, 'Tails ABV');
   const runType = (run.run_type ?? 'wash') as DistillationRunType;
   const planOnly = plannedRecordSkipsEquipmentStatus(run.status);
   const previousRun = id
@@ -3110,6 +3115,7 @@ export function getDistillationCuts(runId: number): DistillationCutView[] {
 }
 
 export function saveDistillationCut(cut: Omit<DistillationCut, 'id'>, id?: number): void {
+  assertEnteredAbv(cut.abv, 'Cut ABV');
   const run = queryOne<{ status: string }>(
     'SELECT status FROM distillation_runs WHERE id = ?',
     [cut.distillation_run_id],
@@ -3265,6 +3271,7 @@ export function getBarrelsForBlend(): Barrel[] {
 }
 
 export function saveBarrel(barrel: Omit<Barrel, 'id' | 'created_at'>, id?: number): number | void {
+  assertEnteredAbv(barrel.initial_abv, 'Initial ABV');
   const warehouse_location = normalizeWarehouseLocationName(barrel.warehouse_location);
   if (warehouse_location) saveWarehouseLocation(warehouse_location);
   if (id) {
@@ -3496,6 +3503,7 @@ export function saveBottlingRun(
   lines: BottlingRunLineInput[],
   id?: number,
 ): void {
+  assertEnteredAbv(run.final_abv, 'Final ABV');
   const activeLines = lines.filter((line) => line.bottle_count > 0 && line.bottle_size_ml > 0);
   const previousLines = id ? bottlingLinesToInventoryInput(getBottlingRunLines(id)) : [];
   const fromTank = run.source_holding_tank_equipment_id != null;
@@ -3647,6 +3655,9 @@ export function saveBlendRecipe(
   id?: number,
 ): number {
   if (!recipe.name.trim()) throw new Error('Recipe name is required.');
+  assertEnteredAbv(recipe.target_abv, 'Target ABV');
+  for (const source of spiritSources) assertEnteredAbv(source.abv, 'Spirit ABV');
+  for (const ingredient of ingredients) assertEnteredAbv(ingredient.abv, 'Flavoring ABV');
 
   const sourceType = recipe.source_type ?? 'tank';
 
@@ -3870,6 +3881,12 @@ export function saveBlendFormula(
   ingredients: BlendIngredientInput[],
   id?: number,
 ): number {
+  assertEnteredAbv(product.target_abv, 'Target ABV');
+  assertEnteredAbv(product.actual_abv, 'Measured ABV');
+  assertEnteredAbv(product.base_spirit_abv, 'Spirit ABV');
+  for (const source of spiritSources) assertEnteredAbv(source.abv, 'Spirit ABV');
+  for (const ingredient of ingredients) assertEnteredAbv(ingredient.abv, 'Flavoring ABV');
+
   const sources = normalizeSpiritSources(product, spiritSources);
   const primary = sources[0];
   const primaryTankId = primary?.holding_tank_equipment_id ?? product.source_holding_tank_equipment_id;
@@ -4231,6 +4248,7 @@ export function saveBlendVerification(
 ): void {
   const product = queryOne<{ status: string }>('SELECT status FROM blend_products WHERE id = ?', [id]);
   if (!product) throw new Error('Blend not found.');
+  assertEnteredAbv(data.actual_abv, 'Measured ABV');
   if (product.status !== 'executed' && product.status !== 'bottled' && product.status !== 'blended') {
     throw new Error('Final measurements can only be saved after production.');
   }

@@ -35,6 +35,7 @@ import { DatePicker } from '../components/DatePicker';
 import { AdminCredentialConfirmModal } from '../components/AdminCredentialConfirmModal';
 import { Modal } from '../components/Modal';
 import { useAuth } from '../context/AuthContext';
+import { limitAbvInput, limitAbvNumber, MAX_ENTERED_ABV } from '../lib/abv-limits';
 import { defaultAssignee } from '../lib/assignee';
 import { localIsoDate } from '../lib/planned-event-date';
 import { latestCompleted } from '../lib/recent-completed';
@@ -1322,8 +1323,10 @@ export function Blending() {
                   <input
                     type="number"
                     step="1"
+                    min={0}
+                    max={MAX_ENTERED_ABV}
                     value={correctionProof}
-                    onChange={(e) => setCorrectionProof(parseFloat(e.target.value) || 80)}
+                    onChange={(e) => setCorrectionProof(limitAbvNumber(parseFloat(e.target.value) || 80))}
                   />
                 </label>
               )}
@@ -1698,8 +1701,13 @@ export function Blending() {
               <input
                 type="number"
                 step="0.1"
+                min={0}
+                max={MAX_ENTERED_ABV}
                 value={form.target_abv ?? ''}
-                onChange={(e) => setForm({ ...form, target_abv: e.target.value ? parseFloat(e.target.value) : null })}
+                onChange={(e) => {
+                  const limited = limitAbvInput(e.target.value);
+                  setForm({ ...form, target_abv: limited.trim() === '' ? null : parseFloat(limited) });
+                }}
                 placeholder="e.g. 40"
               />
             </div>
@@ -1792,12 +1800,15 @@ export function Blending() {
                         type="number"
                         step="0.1"
                         min="0"
-                        max="100"
+                        max={MAX_ENTERED_ABV}
                         placeholder="0 if non-alcoholic"
                         value={ing.abv ?? ''}
-                        onChange={(e) => updateIngredient(realIndex, {
-                          abv: e.target.value === '' ? null : parseFloat(e.target.value) || 0,
-                        })}
+                        onChange={(e) => {
+                          const limited = limitAbvInput(e.target.value);
+                          updateIngredient(realIndex, {
+                            abv: limited.trim() === '' ? null : parseFloat(limited) || 0,
+                          });
+                        }}
                       />
                       <p className="field-hint">
                         Optional. Used in proof calculations when this flavoring contains alcohol (e.g. extract).

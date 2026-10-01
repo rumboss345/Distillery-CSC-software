@@ -17,6 +17,7 @@ import { DatePicker } from '../components/DatePicker';
 import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
 import { BarrelVisual } from '../components/barrels/BarrelVisual';
+import { limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
 import { BARREL_STOCK_ITEM_NAME } from '../lib/barrel-inventory';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
 import { formatDateDisplay, isIsoDate } from '../lib/date-input';
@@ -523,9 +524,14 @@ export function Barrels() {
               <input
                 type="number"
                 step="0.1"
+                min={0}
+                max={MAX_ENTERED_ABV}
                 value={form.initial_abv || ''}
                 disabled={Boolean(form.source_holding_tank_equipment_id && !editId)}
-                onChange={(e) => setForm({ ...form, initial_abv: parseFloat(e.target.value) || 0 })}
+                onChange={(e) => {
+                  const limited = limitAbvInput(e.target.value);
+                  setForm({ ...form, initial_abv: limited.trim() === '' ? 0 : parseFloat(limited) || 0 });
+                }}
               />
               {form.source_holding_tank_equipment_id && !editId && selectedNewSourceTank ? (
                 <span className="field-hint">From tank at fill ({selectedNewSourceTank.abv.toFixed(1)}%).</span>

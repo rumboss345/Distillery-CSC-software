@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { AssigneeCell, AssigneeSelect } from '../components/AssigneeSelect';
 import { DatePicker, DateTimePicker } from '../components/DatePicker';
 import { useAuth } from '../context/AuthContext';
+import { limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
 import { defaultAssignee } from '../lib/assignee';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
 import { formatDateDisplay, formatRecordedAt } from '../lib/date-input';
@@ -1221,8 +1222,9 @@ export function Distillation() {
                         type="number"
                         step="0.1"
                         min="0"
+                        max={MAX_ENTERED_ABV}
                         value={proofTarget}
-                        onChange={(e) => setProofTarget(e.target.value)}
+                        onChange={(e) => setProofTarget(limitAbvInput(e.target.value))}
                         placeholder="Leave blank to charge as-is"
                       />
                     </div>
