@@ -5,6 +5,30 @@ export function runAsksForStillage(runType: DistillationRunType | string | null 
   return runType === 'wash' || runType === 'heavy_rum';
 }
 
+/** Distillation stillage can be stored only in equipment of type Stillage Tank. */
+export function isStillageTankType(type: string | null | undefined): boolean {
+  return type === 'stillage_tank';
+}
+
+export function distillationStillageTankError(tankName: string): string {
+  return `${tankName} is not a stillage tank. Stillage from a distillation can only go into a stillage tank, or be discarded.`;
+}
+
+/** Stillage moves only into a stillage tank, and a stillage tank only receives stillage. */
+export function stillageTransferError(input: {
+  sourceIsStillage: boolean;
+  destIsStillageTank: boolean;
+  destName: string;
+}): string | null {
+  if (input.sourceIsStillage && !input.destIsStillageTank) {
+    return `${input.destName} is not a stillage tank. Stillage can only be sent to a stillage tank.`;
+  }
+  if (!input.sourceIsStillage && input.destIsStillageTank) {
+    return `${input.destName} only receives stillage.`;
+  }
+  return null;
+}
+
 export interface StillageAnswer {
   status: string;
   runType: string;
@@ -22,7 +46,7 @@ export function stillageSaveError(input: StillageAnswer): string | null {
   if (volume <= 0.001) return null;
   if (input.discarded) return null;
   if (!input.tankId) {
-    return 'Choose a tank to store the stillage, or mark it discarded.';
+    return 'Choose a stillage tank to store the stillage, or mark it discarded.';
   }
   return null;
 }

@@ -36,7 +36,9 @@ export function buildTankInventoryReportRows(
 ): TankInventoryReportRow[] {
   const movements = buildLiquidMovements({ preset: 'all', from: null, to: null, label: 'All' });
   const equipment = getEquipmentVolumeReport().filter(
-    (eq) => eq.equipment_type === 'holding_tank' || eq.equipment_type === 'collection_vessel',
+    (eq) => eq.equipment_type === 'holding_tank'
+      || eq.equipment_type === 'stillage_tank'
+      || eq.equipment_type === 'collection_vessel',
   );
 
   return equipment.map((eq) => {

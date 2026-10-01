@@ -15,6 +15,7 @@ const CODE_PREFIX: Record<EquipmentType, string> = {
   fermenter: 'F',
   mash_tun: 'M',
   holding_tank: 'T',
+  stillage_tank: 'ST',
   collection_vessel: 'V',
   pot_still: 'S',
   column_still: 'C',

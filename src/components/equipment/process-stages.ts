@@ -13,6 +13,7 @@ export const PROCESS_STAGES: ProcessStage[] = [
   { key: 'distillation', label: 'Distillation', types: ['pot_still', 'column_still', 'boiler'] },
   { key: 'collection', label: 'Collection Vessels', types: ['collection_vessel'] },
   { key: 'storage', label: 'Holding Tanks', types: ['holding_tank'] },
+  { key: 'stillage', label: 'Stillage Tanks', types: ['stillage_tank'] },
   { key: 'utilities', label: 'Pumps & Hoses', types: ['pump', 'hose'] },
   { key: 'other', label: 'Other Equipment', types: ['other'] },
 ];

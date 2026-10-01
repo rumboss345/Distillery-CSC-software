@@ -7,6 +7,48 @@ export interface VesselInflow {
   /** Gallons added. Newest inflows are listed first. */
   volumeGal: number;
   cutType: CutType | null;
+  /** Spent wash from a distillation, not a spirit cut. */
+  stillage?: boolean;
+}
+
+/** True when the gallons still in the vessel are stillage and nothing else. */
+export function inflowsAreStillageOnly(
+  inflowsNewestFirst: VesselInflow[],
+  volumeGal: number,
+): boolean {
+  if (!(volumeGal > 0.05)) return false;
+  let left = volumeGal;
+  let sawStillage = false;
+  let sawOther = false;
+  for (const inflow of inflowsNewestFirst) {
+    if (left <= 0.05) break;
+    if (!(inflow.volumeGal > 0)) continue;
+    const take = Math.min(inflow.volumeGal, left);
+    if (take > 0.05) {
+      if (inflow.stillage) sawStillage = true;
+      else sawOther = true;
+    }
+    left -= inflow.volumeGal;
+  }
+  if (left > 0.05) return false;
+  return sawStillage && !sawOther;
+}
+
+/** True when any of the gallons still in the vessel are not stillage. */
+export function inflowsIncludeNonStillage(
+  inflowsNewestFirst: VesselInflow[],
+  volumeGal: number,
+): boolean {
+  if (!(volumeGal > 0.05)) return false;
+  let left = volumeGal;
+  for (const inflow of inflowsNewestFirst) {
+    if (left <= 0.05) break;
+    if (!(inflow.volumeGal > 0)) continue;
+    const take = Math.min(inflow.volumeGal, left);
+    if (take > 0.05 && !inflow.stillage) return true;
+    left -= inflow.volumeGal;
+  }
+  return false;
 }
 
 /**
