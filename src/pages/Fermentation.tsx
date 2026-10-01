@@ -196,7 +196,7 @@ export function Fermentation() {
       status: assignmentStatus(assignment.status),
       equipmentId: assignment.floor_equipment_id,
       fermenterName: assignment.equipment_name,
-      label: `${assignment.equipment_name}${assignment.volume_gal > 0 ? ` (${assignment.volume_gal} gal)` : ''}`,
+      label: assignment.equipment_name,
       volumeGal: assignment.volume_gal,
       distilled: false,
       assignment,
@@ -543,6 +543,7 @@ export function Fermentation() {
                     <tr>
                       <th>Wash batch</th>
                       <th>Fermenter</th>
+                      <th>Current volume</th>
                       <th>Start → Current Brix</th>
                       <th>Est. ABV</th>
                       <th>Started</th>
@@ -567,6 +568,7 @@ export function Fermentation() {
                               <span style={{ color: 'var(--text-muted)' }}>Not assigned</span>
                             )}
                           </td>
+                          <td>{row.equipmentId != null ? `${row.volumeGal.toFixed(1)} gal` : '—'}</td>
                           <td>{row.startBrix ?? '—'} → {row.currentBrix ?? '—'}</td>
                           <td>{formatAbvEstimate(estAbv)}</td>
                           <td>{formatDateDisplay(row.batch.start_date)}</td>
