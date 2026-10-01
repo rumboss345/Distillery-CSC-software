@@ -651,10 +651,10 @@ function runMigrations(): void {
 /** Stillage leaving a stillage tank can be discarded, so the destination tank is optional. */
 function migrateStillageDiscardTransfers(): void {
   if (!db) return;
-  const dest = queryOne<{ notnull: number }>(
-    "SELECT \"notnull\" as notnull FROM pragma_table_info('holding_tank_transfers') WHERE name = 'dest_tank_equipment_id'",
+  const dest = queryOne<{ is_required: number }>(
+    "SELECT \"notnull\" AS is_required FROM pragma_table_info('holding_tank_transfers') WHERE name = 'dest_tank_equipment_id'",
   );
-  if (!dest || dest.notnull === 0) return;
+  if (!dest || dest.is_required === 0) return;
   db.run('ALTER TABLE holding_tank_transfers RENAME TO holding_tank_transfers_old');
   db.run(`
     CREATE TABLE holding_tank_transfers (
