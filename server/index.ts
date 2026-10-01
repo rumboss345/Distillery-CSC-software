@@ -306,6 +306,7 @@ app.post('/api/admin/users', authMiddleware, adminMiddleware, (req, res) => {
       ? req.body.processAssignments.map(String)
       : [],
   );
+  const role = req.body.role === 'admin' ? 'admin' : 'user';
 
   if (!email || !password) {
     res.status(400).json({ error: 'Email and password are required' });
@@ -321,7 +322,7 @@ app.post('/api/admin/users', authMiddleware, adminMiddleware, (req, res) => {
   }
 
   try {
-    const user = createUserByAdmin(email, password, name, permissions, processAssignments);
+    const user = createUserByAdmin(email, password, name, permissions, processAssignments, role);
     res.status(201).json({ message: `${user.email} created`, user: publicUser(user) });
   } catch (err) {
     res.status(409).json({

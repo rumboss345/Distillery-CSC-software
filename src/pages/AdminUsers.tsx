@@ -27,6 +27,7 @@ const emptyForm = () => ({
   email: '',
   password: '',
   name: '',
+  role: 'user' as 'admin' | 'user',
   permissions: [...PERMISSION_KEYS] as PermissionKey[],
   processAssignments: [...PROCESS_STAGE_KEYS] as ProcessStageKey[],
 });
@@ -83,6 +84,7 @@ export function AdminUsers() {
         email: form.email,
         password: form.password,
         name: form.name || undefined,
+        role: form.role,
         permissions: form.permissions,
         processAssignments: form.processAssignments,
       });
@@ -284,13 +286,32 @@ export function AdminUsers() {
             </label>
           </div>
 
-          <h3 className="admin-subtitle">Page access</h3>
-          {renderPermissionChecks(form.permissions, (next) => setForm({ ...form, permissions: next }))}
+          <h3 className="admin-subtitle">Role</h3>
+          <label className="admin-check-label">
+            <input
+              type="checkbox"
+              checked={form.role === 'admin'}
+              onChange={(e) => setForm({ ...form, role: e.target.checked ? 'admin' : 'user' })}
+            />
+            Administrator
+          </label>
+          <p className="admin-hint">
+            {form.role === 'admin'
+              ? 'This user can manage users and open every page. They can also confirm actions that need an administrator password.'
+              : 'Leave this off for a production user. Choose the pages and processes they can use below.'}
+          </p>
 
-          <h3 className="admin-subtitle">Process assignments</h3>
-          <p className="admin-hint">Assign which production stages this user is responsible for.</p>
-          {renderProcessChecks(form.processAssignments, (next) =>
-            setForm({ ...form, processAssignments: next }),
+          {form.role === 'user' && (
+            <>
+              <h3 className="admin-subtitle">Page access</h3>
+              {renderPermissionChecks(form.permissions, (next) => setForm({ ...form, permissions: next }))}
+
+              <h3 className="admin-subtitle">Process assignments</h3>
+              <p className="admin-hint">Assign which production stages this user is responsible for.</p>
+              {renderProcessChecks(form.processAssignments, (next) =>
+                setForm({ ...form, processAssignments: next }),
+              )}
+            </>
           )}
 
           <button type="submit" className="btn btn-primary">Create user</button>

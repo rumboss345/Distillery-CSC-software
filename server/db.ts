@@ -6,6 +6,7 @@ import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import {
   DEFAULT_USER_PERMISSIONS,
+  PROCESS_STAGE_KEYS,
   sanitizePermissions,
   sanitizeProcessStages,
   type PermissionKey,
@@ -212,21 +213,26 @@ export function createUserByAdmin(
   name: string | null,
   permissions: PermissionKey[],
   processAssignments: ProcessStageKey[],
+  role: UserRole = 'user',
 ): User {
   const normalized = email.toLowerCase();
   if (getUserByEmail(normalized)) {
     throw new Error('An account with this email already exists');
   }
+  const isAdmin = role === 'admin';
   const passwordHash = bcrypt.hashSync(password, 12);
   const result = ensureDb()
     .prepare(
       `INSERT INTO users (email, password_hash, name, role, status, approval_token)
-       VALUES (?, ?, ?, 'user', 'approved', NULL)`,
+       VALUES (?, ?, ?, ?, 'approved', NULL)`,
     )
-    .run(normalized, passwordHash, name);
+    .run(normalized, passwordHash, name, isAdmin ? 'admin' : 'user');
   const user = getUserById(Number(result.lastInsertRowid))!;
-  setUserPermissions(user.id, permissions);
-  setUserProcessAssignments(user.id, processAssignments);
+  setUserPermissions(user.id, isAdmin ? [...DEFAULT_USER_PERMISSIONS] : permissions);
+  setUserProcessAssignments(
+    user.id,
+    isAdmin ? [...PROCESS_STAGE_KEYS] : processAssignments,
+  );
   return user;
 }
 
