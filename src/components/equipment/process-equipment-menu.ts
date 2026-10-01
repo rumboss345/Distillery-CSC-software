@@ -1,6 +1,5 @@
 import { classifyProcessLiquid } from './process-floor-label';
 import { FERMENTATION_READY_MAX_BRIX, isBrixReadyForDistillation } from '../../lib/fermentation';
-import type { EquipmentType } from '../../types';
 
 export interface ProcessEquipmentMenuLink {
   key: string;
@@ -19,7 +18,7 @@ export interface ProcessEquipmentContextMenuModel {
 export interface ProcessEquipmentMenuSource {
   id: number;
   name: string;
-  equipment_type: EquipmentType;
+  equipment_type: string;
   active_batch_number?: string;
   active_latest_brix?: number | null;
   active_mash_status?: string | null;

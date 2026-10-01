@@ -1,10 +1,10 @@
-import type { EquipmentType } from '../../types';
+import { equipmentTypeLabel } from '../../lib/equipment';
 import type { FloorEquipmentView } from '../../types';
 
 export interface ProcessStage {
   key: string;
   label: string;
-  types: EquipmentType[];
+  types: string[];
 }
 
 export const PROCESS_STAGES: ProcessStage[] = [
@@ -31,10 +31,19 @@ export function groupEquipmentByStage(
   }).filter((g) => g.items.length > 0);
 
   const unassigned = items.filter((item) => !assigned.has(item.id));
-  if (unassigned.length > 0) {
+  const byType = new Map<string, (FloorEquipmentView & { plan_name?: string })[]>();
+  for (const item of unassigned) {
+    const list = byType.get(item.equipment_type) ?? [];
+    list.push(item);
+    byType.set(item.equipment_type, list);
+  }
+  const customTypes = [...byType.keys()].sort((a, b) => (
+    equipmentTypeLabel(a).localeCompare(equipmentTypeLabel(b), undefined, { sensitivity: 'base' })
+  ));
+  for (const type of customTypes) {
     groups.push({
-      stage: { key: 'misc', label: 'Miscellaneous', types: [] },
-      items: unassigned,
+      stage: { key: `type:${type}`, label: equipmentTypeLabel(type), types: [type] },
+      items: byType.get(type) ?? [],
     });
   }
 

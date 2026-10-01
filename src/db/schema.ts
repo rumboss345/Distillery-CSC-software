@@ -367,6 +367,12 @@ CREATE TABLE IF NOT EXISTS floor_equipment (
 
 CREATE INDEX IF NOT EXISTS idx_floor_equipment_plan ON floor_equipment(floor_plan_id);
 
+CREATE TABLE IF NOT EXISTS equipment_types (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS equipment_maintenance_log (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   floor_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id) ON DELETE CASCADE,
