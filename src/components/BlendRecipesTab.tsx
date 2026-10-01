@@ -424,10 +424,6 @@ export function BlendRecipesTab() {
                       });
                     }}
                   />
-                  <TargetProofCalculator
-                    targetAbv={form.target_abv}
-                    onSetTargetAbv={(target_abv) => setForm({ ...form, target_abv })}
-                  />
                 </div>
                 <div className="form-group">
                   <label>Target Brix</label>
@@ -439,6 +435,12 @@ export function BlendRecipesTab() {
                       ...form,
                       target_brix: e.target.value ? parseFloat(e.target.value) : null,
                     })}
+                  />
+                </div>
+                <div className="form-group full-width">
+                  <TargetProofCalculator
+                    targetAbv={form.target_abv}
+                    onSetTargetAbv={(target_abv) => setForm({ ...form, target_abv })}
                   />
                 </div>
                 <div className="form-group full-width">

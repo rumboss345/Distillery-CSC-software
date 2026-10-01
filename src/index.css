@@ -2277,7 +2277,7 @@ tr:hover td {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  max-width: 16rem;
+  max-width: 14rem;
   margin: 0.5rem 0;
 }
 
@@ -2296,6 +2296,7 @@ tr:hover td {
 }
 
 .target-proof-calc-row span {
+  flex-shrink: 0;
   color: var(--text);
   font-weight: 600;
 }
