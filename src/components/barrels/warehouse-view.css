@@ -32,6 +32,8 @@
 
 .warehouse-view .process-viewport .empty-state {
   color: #334155;
+  background: transparent;
+  border: none;
 }
 
 .warehouse-view .warehouse-barrel-row {

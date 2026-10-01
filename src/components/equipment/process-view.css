@@ -28,8 +28,9 @@
 
 .process-toolbar-hint {
   flex: 1;
-  font-size: 0.72rem;
-  color: #94a3b8;
+  font-size: 0.85rem;
+  color: #e2e8f0;
+  line-height: 1.35;
 }
 
 .process-toolbar-links {
@@ -41,11 +42,11 @@
 }
 
 .process-toolbar-link {
-  font-size: 0.72rem;
+  font-size: 0.8rem;
   font-weight: 600;
   letter-spacing: 0.03em;
   text-transform: uppercase;
-  color: #cbd5e1;
+  color: #f8fafc;
   text-decoration: none;
   padding: 0.2rem 0.35rem;
   border-radius: 4px;
@@ -115,26 +116,26 @@
 }
 
 .process-stage-label {
-  font-size: 0.72rem;
+  font-size: 0.8rem;
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #334155;
+  color: #1e293b;
 }
 
 .process-stage-count {
-  font-size: 0.68rem;
+  font-size: 0.78rem;
   font-weight: 600;
-  color: #64748b;
+  color: #475569;
 }
 
 .process-stage-assignees {
   flex: 1 1 100%;
-  font-size: 0.68rem;
+  font-size: 0.78rem;
   font-weight: 500;
   letter-spacing: 0;
   text-transform: none;
-  color: #64748b;
+  color: #475569;
 }
 
 .process-equipment-node {
