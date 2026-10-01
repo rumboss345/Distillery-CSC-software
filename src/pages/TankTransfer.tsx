@@ -79,6 +79,11 @@ export function TankTransfer() {
   );
   const fermentersWithWash = getFermentersWithWash();
   const discardedFermentations = getDiscardedFermentations();
+  const recentLeftovers = latestCompleted(
+    discardedFermentations,
+    (row) => row.discarded_date,
+    (row) => row.id,
+  );
   const [showTransferForm, setShowTransferForm] = useState(false);
   const [transferForm, setTransferForm] = useState(emptyTransferForm);
   const [showFermenterForm, setShowFermenterForm] = useState(false);
@@ -399,7 +404,12 @@ export function TankTransfer() {
 
       <div className="detail-panel">
         <h4>Fermenter leftovers</h4>
-        {discardedFermentations.length === 0 ? (
+        <RecentCompletedNote
+          hiddenCount={recentLeftovers.hiddenCount}
+          to="/reports/fermentation"
+          label="leftovers"
+        />
+        {recentLeftovers.total === 0 ? (
           <p style={{ color: 'var(--text-muted)' }}>No fermenter leftovers recorded yet.</p>
         ) : (
           <div className="table-wrap">
@@ -415,7 +425,7 @@ export function TankTransfer() {
                 </tr>
               </thead>
               <tbody>
-                {discardedFermentations.map((row) => (
+                {recentLeftovers.shown.map((row) => (
                   <tr key={row.id}>
                     <td>{formatDateDisplay(row.discarded_date)}</td>
                     <td>{row.fermenter_name}</td>
