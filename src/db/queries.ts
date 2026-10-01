@@ -11,7 +11,7 @@ import {
   storedCutTypeFromInflows,
   type StoredCutType,
 } from '../lib/collection-vessel-cuts';
-import { isFermenterSourcedRun, isTankSourcedRun, runUsesDestHoldingTank } from '../lib/distillation-run-types';
+import { isFermenterSourcedRun, isTankSourcedRun } from '../lib/distillation-run-types';
 import {
   chargeExceedsStillCapacity,
   plannedRecordSkipsEquipmentStatus,
@@ -1379,12 +1379,6 @@ export function defaultHighWinesTankId(excludeTankId?: number | null): number | 
   return preferred?.id ?? tanks[0]?.id ?? null;
 }
 
-export function defaultHeavyRumTankId(excludeTankId?: number | null): number | null {
-  const tanks = getHighWinesDestinationTanks(excludeTankId);
-  const preferred = tanks.find((t) => t.name.toLowerCase().includes('heavy rum'));
-  return preferred?.id ?? findTankByKeywords(['heavy rum', 'heavy'], excludeTankId) ?? tanks[0]?.id ?? null;
-}
-
 export function defaultLowWinesTankId(excludeTankId?: number | null): number | null {
   const tanks = getHighWinesDestinationTanks(excludeTankId);
   const preferred = tanks.find((t) => {
@@ -1421,7 +1415,6 @@ export function defaultDestTankIdForRunType(
   excludeTankId?: number | null,
 ): number | null {
   if (runType === 'low_wines') return defaultLowWinesTankId(excludeTankId);
-  if (runType === 'heavy_rum') return defaultHeavyRumTankId(excludeTankId);
   return null;
 }
 
@@ -2969,9 +2962,6 @@ export function saveDistillationRun(run: Omit<DistillationRun, 'id' | 'created_a
     if (isTankSourcedRun(runType) && run.source_holding_tank_equipment_id) {
       assertEquipmentUsableForProduction(run.source_holding_tank_equipment_id, 'Source tank');
     }
-    if (runUsesDestHoldingTank(runType) && run.dest_holding_tank_equipment_id) {
-      assertEquipmentUsableForProduction(run.dest_holding_tank_equipment_id, 'Destination tank');
-    }
   }
   const stillCapacity = getStillCapacityByName(run.still_name);
   if (chargeExceedsStillCapacity(run.charge_volume_gal, stillCapacity)) {
@@ -3011,7 +3001,7 @@ export function saveDistillationRun(run: Omit<DistillationRun, 'id' | 'created_a
         isFermenterSourcedRun(runType) ? run.source_mash_batch_id : null,
         isFermenterSourcedRun(runType) ? run.source_fermenter_equipment_id : null,
         isTankSourcedRun(runType) ? run.source_holding_tank_equipment_id : null,
-        runUsesDestHoldingTank(runType) ? run.dest_holding_tank_equipment_id : null,
+        null,
         run.still_name,
         runDate,
         run.charge_volume_gal,
@@ -3039,7 +3029,7 @@ export function saveDistillationRun(run: Omit<DistillationRun, 'id' | 'created_a
         isFermenterSourcedRun(runType) ? run.source_mash_batch_id : null,
         isFermenterSourcedRun(runType) ? run.source_fermenter_equipment_id : null,
         isTankSourcedRun(runType) ? run.source_holding_tank_equipment_id : null,
-        runUsesDestHoldingTank(runType) ? run.dest_holding_tank_equipment_id : null,
+        null,
         run.still_name,
         runDate,
         run.charge_volume_gal,

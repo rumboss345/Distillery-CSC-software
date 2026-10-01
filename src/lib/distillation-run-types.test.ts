@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   isFermenterSourcedRun,
   isTankSourcedRun,
-  runUsesDestHoldingTank,
 } from './distillation-run-types';
 
 describe('distillation-run-types', () => {
@@ -16,11 +15,5 @@ describe('distillation-run-types', () => {
     expect(isTankSourcedRun('low_wines')).toBe(true);
     expect(isTankSourcedRun('wash')).toBe(false);
     expect(isTankSourcedRun('heavy_rum')).toBe(false);
-  });
-
-  it('tracks destination tanks for heavy rum runs only', () => {
-    expect(runUsesDestHoldingTank('low_wines')).toBe(false);
-    expect(runUsesDestHoldingTank('heavy_rum')).toBe(true);
-    expect(runUsesDestHoldingTank('wash')).toBe(false);
   });
 });
