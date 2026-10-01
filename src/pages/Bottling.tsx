@@ -14,6 +14,7 @@ import {
   useRefreshKey,
 } from '../db/queries';
 import { DatePicker } from '../components/DatePicker';
+import { limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
 import { formatDateDisplay } from '../lib/date-input';
 import { latestCompleted } from '../lib/recent-completed';
 import { localIsoDate } from '../lib/planned-event-date';
@@ -629,7 +630,17 @@ export function Bottling() {
 
             <div className="form-group">
               <label>Final ABV (%)</label>
-              <input type="number" step="0.1" value={form.final_abv || ''} onChange={(e) => setForm({ ...form, final_abv: parseFloat(e.target.value) || 0 })} />
+              <input
+                type="number"
+                step="0.1"
+                min={0}
+                max={MAX_ENTERED_ABV}
+                value={form.final_abv || ''}
+                onChange={(e) => {
+                  const limited = limitAbvInput(e.target.value);
+                  setForm({ ...form, final_abv: limited.trim() === '' ? 0 : parseFloat(limited) || 0 });
+                }}
+              />
             </div>
             <div className="form-group full-width">
               <label>Notes</label>

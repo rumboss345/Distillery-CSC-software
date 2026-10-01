@@ -1,3 +1,4 @@
+import { abvExceedsLimit, abvLimitMessage, limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
 import {
   applyAbvTemperatureCorrection,
   STANDARD_GAUGING_TEMP_F,
@@ -33,9 +34,11 @@ export function AbvTemperatureInput({
         <input
           type="number"
           step="0.1"
+          min={0}
+          max={MAX_ENTERED_ABV}
           placeholder={abvPlaceholder}
           value={abvValue}
-          onChange={(e) => onAbvChange(e.target.value)}
+          onChange={(e) => onAbvChange(limitAbvInput(e.target.value))}
         />
       </label>
       <label>
@@ -48,6 +51,9 @@ export function AbvTemperatureInput({
           onChange={(e) => onTemperatureChange(e.target.value)}
         />
       </label>
+      {abvExceedsLimit(correction?.correctedAbv) && (
+        <p className="auth-error">{abvLimitMessage()}</p>
+      )}
       {correction?.applied && (
         <p className="wizard-result-banner abv-temp-correction">
           Corrected to {STANDARD_GAUGING_TEMP_F} °F:{' '}

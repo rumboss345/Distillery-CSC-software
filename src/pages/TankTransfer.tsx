@@ -26,6 +26,7 @@ import {
   saveHoldingTankTransfer,
   useRefreshKey,
 } from '../db/queries';
+import { limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
 import { formatDateDisplay } from '../lib/date-input';
 import { localIsoDate } from '../lib/planned-event-date';
@@ -352,8 +353,8 @@ export function TankTransfer() {
       alert('Enter the gallons on hand.');
       return;
     }
-    if (!Number.isFinite(abv) || abv < 0 || abv > 100) {
-      alert('Enter an ABV from 0 to 100.');
+    if (!Number.isFinite(abv) || abv < 0 || abv > MAX_ENTERED_ABV) {
+      alert('Enter an ABV from 0 to 99.');
       return;
     }
     const tank = tanksWithContents.find((item) => item.id === onHandTankId);
@@ -876,10 +877,10 @@ export function TankTransfer() {
                 id="on-hand-abv"
                 type="number"
                 min={0}
-                max={100}
+                max={MAX_ENTERED_ABV}
                 step="0.1"
                 value={onHandForm.abv}
-                onChange={(e) => setOnHandForm({ ...onHandForm, abv: e.target.value })}
+                onChange={(e) => setOnHandForm({ ...onHandForm, abv: limitAbvInput(e.target.value) })}
               />
             </div>
             <div className="form-group full-width">

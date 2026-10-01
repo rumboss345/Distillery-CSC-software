@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BlendAbvConfirmation } from './BlendAbvConfirmation';
+import { limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
 import { computeRecipeTheoreticalAbv } from '../lib/blend-abv-confirm';
 import {
   deleteBlendRecipe,
@@ -411,11 +412,16 @@ export function BlendRecipesTab() {
                   <input
                     type="number"
                     step="0.1"
+                    min={0}
+                    max={MAX_ENTERED_ABV}
                     value={form.target_abv ?? ''}
-                    onChange={(e) => setForm({
-                      ...form,
-                      target_abv: e.target.value ? parseFloat(e.target.value) : null,
-                    })}
+                    onChange={(e) => {
+                      const limited = limitAbvInput(e.target.value);
+                      setForm({
+                        ...form,
+                        target_abv: limited.trim() === '' ? null : parseFloat(limited),
+                      });
+                    }}
                   />
                 </div>
                 <div className="form-group">
@@ -533,8 +539,15 @@ export function BlendRecipesTab() {
                           <input
                             type="number"
                             step="0.1"
+                            min={0}
+                            max={MAX_ENTERED_ABV}
                             value={source.abv || ''}
-                            onChange={(e) => updateSpiritSource(index, { abv: parseFloat(e.target.value) || 0 })}
+                            onChange={(e) => {
+                              const limited = limitAbvInput(e.target.value);
+                              updateSpiritSource(index, {
+                                abv: limited.trim() === '' ? 0 : parseFloat(limited) || 0,
+                              });
+                            }}
                           />
                         </div>
                       </div>
@@ -686,12 +699,15 @@ export function BlendRecipesTab() {
                               type="number"
                               step="0.1"
                               min="0"
-                              max="100"
+                              max={MAX_ENTERED_ABV}
                               placeholder="0 if non-alcoholic"
                               value={ingredient.abv ?? ''}
-                              onChange={(e) => updateIngredient(index, {
-                                abv: e.target.value === '' ? null : parseFloat(e.target.value) || 0,
-                              })}
+                              onChange={(e) => {
+                                const limited = limitAbvInput(e.target.value);
+                                updateIngredient(index, {
+                                  abv: limited.trim() === '' ? null : parseFloat(limited) || 0,
+                                });
+                              }}
                             />
                             <p className="field-hint">
                               Optional. Counts toward calculated proof when the flavoring contains alcohol.
