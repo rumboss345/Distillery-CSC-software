@@ -25,8 +25,6 @@ import {
   getLatestFermentationBrix,
   getChargeableHoldingTanks,
   getHoldingTanks,
-  getHighWinesDestinationTanks,
-  defaultDestTankIdForRunType,
   defaultTankForCutType,
   getCollectionVesselStoredCutType,
   getCollectionVessels,
@@ -89,7 +87,7 @@ const emptyRun = (runType: DistillationRunType = 'wash'): Omit<DistillationRun, 
   source_mash_batch_id: null,
   source_fermenter_equipment_id: null,
   source_holding_tank_equipment_id: null,
-  dest_holding_tank_equipment_id: runType === 'low_wines' ? null : defaultDestTankIdForRunType(runType),
+  dest_holding_tank_equipment_id: null,
   still_name: '',
   run_date: localIsoDate(),
   charge_volume_gal: 0,
@@ -188,10 +186,6 @@ export function Distillation() {
     key,
   ]);
 
-  const destTanks = runForm.run_type === 'heavy_rum'
-    ? getHighWinesDestinationTanks()
-    : [];
-
   const chargeableSourceTanks = isTankSourcedRun(runForm.run_type)
     ? getChargeableHoldingTanks(editRunId, equipmentListOptions)
     : [];
@@ -274,10 +268,6 @@ export function Distillation() {
     setChargeTempF(tempF);
     const corrected = correctedAbvFromInputs(observed, tempF);
     setRunForm((prev) => ({ ...prev, charge_abv: corrected }));
-  };
-
-  const handleDestTankChange = (tankId: number | null) => {
-    setRunForm({ ...runForm, dest_holding_tank_equipment_id: tankId });
   };
 
   const handleRunStatusChange = (status: RunStatus) => {
@@ -487,10 +477,6 @@ export function Distillation() {
         && !runForm.source_fermenter_equipment_id
       ) {
         alert('Select the fermenter to charge from.');
-        return;
-      }
-      if (runForm.run_type === 'heavy_rum' && !runForm.dest_holding_tank_equipment_id) {
-        alert('Select the heavy rum storage tank.');
         return;
       }
       if (
@@ -1066,22 +1052,6 @@ export function Distillation() {
                       No fermenters with wash ready to charge. Start a fermentation from a wash batch; wash stays in the fermenter until a low wine or heavy rum run is running or complete.
                     </p>
                   )}
-                  {runForm.run_type === 'heavy_rum' && (
-                    <div className="form-group" style={{ marginTop: '0.75rem' }}>
-                      <label>Heavy Rum Storage Tank</label>
-                      <select
-                        value={runForm.dest_holding_tank_equipment_id ?? ''}
-                        onChange={(e) => handleDestTankChange(e.target.value ? parseInt(e.target.value) : null)}
-                      >
-                        <option value="">— Select tank —</option>
-                        {destTanks.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {tankOptionLabel(t)}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
                 </>
               </div>
             ) : (
@@ -1358,7 +1328,7 @@ export function Distillation() {
                 {runForm.run_type === 'heavy_rum' ? (
                   <>
                     {' '}Heavy rum deducts the recorded <strong>charge volume</strong> when the run is <strong>running</strong> or <strong>complete</strong>; remaining wash stays in the fermenter.
-                    Hearts cuts go into the <strong>Heavy Rum Storage Tank</strong> you select.
+                    Choose where each cut is collected when you record cuts.
                     {' '}The fermenter can stay dirty until it is cleaned; that does not block marking this run complete.
                   </>
                 ) : (

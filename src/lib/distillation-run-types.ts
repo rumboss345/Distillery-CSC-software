@@ -24,10 +24,6 @@ export function isTankSourcedRun(runType: DistillationRunType): boolean {
   return runType === 'low_wines';
 }
 
-export function runUsesDestHoldingTank(runType: DistillationRunType): boolean {
-  return runType === 'heavy_rum';
-}
-
 export function runTypeLabel(runType: DistillationRunType | string | undefined): string {
   const key = (runType ?? 'wash') as DistillationRunType;
   return RUN_TYPE_LABELS[key] ?? String(runType);
