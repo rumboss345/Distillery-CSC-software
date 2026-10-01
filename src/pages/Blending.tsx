@@ -33,6 +33,7 @@ import { BlendAbvConfirmation } from '../components/BlendAbvConfirmation';
 import { BlendProductionWorksheet } from '../components/BlendProductionWorksheet';
 import { AssigneeCell, AssigneeSelect } from '../components/AssigneeSelect';
 import { DatePicker } from '../components/DatePicker';
+import { AdminCredentialConfirmModal } from '../components/AdminCredentialConfirmModal';
 import { Modal } from '../components/Modal';
 import { useAuth } from '../context/AuthContext';
 import { defaultAssignee } from '../lib/assignee';
@@ -104,7 +105,7 @@ const STEP_HINTS: Record<number, string> = {
   5: 'Confirm the calculated proof matches your expectations before saving or running a lab trial.',
   6: 'Enter what the lab actually measured. If it is off, use Correct This Batch below.',
   7: 'Once you are satisfied with the lab results, approve the recipe for production.',
-  8: 'Choose where the finished batch goes, then produce. Spirit is pulled from source tanks and ingredients are deducted. Admins can undo production afterward to restore tanks and inventory.',
+  8: 'Choose where the finished batch goes, then produce. Spirit is pulled from source tanks and ingredients are deducted. Undoing production requires an administrator email and password.',
   9: 'Weigh or measure the finished batch, then save. Use weight on a scale if that is how you verify yield.',
 };
 
@@ -328,7 +329,6 @@ function buildSavePayload(
 
 export function Blending() {
   const { user } = useAuth();
-  const isAdmin = user?.role === 'admin';
   const [searchParams, setSearchParams] = useSearchParams();
   const { key, refresh } = useRefreshKey();
   const blends = getBlendProducts();
@@ -338,6 +338,7 @@ export function Blending() {
   const [showWizard, setShowWizard] = useState(false);
   const [wizardStep, setWizardStep] = useState(1);
   const [editId, setEditId] = useState<number | undefined>();
+  const [undoTarget, setUndoTarget] = useState<{ id: number; label: string } | null>(null);
   const [form, setForm] = useState<FormulaForm>(emptyProduct());
   const [spiritSources, setSpiritSources] = useState<SpiritSourceRow[]>([emptySpiritSource()]);
   const [ingredients, setIngredients] = useState<BlendIngredientInput[]>([]);
@@ -1185,33 +1186,15 @@ export function Blending() {
     }
   };
 
-  const confirmUndoProduce = (batchLabel: string) => confirm(
-    `Undo production for "${batchLabel}"?\n\n`
-    + 'Spirit will return to source tanks (and barrels if used), ingredients go back to inventory, '
-    + 'and the finished batch will be removed from the output tank ledger. '
-    + 'The batch returns to approved so you can fix or re-check before producing again.',
-  );
-
-  const handleUndoProduce = () => {
-    if (!editId || !isAdmin) return;
-    if (!confirmUndoProduce(form.product_name)) return;
-    try {
-      undoBlendProduction(editId);
-      setForm((f) => ({ ...f, status: 'approved' }));
-      setWizardStep(8);
-      refresh();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : 'Could not undo production.');
-    }
+  const requestUndoProduce = (id: number, label: string) => {
+    setUndoTarget({ id, label });
   };
 
-  const handleUndoProduceFromList = (blend: (typeof blends)[number]) => {
-    if (!isAdmin) return;
-    if (!confirmUndoProduce(blend.product_name)) return;
+  const performUndoProduce = (id: number) => {
     try {
-      undoBlendProduction(blend.id);
+      undoBlendProduction(id);
       refresh();
-      if (showWizard && editId === blend.id) {
+      if (showWizard && editId === id) {
         setForm((f) => ({ ...f, status: 'approved' }));
         setWizardStep(8);
       }
@@ -2107,13 +2090,13 @@ export function Blending() {
                   {getHoldingTanks().find((t) => t.id === form.output_holding_tank_equipment_id)?.name ?? 'holding tank'}.
                 </p>
               ) : null}
-              {isAdmin && form.status === 'executed' && (
+              {form.status === 'executed' && editId != null && (
                 <div className="wizard-admin-actions no-print">
-                  <button type="button" className="btn btn-secondary" onClick={handleUndoProduce}>
-                    Undo production (admin)
+                  <button type="button" className="btn btn-secondary" onClick={() => requestUndoProduce(editId, form.product_name)}>
+                    Undo production
                   </button>
                   <p className="field-hint">
-                    Restores source tanks and ingredient stock; removes this batch from the output tank ledger.
+                    Requires an administrator email and password. Restores source tanks and ingredient stock, and removes this batch from the output tank ledger.
                   </p>
                 </div>
               )}
@@ -2290,11 +2273,11 @@ export function Blending() {
                     <button className="btn btn-sm btn-primary" onClick={() => openContinue(b)}>
                       {b.status === 'executed' || b.status === 'bottled' || b.status === 'blended' ? 'View' : 'Continue'}
                     </button>
-                    {isAdmin && b.status === 'executed' && (
+                    {b.status === 'executed' && (
                       <button
                         type="button"
                         className="btn btn-sm btn-secondary"
-                        onClick={() => handleUndoProduceFromList(b)}
+                        onClick={() => requestUndoProduce(b.id, b.product_name)}
                       >
                         Undo produce
                       </button>
@@ -2309,6 +2292,20 @@ export function Blending() {
           </table>
         </div>
         </>
+      )}
+
+      {undoTarget && (
+        <AdminCredentialConfirmModal
+          title="Undo blend production"
+          message={`Undo production for "${undoTarget.label}"? Spirit returns to the source tanks and barrels, ingredients go back to inventory, and the finished batch is removed from the output tank. Enter an administrator email and password.`}
+          confirmLabel="Undo production"
+          onClose={() => setUndoTarget(null)}
+          onConfirmed={() => {
+            const id = undoTarget.id;
+            setUndoTarget(null);
+            performUndoProduce(id);
+          }}
+        />
       )}
 
       {showWizard && (
