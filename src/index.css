@@ -2258,6 +2258,32 @@ tr:hover td {
   margin: 0.5rem 0;
 }
 
+.target-proof-calc {
+  margin: 0 0 0.85rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-card));
+}
+
+.target-proof-calc-title {
+  margin: 0 0 0.35rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.target-proof-calc-result {
+  margin: 0 0 0.65rem;
+  font-size: 1rem;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.target-proof-calc .field-hint {
+  margin: 0 0 0.65rem;
+}
+
 .wizard-abv-checkbox {
   display: flex;
   align-items: flex-start;

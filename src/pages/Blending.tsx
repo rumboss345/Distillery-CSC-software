@@ -1920,10 +1920,7 @@ export function Blending() {
               targetAbv={form.target_abv}
               confirmed={abvConfirmed}
               onConfirmChange={setAbvConfirmed}
-              onApplyCalculatedTarget={() => setForm({
-                ...form,
-                target_abv: Math.round(formulation.theoretical.abv * 10) / 10,
-              })}
+              onCalculateProofingWater={handleCalculateWater}
             />
             <p className="field-hint">Next: run a lab test on a trial batch, or approve if you are confident in the numbers.</p>
           </div>

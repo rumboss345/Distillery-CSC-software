@@ -2,6 +2,7 @@ import {
   ABV_CONFIRM_TOLERANCE,
   abvMatchesTarget,
 } from '../lib/blend-abv-confirm';
+import { measureAlternate } from '../lib/blending';
 
 export interface BlendAbvConfirmationProps {
   calculatedAbv: number | null;
@@ -9,7 +10,7 @@ export interface BlendAbvConfirmationProps {
   targetAbv: number | null;
   confirmed: boolean;
   onConfirmChange: (confirmed: boolean) => void;
-  onApplyCalculatedTarget?: () => void;
+  onCalculateProofingWater?: () => void;
 }
 
 export function BlendAbvConfirmation({
@@ -18,7 +19,7 @@ export function BlendAbvConfirmation({
   targetAbv,
   confirmed,
   onConfirmChange,
-  onApplyCalculatedTarget,
+  onCalculateProofingWater,
 }: BlendAbvConfirmationProps) {
   if (calculatedAbv == null) {
     return (
@@ -47,7 +48,7 @@ export function BlendAbvConfirmation({
           Target proof: <strong>{targetAbv.toFixed(1)}%</strong>
           {delta != null && !onTarget && (
             <span className="wizard-abv-delta">
-              {' '}— {Math.abs(delta).toFixed(1)}% {delta > 0 ? 'above' : 'below'} calculated
+              {' '}— {Math.abs(delta).toFixed(1)}% {delta > 0 ? 'above' : 'below'} target
             </span>
           )}
           {onTarget && (
@@ -55,14 +56,24 @@ export function BlendAbvConfirmation({
           )}
         </p>
       )}
-      {!onTarget && targetAbv != null && onApplyCalculatedTarget && (
-        <button
-          type="button"
-          className="btn btn-sm btn-secondary wizard-abv-apply"
-          onClick={onApplyCalculatedTarget}
-        >
-          Use calculated proof ({calculatedAbv.toFixed(1)}%) as target
-        </button>
+      {!onTarget && targetAbv != null && calculatedAbv > targetAbv && onCalculateProofingWater && (
+        <>
+          <button
+            type="button"
+            className="btn btn-sm btn-secondary wizard-abv-apply"
+            onClick={onCalculateProofingWater}
+          >
+            Calculate proofing water for {targetAbv.toFixed(1)}%
+          </button>
+          <p className="field-hint">
+            Fills in the gallons of water that bring this blend down to the target proof.
+          </p>
+        </>
+      )}
+      {!onTarget && targetAbv != null && calculatedAbv < targetAbv && (
+        <p className="field-hint">
+          Proofing water lowers the proof. This blend is already below the target, so water will not bring it up.
+        </p>
       )}
       <label className="checkbox-label wizard-abv-checkbox">
         <input
@@ -72,6 +83,48 @@ export function BlendAbvConfirmation({
         />
         I confirm {calculatedAbv.toFixed(1)}% ABV is correct for this recipe
       </label>
+    </div>
+  );
+}
+
+export function ProofingWaterSuggestion({
+  targetAbv,
+  waterGal,
+  onApply,
+}: {
+  targetAbv: number;
+  waterGal: number | null;
+  onApply: () => void;
+}) {
+  const weight = waterGal != null && waterGal > 0.001
+    ? measureAlternate({ amount: waterGal, unit: 'gal', ingredient_type: 'water' })
+    : null;
+  const proof = Math.round(targetAbv * 2 * 10) / 10;
+
+  return (
+    <div className="target-proof-calc">
+      <p className="target-proof-calc-title">Proofing water for {targetAbv.toFixed(1)}% ABV</p>
+      {waterGal != null && waterGal > 0.001 ? (
+        <p className="target-proof-calc-result">
+          Add <strong>{waterGal.toFixed(2)} gal</strong>
+          {weight ? ` (${weight.label})` : ''} of proofing water to reach {targetAbv.toFixed(1)}% ABV
+          {' '}({proof} proof). Sugar and flavorings already in the recipe are included.
+        </p>
+      ) : (
+        <p className="field-hint">
+          Enter spirit volume and ABV to calculate the water that brings the blend to this proof.
+        </p>
+      )}
+      <button
+        type="button"
+        className="btn btn-sm btn-secondary"
+        onClick={onApply}
+        disabled={waterGal == null || waterGal <= 0.001}
+      >
+        {waterGal != null && waterGal > 0.001
+          ? `Use ${waterGal.toFixed(2)} gal as the proofing water additive`
+          : 'Calculate proofing water'}
+      </button>
     </div>
   );
 }

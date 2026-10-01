@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BlendAbvConfirmation } from './BlendAbvConfirmation';
+import { BlendAbvConfirmation, ProofingWaterSuggestion } from './BlendAbvConfirmation';
 import { limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
-import { computeRecipeTheoreticalAbv } from '../lib/blend-abv-confirm';
+import {
+  ABV_CONFIRM_TOLERANCE,
+  computeRecipeTheoreticalAbv,
+  ingredientsWithProofingWater,
+  proofingWaterForRecipe,
+} from '../lib/blend-abv-confirm';
 import {
   deleteBlendRecipe,
   getBlendRecipes,
@@ -116,6 +121,15 @@ export function BlendRecipesTab() {
     [syncedSpiritSources, ingredients],
   );
 
+  const proofingWater = useMemo(() => {
+    if (form.target_abv == null) return null;
+    return proofingWaterForRecipe(
+      syncedSpiritSources.map(toSpiritRecipeInput),
+      ingredients,
+      form.target_abv,
+    );
+  }, [syncedSpiritSources, ingredients, form.target_abv]);
+
   useEffect(() => {
     setAbvConfirmed(false);
   }, [calculatedRecipe.abv, calculatedRecipe.volumeGal, form.target_abv]);
@@ -167,6 +181,23 @@ export function BlendRecipesTab() {
     );
     setAbvConfirmed(false);
     setShowForm(true);
+  };
+
+  const handleCalculateProofingWater = () => {
+    if (form.target_abv == null) {
+      alert('Enter the target proof first.');
+      return;
+    }
+    const solved = proofingWaterForRecipe(
+      syncedSpiritSources.map(toSpiritRecipeInput),
+      ingredients,
+      form.target_abv,
+    );
+    if (!solved) {
+      alert('Could not calculate proofing water. Enter spirit volume and ABV, and a target proof at or below that strength.');
+      return;
+    }
+    setIngredients((prev) => ingredientsWithProofingWater(prev, solved.waterGal));
   };
 
   const handleSave = () => {
@@ -423,6 +454,7 @@ export function BlendRecipesTab() {
                       });
                     }}
                   />
+                  <p className="field-hint">The proof you want to bottle. Proofing water is calculated to reach this.</p>
                 </div>
                 <div className="form-group">
                   <label>Target Brix</label>
@@ -574,6 +606,15 @@ export function BlendRecipesTab() {
                   + Add additive
                 </button>
               </div>
+              {form.target_abv != null
+                && calculatedRecipe.abv != null
+                && calculatedRecipe.abv > form.target_abv + ABV_CONFIRM_TOLERANCE && (
+                <ProofingWaterSuggestion
+                  targetAbv={form.target_abv}
+                  waterGal={proofingWater?.waterGal ?? null}
+                  onApply={handleCalculateProofingWater}
+                />
+              )}
               {ingredients.length === 0 ? (
                 <p className="field-hint blend-recipe-empty-hint">No additives — add water, sugar, or flavorings if this recipe needs them.</p>
               ) : (
@@ -729,12 +770,6 @@ export function BlendRecipesTab() {
                 targetAbv={form.target_abv}
                 confirmed={abvConfirmed}
                 onConfirmChange={setAbvConfirmed}
-                onApplyCalculatedTarget={() => setForm({
-                  ...form,
-                  target_abv: calculatedRecipe.abv != null
-                    ? Math.round(calculatedRecipe.abv * 10) / 10
-                    : null,
-                })}
               />
             </section>
 
