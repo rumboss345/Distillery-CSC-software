@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { equipmentTypeNameError, normalizeEquipmentTypeName } from './equipment-type';
+import { equipmentTypeDeleteError, equipmentTypeNameError, normalizeEquipmentTypeName } from './equipment-type';
 
 describe('equipment type names', () => {
   it('collapses extra spaces', () => {
@@ -22,5 +22,13 @@ describe('equipment type names', () => {
 
   it('accepts a new type name', () => {
     expect(equipmentTypeNameError('Thumper', ['Gin basket'])).toBeNull();
+  });
+
+  it('blocks deleting a type that equipment still uses', () => {
+    expect(equipmentTypeDeleteError('Thumper', 0)).toBeNull();
+    expect(equipmentTypeDeleteError('Thumper', 1)).toBe(
+      '"Thumper" is used by 1 piece of equipment. Change those before deleting this type.',
+    );
+    expect(equipmentTypeDeleteError('Gin basket', 3)).toMatch(/3 pieces of equipment/);
   });
 });

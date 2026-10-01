@@ -22,3 +22,14 @@ export function equipmentTypeNameError(name: string, existingNames: string[]): s
 
   return null;
 }
+
+/** Custom types can be removed when no equipment still uses them. */
+export function equipmentTypeDeleteError(name: string, equipmentCount: number): string | null {
+  if (equipmentCount > 0) {
+    const pieces = equipmentCount === 1
+      ? '1 piece of equipment'
+      : `${equipmentCount} pieces of equipment`;
+    return `"${name}" is used by ${pieces}. Change those before deleting this type.`;
+  }
+  return null;
+}
