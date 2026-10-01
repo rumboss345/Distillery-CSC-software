@@ -9,7 +9,7 @@ export interface BlendAbvConfirmationProps {
   targetAbv: number | null;
   confirmed: boolean;
   onConfirmChange: (confirmed: boolean) => void;
-  onApplyCalculatedTarget?: () => void;
+  onCalculateProofingWater?: () => void;
 }
 
 export function BlendAbvConfirmation({
@@ -18,7 +18,7 @@ export function BlendAbvConfirmation({
   targetAbv,
   confirmed,
   onConfirmChange,
-  onApplyCalculatedTarget,
+  onCalculateProofingWater,
 }: BlendAbvConfirmationProps) {
   if (calculatedAbv == null) {
     return (
@@ -47,7 +47,7 @@ export function BlendAbvConfirmation({
           Target proof: <strong>{targetAbv.toFixed(1)}%</strong>
           {delta != null && !onTarget && (
             <span className="wizard-abv-delta">
-              {' '}— {Math.abs(delta).toFixed(1)}% {delta > 0 ? 'above' : 'below'} calculated
+              {' '}— {Math.abs(delta).toFixed(1)}% {delta > 0 ? 'above' : 'below'} target
             </span>
           )}
           {onTarget && (
@@ -55,14 +55,24 @@ export function BlendAbvConfirmation({
           )}
         </p>
       )}
-      {!onTarget && targetAbv != null && onApplyCalculatedTarget && (
-        <button
-          type="button"
-          className="btn btn-sm btn-secondary wizard-abv-apply"
-          onClick={onApplyCalculatedTarget}
-        >
-          Use calculated proof ({calculatedAbv.toFixed(1)}%) as target
-        </button>
+      {!onTarget && targetAbv != null && calculatedAbv > targetAbv && onCalculateProofingWater && (
+        <>
+          <button
+            type="button"
+            className="btn btn-sm btn-secondary wizard-abv-apply"
+            onClick={onCalculateProofingWater}
+          >
+            Calculate proofing water for {targetAbv.toFixed(1)}%
+          </button>
+          <p className="field-hint">
+            Fills in the gallons of water that bring this recipe down to the target proof.
+          </p>
+        </>
+      )}
+      {!onTarget && targetAbv != null && calculatedAbv < targetAbv && (
+        <p className="field-hint">
+          Proofing water lowers the proof. This blend is already below the target, so water will not bring it up.
+        </p>
       )}
       <label className="checkbox-label wizard-abv-checkbox">
         <input

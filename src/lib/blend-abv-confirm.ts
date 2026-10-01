@@ -1,4 +1,4 @@
-import { computeTheoreticalBlend, type AdditiveInput, type SpiritSourceInput } from './blend-formulation';
+import { computeTheoreticalBlend, solveWaterForTargetAbv, type AdditiveInput, type SpiritSourceInput } from './blend-formulation';
 import type { BlendIngredientInput, BlendRecipeSpiritSourceInput } from '../types';
 
 export const ABV_CONFIRM_TOLERANCE = 0.3;
@@ -49,4 +49,45 @@ export function computeRecipeTheoreticalAbv(
     return { abv: null, volumeGal: null };
   }
   return { abv: result.abv, volumeGal: result.volumeGal };
+}
+
+/** Replace recipe water with the gallons needed to hit the target proof. */
+export function ingredientsWithProofingWater(
+  ingredients: BlendIngredientInput[],
+  waterGal: number,
+): BlendIngredientInput[] {
+  const existing = ingredients.find((row) => row.ingredient_type === 'water');
+  const water: BlendIngredientInput = {
+    ingredient_type: 'water',
+    name: existing?.name.trim() || 'Proofing water',
+    amount: Math.round(waterGal * 1000) / 1000,
+    unit: 'gal',
+    abv: null,
+    cost_per_unit: existing?.cost_per_unit ?? null,
+    lot_number: existing?.lot_number ?? '',
+    inventory_item_id: null,
+    notes: existing?.notes ?? '',
+  };
+  return [water, ...ingredients.filter((row) => row.ingredient_type !== 'water')];
+}
+
+/**
+ * Gallons of proofing water that bring the recipe to the target ABV.
+ * Water only lowers proof, so a target above the undiluted blend cannot be solved.
+ */
+export function proofingWaterForRecipe(
+  spirits: BlendRecipeSpiritSourceInput[],
+  ingredients: BlendIngredientInput[],
+  targetAbv: number,
+): { waterGal: number; abv: number } | null {
+  const solved = solveWaterForTargetAbv(
+    toRecipeSpiritInputs(spirits),
+    toRecipeAdditiveInputs(ingredients.filter((row) => row.ingredient_type !== 'water')),
+    targetAbv,
+  );
+  if (!solved) return null;
+  if (solved.waterGal <= 0.001 && solved.result.abv + ABV_CONFIRM_TOLERANCE < targetAbv) {
+    return null;
+  }
+  return { waterGal: solved.waterGal, abv: solved.result.abv };
 }

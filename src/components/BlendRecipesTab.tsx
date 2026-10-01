@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BlendAbvConfirmation } from './BlendAbvConfirmation';
 import { limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
-import { computeRecipeTheoreticalAbv } from '../lib/blend-abv-confirm';
+import {
+  computeRecipeTheoreticalAbv,
+  ingredientsWithProofingWater,
+  proofingWaterForRecipe,
+} from '../lib/blend-abv-confirm';
 import {
   deleteBlendRecipe,
   getBlendRecipes,
@@ -167,6 +171,23 @@ export function BlendRecipesTab() {
     );
     setAbvConfirmed(false);
     setShowForm(true);
+  };
+
+  const handleCalculateProofingWater = () => {
+    if (form.target_abv == null) {
+      alert('Enter the target proof first.');
+      return;
+    }
+    const solved = proofingWaterForRecipe(
+      syncedSpiritSources.map(toSpiritRecipeInput),
+      ingredients,
+      form.target_abv,
+    );
+    if (!solved) {
+      alert('Could not calculate proofing water. Enter spirit volume and ABV, and a target proof at or below that strength.');
+      return;
+    }
+    setIngredients((prev) => ingredientsWithProofingWater(prev, solved.waterGal));
   };
 
   const handleSave = () => {
@@ -423,6 +444,7 @@ export function BlendRecipesTab() {
                       });
                     }}
                   />
+                  <p className="field-hint">The proof you want to bottle. Proofing water is calculated to reach this.</p>
                 </div>
                 <div className="form-group">
                   <label>Target Brix</label>
@@ -729,12 +751,7 @@ export function BlendRecipesTab() {
                 targetAbv={form.target_abv}
                 confirmed={abvConfirmed}
                 onConfirmChange={setAbvConfirmed}
-                onApplyCalculatedTarget={() => setForm({
-                  ...form,
-                  target_abv: calculatedRecipe.abv != null
-                    ? Math.round(calculatedRecipe.abv * 10) / 10
-                    : null,
-                })}
+                onCalculateProofingWater={handleCalculateProofingWater}
               />
             </section>
 
