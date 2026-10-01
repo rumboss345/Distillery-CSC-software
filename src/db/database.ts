@@ -1114,6 +1114,27 @@ function migrateAdvancedBlending(): void {
   db.run(`
     UPDATE blend_products SET status = 'executed' WHERE status = 'blended'
   `);
+
+  const hasOpeningBalances = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='holding_tank_opening_balances'",
+  );
+  if (!hasOpeningBalances) {
+    db.run(`
+      CREATE TABLE IF NOT EXISTS holding_tank_opening_balances (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tank_equipment_id INTEGER NOT NULL UNIQUE REFERENCES floor_equipment(id),
+        volume_gal REAL NOT NULL,
+        alcohol_gal REAL NOT NULL,
+        measured_volume_gal REAL NOT NULL,
+        measured_abv REAL NOT NULL,
+        recorded_at TEXT NOT NULL,
+        notes TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
+    db.run('CREATE INDEX IF NOT EXISTS idx_tank_opening_tank ON holding_tank_opening_balances(tank_equipment_id)');
+    persistDb();
+  }
 }
 
 const DB_STORAGE_KEY = 'distillery-tracker-db-v5';

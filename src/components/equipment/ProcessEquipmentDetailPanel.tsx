@@ -24,6 +24,7 @@ const INTAKE_KIND_LABELS: Record<HoldingTankIntakeEntry['kind'], string> = {
   transfer: 'Transfer',
   blend: 'Blend',
   stillage: 'Stillage',
+  opening: 'On hand',
 };
 
 function intakeAbvLabel(entry: HoldingTankIntakeEntry): string {
