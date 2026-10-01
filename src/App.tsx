@@ -15,6 +15,7 @@ import { Blending } from './pages/Blending';
 import { Inventory } from './pages/Inventory';
 import { ReportsLayout } from './pages/reports/ReportsLayout';
 import { SummaryReport } from './pages/reports/SummaryReport';
+import { WashReport } from './pages/reports/WashReport';
 import { FermentationReport } from './pages/reports/FermentationReport';
 import { DistillationReport } from './pages/reports/DistillationReport';
 import { TankInventoryReport } from './pages/reports/TankInventoryReport';
@@ -77,6 +78,7 @@ function AppContent() {
             <Route path="/floor-plan" element={<FloorPlanPage />} />
             <Route path="/reports" element={<ReportsLayout />}>
               <Route index element={<SummaryReport />} />
+              <Route path="wash" element={<WashReport />} />
               <Route path="fermentation" element={<FermentationReport />} />
               <Route path="distillation" element={<DistillationReport />} />
               <Route path="tanks" element={<TankInventoryReport />} />

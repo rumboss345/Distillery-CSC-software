@@ -4,6 +4,7 @@ export * from './csv';
 export * from './movements';
 export * from './distillation-rows';
 export * from './fermentation-rows';
+export * from './wash-rows';
 export * from './tank-rows';
 export * from './blend-rows';
 export * from './bottling-rows';

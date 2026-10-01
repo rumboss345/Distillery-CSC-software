@@ -1,11 +1,15 @@
 import { formatDateDisplay } from '../../lib/date-input';
-import { buildFermentationHistoryRows } from '../../lib/reporting/fermentation-rows';
+import {
+  buildFermentationHistoryRows,
+  buildFermentationLeftoverRows,
+} from '../../lib/reporting/fermentation-rows';
 import { useReportContext } from './report-context';
 import { ReportTableShell } from './ReportTableShell';
 
 export function FermentationReport() {
   const { range } = useReportContext();
   const rows = buildFermentationHistoryRows(range);
+  const leftovers = buildFermentationLeftoverRows(range);
 
   const csvHeaders = [
     'Wash batch', 'Recipe', 'Fermenter', 'Volume gal', 'Started', 'Start Brix', 'Status', 'Operator',
@@ -21,16 +25,27 @@ export function FermentationReport() {
     row.operator,
   ]);
 
+  const leftoverHeaders = ['Date', 'Wash batch', 'Recipe', 'Fermenter', 'Gallons', 'Notes'];
+  const leftoverCsv = leftovers.map((row) => [
+    row.discarded_date,
+    row.batch_number,
+    row.recipe_name,
+    row.fermenter_name,
+    row.volume_gal,
+    row.notes,
+  ]);
+
   return (
+    <>
     <ReportTableShell
       title="Fermentation history"
-      description="Completed fermentations. The Fermentation page keeps the latest 10. Use the period above to look up older ones."
+      description="Completed and discarded fermentations. The Fermentation page keeps the latest 10 of each. Use the period above to look up older ones."
       periodLabel={range.label}
       csvFilename={`fermentation-${range.from ?? 'all'}`}
       csvHeaders={csvHeaders}
       csvRows={csvRows}
       isEmpty={rows.length === 0}
-      emptyMessage="No completed fermentations in this period."
+      emptyMessage="No completed or discarded fermentations in this period."
     >
       <table>
         <thead>
@@ -61,5 +76,41 @@ export function FermentationReport() {
         </tbody>
       </table>
     </ReportTableShell>
+    <ReportTableShell
+      title="Fermentation leftovers"
+      description="Gallons that could not be used. The Fermentation page keeps the latest 10 leftover records."
+      periodLabel={range.label}
+      csvFilename={`fermentation-leftovers-${range.from ?? 'all'}`}
+      csvHeaders={leftoverHeaders}
+      csvRows={leftoverCsv}
+      isEmpty={leftovers.length === 0}
+      emptyMessage="No leftovers in this period."
+    >
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Wash batch</th>
+            <th>Recipe</th>
+            <th>Fermenter</th>
+            <th>Gallons</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {leftovers.map((row) => (
+            <tr key={row.key}>
+              <td>{formatDateDisplay(row.discarded_date)}</td>
+              <td><strong>{row.batch_number}</strong></td>
+              <td>{row.recipe_name}</td>
+              <td>{row.fermenter_name}</td>
+              <td>{row.volume_gal.toFixed(1)} gal</td>
+              <td>{row.notes}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </ReportTableShell>
+    </>
   );
 }

@@ -4,6 +4,7 @@ import { DatePicker } from '../components/DatePicker';
 import { AbvVolumeTemperatureFields } from '../components/AbvVolumeTemperatureFields';
 import { correctedAbvFromInputs } from '../components/AbvTemperatureInput';
 import { Modal } from '../components/Modal';
+import { RecentCompletedNote } from '../components/RecentCompletedNote';
 import { StatusBadge } from '../components/StatusBadge';
 import {
   deleteDiscardedFermentation,
@@ -24,6 +25,7 @@ import {
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
 import { formatDateDisplay } from '../lib/date-input';
 import { localIsoDate } from '../lib/planned-event-date';
+import { latestCompleted } from '../lib/recent-completed';
 import { DISCARD_DESTINATION, fermenterTransferError } from '../lib/fermenter-transfer';
 const sourceTankVolumeGal = (tankId: number) => {
   if (!tankId) return 0;
@@ -70,6 +72,11 @@ export function TankTransfer() {
       ...getHoldingTankContents(tank.id),
     }));
   const tankTransfers = getHoldingTankTransfers();
+  const recentTransfers = latestCompleted(
+    tankTransfers,
+    (transfer) => transfer.transfer_date,
+    (transfer) => transfer.id,
+  );
   const fermentersWithWash = getFermentersWithWash();
   const discardedFermentations = getDiscardedFermentations();
   const [showTransferForm, setShowTransferForm] = useState(false);
@@ -496,7 +503,12 @@ export function TankTransfer() {
 
       <div className="detail-panel">
         <h4>Transfers</h4>
-        {tankTransfers.length === 0 ? (
+        <RecentCompletedNote
+          hiddenCount={recentTransfers.hiddenCount}
+          to="/reports/movements"
+          label="transfers"
+        />
+        {recentTransfers.total === 0 ? (
           <p style={{ color: 'var(--text-muted)' }}>No tank-to-tank transfers recorded yet.</p>
         ) : (
           <div className="table-wrap">
@@ -513,7 +525,7 @@ export function TankTransfer() {
                 </tr>
               </thead>
               <tbody>
-                {tankTransfers.map((t) => (
+                {recentTransfers.shown.map((t) => (
                   <tr key={t.id}>
                     <td>{formatDateDisplay(t.transfer_date)}</td>
                     <td>{t.source_tank_name}</td>
