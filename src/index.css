@@ -2258,6 +2258,58 @@ tr:hover td {
   margin: 0.5rem 0;
 }
 
+.target-proof-calc {
+  margin-top: 0.75rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+}
+
+.target-proof-calc-title {
+  margin: 0 0 0.25rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.target-proof-calc-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 14rem;
+  margin: 0.5rem 0;
+}
+
+.form-group .target-proof-calc-row > input,
+.target-proof-calc-row input {
+  width: auto;
+  flex: 1;
+  min-width: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 0.75rem;
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 1rem;
+}
+
+.target-proof-calc-row span {
+  flex-shrink: 0;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.target-proof-calc-result {
+  margin: 0 0 0.5rem;
+  color: var(--text);
+}
+
+.target-proof-calc .btn {
+  margin-top: 0.15rem;
+}
+
 .wizard-abv-checkbox {
   display: flex;
   align-items: flex-start;

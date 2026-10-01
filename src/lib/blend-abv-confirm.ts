@@ -1,5 +1,19 @@
+import { MAX_ENTERED_ABV } from './abv-limits';
 import { computeTheoreticalBlend, type AdditiveInput, type SpiritSourceInput } from './blend-formulation';
 import type { BlendIngredientInput, BlendRecipeSpiritSourceInput } from '../types';
+
+/** US proof is twice the alcohol percent. 80 proof is 40% ABV. */
+export function abvFromUsProof(proof: number): number | null {
+  if (!Number.isFinite(proof) || proof <= 0) return null;
+  const abv = proof / 2;
+  if (abv > MAX_ENTERED_ABV) return null;
+  return Math.round(abv * 10) / 10;
+}
+
+export function usProofFromAbv(abv: number): number | null {
+  if (!Number.isFinite(abv) || abv <= 0 || abv > MAX_ENTERED_ABV) return null;
+  return Math.round(abv * 2 * 10) / 10;
+}
 
 export const ABV_CONFIRM_TOLERANCE = 0.3;
 

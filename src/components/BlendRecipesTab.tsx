@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BlendAbvConfirmation } from './BlendAbvConfirmation';
+import { TargetProofCalculator } from './TargetProofCalculator';
 import { limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
 import { computeRecipeTheoreticalAbv } from '../lib/blend-abv-confirm';
 import {
@@ -437,6 +438,12 @@ export function BlendRecipesTab() {
                   />
                 </div>
                 <div className="form-group full-width">
+                  <TargetProofCalculator
+                    targetAbv={form.target_abv}
+                    onSetTargetAbv={(target_abv) => setForm({ ...form, target_abv })}
+                  />
+                </div>
+                <div className="form-group full-width">
                   <label>Notes</label>
                   <textarea
                     rows={2}
@@ -729,12 +736,6 @@ export function BlendRecipesTab() {
                 targetAbv={form.target_abv}
                 confirmed={abvConfirmed}
                 onConfirmChange={setAbvConfirmed}
-                onApplyCalculatedTarget={() => setForm({
-                  ...form,
-                  target_abv: calculatedRecipe.abv != null
-                    ? Math.round(calculatedRecipe.abv * 10) / 10
-                    : null,
-                })}
               />
             </section>
 
