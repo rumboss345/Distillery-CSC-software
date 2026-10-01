@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BlendAbvConfirmation } from './BlendAbvConfirmation';
+import { TargetProofCalculator } from './TargetProofCalculator';
 import { limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
 import { computeRecipeTheoreticalAbv } from '../lib/blend-abv-confirm';
 import {
@@ -423,6 +424,10 @@ export function BlendRecipesTab() {
                       });
                     }}
                   />
+                  <TargetProofCalculator
+                    targetAbv={form.target_abv}
+                    onSetTargetAbv={(target_abv) => setForm({ ...form, target_abv })}
+                  />
                 </div>
                 <div className="form-group">
                   <label>Target Brix</label>
@@ -729,12 +734,6 @@ export function BlendRecipesTab() {
                 targetAbv={form.target_abv}
                 confirmed={abvConfirmed}
                 onConfirmChange={setAbvConfirmed}
-                onApplyCalculatedTarget={() => setForm({
-                  ...form,
-                  target_abv: calculatedRecipe.abv != null
-                    ? Math.round(calculatedRecipe.abv * 10) / 10
-                    : null,
-                })}
               />
             </section>
 

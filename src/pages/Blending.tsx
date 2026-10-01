@@ -29,6 +29,7 @@ import {
 } from '../lib/barrel-blending';
 import { AbvTemperatureInput, correctedAbvFromInputs } from '../components/AbvTemperatureInput';
 import { BlendAbvConfirmation } from '../components/BlendAbvConfirmation';
+import { TargetProofCalculator } from '../components/TargetProofCalculator';
 import { BlendProductionWorksheet } from '../components/BlendProductionWorksheet';
 import { AssigneeCell, AssigneeSelect } from '../components/AssigneeSelect';
 import { DatePicker } from '../components/DatePicker';
@@ -1710,6 +1711,10 @@ export function Blending() {
                 }}
                 placeholder="e.g. 40"
               />
+              <TargetProofCalculator
+                targetAbv={form.target_abv}
+                onSetTargetAbv={(target_abv) => setForm({ ...form, target_abv })}
+              />
             </div>
             {form.target_abv != null && (
               <button type="button" className="btn btn-secondary" onClick={handleCalculateWater}>
@@ -1920,10 +1925,6 @@ export function Blending() {
               targetAbv={form.target_abv}
               confirmed={abvConfirmed}
               onConfirmChange={setAbvConfirmed}
-              onApplyCalculatedTarget={() => setForm({
-                ...form,
-                target_abv: Math.round(formulation.theoretical.abv * 10) / 10,
-              })}
             />
             <p className="field-hint">Next: run a lab test on a trial batch, or approve if you are confident in the numbers.</p>
           </div>

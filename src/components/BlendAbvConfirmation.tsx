@@ -1,7 +1,9 @@
 import {
   ABV_CONFIRM_TOLERANCE,
   abvMatchesTarget,
+  usProofFromAbv,
 } from '../lib/blend-abv-confirm';
+import { TargetProofCalculator } from './TargetProofCalculator';
 
 export interface BlendAbvConfirmationProps {
   calculatedAbv: number | null;
@@ -9,7 +11,7 @@ export interface BlendAbvConfirmationProps {
   targetAbv: number | null;
   confirmed: boolean;
   onConfirmChange: (confirmed: boolean) => void;
-  onApplyCalculatedTarget?: () => void;
+  onSetTargetAbv?: (abv: number) => void;
 }
 
 export function BlendAbvConfirmation({
@@ -18,8 +20,12 @@ export function BlendAbvConfirmation({
   targetAbv,
   confirmed,
   onConfirmChange,
-  onApplyCalculatedTarget,
+  onSetTargetAbv,
 }: BlendAbvConfirmationProps) {
+  const calculator = onSetTargetAbv
+    ? <TargetProofCalculator targetAbv={targetAbv} onSetTargetAbv={onSetTargetAbv} />
+    : null;
+
   if (calculatedAbv == null) {
     return (
       <div className="wizard-abv-confirm wizard-abv-confirm-pending">
@@ -27,12 +33,14 @@ export function BlendAbvConfirmation({
         <p className="field-hint">
           Enter spirit pulls and additives to calculate final proof before saving this recipe.
         </p>
+        {calculator}
       </div>
     );
   }
 
   const onTarget = targetAbv != null && abvMatchesTarget(calculatedAbv, targetAbv);
   const delta = targetAbv != null ? calculatedAbv - targetAbv : null;
+  const calculatedProof = usProofFromAbv(calculatedAbv);
 
   return (
     <div className={`wizard-abv-confirm ${onTarget ? 'on-target' : 'mismatch'}`}>
@@ -41,6 +49,7 @@ export function BlendAbvConfirmation({
         Calculated from spirits and additives
         {calculatedVolumeGal != null ? ` (${calculatedVolumeGal.toFixed(1)} gal)` : ''}:{' '}
         <strong>{calculatedAbv.toFixed(1)}% ABV</strong>
+        {calculatedProof != null ? ` (${calculatedProof} proof)` : ''}
       </p>
       {targetAbv != null && (
         <p>
@@ -55,15 +64,7 @@ export function BlendAbvConfirmation({
           )}
         </p>
       )}
-      {!onTarget && targetAbv != null && onApplyCalculatedTarget && (
-        <button
-          type="button"
-          className="btn btn-sm btn-secondary wizard-abv-apply"
-          onClick={onApplyCalculatedTarget}
-        >
-          Use calculated proof ({calculatedAbv.toFixed(1)}%) as target
-        </button>
-      )}
+      {calculator}
       <label className="checkbox-label wizard-abv-checkbox">
         <input
           type="checkbox"
