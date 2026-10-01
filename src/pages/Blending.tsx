@@ -17,7 +17,6 @@ import {
   getHoldingTanks,
   getInventoryItems,
   saveBlendFormula,
-  saveBlendVerification,
   deleteBlendProduct,
   generateBatchNumber,
   useRefreshKey,
@@ -1137,6 +1136,7 @@ export function Blending() {
   };
 
   const handleProduce = () => {
+    if (blendIsComplete(form.status)) return;
     if (!editId) {
       alert('Save the recipe first.');
       return;
@@ -1204,6 +1204,7 @@ export function Blending() {
   };
 
   const handleApplyCorrection = () => {
+    if (blendIsComplete(form.status)) return;
     if (!batchCorrection || batchCorrection.onTarget) return;
     let nextIngredients = ingredients;
     for (const action of batchCorrection.actions) {
@@ -1231,25 +1232,6 @@ export function Blending() {
       refresh();
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Delete failed.');
-    }
-  };
-
-  const handleSaveVerification = () => {
-    if (!editId) {
-      alert('No batch to save.');
-      return;
-    }
-    try {
-      saveBlendVerification(editId, {
-        actual_abv: form.actual_abv,
-        actual_volume_gal: form.actual_volume_gal,
-        actual_weight_lbs: form.actual_weight_lbs,
-        actual_brix: form.actual_brix,
-      });
-      refresh();
-      alert('Final measurements saved.');
-    } catch (e) {
-      alert(e instanceof Error ? e.message : 'Could not save measurements.');
     }
   };
 
@@ -1354,6 +1336,43 @@ export function Blending() {
       )}
     </div>
   );
+
+  const renderProductionWorksheet = (outputTankName: string | null) => {
+    const yieldGal = formulation.reconciliation.effective.volumeGal ?? formulation.theoretical.volumeGal ?? 0;
+    const worksheetSpiritLines = activeSources.map((s, index) => {
+      const tank = getHoldingTanks().find((t) => t.id === s.holding_tank_equipment_id);
+      return {
+        label: recipeTemplate?.spirit_sources[index]?.spirit_label ?? `Spirit ${index + 1}`,
+        tankName: tank?.name ?? '—',
+        amount: s.amount,
+        unit: s.unit,
+        volumeGal: s.volume_gal,
+        abv: s.abv,
+        recipeAbv: recipeTemplate?.spirit_sources[index]?.abv ?? s.recipe_abv,
+      };
+    });
+    return (
+      <div className="blend-worksheet-print-area" ref={worksheetPrintRef}>
+        <BlendProductionWorksheet
+          batchNumber={form.batch_number}
+          productName={form.product_name}
+          blendDate={form.blend_date}
+          assignedTo={form.assigned_user_name}
+          targetAbv={form.target_abv}
+          targetBrix={form.target_brix}
+          scaleFactor={form.scale_factor ?? 1}
+          expectedYieldGal={yieldGal}
+          expectedAbv={formulation.reconciliation.effective.abv ?? formulation.theoretical.abv ?? 0}
+          outputTankName={outputTankName}
+          spiritLines={worksheetSpiritLines}
+          ingredients={ingredients}
+          waterAdjustmentNote={waterAdjustmentNote}
+          abvDeltas={spiritAbvMismatch}
+          notes={form.notes}
+        />
+      </div>
+    );
+  };
 
   const renderStepContent = () => {
     switch (wizardStep) {
@@ -1974,18 +1993,6 @@ export function Blending() {
         const outputTankName = selectedOutputId > 0
           ? outputTanks.find((t) => t.id === selectedOutputId)?.name ?? null
           : null;
-        const worksheetSpiritLines = activeSources.map((s, index) => {
-          const tank = getHoldingTanks().find((t) => t.id === s.holding_tank_equipment_id);
-          return {
-            label: recipeTemplate?.spirit_sources[index]?.spirit_label ?? `Spirit ${index + 1}`,
-            tankName: tank?.name ?? '—',
-            amount: s.amount,
-            unit: s.unit,
-            volumeGal: s.volume_gal,
-            abv: s.abv,
-            recipeAbv: recipeTemplate?.spirit_sources[index]?.abv ?? s.recipe_abv,
-          };
-        });
         return (
           <div className="wizard-produce-card">
             <p>You are about to produce batch <strong>{form.batch_number}</strong> — {form.product_name}.</p>
@@ -1997,25 +2004,7 @@ export function Blending() {
                 return <li key={i}>Pull {entered} ({s.volume_gal.toFixed(2)} gal) from {tank?.name}</li>;
               })}
             </ul>
-            <div className="blend-worksheet-print-area" ref={worksheetPrintRef}>
-              <BlendProductionWorksheet
-                batchNumber={form.batch_number}
-                productName={form.product_name}
-                blendDate={form.blend_date}
-                assignedTo={form.assigned_user_name}
-                targetAbv={form.target_abv}
-                targetBrix={form.target_brix}
-                scaleFactor={form.scale_factor ?? 1}
-                expectedYieldGal={yieldGal}
-                expectedAbv={formulation.reconciliation.effective.abv ?? formulation.theoretical.abv ?? 0}
-                outputTankName={outputTankName}
-                spiritLines={worksheetSpiritLines}
-                ingredients={ingredients}
-                waterAdjustmentNote={waterAdjustmentNote}
-                abvDeltas={spiritAbvMismatch}
-                notes={form.notes}
-              />
-            </div>
+            {renderProductionWorksheet(outputTankName)}
             <div className="blend-worksheet-actions no-print">
               <button
                 type="button"
@@ -2074,135 +2063,54 @@ export function Blending() {
       }
 
       case 9: {
-        const finalWeightAlt = form.actual_weight_lbs != null && verifyAbv > 0
-          ? spiritMeasureAlternate(form.actual_weight_lbs, 'lbs', verifyAbv)
+        const outputTankName = form.output_holding_tank_equipment_id
+          ? getHoldingTanks().find((t) => t.id === form.output_holding_tank_equipment_id)?.name ?? 'holding tank'
           : null;
-        const finalVolumeAlt = form.actual_volume_gal != null && verifyAbv > 0
-          ? spiritMeasureAlternate(form.actual_volume_gal, 'gal', verifyAbv)
-          : null;
+        const hasFinalMeasurements = form.actual_abv != null
+          || form.actual_volume_gal != null
+          || form.actual_weight_lbs != null
+          || form.actual_brix != null;
         return (
-          <>
-            <div className="wizard-verify-card">
-              <p>Batch <strong>{form.batch_number}</strong> has been produced.</p>
-              {form.output_holding_tank_equipment_id ? (
+          <div className="wizard-verify-card">
+            <p>Batch <strong>{form.batch_number}</strong> has been produced. This record is read-only.</p>
+            {outputTankName ? (
+              <p className="field-hint">Finished liquid deposited in {outputTankName}.</p>
+            ) : null}
+            {hasFinalMeasurements ? (
+              <ul className="wizard-produce-checklist">
+                {form.actual_abv != null && <li>Final proof: {form.actual_abv.toFixed(1)}% ABV</li>}
+                {form.actual_volume_gal != null && <li>Final volume: {form.actual_volume_gal.toFixed(1)} gal</li>}
+                {form.actual_weight_lbs != null && <li>Final weight: {form.actual_weight_lbs.toFixed(2)} lbs</li>}
+                {form.actual_brix != null && <li>Final Brix: {form.actual_brix}</li>}
+              </ul>
+            ) : (
+              <p className="field-hint">No final measurements were saved with this batch.</p>
+            )}
+            {form.status === 'executed' && editId != null && (
+              <div className="wizard-admin-actions no-print">
+                <button type="button" className="btn btn-secondary" onClick={() => requestUndoProduce(editId, form.product_name)}>
+                  Undo production
+                </button>
                 <p className="field-hint">
-                  Finished liquid deposited in{' '}
-                  {getHoldingTanks().find((t) => t.id === form.output_holding_tank_equipment_id)?.name ?? 'holding tank'}.
+                  Requires an administrator email and password. Restores source tanks and ingredient stock, and removes this batch from the output tank ledger.
                 </p>
-              ) : null}
-              {form.status === 'executed' && editId != null && (
-                <div className="wizard-admin-actions no-print">
-                  <button type="button" className="btn btn-secondary" onClick={() => requestUndoProduce(editId, form.product_name)}>
-                    Undo production
-                  </button>
-                  <p className="field-hint">
-                    Requires an administrator email and password. Restores source tanks and ingredient stock, and removes this batch from the output tank ledger.
-                  </p>
-                </div>
-              )}
-              <div className="measure-mode-toggle">
-                <span className="measure-mode-label">How are you verifying yield?</span>
-                <div className="measure-mode-buttons">
-                  <button
-                    type="button"
-                    className={`btn btn-sm ${verifyMeasureMode === 'volume' ? 'btn-primary' : 'btn-secondary'}`}
-                    onClick={() => setVerifyMeasureMode('volume')}
-                  >
-                    Volume
-                  </button>
-                  <button
-                    type="button"
-                    className={`btn btn-sm ${verifyMeasureMode === 'weight' ? 'btn-primary' : 'btn-secondary'}`}
-                    onClick={() => setVerifyMeasureMode('weight')}
-                  >
-                    Weight on scale
-                  </button>
-                </div>
               </div>
-              <AbvTemperatureInput
-                abvLabel="Final observed proof (ABV % at sample temp)"
-                abvValue={observedAbvInput}
-                temperatureValue={sampleTempF}
-                onAbvChange={(value) => {
-                  syncObservedAbvToForm(value, sampleTempF);
-                  const corrected = correctedAbvFromInputs(value, sampleTempF) ?? verifyAbv;
-                  let nextVolume = form.actual_volume_gal;
-                  let nextWeight = form.actual_weight_lbs;
-                  if (verifyMeasureMode === 'weight' && form.actual_weight_lbs != null) {
-                    nextVolume = spiritVolumeGalFromAmount(form.actual_weight_lbs, 'lbs', corrected);
-                  } else if (verifyMeasureMode === 'volume' && form.actual_volume_gal != null) {
-                    nextWeight = spiritWeightLbsFromVolumeGal(form.actual_volume_gal, corrected);
-                  }
-                  setForm((f) => ({
-                    ...f,
-                    actual_volume_gal: nextVolume,
-                    actual_weight_lbs: nextWeight,
-                  }));
-                }}
-                onTemperatureChange={(value) => {
-                  syncObservedAbvToForm(observedAbvInput, value);
-                  const corrected = correctedAbvFromInputs(observedAbvInput, value) ?? verifyAbv;
-                  let nextVolume = form.actual_volume_gal;
-                  let nextWeight = form.actual_weight_lbs;
-                  if (verifyMeasureMode === 'weight' && form.actual_weight_lbs != null) {
-                    nextVolume = spiritVolumeGalFromAmount(form.actual_weight_lbs, 'lbs', corrected);
-                  } else if (verifyMeasureMode === 'volume' && form.actual_volume_gal != null) {
-                    nextWeight = spiritWeightLbsFromVolumeGal(form.actual_volume_gal, corrected);
-                  }
-                  setForm((f) => ({
-                    ...f,
-                    actual_volume_gal: nextVolume,
-                    actual_weight_lbs: nextWeight,
-                  }));
-                }}
-              />
-              <div className="wizard-lab-inputs">
-                {verifyMeasureMode === 'volume' ? (
-                  <label>
-                    Final volume (gallons)
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={form.actual_volume_gal ?? ''}
-                      onChange={(e) => {
-                        const v = e.target.value ? parseFloat(e.target.value) : null;
-                        const weight = v != null && verifyAbv > 0 ? spiritWeightLbsFromVolumeGal(v, verifyAbv) : null;
-                        setForm({ ...form, actual_volume_gal: v, actual_weight_lbs: weight });
-                        setMeasuredForCorrection({ ...measuredForCorrection, volume: e.target.value });
-                      }}
-                    />
-                    {finalVolumeAlt && (
-                      <span className="field-hint">{finalVolumeAlt.label}</span>
-                    )}
-                  </label>
-                ) : (
-                  <label>
-                    Final weight (lbs on scale)
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={form.actual_weight_lbs ?? ''}
-                      onChange={(e) => {
-                        const w = e.target.value ? parseFloat(e.target.value) : null;
-                        const volume = w != null && verifyAbv > 0
-                          ? spiritVolumeGalFromAmount(w, 'lbs', verifyAbv)
-                          : null;
-                        setForm({ ...form, actual_weight_lbs: w, actual_volume_gal: volume });
-                        setMeasuredForCorrection({ ...measuredForCorrection, weight: e.target.value });
-                      }}
-                    />
-                    {finalWeightAlt && (
-                      <span className="field-hint">{finalWeightAlt.label}</span>
-                    )}
-                  </label>
-                )}
-              </div>
-              <button type="button" className="btn btn-primary" onClick={handleSaveVerification}>
-                Save final measurements
+            )}
+            {renderProductionWorksheet(outputTankName)}
+            <div className="blend-worksheet-actions no-print">
+              <button type="button" className="btn btn-secondary" onClick={() => window.print()}>
+                Print staff worksheet
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={handleDownloadWorksheetPdf}
+                disabled={worksheetPdfExporting}
+              >
+                {worksheetPdfExporting ? 'Generating PDF…' : 'Download PDF'}
               </button>
             </div>
-            {renderCorrectBatchPanel({ allowWeight: true })}
-          </>
+          </div>
         );
       }
 
@@ -2309,7 +2217,7 @@ export function Blending() {
       )}
 
       {showWizard && (
-        <Modal title={currentStep.title} onClose={() => setShowWizard(false)}>
+        <Modal title={isLocked ? 'Produced batch' : currentStep.title} onClose={() => setShowWizard(false)}>
           <div className="blend-wizard">
             <nav className="blend-wizard-steps" aria-label="Batch progress">
               {WIZARD_STEPS.map((step) => (
@@ -2326,7 +2234,11 @@ export function Blending() {
               ))}
             </nav>
 
-            <p className="blend-wizard-hint">{STEP_HINTS[wizardStep]}</p>
+            <p className="blend-wizard-hint">
+              {isLocked
+                ? 'This batch has been produced. The record is read-only.'
+                : STEP_HINTS[wizardStep]}
+            </p>
 
             <div className="blend-wizard-content">
               {renderStepContent()}
