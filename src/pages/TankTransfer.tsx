@@ -22,6 +22,7 @@ import {
   getHoldingTankTransfers,
   getSpiritTransferVessels,
   saveFermenterWashTransfer,
+  sourceMayMoveStillageFreely,
   saveHoldingTankOnHand,
   saveHoldingTankTransfer,
   useRefreshKey,
@@ -691,7 +692,10 @@ export function TankTransfer() {
                 })}
               </select>
               <p className="field-hint">
-                A collection vessel can take spirit from any run, but not a different cut. Keep heads, hearts, and tails in separate vessels.
+                {transferForm.source_tank_equipment_id > 0
+                  && sourceMayMoveStillageFreely(transferForm.source_tank_equipment_id)
+                  ? 'Stillage can be transferred into any holding tank or collection vessel.'
+                  : 'A collection vessel can take spirit from any run, but not a different cut. Keep heads, hearts, and tails in separate vessels.'}
               </p>
             </div>
             <div className="form-group full-width">
