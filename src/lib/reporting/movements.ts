@@ -123,13 +123,13 @@ export function buildLiquidMovements(range: ReportDateRange): LiquidMovementRow[
     volume_gal: number;
     abv: number;
     source_name: string;
-    dest_name: string;
+    dest_name: string | null;
   }>(`
     SELECT t.id, COALESCE(t.created_at, t.transfer_date) as occurred_at, t.spirit_type,
            t.volume_gal, t.abv, src.name as source_name, dest.name as dest_name
     FROM holding_tank_transfers t
     JOIN floor_equipment src ON src.id = t.source_tank_equipment_id
-    JOIN floor_equipment dest ON dest.id = t.dest_tank_equipment_id
+    LEFT JOIN floor_equipment dest ON dest.id = t.dest_tank_equipment_id
     WHERE t.volume_gal > 0
   `);
   for (const t of transfers) {
@@ -139,7 +139,7 @@ export function buildLiquidMovements(range: ReportDateRange): LiquidMovementRow[
       occurred_at: t.occurred_at,
       movement_type: 'tank_transfer',
       source_label: t.source_name,
-      dest_label: t.dest_name,
+      dest_label: t.dest_name ?? 'Discarded',
       product_liquid: 'tank transfer',
       batch_ref: '',
       volume_gal: t.volume_gal,
