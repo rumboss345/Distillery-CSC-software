@@ -335,6 +335,12 @@ body.nav-open {
   font-size: 1.05rem;
 }
 
+.trace-path td:nth-child(1),
+.trace-path td:nth-child(2),
+.trace-path td:nth-child(3) {
+  white-space: nowrap;
+}
+
 .trace-gaps {
   margin: 0.75rem 0 0;
   padding-left: 1.15rem;
