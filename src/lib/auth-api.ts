@@ -111,6 +111,7 @@ export async function createAdminUser(payload: {
   name?: string;
   permissions: PermissionKey[];
   processAssignments: ProcessStageKey[];
+  role?: 'admin' | 'user';
 }) {
   return apiFetch<{ message: string; user: AuthUser }>('/api/admin/users', {
     method: 'POST',
