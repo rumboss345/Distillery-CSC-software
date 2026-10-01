@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { DatePicker } from '../components/DatePicker';
 import { AbvVolumeTemperatureFields } from '../components/AbvVolumeTemperatureFields';
 import { correctedAbvFromInputs } from '../components/AbvTemperatureInput';
@@ -64,6 +65,8 @@ const emptyFermenterForm = () => ({
 });
 
 export function TankTransfer() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const [searchParams, setSearchParams] = useSearchParams();
   const calendarPlanHandled = useRef(false);
   const { key, refresh } = useRefreshKey();
@@ -329,6 +332,7 @@ export function TankTransfer() {
   };
 
   const openOnHand = (tankId: number) => {
+    if (!isAdmin) return;
     const contents = getHoldingTankContents(tankId);
     const existing = getHoldingTankOnHand(tankId);
     setOnHandTankId(tankId);
@@ -341,7 +345,7 @@ export function TankTransfer() {
   };
 
   const handleSaveOnHand = () => {
-    if (!onHandTankId) return;
+    if (!isAdmin || !onHandTankId) return;
     const volumeGal = onHandForm.volume_gal.trim() === '' ? NaN : parseFloat(onHandForm.volume_gal);
     const abv = onHandForm.abv.trim() === '' ? (volumeGal === 0 ? 0 : NaN) : parseFloat(onHandForm.abv);
     if (!Number.isFinite(volumeGal) || volumeGal < 0) {
@@ -376,7 +380,7 @@ export function TankTransfer() {
   };
 
   const handleClearOnHand = () => {
-    if (!onHandTankId) return;
+    if (!isAdmin || !onHandTankId) return;
     if (!confirm('Remove the on-hand reading? The tank goes back to only what production records add and remove.')) {
       return;
     }
@@ -519,8 +523,9 @@ export function TankTransfer() {
       <div className="detail-panel">
         <h4>Tanks</h4>
         <p className="field-hint" style={{ marginTop: '-0.5rem' }}>
-          Starting today, choose Set volume and enter the gallons and ABV already in each tank.
-          After that, record only new transfers and production — those gallons are already counted.
+          {isAdmin
+            ? 'Starting today, choose Set volume and enter the gallons and ABV already in each tank. After that, record only new transfers and production — those gallons are already counted.'
+            : 'Select a tank with spirit to transfer it. An administrator sets the gallons already in a tank.'}
         </p>
         {tanksWithContents.length === 0 ? (
           <p style={{ color: 'var(--text-muted)' }}>No holding tanks or collection vessels on the floor plan.</p>
@@ -561,16 +566,18 @@ export function TankTransfer() {
                         />
                       </td>
                       <td className="td-actions">
-                        <button
-                          type="button"
-                          className="btn btn-sm btn-secondary"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            openOnHand(tank.id);
-                          }}
-                        >
-                          Set volume
-                        </button>
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-secondary"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              openOnHand(tank.id);
+                            }}
+                          >
+                            Set volume
+                          </button>
+                        )}
                         {canTransfer && (
                           <button
                             type="button"
@@ -836,7 +843,7 @@ export function TankTransfer() {
         </Modal>
       )}
 
-      {onHandTankId != null && (
+      {isAdmin && onHandTankId != null && (
         <Modal title="Set tank volume" onClose={() => setOnHandTankId(null)}>
           <p className="field-hint" style={{ marginTop: 0 }}>
             Enter what is in {tanksWithContents.find((tank) => tank.id === onHandTankId)?.name} today.
