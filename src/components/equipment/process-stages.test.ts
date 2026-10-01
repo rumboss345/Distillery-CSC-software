@@ -18,6 +18,7 @@ function item(id: number, equipment_type: string, name = `Item ${id}`): FloorEqu
     status: 'empty',
     linked_mash_batch_id: null,
     notes: '',
+    icon: '',
     maintenance_status: null,
     maintenance_notes: '',
     cleaned_at: null,
@@ -39,5 +40,18 @@ describe('groupEquipmentByStage', () => {
       'Gin basket',
       'Thumper',
     ]);
+  });
+
+  it('groups pumps and hoses together', () => {
+    const groups = groupEquipmentByStage([
+      item(1, 'pump', 'Transfer pump'),
+      item(2, 'hose', 'Charge hose'),
+      item(3, 'holding_tank', 'Hearts tank'),
+    ]);
+    expect(groups.map((group) => group.stage.label)).toEqual([
+      'Holding Tanks',
+      'Pumps & Hoses',
+    ]);
+    expect(groups[1].items.map((entry) => entry.name)).toEqual(['Transfer pump', 'Charge hose']);
   });
 });

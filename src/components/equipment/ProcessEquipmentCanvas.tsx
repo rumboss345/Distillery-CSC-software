@@ -418,7 +418,7 @@ export function ProcessEquipmentCanvas({
                     data={visual}
                     selected={selectedId === item.id}
                     labelStyle="process"
-                    scaleMultiplier={processEquipmentVisualScale(item.equipment_type)}
+                    scaleMultiplier={processEquipmentVisualScale(visual.icon)}
                     onClick={() => {
                       if (!dragMovedRef.current) onSelect(item.id);
                     }}

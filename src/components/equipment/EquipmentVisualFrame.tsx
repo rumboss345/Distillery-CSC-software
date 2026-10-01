@@ -20,6 +20,7 @@ export function EquipmentVisualFrame({
   labelStyle = 'default',
   onClick,
   className = '',
+  preview = false,
   children,
   svgWidth = 140,
   svgHeight = 180,
@@ -28,18 +29,24 @@ export function EquipmentVisualFrame({
   const scale = SIZE_MAP[size] * scaleMultiplier;
   const tooltip = buildTooltip(data);
   const isProcess = labelStyle === 'process';
+  const Root = preview ? 'div' : 'button';
+  const volumeLabel = showVolume
+    ? `${data.name}, ${Math.round(data.fillPercent)} percent full`
+    : data.name;
 
   return (
-    <button
-      type="button"
+    <Root
+      {...(preview ? {} : {
+        type: 'button' as const,
+        onClick,
+        title: tooltip,
+        'aria-label': volumeLabel,
+        'aria-pressed': selected,
+      })}
       className={`equipment-visual${selected ? ' equipment-visual--selected' : ''}${onClick ? ' equipment-visual--interactive' : ''}${isProcess ? ' equipment-visual--process' : ''} ${className}`.trim()}
       style={isProcess ? undefined : ({ '--eq-scale': scale } as React.CSSProperties)}
-      onClick={onClick}
-      title={tooltip}
-      aria-label={`${data.name}, ${Math.round(data.fillPercent)} percent full`}
-      aria-pressed={selected}
     >
-      {!isProcess && (
+      {!isProcess && !preview && (
         <div className="equipment-visual-tooltip" role="tooltip">
           <TooltipContent data={data} />
         </div>
@@ -51,8 +58,8 @@ export function EquipmentVisualFrame({
         {children}
       </div>
       {isProcess ? (
-        <ProcessEquipmentLabels data={data} />
-      ) : (
+        <ProcessEquipmentLabels data={data} showVolume={showVolume} />
+      ) : preview ? null : (
         <div className="equipment-visual-labels">
           <span className="equipment-visual-code">{data.code}</span>
           <span className="equipment-visual-name">{data.name}</span>
@@ -69,7 +76,7 @@ export function EquipmentVisualFrame({
           )}
         </div>
       )}
-    </button>
+    </Root>
   );
 }
 

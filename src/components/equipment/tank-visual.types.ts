@@ -35,4 +35,6 @@ export interface TankVisualProps {
   labelStyle?: 'default' | 'process';
   onClick?: () => void;
   className?: string;
+  /** Compact picture for the icon picker. Hides the volume caption. */
+  preview?: boolean;
 }

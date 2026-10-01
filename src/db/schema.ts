@@ -361,6 +361,7 @@ CREATE TABLE IF NOT EXISTS floor_equipment (
   floor_plan_id INTEGER NOT NULL DEFAULT 1 REFERENCES floor_plans(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   equipment_type TEXT NOT NULL DEFAULT 'fermenter',
+  icon TEXT NOT NULL DEFAULT '',
   pos_x_ft REAL NOT NULL DEFAULT 4,
   pos_y_ft REAL NOT NULL DEFAULT 4,
   process_pos_x REAL,
@@ -384,6 +385,7 @@ CREATE INDEX IF NOT EXISTS idx_floor_equipment_plan ON floor_equipment(floor_pla
 CREATE TABLE IF NOT EXISTS equipment_types (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  icon TEXT NOT NULL DEFAULT 'other',
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

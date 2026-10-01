@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FloorEquipment, FloorEquipmentView, FloorPlan } from '../types';
-import { TYPE_COLORS, IN_USE_COLORS, equipmentTypeLabel, getEquipmentDisplayColor } from '../lib/equipment';
+import { TYPE_COLORS, IN_USE_COLORS, equipmentTypeLabel, getEquipmentDisplayColor, resolveEquipmentIcon } from '../lib/equipment';
 
 const PX_PER_FT = 10;
 
@@ -122,6 +122,7 @@ export function FloorCanvas({
           const isSelected = selectedId === item.id;
           const isDragging = dragging?.id === item.id;
           const isFermenting = item.equipment_type === 'fermenter' && item.active_mash_status === 'fermenting';
+          const icon = resolveEquipmentIcon(item.icon, item.equipment_type);
           const posX = isDragging && livePos ? livePos.x : item.pos_x_ft;
           const posY = isDragging && livePos ? livePos.y : item.pos_y_ft;
           const w = item.width_ft * PX_PER_FT;
@@ -152,7 +153,7 @@ export function FloorCanvas({
               }}
             >
               <div className="floor-equipment-icon">
-                {item.equipment_type === 'fermenter' && (
+                {icon === 'fermenter' && (
                   <div className="eq-shape eq-fermenter">
                     {isFermenting && (
                       <div className="fermenter-bubbles" aria-hidden>
@@ -161,17 +162,12 @@ export function FloorCanvas({
                     )}
                   </div>
                 )}
-                {item.equipment_type === 'pot_still' && <div className="eq-shape eq-pot-still" />}
-                {item.equipment_type === 'column_still' && <div className="eq-shape eq-column-still" />}
-                {item.equipment_type === 'mash_tun' && <div className="eq-shape eq-mash-tun" />}
-                {(item.equipment_type === 'holding_tank'
-                  || item.equipment_type === 'collection_vessel'
-                  || item.equipment_type === 'boiler'
-                  || item.equipment_type === 'other'
-                  || (item.equipment_type !== 'fermenter'
-                    && item.equipment_type !== 'pot_still'
-                    && item.equipment_type !== 'column_still'
-                    && item.equipment_type !== 'mash_tun')) && (
+                {icon === 'pot_still' && <div className="eq-shape eq-pot-still" />}
+                {icon === 'column_still' && <div className="eq-shape eq-column-still" />}
+                {icon === 'mash_tun' && <div className="eq-shape eq-mash-tun" />}
+                {icon === 'pump' && <div className="eq-shape eq-pump" />}
+                {icon === 'hose' && <div className="eq-shape eq-hose" />}
+                {(icon === 'holding_tank' || icon === 'collection_vessel' || icon === 'boiler' || icon === 'other') && (
                   <div className="eq-shape eq-tank" />
                 )}
               </div>

@@ -25,12 +25,14 @@ export type BarrelStatus = 'aging' | 'empty' | 'dumped';
 
 export type EquipmentType =
   | 'fermenter'
-  | 'pot_still'
-  | 'column_still'
   | 'mash_tun'
   | 'holding_tank'
   | 'collection_vessel'
+  | 'pot_still'
+  | 'column_still'
   | 'boiler'
+  | 'pump'
+  | 'hose'
   | 'other';
 
 export type EquipmentStatus = 'empty' | 'in_use' | 'cleaning' | 'offline';
@@ -72,6 +74,8 @@ export interface FloorEquipment {
   floor_plan_id: number;
   name: string;
   equipment_type: string;
+  /** Visual icon. Empty uses the equipment type when that type has a picture. */
+  icon: string;
   pos_x_ft: number;
   pos_y_ft: number;
   process_pos_x: number | null;

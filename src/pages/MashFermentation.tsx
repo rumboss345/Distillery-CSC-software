@@ -230,6 +230,7 @@ export function MashFermentation() {
       code: 'WASH',
       name: washTank?.name ?? 'Wash tank',
       equipmentType: 'mash_tun',
+      icon: 'mash_tun',
       typeLabel: 'Wash Tank',
       capacityGal,
       currentVolumeGal: volume,

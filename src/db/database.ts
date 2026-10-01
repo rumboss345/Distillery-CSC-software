@@ -1135,6 +1135,22 @@ function migrateAdvancedBlending(): void {
     db.run('CREATE INDEX IF NOT EXISTS idx_tank_opening_tank ON holding_tank_opening_balances(tank_equipment_id)');
     persistDb();
   }
+
+  const hasEquipmentIcon = queryOne<{ name: string }>(
+    "SELECT name FROM pragma_table_info('floor_equipment') WHERE name='icon'",
+  );
+  if (!hasEquipmentIcon) {
+    db.run("ALTER TABLE floor_equipment ADD COLUMN icon TEXT NOT NULL DEFAULT ''");
+    persistDb();
+  }
+
+  const hasEquipmentTypeIcon = queryOne<{ name: string }>(
+    "SELECT name FROM pragma_table_info('equipment_types') WHERE name='icon'",
+  );
+  if (!hasEquipmentTypeIcon) {
+    db.run("ALTER TABLE equipment_types ADD COLUMN icon TEXT NOT NULL DEFAULT 'other'");
+    persistDb();
+  }
 }
 
 const DB_STORAGE_KEY = 'distillery-tracker-db-v5';

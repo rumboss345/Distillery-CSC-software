@@ -1,7 +1,7 @@
 import type { EquipmentStatus, EquipmentType } from '../../types';
 import { equipmentNeedsCleaning } from '../../lib/equipment-cleaning';
 import { equipmentBlocksProduction } from '../../lib/equipment-maintenance';
-import { equipmentTypeLabel } from '../../lib/equipment';
+import { equipmentTypeLabel, resolveEquipmentIcon } from '../../lib/equipment';
 import type { EquipmentVolumeReport } from '../../types';
 import type { FloorEquipmentView } from '../../types';
 import { estimateAbvFromBrix, fermenterLiquidBrixPhase } from '../../lib/fermentation';
@@ -13,12 +13,14 @@ export function formatGal(value: number): string {
 
 const CODE_PREFIX: Record<EquipmentType, string> = {
   fermenter: 'F',
-  pot_still: 'S',
-  column_still: 'C',
   mash_tun: 'M',
   holding_tank: 'T',
   collection_vessel: 'V',
+  pot_still: 'S',
+  column_still: 'C',
   boiler: 'B',
+  pump: 'P',
+  hose: 'H',
   other: 'E',
 };
 
@@ -127,6 +129,7 @@ export function buildEquipmentVisualData(
     code: equipmentCode(item.equipment_type, item.id),
     name: item.name,
     equipmentType: item.equipment_type,
+    icon: resolveEquipmentIcon(item.icon, item.equipment_type),
     typeLabel: equipmentTypeLabel(item.equipment_type),
     capacityGal,
     currentVolumeGal,

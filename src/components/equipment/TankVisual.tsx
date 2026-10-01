@@ -35,6 +35,7 @@ export function TankVisual({
   labelStyle = 'default',
   onClick,
   className = '',
+  preview = false,
 }: TankVisualProps) {
   const uid = useId().replace(/:/g, '');
   const scale = SIZE_MAP[size] * scaleMultiplier;
@@ -60,17 +61,21 @@ export function TankVisual({
   const svgWidth = 160;
   const svgHeight = 200;
 
+  const Root = preview ? 'div' : 'button';
+
   return (
-    <button
-      type="button"
+    <Root
+      {...(preview ? {} : {
+        type: 'button' as const,
+        onClick,
+        title: tooltip,
+        'aria-label': `${tank.name}, ${Math.round(tank.fillPercent)} percent full`,
+        'aria-pressed': selected,
+      })}
       className={`tank-visual${selected ? ' tank-visual--selected' : ''}${onClick ? ' tank-visual--interactive' : ''}${isProcess ? ' tank-visual--process' : ''} ${className}`.trim()}
       style={isProcess ? undefined : ({ '--tank-scale': scale } as React.CSSProperties)}
-      onClick={onClick}
-      title={tooltip}
-      aria-label={`${tank.name}, ${Math.round(tank.fillPercent)} percent full`}
-      aria-pressed={selected}
     >
-      {!isProcess && (
+      {!isProcess && !preview && (
       <div className="tank-visual-tooltip" role="tooltip">
         <strong>{tank.code} — {tank.name}</strong>
         {tank.liquidName && <span>{tank.liquidName}</span>}
@@ -206,7 +211,7 @@ export function TankVisual({
 
       {isProcess ? (
         <ProcessEquipmentLabels data={tank} />
-      ) : (
+      ) : preview ? null : (
         <div className="tank-visual-labels">
           <span className="tank-visual-code">{tank.code}</span>
           <span className="tank-visual-name">{tank.name}</span>
@@ -216,6 +221,6 @@ export function TankVisual({
           <span className="tank-visual-percent">{Math.round(tank.fillPercent)}%</span>
         </div>
       )}
-    </button>
+    </Root>
   );
 }

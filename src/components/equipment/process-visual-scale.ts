@@ -7,6 +7,8 @@ const PROCESS_VISUAL_SCALE: Partial<Record<EquipmentType | string, number>> = {
   fermenter: 1.1,
   pot_still: 1,
   column_still: 1,
+  pump: 0.85,
+  hose: 0.85,
 };
 
 export function processEquipmentVisualScale(type: string): number {
