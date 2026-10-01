@@ -81,9 +81,9 @@ describe('buildProcessEquipmentContextMenu', () => {
     const stillage = buildProcessEquipmentContextMenu(source({
       id: 10,
       name: 'Stillage Storage tank',
-      equipment_type: 'holding_tank',
+      equipment_type: 'stillage_tank',
       volumeGal: 200,
-      abv: 1,
+      abv: 0,
       liquidName: 'Stillage',
     }));
     expect(labels(stillage.next)).toEqual(['Transfer']);

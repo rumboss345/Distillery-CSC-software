@@ -21,6 +21,7 @@ export function EquipmentVisual(props: EquipmentVisualProps) {
 
   switch (kind) {
     case 'holding_tank':
+    case 'stillage_tank':
     case 'collection_vessel':
       return (
         <TankVisual

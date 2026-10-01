@@ -1,7 +1,46 @@
 import { describe, expect, it } from 'vitest';
-import { persistedStillage, runAsksForStillage, stillageSaveError, stillageSummary } from './stillage';
+import {
+  distillationStillageTankError,
+  isStillageTankType,
+  persistedStillage,
+  runAsksForStillage,
+  stillageSaveError,
+  stillageSummary,
+  stillageTransferError,
+} from './stillage';
 
 describe('stillage on completed low wine and heavy rum runs', () => {
+  it('treats only the Stillage Tank equipment type as a stillage tank', () => {
+    expect(isStillageTankType('stillage_tank')).toBe(true);
+    expect(isStillageTankType('holding_tank')).toBe(false);
+    expect(isStillageTankType('collection_vessel')).toBe(false);
+    expect(isStillageTankType('Stillage Storage tank')).toBe(false);
+    expect(distillationStillageTankError('Dunder tank')).toMatch(/stillage tank/);
+  });
+
+  it('sends stillage only to a stillage tank', () => {
+    expect(stillageTransferError({
+      sourceIsStillage: true,
+      destIsStillageTank: false,
+      destName: 'Dunder tank',
+    })).toMatch(/only be sent to a stillage tank/);
+    expect(stillageTransferError({
+      sourceIsStillage: false,
+      destIsStillageTank: true,
+      destName: 'Stillage Storage tank',
+    })).toMatch(/only receives stillage/);
+    expect(stillageTransferError({
+      sourceIsStillage: true,
+      destIsStillageTank: true,
+      destName: 'Stillage Storage tank',
+    })).toBeNull();
+    expect(stillageTransferError({
+      sourceIsStillage: false,
+      destIsStillageTank: false,
+      destName: 'Low wines storage Tank 5',
+    })).toBeNull();
+  });
+
   it('asks only for low wine and heavy rum runs', () => {
     expect(runAsksForStillage('wash')).toBe(true);
     expect(runAsksForStillage('heavy_rum')).toBe(true);

@@ -222,6 +222,7 @@ export function ProcessEquipmentCanvas({
         } else if (livePosRef.current) {
           const dragged = allEquipment.find((e) => e.id === dragging.id);
           const volumeOrderedTank = dragged?.equipment_type === 'holding_tank'
+            || dragged?.equipment_type === 'stillage_tank'
             || dragged?.equipment_type === 'collection_vessel';
           if (!volumeOrderedTank) {
             const finalPos = resolveDropSlotPosition(dragging.id, livePosRef.current, layoutPlan);

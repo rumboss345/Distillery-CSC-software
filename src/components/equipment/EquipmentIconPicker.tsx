@@ -4,7 +4,7 @@ import { EquipmentVisual } from './EquipmentVisual';
 import type { EquipmentVisualData } from './equipment-visual.types';
 
 function previewData(icon: EquipmentType, label: string): EquipmentVisualData {
-  const tank = icon === 'holding_tank' || icon === 'collection_vessel';
+  const tank = icon === 'holding_tank' || icon === 'stillage_tank' || icon === 'collection_vessel';
   const fermenter = icon === 'fermenter';
   const wash = icon === 'mash_tun';
   const still = icon === 'pot_still' || icon === 'column_still';
@@ -21,8 +21,16 @@ function previewData(icon: EquipmentType, label: string): EquipmentVisualData {
     capacityGal,
     currentVolumeGal: showsFill ? fillPercent : 0,
     fillPercent,
-    liquidName: icon === 'collection_vessel' ? 'Low wine' : tank ? 'Hearts' : wash ? 'Wash' : undefined,
-    abv: tank ? 65 : undefined,
+    liquidName: icon === 'stillage_tank'
+      ? 'Stillage'
+      : icon === 'collection_vessel'
+        ? 'Low wine'
+        : tank
+          ? 'Hearts'
+          : wash
+            ? 'Wash'
+            : undefined,
+    abv: icon === 'stillage_tank' ? 0 : tank ? 65 : undefined,
     status: showsFill ? 'active' : 'available',
     isWashing: wash,
     fermenterLatestBrix: fermenter ? 12 : undefined,

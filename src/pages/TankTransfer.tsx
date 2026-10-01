@@ -24,14 +24,25 @@ import {
   saveFermenterWashTransfer,
   saveHoldingTankOnHand,
   saveHoldingTankTransfer,
+  transferSourceIsStillage,
   useRefreshKey,
 } from '../db/queries';
+import { isSpiritLedgerEquipmentType } from '../lib/equipment';
+import { isStillageTankType } from '../lib/stillage';
 import { limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
 import { formatDateDisplay } from '../lib/date-input';
 import { localIsoDate } from '../lib/planned-event-date';
 import { latestCompleted } from '../lib/recent-completed';
 import { DISCARD_DESTINATION, fermenterTransferError } from '../lib/fermenter-transfer';
+const destAcceptsTransferFrom = (sourceId: number, destId: number): boolean => {
+  if (!destId || destId === sourceId) return false;
+  const dest = getFloorEquipment().find((item) => item.id === destId);
+  const destIsStillage = isStillageTankType(dest?.equipment_type);
+  const sourceIsStillage = sourceId > 0 && transferSourceIsStillage(sourceId);
+  return sourceIsStillage ? destIsStillage : !destIsStillage;
+};
+
 const sourceTankVolumeGal = (tankId: number) => {
   if (!tankId) return 0;
   const contents = getHoldingTankContents(tankId);
@@ -73,7 +84,7 @@ export function TankTransfer() {
   const { key, refresh } = useRefreshKey();
   const spiritTransferVessels = getSpiritTransferVessels();
   const tanksWithContents = getFloorEquipment()
-    .filter((item) => item.equipment_type === 'holding_tank' || item.equipment_type === 'collection_vessel')
+    .filter((item) => isSpiritLedgerEquipmentType(item.equipment_type))
     .map((tank) => ({
       ...tank,
       ...getHoldingTankContents(tank.id),
@@ -118,9 +129,14 @@ export function TankTransfer() {
   const selectedTransferSourceTank = sourceTanksForTransfer.find(
     (t) => t.id === transferForm.source_tank_equipment_id,
   );
-  const destTanksForTransfer = spiritTransferVessels.filter(
-    (t) => t.id !== transferForm.source_tank_equipment_id,
-  );
+  const sourceSendsStillage = transferForm.source_tank_equipment_id > 0
+    && transferSourceIsStillage(transferForm.source_tank_equipment_id);
+  const destTanksForTransfer = spiritTransferVessels.filter((t) => (
+    t.id !== transferForm.source_tank_equipment_id
+    && (sourceSendsStillage
+      ? isStillageTankType(t.equipment_type)
+      : !isStillageTankType(t.equipment_type))
+  ));
   const transferSourceContents = transferForm.source_tank_equipment_id
     ? getHoldingTankContents(transferForm.source_tank_equipment_id)
     : null;
@@ -138,7 +154,9 @@ export function TankTransfer() {
     return {
       ...prev,
       source_tank_equipment_id: tankId,
-      dest_tank_equipment_id: prev.dest_tank_equipment_id === tankId ? 0 : prev.dest_tank_equipment_id,
+      dest_tank_equipment_id: destAcceptsTransferFrom(tankId, prev.dest_tank_equipment_id)
+        ? prev.dest_tank_equipment_id
+        : 0,
       volume_gal: fullVolumeGal,
       observed_abv: contents ? (Math.round(contents.abv * 10) / 10).toString() : '',
       sample_temp_f: '60',
@@ -229,7 +247,11 @@ export function TankTransfer() {
       alert('Enter the volume to transfer.');
       return;
     }
-    if (transferCorrectedAbv == null || transferCorrectedAbv <= 0) {
+    const sendingStillage = transferSourceIsStillage(transferForm.source_tank_equipment_id);
+    const abvToSave = sendingStillage
+      ? (transferCorrectedAbv != null && transferCorrectedAbv > 0 ? transferCorrectedAbv : 0)
+      : transferCorrectedAbv;
+    if (!sendingStillage && (abvToSave == null || abvToSave <= 0)) {
       alert('Enter the transfer ABV (%).');
       return;
     }
@@ -252,7 +274,7 @@ export function TankTransfer() {
         source_tank_equipment_id: transferForm.source_tank_equipment_id,
         dest_tank_equipment_id: transferForm.dest_tank_equipment_id,
         volume_gal: transferForm.volume_gal,
-        abv: transferCorrectedAbv,
+        abv: abvToSave ?? 0,
         transfer_date: transferForm.transfer_date,
         notes: transferForm.notes,
       });
@@ -691,8 +713,13 @@ export function TankTransfer() {
                 })}
               </select>
               <p className="field-hint">
-                A collection vessel can take spirit from any run, but not a different cut. Keep heads, hearts, and tails in separate vessels.
+                {sourceSendsStillage
+                  ? 'Stillage can only be sent to a stillage tank.'
+                  : 'A collection vessel can take spirit from any run, but not a different cut. Keep heads, hearts, and tails in separate vessels.'}
               </p>
+              {sourceSendsStillage && destTanksForTransfer.length === 0 && (
+                <p className="field-hint">No stillage tank is set up. Add equipment with type Stillage Tank before moving this stillage.</p>
+              )}
             </div>
             <div className="form-group full-width">
               <AbvVolumeTemperatureFields
