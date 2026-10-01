@@ -1485,6 +1485,105 @@ tr:hover td {
   border-radius: 50%;
 }
 
+.eq-pump {
+  width: 52%;
+  height: 52%;
+  border-radius: 50%;
+  position: relative;
+}
+
+.eq-pump::before {
+  content: '';
+  position: absolute;
+  left: -32%;
+  top: 38%;
+  width: 36%;
+  height: 24%;
+  background: inherit;
+  border-radius: 2px;
+}
+
+.eq-pump::after {
+  content: '';
+  position: absolute;
+  right: -38%;
+  top: 18%;
+  width: 42%;
+  height: 64%;
+  background: inherit;
+  border-radius: 3px;
+}
+
+.eq-hose {
+  width: 78%;
+  height: 22%;
+  border-radius: 999px;
+  position: relative;
+}
+
+.eq-hose::before,
+.eq-hose::after {
+  content: '';
+  position: absolute;
+  top: -60%;
+  width: 18%;
+  height: 220%;
+  background: inherit;
+  border-radius: 3px;
+}
+
+.eq-hose::before { left: -4%; }
+.eq-hose::after { right: -4%; }
+
+.equipment-icon-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 0.5rem;
+}
+
+.equipment-icon-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  min-width: 0;
+  padding: 0.35rem 0.25rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.15);
+  color: inherit;
+  cursor: pointer;
+}
+
+.equipment-icon-option.is-selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.equipment-icon-option-preview {
+  width: 100%;
+  height: 78px;
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  pointer-events: none;
+}
+
+.equipment-icon-option-preview .equipment-visual--preview {
+  transform: scale(0.36);
+  transform-origin: top center;
+  padding: 0;
+  gap: 0;
+  pointer-events: none;
+}
+
+.equipment-icon-option-label {
+  font-size: 0.68rem;
+  line-height: 1.2;
+  text-align: center;
+}
+
 .floor-legend {
   display: flex;
   flex-wrap: wrap;

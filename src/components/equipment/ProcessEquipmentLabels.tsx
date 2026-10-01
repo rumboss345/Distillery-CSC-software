@@ -20,7 +20,13 @@ type LabelData = Pick<
   | 'fermenterLatestBrix'
 >;
 
-export function ProcessEquipmentLabels({ data }: { data: LabelData | TankVisualData }) {
+export function ProcessEquipmentLabels({
+  data,
+  showVolume = true,
+}: {
+  data: LabelData | TankVisualData;
+  showVolume?: boolean;
+}) {
   const isEmpty = data.currentVolumeGal <= 0 && data.fillPercent <= 0 && !data.liquidName;
   const isFermenting = 'isFermenting' in data && data.isFermenting === true;
   const brix = 'fermenterLatestBrix' in data ? data.fermenterLatestBrix : undefined;
@@ -40,19 +46,21 @@ export function ProcessEquipmentLabels({ data }: { data: LabelData | TankVisualD
   return (
     <div className="process-equipment-labels">
       <div className="process-equipment-id" title={data.name}>{shortName}</div>
-      {isFermenting && (
+      {showVolume && isFermenting && (
         <div className="process-equipment-status process-equipment-status--fermenting">Fermenting</div>
       )}
-      {contents && (
+      {showVolume && contents && (
         <div className="process-equipment-contents" title={contents}>{contents}</div>
       )}
-      <div className={`process-equipment-status${isEmpty ? ' process-equipment-status--empty' : ''}`}>
-        {volumeText}
-      </div>
-      {brix != null && !isEmpty && (
+      {showVolume && (
+        <div className={`process-equipment-status${isEmpty ? ' process-equipment-status--empty' : ''}`}>
+          {volumeText}
+        </div>
+      )}
+      {showVolume && brix != null && !isEmpty && (
         <div className="process-equipment-brix">{brix.toFixed(1)}° Brix</div>
       )}
-      {abvText && <div className="process-equipment-abv">{abvText}</div>}
+      {showVolume && abvText && <div className="process-equipment-abv">{abvText}</div>}
     </div>
   );
 }

@@ -20,7 +20,7 @@ const COLUMN_VAPOR_DOTS = [
 export function StillVisual(props: EquipmentVisualProps) {
   const { data } = props;
   const uid = useId().replace(/:/g, '');
-  const isColumn = data.equipmentType === 'column_still';
+  const isColumn = (data.icon || data.equipmentType) === 'column_still';
   const isRunning = data.status === 'active';
 
   const columnFillPercent = useMemo(() => {

@@ -9,5 +9,7 @@ describe('processEquipmentVisualScale', () => {
     expect(processEquipmentVisualScale('pot_still')).toBe(1);
     expect(processEquipmentVisualScale('column_still')).toBe(1);
     expect(processEquipmentVisualScale('mash_tun')).toBe(1);
+    expect(processEquipmentVisualScale('pump')).toBe(0.85);
+    expect(processEquipmentVisualScale('hose')).toBe(0.85);
   });
 });

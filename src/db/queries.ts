@@ -27,7 +27,7 @@ import {
   maintenanceStatusLabel,
 } from '../lib/equipment-maintenance';
 import { equipmentCleaningStatusLabel, equipmentNeedsCleaning, equipmentStatusWhenReturningToPlanned } from '../lib/equipment-cleaning';
-import { EQUIPMENT_TYPES } from '../lib/equipment';
+import { EQUIPMENT_TYPES, resolveEquipmentIcon } from '../lib/equipment';
 import { equipmentTypeNameError, normalizeEquipmentTypeName } from '../lib/equipment-type';
 import { countActiveFermentations, fermenterShowsAssignedWash } from '../lib/mash-fermenter-fill';
 import { compareStoredDatesDesc } from '../lib/date-input';
@@ -4631,22 +4631,29 @@ export function updateEquipmentMaintenance(
   });
 }
 
-export function getEquipmentTypeOptions(): { value: string; label: string }[] {
-  const custom = queryAll<{ name: string }>(
-    'SELECT name FROM equipment_types ORDER BY name COLLATE NOCASE',
+export function getEquipmentTypeOptions(): { value: string; label: string; icon: string }[] {
+  const custom = queryAll<{ name: string; icon: string | null }>(
+    'SELECT name, icon FROM equipment_types ORDER BY name COLLATE NOCASE',
   );
   return [
-    ...EQUIPMENT_TYPES.map((type) => ({ value: type.value, label: type.label })),
-    ...custom.map((row) => ({ value: row.name, label: row.name })),
+    ...EQUIPMENT_TYPES.map((type) => ({ value: type.value, label: type.label, icon: type.value })),
+    ...custom.map((row) => ({
+      value: row.name,
+      label: row.name,
+      icon: resolveEquipmentIcon(row.icon, 'other'),
+    })),
   ];
 }
 
-export function addEquipmentType(name: string): string {
+export function addEquipmentType(name: string, icon = 'other'): string {
   const normalized = normalizeEquipmentTypeName(name);
   const existing = queryAll<{ name: string }>('SELECT name FROM equipment_types');
   const error = equipmentTypeNameError(normalized, existing.map((row) => row.name));
   if (error) throw new Error(error);
-  insertRow('INSERT INTO equipment_types (name) VALUES (?)', [normalized]);
+  insertRow(
+    'INSERT INTO equipment_types (name, icon) VALUES (?, ?)',
+    [normalized, resolveEquipmentIcon(icon, 'other')],
+  );
   return normalized;
 }
 
@@ -4656,15 +4663,16 @@ export function saveFloorEquipment(
 ): void {
   const maintenanceStatus = item.maintenance_status ?? null;
   const maintenanceNotes = item.maintenance_notes ?? '';
+  const icon = resolveEquipmentIcon(item.icon, item.equipment_type);
   if (id) {
     runQuery(
-      `UPDATE floor_equipment SET floor_plan_id=?, name=?, equipment_type=?, pos_x_ft=?, pos_y_ft=?, width_ft=?, depth_ft=?, capacity_gal=?, status=?, linked_mash_batch_id=?, notes=?, maintenance_status=?, maintenance_notes=? WHERE id=?`,
-      [item.floor_plan_id, item.name, item.equipment_type, item.pos_x_ft, item.pos_y_ft, item.width_ft, item.depth_ft, item.capacity_gal, item.status, item.linked_mash_batch_id, item.notes, maintenanceStatus, maintenanceNotes, id],
+      `UPDATE floor_equipment SET floor_plan_id=?, name=?, equipment_type=?, icon=?, pos_x_ft=?, pos_y_ft=?, width_ft=?, depth_ft=?, capacity_gal=?, status=?, linked_mash_batch_id=?, notes=?, maintenance_status=?, maintenance_notes=? WHERE id=?`,
+      [item.floor_plan_id, item.name, item.equipment_type, icon, item.pos_x_ft, item.pos_y_ft, item.width_ft, item.depth_ft, item.capacity_gal, item.status, item.linked_mash_batch_id, item.notes, maintenanceStatus, maintenanceNotes, id],
     );
   } else {
     insertRow(
-      `INSERT INTO floor_equipment (floor_plan_id, name, equipment_type, pos_x_ft, pos_y_ft, width_ft, depth_ft, capacity_gal, status, linked_mash_batch_id, notes, maintenance_status, maintenance_notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [item.floor_plan_id, item.name, item.equipment_type, item.pos_x_ft, item.pos_y_ft, item.width_ft, item.depth_ft, item.capacity_gal, item.status, item.linked_mash_batch_id, item.notes, maintenanceStatus, maintenanceNotes],
+      `INSERT INTO floor_equipment (floor_plan_id, name, equipment_type, icon, pos_x_ft, pos_y_ft, width_ft, depth_ft, capacity_gal, status, linked_mash_batch_id, notes, maintenance_status, maintenance_notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [item.floor_plan_id, item.name, item.equipment_type, icon, item.pos_x_ft, item.pos_y_ft, item.width_ft, item.depth_ft, item.capacity_gal, item.status, item.linked_mash_batch_id, item.notes, maintenanceStatus, maintenanceNotes],
     );
   }
 }

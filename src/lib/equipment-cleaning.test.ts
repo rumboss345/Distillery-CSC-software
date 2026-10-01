@@ -18,6 +18,7 @@ const base = (overrides: Partial<FloorEquipment>): FloorEquipment => ({
   status: 'empty',
   linked_mash_batch_id: null,
   notes: '',
+  icon: '',
   maintenance_status: null,
   maintenance_notes: '',
   cleaned_at: null,

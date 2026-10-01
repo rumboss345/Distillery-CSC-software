@@ -3,14 +3,19 @@ import { fermenterLiquidBrixPhase } from './fermentation';
 
 export const EQUIPMENT_TYPES: { value: EquipmentType; label: string }[] = [
   { value: 'fermenter', label: 'Fermenter' },
-  { value: 'pot_still', label: 'Pot Still' },
-  { value: 'column_still', label: 'Column Still' },
   { value: 'mash_tun', label: 'Wash Tank' },
   { value: 'holding_tank', label: 'Holding Tank' },
   { value: 'collection_vessel', label: 'Collection Vessels' },
+  { value: 'pot_still', label: 'Pot Still' },
+  { value: 'column_still', label: 'Column Still' },
   { value: 'boiler', label: 'Boiler' },
+  { value: 'pump', label: 'Pump' },
+  { value: 'hose', label: 'Hose' },
   { value: 'other', label: 'Other' },
 ];
+
+/** Pictures you can assign when adding or editing equipment. */
+export const EQUIPMENT_ICONS = EQUIPMENT_TYPES;
 
 export const EQUIPMENT_STATUSES: EquipmentStatus[] = [
   'empty', 'in_use', 'cleaning', 'offline',
@@ -18,12 +23,14 @@ export const EQUIPMENT_STATUSES: EquipmentStatus[] = [
 
 export const TYPE_COLORS: Record<EquipmentType, string> = {
   fermenter: '#6b9e78',
-  pot_still: '#c8956c',
-  column_still: '#d4a04a',
   mash_tun: '#8b7355',
   holding_tank: '#6a9ec9',
   collection_vessel: '#7c8fd4',
+  pot_still: '#c8956c',
+  column_still: '#d4a04a',
   boiler: '#c96a6a',
+  pump: '#3d8f8a',
+  hose: '#4d7a52',
   other: '#9a928a',
 };
 
@@ -72,14 +79,38 @@ export function equipmentTypeDefaults(type: string): { width_ft: number; depth_f
 
 export const TYPE_DEFAULTS: Record<EquipmentType, { width_ft: number; depth_ft: number; capacity_gal: number }> = {
   fermenter: { width_ft: 10, depth_ft: 10, capacity_gal: 1000 },
-  pot_still: { width_ft: 12, depth_ft: 14, capacity_gal: 200 },
-  column_still: { width_ft: 8, depth_ft: 20, capacity_gal: 300 },
   mash_tun: { width_ft: 14, depth_ft: 12, capacity_gal: 600 },
   holding_tank: { width_ft: 8, depth_ft: 6, capacity_gal: 100 },
   collection_vessel: { width_ft: 7, depth_ft: 6, capacity_gal: 80 },
+  pot_still: { width_ft: 12, depth_ft: 14, capacity_gal: 200 },
+  column_still: { width_ft: 8, depth_ft: 20, capacity_gal: 300 },
   boiler: { width_ft: 6, depth_ft: 8, capacity_gal: 0 },
+  pump: { width_ft: 4, depth_ft: 3, capacity_gal: 0 },
+  hose: { width_ft: 8, depth_ft: 2, capacity_gal: 0 },
   other: { width_ft: 8, depth_ft: 8, capacity_gal: 0 },
 };
+
+export function isBuiltInEquipmentType(type: string): type is EquipmentType {
+  return EQUIPMENT_TYPES.some((item) => item.value === type);
+}
+
+/** Tank, fermenter, wash tank, and still pictures show a fill level and liquid. */
+export function equipmentIconShowsVolume(icon: string): boolean {
+  return icon === 'fermenter'
+    || icon === 'mash_tun'
+    || icon === 'holding_tank'
+    || icon === 'collection_vessel'
+    || icon === 'pot_still'
+    || icon === 'column_still';
+}
+
+/** Saved icon, otherwise the equipment type when that type has a picture. */
+export function resolveEquipmentIcon(icon: string | null | undefined, equipmentType: string): EquipmentType {
+  const chosen = (icon ?? '').trim();
+  if (isBuiltInEquipmentType(chosen)) return chosen;
+  if (isBuiltInEquipmentType(equipmentType)) return equipmentType;
+  return 'other';
+}
 
 export function equipmentTypeLabel(type: string): string {
   return EQUIPMENT_TYPES.find((t) => t.value === type)?.label ?? type;

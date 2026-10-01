@@ -7,6 +7,8 @@ export interface EquipmentVisualData {
   code: string;
   name: string;
   equipmentType: string;
+  /** Picture to draw. Volume still comes from the equipment type. */
+  icon: string;
   typeLabel: string;
   capacityGal: number;
   currentVolumeGal: number;
@@ -34,4 +36,6 @@ export interface EquipmentVisualProps {
   labelStyle?: 'default' | 'process';
   onClick?: () => void;
   className?: string;
+  /** Compact, non-interactive picture for the icon picker. */
+  preview?: boolean;
 }

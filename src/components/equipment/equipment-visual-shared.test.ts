@@ -18,6 +18,7 @@ function fermenterView(overrides: Partial<FloorEquipmentView> = {}): FloorEquipm
     status: 'in_use',
     linked_mash_batch_id: null,
     notes: '',
+    icon: '',
     maintenance_status: null,
     maintenance_notes: '',
     cleaned_at: null,
@@ -45,5 +46,11 @@ describe('buildEquipmentVisualData fermenter est. ABV', () => {
       fermenterView({ equipment_type: 'holding_tank', active_batch_number: undefined }),
     );
     expect(visual.estimatedAbv).toBeUndefined();
+  });
+
+  it('uses a saved icon and otherwise matches the equipment type', () => {
+    expect(buildEquipmentVisualData(fermenterView()).icon).toBe('fermenter');
+    expect(buildEquipmentVisualData(fermenterView({ icon: 'pump' })).icon).toBe('pump');
+    expect(buildEquipmentVisualData(fermenterView({ equipment_type: 'Gin basket', icon: 'pot_still' })).icon).toBe('pot_still');
   });
 });

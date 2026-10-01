@@ -21,13 +21,16 @@ import { HoldingTankIntakeHistory } from '../components/HoldingTankIntakeHistory
 import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
 import { holdingTankIntakeKey } from '../db/queries';
+import { EquipmentIconPicker } from '../components/equipment/EquipmentIconPicker';
 import {
   EQUIPMENT_STATUSES,
   equipmentTypeDefaults,
   equipmentTypeLabel,
+  isBuiltInEquipmentType,
   isLiquidVesselEquipmentType,
+  resolveEquipmentIcon,
 } from '../lib/equipment';
-import type { EquipmentStatus, FloorEquipment } from '../types';
+import type { EquipmentStatus, EquipmentType, FloorEquipment } from '../types';
 
 const emptyEquipment = (planId: number, type = 'fermenter'): Omit<FloorEquipment, 'id' | 'created_at'> => {
   const defaults = equipmentTypeDefaults(type);
@@ -35,6 +38,7 @@ const emptyEquipment = (planId: number, type = 'fermenter'): Omit<FloorEquipment
     floor_plan_id: planId,
     name: '',
     equipment_type: type,
+    icon: resolveEquipmentIcon('', type),
     pos_x_ft: 4,
     pos_y_ft: 4,
     process_pos_x: null,
@@ -72,6 +76,7 @@ export function FloorPlanPage() {
   const [viewMode, setViewMode] = useState<'process' | 'classic'>('process');
   const [showTypeForm, setShowTypeForm] = useState(false);
   const [typeName, setTypeName] = useState('');
+  const [typeIcon, setTypeIcon] = useState<EquipmentType>('other');
   const [typeError, setTypeError] = useState('');
   const equipmentTypes = getEquipmentTypeOptions();
 
@@ -113,25 +118,44 @@ export function FloorPlanPage() {
 
   const openEdit = (item: FloorEquipment) => {
     setEditId(item.id);
-    setForm({ ...item });
+    setForm({
+      ...item,
+      icon: resolveEquipmentIcon(item.icon, item.equipment_type),
+    });
     setShowForm(true);
   };
 
   const openTypeForm = () => {
     setTypeName('');
+    setTypeIcon('other');
     setTypeError('');
     setShowTypeForm(true);
   };
 
   const handleTypeChange = (type: string) => {
-    const defaults = equipmentTypeDefaults(type);
+    const option = equipmentTypes.find((item) => item.value === type);
+    const icon = option?.icon ?? resolveEquipmentIcon('', type);
+    if (type === form.equipment_type) {
+      setForm({ ...form, icon });
+      return;
+    }
+    const defaults = equipmentTypeDefaults(isBuiltInEquipmentType(type) ? type : icon);
     setForm({
       ...form,
       equipment_type: type,
+      icon,
       width_ft: defaults.width_ft,
       depth_ft: defaults.depth_ft,
       capacity_gal: defaults.capacity_gal,
     });
+  };
+
+  const handleIconPick = (icon: EquipmentType) => {
+    if (isBuiltInEquipmentType(form.equipment_type)) {
+      handleTypeChange(icon);
+      return;
+    }
+    setForm({ ...form, icon });
   };
 
   const handleSave = () => {
@@ -142,11 +166,21 @@ export function FloorPlanPage() {
 
   const handleSaveType = () => {
     try {
-      const created = addEquipmentType(typeName);
+      const created = addEquipmentType(typeName, typeIcon);
       setShowTypeForm(false);
       setTypeName('');
       setTypeError('');
-      if (showForm) handleTypeChange(created);
+      if (showForm) {
+        const defaults = equipmentTypeDefaults(typeIcon);
+        setForm({
+          ...form,
+          equipment_type: created,
+          icon: typeIcon,
+          width_ft: defaults.width_ft,
+          depth_ft: defaults.depth_ft,
+          capacity_gal: defaults.capacity_gal,
+        });
+      }
       refresh();
     } catch (err) {
       setTypeError(err instanceof Error ? err.message : 'Could not add equipment type.');
@@ -433,7 +467,7 @@ export function FloorPlanPage() {
       )}
 
       {showForm && (
-        <Modal title={editId ? 'Edit Equipment' : 'Add Equipment'} onClose={() => setShowForm(false)}>
+        <Modal title={editId ? 'Edit Equipment' : 'Add Equipment'} onClose={() => setShowForm(false)} wide>
           <div className="form-grid">
             <div className="form-group">
               <label>Name</label>
@@ -463,6 +497,13 @@ export function FloorPlanPage() {
               <button type="button" className="btn btn-sm btn-ghost" onClick={openTypeForm}>
                 Add equipment type
               </button>
+            </div>
+            <div className="form-group full-width">
+              <label>Icon</label>
+              <EquipmentIconPicker value={resolveEquipmentIcon(form.icon, form.equipment_type)} onChange={handleIconPick} />
+              <p className="form-hint">
+                Tanks, fermenters, wash tanks, and stills show how full they are and the liquid inside.
+              </p>
             </div>
             <div className="form-group">
               <label>Status</label>
@@ -533,7 +574,7 @@ export function FloorPlanPage() {
       )}
 
       {showTypeForm && (
-        <Modal title="Add equipment type" onClose={() => setShowTypeForm(false)}>
+        <Modal title="Add equipment type" onClose={() => setShowTypeForm(false)} wide>
           <div className="form-group">
             <label>Type name</label>
             <input
@@ -542,13 +583,18 @@ export function FloorPlanPage() {
                 setTypeName(e.target.value);
                 setTypeError('');
               }}
-              placeholder="e.g. Gin basket, Thumper, Pump"
+              placeholder="e.g. Gin basket, Thumper"
               autoFocus
             />
+          </div>
+          <div className="form-group">
+            <label>Icon</label>
+            <EquipmentIconPicker value={typeIcon} onChange={setTypeIcon} />
           </div>
           {typeError && <div className="auth-error">{typeError}</div>}
           <p className="form-hint">
             The new type is available when you add equipment and gets its own section on the process view.
+            Pick the picture it should use. Tank icons still show how full they are.
           </p>
           <div className="form-actions">
             <button className="btn btn-secondary" onClick={() => setShowTypeForm(false)}>Cancel</button>
