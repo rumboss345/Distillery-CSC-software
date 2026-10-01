@@ -28,7 +28,7 @@ import {
   useRefreshKey,
 } from '../db/queries';
 import { isSpiritLedgerEquipmentType } from '../lib/equipment';
-import { isStillageTankType } from '../lib/stillage';
+import { isStillageTankType, STILLAGE_DISCARD_DESTINATION } from '../lib/stillage';
 import { limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
 import { formatDateDisplay } from '../lib/date-input';
@@ -36,10 +36,11 @@ import { localIsoDate } from '../lib/planned-event-date';
 import { latestCompleted } from '../lib/recent-completed';
 import { DISCARD_DESTINATION, fermenterTransferError } from '../lib/fermenter-transfer';
 const destAcceptsTransferFrom = (sourceId: number, destId: number): boolean => {
+  const sourceIsStillage = sourceId > 0 && transferSourceIsStillage(sourceId);
+  if (destId === STILLAGE_DISCARD_DESTINATION) return sourceIsStillage;
   if (!destId || destId === sourceId) return false;
   const dest = getFloorEquipment().find((item) => item.id === destId);
   const destIsStillage = isStillageTankType(dest?.equipment_type);
-  const sourceIsStillage = sourceId > 0 && transferSourceIsStillage(sourceId);
   return sourceIsStillage ? destIsStillage : !destIsStillage;
 };
 
@@ -141,7 +142,7 @@ export function TankTransfer() {
     ? getHoldingTankContents(transferForm.source_tank_equipment_id)
     : null;
   const transferDestTank = spiritTransferVessels.find((t) => t.id === transferForm.dest_tank_equipment_id);
-  const transferDestContents = transferForm.dest_tank_equipment_id
+  const transferDestContents = transferForm.dest_tank_equipment_id > 0
     ? getHoldingTankContents(transferForm.dest_tank_equipment_id)
     : null;
 
@@ -239,7 +240,8 @@ export function TankTransfer() {
       alert('Select the source tank.');
       return;
     }
-    if (!transferForm.dest_tank_equipment_id) {
+    const discardingStillage = transferForm.dest_tank_equipment_id === STILLAGE_DISCARD_DESTINATION;
+    if (!discardingStillage && !transferForm.dest_tank_equipment_id) {
       alert('Select the destination tank.');
       return;
     }
@@ -259,7 +261,7 @@ export function TankTransfer() {
       alert(`Only ${transferSourceContents.volume_gal.toFixed(1)} gal available in the source tank.`);
       return;
     }
-    if (transferDestTank && transferDestContents && transferForm.volume_gal > 0) {
+    if (!discardingStillage && transferDestTank && transferDestContents && transferForm.volume_gal > 0) {
       const newTotal = transferDestContents.volume_gal + transferForm.volume_gal;
       if (transferDestTank.capacity_gal > 0 && newTotal > transferDestTank.capacity_gal) {
         if (!confirm(
@@ -272,7 +274,7 @@ export function TankTransfer() {
     try {
       saveHoldingTankTransfer({
         source_tank_equipment_id: transferForm.source_tank_equipment_id,
-        dest_tank_equipment_id: transferForm.dest_tank_equipment_id,
+        dest_tank_equipment_id: discardingStillage ? null : transferForm.dest_tank_equipment_id,
         volume_gal: transferForm.volume_gal,
         abv: abvToSave ?? 0,
         transfer_date: transferForm.transfer_date,
@@ -651,7 +653,7 @@ export function TankTransfer() {
                   <tr key={t.id}>
                     <td>{formatDateDisplay(t.transfer_date)}</td>
                     <td>{t.source_tank_name}</td>
-                    <td>{t.dest_tank_name}</td>
+                    <td>{t.dest_tank_name ?? 'Discarded'}</td>
                     <td>{t.volume_gal.toFixed(1)} gal</td>
                     <td>{t.abv.toFixed(1)}%</td>
                     <td>{t.notes || '—'}</td>
@@ -697,13 +699,16 @@ export function TankTransfer() {
             <div className="form-group full-width">
               <label>To Tank</label>
               <select
-                value={transferForm.dest_tank_equipment_id || ''}
+                value={transferForm.dest_tank_equipment_id ? String(transferForm.dest_tank_equipment_id) : ''}
                 onChange={(e) => setTransferForm({
                   ...transferForm,
                   dest_tank_equipment_id: e.target.value ? parseInt(e.target.value, 10) : 0,
                 })}
               >
                 <option value="">— Select destination tank —</option>
+                {sourceSendsStillage && (
+                  <option value={String(STILLAGE_DISCARD_DESTINATION)}>Discarded</option>
+                )}
                 {destTanksForTransfer.map((t) => {
                   const contents = getHoldingTankContents(t.id);
                   const label = contents.volume_gal > 0
@@ -714,11 +719,11 @@ export function TankTransfer() {
               </select>
               <p className="field-hint">
                 {sourceSendsStillage
-                  ? 'Stillage can only be sent to a stillage tank.'
+                  ? 'Stillage can be sent to a stillage tank, or discarded.'
                   : 'A collection vessel can take spirit from any run, but not a different cut. Keep heads, hearts, and tails in separate vessels.'}
               </p>
               {sourceSendsStillage && destTanksForTransfer.length === 0 && (
-                <p className="field-hint">No stillage tank is set up. Add equipment with type Stillage Tank before moving this stillage.</p>
+                <p className="field-hint">No other stillage tank is set up. Discard this stillage, or add another Stillage Tank.</p>
               )}
             </div>
             <div className="form-group full-width">
@@ -770,7 +775,9 @@ export function TankTransfer() {
           </div>
           <div className="form-actions">
             <button type="button" className="btn btn-secondary" onClick={() => setShowTransferForm(false)}>Cancel</button>
-            <button type="button" className="btn btn-primary" onClick={handleSaveTransfer}>Transfer</button>
+            <button type="button" className="btn btn-primary" onClick={handleSaveTransfer}>
+              {transferForm.dest_tank_equipment_id === STILLAGE_DISCARD_DESTINATION ? 'Discard' : 'Transfer'}
+            </button>
           </div>
         </Modal>
       )}

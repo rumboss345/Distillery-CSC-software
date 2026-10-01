@@ -286,7 +286,7 @@ export interface HoldingTankTransfer {
   id: number;
   spirit_type: SpiritTransferType;
   source_tank_equipment_id: number;
-  dest_tank_equipment_id: number;
+  dest_tank_equipment_id: number | null;
   volume_gal: number;
   abv: number;
   transfer_date: string;

@@ -128,7 +128,7 @@ CREATE TABLE IF NOT EXISTS holding_tank_transfers (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   spirit_type TEXT NOT NULL DEFAULT 'low_wines',
   source_tank_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
-  dest_tank_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
+  dest_tank_equipment_id INTEGER REFERENCES floor_equipment(id),
   volume_gal REAL NOT NULL DEFAULT 0,
   abv REAL NOT NULL DEFAULT 0,
   transfer_date TEXT NOT NULL,
@@ -638,6 +638,7 @@ function runMigrations(): void {
   migrateRecipeNutrients();
   migrateMashBatchNutrients();
   seedBlendRecipes2024();
+  migrateStillageDiscardTransfers();
   db.run(`
     UPDATE floor_equipment
     SET equipment_type = 'stillage_tank'
@@ -645,6 +646,38 @@ function runMigrations(): void {
       AND name LIKE '%stillage%' COLLATE NOCASE
   `);
   persistDb();
+}
+
+/** Stillage leaving a stillage tank can be discarded, so the destination tank is optional. */
+function migrateStillageDiscardTransfers(): void {
+  if (!db) return;
+  const dest = queryOne<{ notnull: number }>(
+    "SELECT \"notnull\" as notnull FROM pragma_table_info('holding_tank_transfers') WHERE name = 'dest_tank_equipment_id'",
+  );
+  if (!dest || dest.notnull === 0) return;
+  db.run('ALTER TABLE holding_tank_transfers RENAME TO holding_tank_transfers_old');
+  db.run(`
+    CREATE TABLE holding_tank_transfers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      spirit_type TEXT NOT NULL DEFAULT 'low_wines',
+      source_tank_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
+      dest_tank_equipment_id INTEGER REFERENCES floor_equipment(id),
+      volume_gal REAL NOT NULL DEFAULT 0,
+      abv REAL NOT NULL DEFAULT 0,
+      transfer_date TEXT NOT NULL,
+      notes TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  db.run(`
+    INSERT INTO holding_tank_transfers
+      (id, spirit_type, source_tank_equipment_id, dest_tank_equipment_id, volume_gal, abv, transfer_date, notes, created_at)
+    SELECT id, spirit_type, source_tank_equipment_id, dest_tank_equipment_id, volume_gal, abv, transfer_date, notes, created_at
+    FROM holding_tank_transfers_old
+  `);
+  db.run('DROP TABLE holding_tank_transfers_old');
+  db.run('CREATE INDEX IF NOT EXISTS idx_tank_transfers_source ON holding_tank_transfers(source_tank_equipment_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_tank_transfers_dest ON holding_tank_transfers(dest_tank_equipment_id)');
 }
 
 function migrateMashBatchNutrients(): void {

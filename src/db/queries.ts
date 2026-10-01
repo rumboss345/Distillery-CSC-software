@@ -1538,14 +1538,25 @@ export function transferSourceIsStillage(tankId: number): boolean {
   return sourceHoldsStillage(tankId);
 }
 
-function assertStillageTransferDestination(sourceId: number, destId: number): void {
+function assertStillageTransferDestination(sourceId: number, destId: number | null): void {
+  const sourceIsStillage = transferSourceIsStillage(sourceId);
+  if (destId == null) {
+    const message = stillageTransferError({
+      sourceIsStillage,
+      destIsStillageTank: false,
+      destName: 'Discarded',
+      destDiscarded: true,
+    });
+    if (message) throw new Error(message);
+    return;
+  }
   const dest = queryOne<{ equipment_type: string; name: string }>(
     'SELECT equipment_type, name FROM floor_equipment WHERE id = ?',
     [destId],
   );
   if (!dest) return;
   const message = stillageTransferError({
-    sourceIsStillage: transferSourceIsStillage(sourceId),
+    sourceIsStillage,
     destIsStillageTank: isStillageTankType(dest.equipment_type),
     destName: dest.name,
   });
@@ -1833,7 +1844,7 @@ export function getHoldingTankTransfers(): HoldingTankTransferView[] {
             dest.name as dest_tank_name
      FROM holding_tank_transfers t
      JOIN floor_equipment src ON src.id = t.source_tank_equipment_id
-     JOIN floor_equipment dest ON dest.id = t.dest_tank_equipment_id
+     LEFT JOIN floor_equipment dest ON dest.id = t.dest_tank_equipment_id
      ORDER BY t.transfer_date DESC, t.id DESC`,
   );
 }
@@ -1850,7 +1861,8 @@ export function saveHoldingTankTransfer(
     spirit_type?: HoldingTankTransfer['spirit_type'];
   },
 ): void {
-  if (transfer.source_tank_equipment_id === transfer.dest_tank_equipment_id) {
+  const discarding = transfer.dest_tank_equipment_id == null;
+  if (!discarding && transfer.source_tank_equipment_id === transfer.dest_tank_equipment_id) {
     throw new Error('Source and destination tanks must be different.');
   }
   if (transfer.volume_gal <= 0) {
@@ -1858,16 +1870,18 @@ export function saveHoldingTankTransfer(
   }
   assertEnteredAbv(transfer.abv, 'Transfer ABV');
   assertSpiritTransferVessel(transfer.source_tank_equipment_id, 'source');
-  assertSpiritTransferVessel(transfer.dest_tank_equipment_id, 'destination');
   assertEquipmentUsableForProduction(transfer.source_tank_equipment_id, 'Source tank');
-  assertEquipmentUsableForProduction(transfer.dest_tank_equipment_id, 'Destination tank');
+  if (!discarding && transfer.dest_tank_equipment_id != null) {
+    assertSpiritTransferVessel(transfer.dest_tank_equipment_id, 'destination');
+    assertEquipmentUsableForProduction(transfer.dest_tank_equipment_id, 'Destination tank');
+    assertCollectionVesselCutTransfer(
+      transfer.source_tank_equipment_id,
+      transfer.dest_tank_equipment_id,
+    );
+  }
   assertStillageTransferDestination(
     transfer.source_tank_equipment_id,
-    transfer.dest_tank_equipment_id,
-  );
-  assertCollectionVesselCutTransfer(
-    transfer.source_tank_equipment_id,
-    transfer.dest_tank_equipment_id,
+    discarding ? null : transfer.dest_tank_equipment_id,
   );
   const available = getHoldingTankContents(transfer.source_tank_equipment_id);
   if (transfer.volume_gal > available.volume_gal + 0.01) {

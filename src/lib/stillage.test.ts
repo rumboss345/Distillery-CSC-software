@@ -35,6 +35,18 @@ describe('stillage on completed low wine and heavy rum runs', () => {
       destName: 'Stillage Storage tank',
     })).toBeNull();
     expect(stillageTransferError({
+      sourceIsStillage: true,
+      destIsStillageTank: false,
+      destName: 'Discarded',
+      destDiscarded: true,
+    })).toBeNull();
+    expect(stillageTransferError({
+      sourceIsStillage: false,
+      destIsStillageTank: false,
+      destName: 'Discarded',
+      destDiscarded: true,
+    })).toMatch(/Only stillage can be discarded/);
+    expect(stillageTransferError({
       sourceIsStillage: false,
       destIsStillageTank: false,
       destName: 'Low wines storage Tank 5',

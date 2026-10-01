@@ -246,13 +246,13 @@ export function searchTraceability(query: string, limit = 50): TraceabilityHit[]
 interface TransferRow {
   id: number;
   source_tank_equipment_id: number;
-  dest_tank_equipment_id: number;
+  dest_tank_equipment_id: number | null;
   volume_gal: number;
   abv: number;
   transfer_date: string;
   source_name: string;
   source_floor: string | null;
-  dest_name: string;
+  dest_name: string | null;
   dest_floor: string | null;
 }
 
@@ -279,12 +279,15 @@ export function getTraceabilityPath(kind: TraceabilityKind, id: number): Traceab
   };
 
   const addTransfer = (row: TransferRow) => {
+    const destLabel = row.dest_tank_equipment_id
+      ? place(row.dest_name, row.dest_floor)
+      : 'Discarded';
     addStep({
       key: `transfer:${row.id}`,
       stage: 'Transfer',
       reference: 'Tank transfer',
       when: row.transfer_date,
-      where: `${place(row.source_name, row.source_floor)} → ${place(row.dest_name, row.dest_floor)}`,
+      where: `${place(row.source_name, row.source_floor)} → ${destLabel}`,
       what: joinParts([gal(row.volume_gal), `${Number(row.abv).toFixed(1)}% ABV`]),
     });
   };
@@ -326,7 +329,7 @@ export function getTraceabilityPath(kind: TraceabilityKind, id: number): Traceab
        FROM holding_tank_transfers t
        JOIN floor_equipment src ON src.id = t.source_tank_equipment_id
        LEFT JOIN floor_plans srcp ON srcp.id = src.floor_plan_id
-       JOIN floor_equipment dest ON dest.id = t.dest_tank_equipment_id
+       LEFT JOIN floor_equipment dest ON dest.id = t.dest_tank_equipment_id
        LEFT JOIN floor_plans destp ON destp.id = dest.floor_plan_id
        WHERE t.dest_tank_equipment_id = ?`,
       [tankId],
@@ -350,7 +353,7 @@ export function getTraceabilityPath(kind: TraceabilityKind, id: number): Traceab
        FROM holding_tank_transfers t
        JOIN floor_equipment src ON src.id = t.source_tank_equipment_id
        LEFT JOIN floor_plans srcp ON srcp.id = src.floor_plan_id
-       JOIN floor_equipment dest ON dest.id = t.dest_tank_equipment_id
+       LEFT JOIN floor_equipment dest ON dest.id = t.dest_tank_equipment_id
        LEFT JOIN floor_plans destp ON destp.id = dest.floor_plan_id
        WHERE t.source_tank_equipment_id IN (${marks})`,
       tanks,
@@ -359,7 +362,7 @@ export function getTraceabilityPath(kind: TraceabilityKind, id: number): Traceab
     for (const transfer of transfers) {
       if (!dayOnOrAfter(transfer.transfer_date, asOf)) continue;
       addTransfer(transfer);
-      reached.add(transfer.dest_tank_equipment_id);
+      if (transfer.dest_tank_equipment_id) reached.add(transfer.dest_tank_equipment_id);
     }
     const reachedIds = [...reached];
     const reachedMarks = inClause(reachedIds);

@@ -14,14 +14,22 @@ export function distillationStillageTankError(tankName: string): string {
   return `${tankName} is not a stillage tank. Stillage from a distillation can only go into a stillage tank, or be discarded.`;
 }
 
-/** Stillage moves only into a stillage tank, and a stillage tank only receives stillage. */
+/** Form value for discarding stillage instead of moving it into another tank. */
+export const STILLAGE_DISCARD_DESTINATION = -1;
+
+/** Stillage moves only into a stillage tank or is discarded. A stillage tank only receives stillage. */
 export function stillageTransferError(input: {
   sourceIsStillage: boolean;
   destIsStillageTank: boolean;
   destName: string;
+  destDiscarded?: boolean;
 }): string | null {
+  if (input.destDiscarded) {
+    if (!input.sourceIsStillage) return 'Only stillage can be discarded.';
+    return null;
+  }
   if (input.sourceIsStillage && !input.destIsStillageTank) {
-    return `${input.destName} is not a stillage tank. Stillage can only be sent to a stillage tank.`;
+    return `${input.destName} is not a stillage tank. Stillage can only be sent to a stillage tank, or discarded.`;
   }
   if (!input.sourceIsStillage && input.destIsStillageTank) {
     return `${input.destName} only receives stillage.`;

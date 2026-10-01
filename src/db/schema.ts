@@ -311,7 +311,7 @@ CREATE TABLE IF NOT EXISTS holding_tank_transfers (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   spirit_type TEXT NOT NULL DEFAULT 'low_wines',
   source_tank_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
-  dest_tank_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
+  dest_tank_equipment_id INTEGER REFERENCES floor_equipment(id),
   volume_gal REAL NOT NULL DEFAULT 0,
   abv REAL NOT NULL DEFAULT 0,
   transfer_date TEXT NOT NULL,
