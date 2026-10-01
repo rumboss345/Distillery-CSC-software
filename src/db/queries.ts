@@ -32,7 +32,7 @@ import {
 import { equipmentCleaningStatusLabel, equipmentNeedsCleaning, equipmentStatusWhenReturningToPlanned } from '../lib/equipment-cleaning';
 import { assertEnteredAbv } from '../lib/abv-limits';
 import { EQUIPMENT_TYPES, isSpiritLedgerEquipmentType, resolveEquipmentIcon } from '../lib/equipment';
-import { equipmentTypeNameError, normalizeEquipmentTypeName } from '../lib/equipment-type';
+import { equipmentTypeDeleteError, equipmentTypeNameError, normalizeEquipmentTypeName } from '../lib/equipment-type';
 import { countActiveFermentations, fermenterShowsAssignedWash } from '../lib/mash-fermenter-fill';
 import { compareStoredDatesDesc } from '../lib/date-input';
 import { eventDateWhenLeavingPlanned, localIsoDate } from '../lib/planned-event-date';
@@ -4786,6 +4786,42 @@ export function addEquipmentType(name: string, icon = 'other'): string {
     [normalized, resolveEquipmentIcon(icon, 'other')],
   );
   return normalized;
+}
+
+export interface CustomEquipmentType {
+  id: number;
+  name: string;
+  icon: string;
+  equipment_count: number;
+}
+
+export function getCustomEquipmentTypes(): CustomEquipmentType[] {
+  return queryAll<CustomEquipmentType>(`
+    SELECT t.id, t.name, t.icon,
+      (
+        SELECT COUNT(*)
+        FROM floor_equipment fe
+        WHERE fe.equipment_type = t.name COLLATE NOCASE
+      ) as equipment_count
+    FROM equipment_types t
+    ORDER BY t.name COLLATE NOCASE
+  `);
+}
+
+export function deleteEquipmentType(name: string): void {
+  const normalized = normalizeEquipmentTypeName(name);
+  const row = queryOne<{ id: number; name: string }>(
+    'SELECT id, name FROM equipment_types WHERE name = ? COLLATE NOCASE',
+    [normalized],
+  );
+  if (!row) throw new Error('Equipment type not found.');
+  const count = queryOne<{ count: number }>(
+    'SELECT COUNT(*) as count FROM floor_equipment WHERE equipment_type = ? COLLATE NOCASE',
+    [row.name],
+  )?.count ?? 0;
+  const error = equipmentTypeDeleteError(row.name, count);
+  if (error) throw new Error(error);
+  runQuery('DELETE FROM equipment_types WHERE id = ?', [row.id]);
 }
 
 export function saveFloorEquipment(

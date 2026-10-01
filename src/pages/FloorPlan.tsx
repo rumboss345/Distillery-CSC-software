@@ -6,6 +6,8 @@ import {
   getFloorEquipmentWithContext,
   getHoldingTanksWithContents,
   addEquipmentType,
+  deleteEquipmentType,
+  getCustomEquipmentTypes,
   addFloorPlan,
   getEquipmentTypeOptions,
   saveFloorEquipment,
@@ -30,6 +32,7 @@ import {
   isLiquidVesselEquipmentType,
   resolveEquipmentIcon,
 } from '../lib/equipment';
+import { equipmentTypeDeleteError } from '../lib/equipment-type';
 import type { EquipmentStatus, EquipmentType, FloorEquipment } from '../types';
 
 const emptyEquipment = (planId: number, type = 'fermenter'): Omit<FloorEquipment, 'id' | 'created_at'> => {
@@ -79,6 +82,7 @@ export function FloorPlanPage() {
   const [typeIcon, setTypeIcon] = useState<EquipmentType>('other');
   const [typeError, setTypeError] = useState('');
   const equipmentTypes = getEquipmentTypeOptions();
+  const customEquipmentTypes = getCustomEquipmentTypes();
 
   void key;
 
@@ -164,10 +168,28 @@ export function FloorPlanPage() {
     refresh();
   };
 
+  const handleDeleteType = (name: string, equipmentCount: number) => {
+    const blocked = equipmentTypeDeleteError(name, equipmentCount);
+    if (blocked) {
+      setTypeError(blocked);
+      return;
+    }
+    if (!confirm(`Delete equipment type "${name}"?`)) return;
+    try {
+      deleteEquipmentType(name);
+      if (form.equipment_type.localeCompare(name, undefined, { sensitivity: 'base' }) === 0) {
+        handleTypeChange('other');
+      }
+      setTypeError('');
+      refresh();
+    } catch (err) {
+      setTypeError(err instanceof Error ? err.message : 'Could not delete equipment type.');
+    }
+  };
+
   const handleSaveType = () => {
     try {
       const created = addEquipmentType(typeName, typeIcon);
-      setShowTypeForm(false);
       setTypeName('');
       setTypeError('');
       if (showForm) {
@@ -180,6 +202,7 @@ export function FloorPlanPage() {
           depth_ft: defaults.depth_ft,
           capacity_gal: defaults.capacity_gal,
         });
+        setShowTypeForm(false);
       }
       refresh();
     } catch (err) {
@@ -596,6 +619,33 @@ export function FloorPlanPage() {
             The new type is available when you add equipment and gets its own section on the process view.
             Pick the picture it should use. Tank icons still show how full they are.
           </p>
+          <h4 className="equipment-type-list-title">Added types</h4>
+          {customEquipmentTypes.length === 0 ? (
+            <p className="form-hint">No extra types yet. Built-in types stay on the equipment list.</p>
+          ) : (
+            <ul className="equipment-type-list">
+              {customEquipmentTypes.map((type) => (
+                <li key={type.id}>
+                  <span>
+                    <strong>{type.name}</strong>
+                    <span className="equipment-type-list-meta">
+                      {equipmentTypeLabel(type.icon)}
+                      {type.equipment_count > 0
+                        ? ` · ${type.equipment_count} in use`
+                        : ' · not used'}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-danger"
+                    onClick={() => handleDeleteType(type.name, type.equipment_count)}
+                  >
+                    Delete
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
           <div className="form-actions">
             <button className="btn btn-secondary" onClick={() => setShowTypeForm(false)}>Cancel</button>
             <button className="btn btn-primary" onClick={handleSaveType} disabled={!typeName.trim()}>
