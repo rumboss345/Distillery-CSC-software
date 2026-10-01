@@ -20,6 +20,7 @@ import {
 import { MashTunVisual } from '../components/equipment/MashTunVisual';
 import type { EquipmentVisualData } from '../components/equipment/equipment-visual.types';
 import { Modal } from '../components/Modal';
+import { RecentCompletedNote } from '../components/RecentCompletedNote';
 import { StatusBadge } from '../components/StatusBadge';
 import { estimateSugarWash } from '../lib/fermentation';
 import type { MashBatchNutrientInput } from '../types';
@@ -35,6 +36,7 @@ import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-p
 import { formatDateDisplay } from '../lib/date-input';
 import { equipmentUnavailableForProduction } from '../lib/equipment-maintenance';
 import { eventDateWhenLeavingPlanned, localIsoDate } from '../lib/planned-event-date';
+import { latestCompleted } from '../lib/recent-completed';
 import { WASH_PAGE_STATUSES, washRecordKind } from '../lib/wash-stage';
 import type { MashBatch, MashStatus } from '../types';
 
@@ -200,7 +202,14 @@ export function MashFermentation() {
       if (byStatus[batch.status]) byStatus[batch.status].push(batch);
     }
     return WASH_STATUSES
-      .map((status) => ({ status, items: byStatus[status] }))
+      .map((status) => {
+        const matching = byStatus[status];
+        if (status !== 'discarded') {
+          return { status, items: matching, hiddenCount: 0 };
+        }
+        const recent = latestCompleted(matching, (batch) => batch.start_date, (batch) => batch.id);
+        return { status, items: recent.shown, hiddenCount: recent.hiddenCount };
+      })
       .filter((group) => group.items.length > 0);
   }, [washBatches]);
 
@@ -254,15 +263,20 @@ export function MashFermentation() {
         </div>
       ) : (
         <div className="wash-status-groups">
-          {batchesByStatus.map(({ status, items }) => (
+          {batchesByStatus.map(({ status, items, hiddenCount }) => (
             <section key={status} className="card wash-status-group">
               <header className="wash-status-group-header">
                 <h3 className="wash-status-group-title">{STATUS_GROUP_HEADINGS[status]}</h3>
                 <StatusBadge status={STATUS_LABELS[status]} />
                 <span className="text-muted wash-status-group-count">
-                  {items.length} {items.length === 1 ? 'batch' : 'batches'}
+                  {hiddenCount > 0 ? `${items.length} of ${items.length + hiddenCount}` : items.length}
+                  {' '}
+                  {(items.length + hiddenCount) === 1 ? 'batch' : 'batches'}
                 </span>
               </header>
+              {status === 'discarded' && (
+                <RecentCompletedNote hiddenCount={hiddenCount} to="/reports/wash" label="discarded batches" />
+              )}
               <div className="table-wrap">
                 <table>
                   <thead>

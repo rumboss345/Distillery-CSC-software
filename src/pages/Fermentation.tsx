@@ -180,6 +180,11 @@ export function Fermentation() {
   }
 
   const leftovers = getDiscardedFermentations();
+  const recentLeftovers = latestCompleted(
+    leftovers,
+    (row) => row.discarded_date,
+    (row) => row.id,
+  );
 
   const rows = fermentationBatches.flatMap((batch): FermentationRow[] => {
     const startBrix = batch.actual_brix ?? batch.target_brix;
@@ -249,7 +254,7 @@ export function Fermentation() {
   const rowsByStatus = FERMENTATION_PAGE_STATUSES
     .map((groupStatus) => {
       const matching = rows.filter((row) => row.status === groupStatus);
-      if (groupStatus !== 'complete') {
+      if (groupStatus === 'fermenting') {
         return { status: groupStatus, items: matching, hiddenCount: 0 };
       }
       const recent = latestCompleted(matching, (row) => row.batch.start_date, (row) => row.batch.id);
@@ -525,8 +530,12 @@ export function Fermentation() {
                   {(items.length + hiddenCount) === 1 ? 'fermentation' : 'fermentations'}
                 </span>
               </header>
-              {groupStatus === 'complete' && (
-                <RecentCompletedNote hiddenCount={hiddenCount} to="/reports/fermentation" />
+              {groupStatus !== 'fermenting' && (
+                <RecentCompletedNote
+                  hiddenCount={hiddenCount}
+                  to="/reports/fermentation"
+                  label={groupStatus === 'discarded' ? 'discarded fermentations' : 'completed'}
+                />
               )}
               <div className="table-wrap">
                 <table>
@@ -582,15 +591,24 @@ export function Fermentation() {
         </div>
       )}
 
-      {leftovers.length > 0 && (
+      {recentLeftovers.total > 0 && (
         <section className="card wash-status-group" style={{ marginTop: '1rem' }}>
           <header className="wash-status-group-header">
             <h3 className="wash-status-group-title">Leftovers</h3>
             <span className="text-muted wash-status-group-count">
-              {leftovers.length} {leftovers.length === 1 ? 'record' : 'records'}
+              {recentLeftovers.hiddenCount > 0
+                ? `${recentLeftovers.shown.length} of ${recentLeftovers.total}`
+                : recentLeftovers.total}
+              {' '}
+              {recentLeftovers.total === 1 ? 'record' : 'records'}
             </span>
           </header>
           <p className="field-hint">Gallons that cannot be used. The rest of each fermentation stays.</p>
+          <RecentCompletedNote
+            hiddenCount={recentLeftovers.hiddenCount}
+            to="/reports/fermentation"
+            label="leftovers"
+          />
           <div className="table-wrap">
             <table>
               <thead>
@@ -603,7 +621,7 @@ export function Fermentation() {
                 </tr>
               </thead>
               <tbody>
-                {leftovers.map((row) => (
+                {recentLeftovers.shown.map((row) => (
                   <tr key={row.id}>
                     <td>{formatDateDisplay(row.discarded_date)}</td>
                     <td>{row.batch_number || '—'}</td>
