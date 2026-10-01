@@ -228,54 +228,51 @@ function AlcoholDilutionCalculator() {
           </button>
         </div>
 
-        <div className="form-grid">
-          <div className="form-group">
-            <label>
-              {volumeBasis === 'before'
-                ? amountMeasure === 'weight'
-                  ? 'Weight (actual) of spirit before dilution'
-                  : 'Volume (actual) before dilution'
-                : amountMeasure === 'weight'
-                  ? 'Weight (target) of blend after dilution'
-                  : 'Volume (target) after dilution'}
-            </label>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <input
-                type="number"
-                step={amountMeasure === 'weight' ? '0.1' : '0.01'}
-                min="0"
-                value={amountValue}
-                onChange={(e) => setAmountValue(e.target.value)}
-                style={{ flex: 1 }}
-              />
-              {amountMeasure === 'volume' ? (
-                <select
-                  value={volumeUnit}
-                  onChange={(e) => setVolumeUnit(e.target.value as VolumeUnit)}
-                >
-                  <option value="l">L</option>
-                  <option value="gal">US gal</option>
-                </select>
-              ) : (
-                <select
-                  value={weightUnit}
-                  onChange={(e) => setWeightUnit(e.target.value as WeightUnit)}
-                >
-                  <option value="lb">lb</option>
-                  <option value="kg">kg</option>
-                </select>
-              )}
-            </div>
-            {amountMeasure === 'weight' && (
-              <p className="field-hint">
-                Weight is converted to wine gallons using TTB Table No. 3 at{' '}
-                {volumeBasis === 'before'
-                  ? `${correctedActualAbv?.toFixed(2) ?? '—'}% ABV (spirit)`
-                  : `${targetAbvNum > 0 ? targetAbvNum.toFixed(2) : '—'}% ABV (finished blend)`}
-                .
-              </p>
+        <div className="form-group">
+          <label>
+            {volumeBasis === 'before'
+              ? amountMeasure === 'weight'
+                ? 'Weight (actual) of spirit before dilution'
+                : 'Volume (actual) before dilution'
+              : amountMeasure === 'weight'
+                ? 'Weight (target) of blend after dilution'
+                : 'Volume (target) after dilution'}
+          </label>
+          <div className="amount-unit-row">
+            <input
+              type="number"
+              step={amountMeasure === 'weight' ? '0.1' : '0.01'}
+              min="0"
+              value={amountValue}
+              onChange={(e) => setAmountValue(e.target.value)}
+            />
+            {amountMeasure === 'volume' ? (
+              <select
+                value={volumeUnit}
+                onChange={(e) => setVolumeUnit(e.target.value as VolumeUnit)}
+              >
+                <option value="l">L</option>
+                <option value="gal">US gal</option>
+              </select>
+            ) : (
+              <select
+                value={weightUnit}
+                onChange={(e) => setWeightUnit(e.target.value as WeightUnit)}
+              >
+                <option value="lb">lb</option>
+                <option value="kg">kg</option>
+              </select>
             )}
           </div>
+          {amountMeasure === 'weight' && (
+            <p className="field-hint">
+              Weight is converted to wine gallons using TTB Table No. 3 at{' '}
+              {volumeBasis === 'before'
+                ? `${correctedActualAbv?.toFixed(2) ?? '—'}% ABV (spirit)`
+                : `${targetAbvNum > 0 ? targetAbvNum.toFixed(2) : '—'}% ABV (finished blend)`}
+              .
+            </p>
+          )}
         </div>
 
         {correctedActualAbv != null && targetAbvNum > 0 && targetAbvNum >= correctedActualAbv && (
@@ -583,41 +580,35 @@ export function SpiritWeightCalculator() {
                 </div>
               </div>
             ) : inputMode === 'weight' ? (
-              <div className="form-grid">
-                <div className="form-group">
-                  <label>Weight</label>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={weightValue}
-                      onChange={(e) => setWeightValue(e.target.value)}
-                      style={{ flex: 1 }}
-                    />
-                    <select value={weightUnit} onChange={(e) => setWeightUnit(e.target.value as WeightUnit)}>
-                      <option value="lb">lb</option>
-                      <option value="kg">kg</option>
-                    </select>
-                  </div>
+              <div className="form-group">
+                <label>Weight</label>
+                <div className="amount-unit-row">
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={weightValue}
+                    onChange={(e) => setWeightValue(e.target.value)}
+                  />
+                  <select value={weightUnit} onChange={(e) => setWeightUnit(e.target.value as WeightUnit)}>
+                    <option value="lb">lb</option>
+                    <option value="kg">kg</option>
+                  </select>
                 </div>
               </div>
             ) : (
-              <div className="form-grid">
-                <div className="form-group">
-                  <label>Physical volume</label>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={volumeValue}
-                      onChange={(e) => setVolumeValue(e.target.value)}
-                      style={{ flex: 1 }}
-                    />
-                    <select value={volumeUnit} onChange={(e) => setVolumeUnit(e.target.value as VolumeUnit)}>
-                      <option value="gal">US gal</option>
-                      <option value="l">L</option>
-                    </select>
-                  </div>
+              <div className="form-group">
+                <label>Physical volume</label>
+                <div className="amount-unit-row">
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={volumeValue}
+                    onChange={(e) => setVolumeValue(e.target.value)}
+                  />
+                  <select value={volumeUnit} onChange={(e) => setVolumeUnit(e.target.value as VolumeUnit)}>
+                    <option value="gal">US gal</option>
+                    <option value="l">L</option>
+                  </select>
                 </div>
               </div>
             )}
