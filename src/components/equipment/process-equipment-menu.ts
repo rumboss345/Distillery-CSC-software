@@ -35,7 +35,6 @@ export function buildProcessEquipmentContextMenu(
 ): ProcessEquipmentContextMenuModel {
   const hasLiquid = source.volumeGal > 0;
   const isTransferVessel = source.equipment_type === 'holding_tank'
-    || source.equipment_type === 'stillage_tank'
     || source.equipment_type === 'collection_vessel';
   const isHoldingTank = source.equipment_type === 'holding_tank';
   const liquidClass = classifyProcessLiquid(source.name, source.liquidName);

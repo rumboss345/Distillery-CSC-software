@@ -11,7 +11,6 @@ describe('equipment icons', () => {
 
   it('shows a fill level for tanks, fermenters, wash tanks, and stills', () => {
     expect(equipmentIconShowsVolume('holding_tank')).toBe(true);
-    expect(equipmentIconShowsVolume('stillage_tank')).toBe(true);
     expect(equipmentIconShowsVolume('collection_vessel')).toBe(true);
     expect(equipmentIconShowsVolume('fermenter')).toBe(true);
     expect(equipmentIconShowsVolume('mash_tun')).toBe(true);

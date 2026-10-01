@@ -24,12 +24,12 @@ import {
   getFermenterChargeCapacityGal,
   getLatestFermentationBrix,
   getChargeableHoldingTanks,
+  getHoldingTanks,
   getHighWinesDestinationTanks,
   defaultDestTankIdForRunType,
   defaultTankForCutType,
   getCollectionVesselStoredCutType,
   getCollectionVessels,
-  getStillageTanks,
   getCutDestinationsForRun,
   getHoldingTankContents,
   getSpiritTransferVesselsWithContents,
@@ -63,7 +63,7 @@ import {
   spiritChargeDetail,
   type SpiritProofPlace,
 } from '../lib/spirit-charge-proof';
-import { runAsksForStillage, stillageSaveError, stillageSummary } from '../lib/stillage';
+import { isStillageTankName, runAsksForStillage, stillageSaveError, stillageSummary } from '../lib/stillage';
 import type {
   DistillationCutView,
   DistillationRun,
@@ -111,7 +111,12 @@ export function Distillation() {
   const runs = getDistillationRuns();
   const mashes = getMashBatches();
   const collectionVessels = getCollectionVessels();
-  const stillageTanks = getStillageTanks({ includeUnavailable: true });
+  const stillageTanks = [
+    ...getHoldingTanks({ includeUnavailable: true }),
+    ...getCollectionVessels({ includeUnavailable: true }),
+  ]
+    .filter((tank) => isStillageTankName(tank.name))
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
   const tanksWithContents = getSpiritTransferVesselsWithContents();
   const equipment = getFloorEquipment();
   const [showRunForm, setShowRunForm] = useState(false);
@@ -1334,7 +1339,7 @@ export function Distillation() {
                         ))}
                       </select>
                       {stillageTanks.length === 0 && (
-                        <p className="field-hint">No stillage tank is set up. Add equipment with type Stillage Tank, or discard this stillage.</p>
+                        <p className="field-hint">No stillage tank is set up. Name a holding tank or collection vessel with "stillage", or discard this stillage.</p>
                       )}
                     </div>
                   )}

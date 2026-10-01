@@ -12,7 +12,6 @@ describe('equipment type names', () => {
     expect(equipmentTypeNameError('Pot Still', [])).toBe('Equipment type "Pot Still" already exists.');
     expect(equipmentTypeNameError('Pump', [])).toBe('Equipment type "Pump" already exists.');
     expect(equipmentTypeNameError('Hose', [])).toBe('Equipment type "Hose" already exists.');
-    expect(equipmentTypeNameError('Stillage Tank', [])).toBe('Equipment type "Stillage Tank" already exists.');
   });
 
   it('rejects a type that was already added', () => {

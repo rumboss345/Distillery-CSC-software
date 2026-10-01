@@ -638,12 +638,6 @@ function runMigrations(): void {
   migrateRecipeNutrients();
   migrateMashBatchNutrients();
   seedBlendRecipes2024();
-  db.run(`
-    UPDATE floor_equipment
-    SET equipment_type = 'stillage_tank'
-    WHERE equipment_type = 'holding_tank'
-      AND name LIKE '%stillage%' COLLATE NOCASE
-  `);
   persistDb();
 }
 
