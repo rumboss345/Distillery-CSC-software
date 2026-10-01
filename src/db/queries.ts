@@ -4025,7 +4025,8 @@ export function executeBlendProduct(id: number, outputTankId: number): void {
 }
 
 /**
- * Reverse an executed blend (admin). Restores inventory and barrel pulls and removes
+ * Reverse an executed blend. The blending page requires an administrator email and password first.
+ * Restores inventory and barrel pulls and removes
  * the finished batch from the output-tank ledger by returning status to approved.
  */
 export function undoBlendProduction(id: number): void {
