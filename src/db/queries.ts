@@ -1063,12 +1063,12 @@ const TANK_CHARGE_DRAWN_GPA_SQL = `
   END
 `;
 
-export function getHoldingTankContents(
+function computeHoldingTankContents(
   tankId: number,
   excludeRunId?: number,
   excludeBlendId?: number,
   excludeBottlingRunId?: number,
-): HoldingTankContents {
+): HoldingTankContents & { production_volume_gal: number; production_gpa: number } {
   const ins = queryOne<{ volume_gal: number; gpa: number; run_count: number; cut_count: number }>(`
     SELECT
       COALESCE(SUM(c.volume_gal), 0) as volume_gal,
@@ -1149,6 +1149,12 @@ export function getHoldingTankContents(
       AND stillage_volume_gal > 0
   `, [tankId]);
 
+  const opening = queryOne<{ volume_gal: number; alcohol_gal: number }>(`
+    SELECT volume_gal, alcohol_gal
+    FROM holding_tank_opening_balances
+    WHERE tank_equipment_id = ?
+  `, [tankId]);
+
   const volumeIn = (ins?.volume_gal ?? 0) + (transferIns?.volume_gal ?? 0) + (blendIns?.volume_gal ?? 0)
     + (stillageIns?.volume_gal ?? 0);
   const volumeOut = (runOuts?.volume_gal ?? 0) + (blendOuts?.volume_gal ?? 0)
@@ -1156,8 +1162,12 @@ export function getHoldingTankContents(
   const gpaIn = (ins?.gpa ?? 0) + (transferIns?.gpa ?? 0) + (blendIns?.gpa ?? 0);
   const gpaOut = (runOuts?.gpa ?? 0) + (blendOuts?.gpa ?? 0)
     + (bottlingOuts?.gpa ?? 0) + (barrelFillOuts?.gpa ?? 0) + (transferOuts?.gpa ?? 0);
-  const volume_gal = Math.max(0, volumeIn - volumeOut);
-  const gpaRemaining = Math.max(0, gpaIn - gpaOut);
+  const productionVolume = volumeIn - volumeOut;
+  const productionGpa = gpaIn - gpaOut;
+  const netVolume = productionVolume + (opening?.volume_gal ?? 0);
+  const netGpa = productionGpa + (opening?.alcohol_gal ?? 0);
+  const volume_gal = Math.max(0, netVolume);
+  const gpaRemaining = Math.max(0, netGpa);
   const abv = volume_gal > 0 ? (gpaRemaining / volume_gal) * 100 : 0;
 
   return {
@@ -1165,7 +1175,102 @@ export function getHoldingTankContents(
     abv,
     run_count: ins?.run_count ?? 0,
     cut_count: ins?.cut_count ?? 0,
+    production_volume_gal: productionVolume,
+    production_gpa: productionGpa,
   };
+}
+
+export function getHoldingTankContents(
+  tankId: number,
+  excludeRunId?: number,
+  excludeBlendId?: number,
+  excludeBottlingRunId?: number,
+): HoldingTankContents {
+  const ledger = computeHoldingTankContents(
+    tankId,
+    excludeRunId,
+    excludeBlendId,
+    excludeBottlingRunId,
+  );
+  return {
+    volume_gal: ledger.volume_gal,
+    abv: ledger.abv,
+    run_count: ledger.run_count,
+    cut_count: ledger.cut_count,
+  };
+}
+
+export interface HoldingTankOnHand {
+  id: number;
+  tank_equipment_id: number;
+  measured_volume_gal: number;
+  measured_abv: number;
+  recorded_at: string;
+  notes: string;
+}
+
+export function getHoldingTankOnHand(tankId: number): HoldingTankOnHand | null {
+  return queryOne<HoldingTankOnHand>(
+    `SELECT id, tank_equipment_id, measured_volume_gal, measured_abv, recorded_at, notes
+     FROM holding_tank_opening_balances
+     WHERE tank_equipment_id = ?`,
+    [tankId],
+  );
+}
+
+/** Record the gallons and ABV already in a tank, without inventing a distillation or transfer. */
+export function saveHoldingTankOnHand(input: {
+  tankEquipmentId: number;
+  volumeGal: number;
+  abv: number;
+  recordedAt: string;
+  notes?: string;
+}): void {
+  assertSpiritTransferVessel(input.tankEquipmentId, 'destination');
+  if (!Number.isFinite(input.volumeGal) || input.volumeGal < 0) {
+    throw new Error('Enter the gallons on hand.');
+  }
+  if (!Number.isFinite(input.abv) || input.abv < 0 || input.abv > 100) {
+    throw new Error('Enter an ABV from 0 to 100.');
+  }
+  if (!input.recordedAt?.trim()) {
+    throw new Error('Enter the date of this reading.');
+  }
+  const measuredVolume = Math.round(input.volumeGal * 1000) / 1000;
+  const measuredAbv = Math.round(input.abv * 1000) / 1000;
+  const production = computeHoldingTankContents(input.tankEquipmentId);
+  const adjustmentVolume = Math.round((measuredVolume - production.production_volume_gal) * 1000) / 1000;
+  const adjustmentAlcohol = Math.round((measuredVolume * measuredAbv / 100 - production.production_gpa) * 1000) / 1000;
+  const notes = input.notes?.trim() ?? '';
+  const existing = queryOne<{ id: number }>(
+    'SELECT id FROM holding_tank_opening_balances WHERE tank_equipment_id = ?',
+    [input.tankEquipmentId],
+  );
+  if (Math.abs(adjustmentVolume) < 0.001 && Math.abs(adjustmentAlcohol) < 0.001) {
+    if (existing) {
+      runQuery('DELETE FROM holding_tank_opening_balances WHERE id = ?', [existing.id]);
+    }
+  } else if (existing) {
+    runQuery(
+      `UPDATE holding_tank_opening_balances
+       SET volume_gal = ?, alcohol_gal = ?, measured_volume_gal = ?, measured_abv = ?, recorded_at = ?, notes = ?
+       WHERE id = ?`,
+      [adjustmentVolume, adjustmentAlcohol, measuredVolume, measuredAbv, input.recordedAt, notes, existing.id],
+    );
+  } else {
+    insertRow(
+      `INSERT INTO holding_tank_opening_balances
+        (tank_equipment_id, volume_gal, alcohol_gal, measured_volume_gal, measured_abv, recorded_at, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [input.tankEquipmentId, adjustmentVolume, adjustmentAlcohol, measuredVolume, measuredAbv, input.recordedAt, notes],
+    );
+  }
+  syncHoldingTankStatuses();
+}
+
+export function clearHoldingTankOnHand(tankId: number): void {
+  runQuery('DELETE FROM holding_tank_opening_balances WHERE tank_equipment_id = ?', [tankId]);
+  syncHoldingTankStatuses();
 }
 
 export function getChargeableHoldingTanks(
@@ -1588,6 +1693,27 @@ export function getHoldingTankIntakeHistory(
       abv: 0,
       summary: `Stillage from ${row.batch_number} (${runTypeLabels[row.run_type] ?? row.run_type})`,
       detail: row.still_name || undefined,
+      notes: row.notes?.trim() || undefined,
+    })),
+    ...queryAll<{
+      id: number;
+      occurred_at: string;
+      volume_gal: number;
+      abv: number;
+      notes: string;
+    }>(`
+      SELECT id, recorded_at as occurred_at, measured_volume_gal as volume_gal,
+             measured_abv as abv, notes
+      FROM holding_tank_opening_balances
+      WHERE tank_equipment_id = ?
+    `, [tankId]).map((row) => ({
+      kind: 'opening' as const,
+      id: row.id,
+      occurred_at: row.occurred_at,
+      volume_gal: row.volume_gal,
+      abv: row.abv,
+      summary: row.volume_gal > 0 ? 'On hand' : 'On hand cleared',
+      detail: row.notes?.trim() || 'Recorded when tracking started',
       notes: row.notes?.trim() || undefined,
     })),
   ];

@@ -261,7 +261,7 @@ export interface HoldingTankContents {
   cut_count: number;
 }
 
-export type HoldingTankIntakeKind = 'cut' | 'transfer' | 'blend' | 'stillage';
+export type HoldingTankIntakeKind = 'cut' | 'transfer' | 'blend' | 'stillage' | 'opening';
 
 /** A single distillation cut, transfer, or blend that added spirit to a holding tank. */
 export interface HoldingTankIntakeEntry {

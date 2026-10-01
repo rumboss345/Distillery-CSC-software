@@ -7,6 +7,7 @@ import { Modal } from '../components/Modal';
 import { RecentCompletedNote } from '../components/RecentCompletedNote';
 import { StatusBadge } from '../components/StatusBadge';
 import {
+  clearHoldingTankOnHand,
   deleteDiscardedFermentation,
   deleteHoldingTankTransfer,
   getCollectionVesselStoredCutType,
@@ -16,9 +17,11 @@ import {
   getFloorEquipment,
   getHoldingTankContents,
   getHoldingTankIntakeHistory,
+  getHoldingTankOnHand,
   getHoldingTankTransfers,
   getSpiritTransferVessels,
   saveFermenterWashTransfer,
+  saveHoldingTankOnHand,
   saveHoldingTankTransfer,
   useRefreshKey,
 } from '../db/queries';
@@ -88,6 +91,13 @@ export function TankTransfer() {
   const [transferForm, setTransferForm] = useState(emptyTransferForm);
   const [showFermenterForm, setShowFermenterForm] = useState(false);
   const [fermenterForm, setFermenterForm] = useState(emptyFermenterForm);
+  const [onHandTankId, setOnHandTankId] = useState<number | null>(null);
+  const [onHandForm, setOnHandForm] = useState({
+    volume_gal: '',
+    abv: '',
+    recorded_at: localIsoDate(),
+    notes: '',
+  });
 
   void key;
 
@@ -318,6 +328,67 @@ export function TankTransfer() {
     }
   };
 
+  const openOnHand = (tankId: number) => {
+    const contents = getHoldingTankContents(tankId);
+    const existing = getHoldingTankOnHand(tankId);
+    setOnHandTankId(tankId);
+    setOnHandForm({
+      volume_gal: contents.volume_gal > 0.001 ? contents.volume_gal.toFixed(1) : '',
+      abv: contents.volume_gal > 0.001 ? contents.abv.toFixed(1) : '',
+      recorded_at: existing?.recorded_at?.slice(0, 10) || localIsoDate(),
+      notes: existing?.notes ?? '',
+    });
+  };
+
+  const handleSaveOnHand = () => {
+    if (!onHandTankId) return;
+    const volumeGal = onHandForm.volume_gal.trim() === '' ? NaN : parseFloat(onHandForm.volume_gal);
+    const abv = onHandForm.abv.trim() === '' ? (volumeGal === 0 ? 0 : NaN) : parseFloat(onHandForm.abv);
+    if (!Number.isFinite(volumeGal) || volumeGal < 0) {
+      alert('Enter the gallons on hand.');
+      return;
+    }
+    if (!Number.isFinite(abv) || abv < 0 || abv > 100) {
+      alert('Enter an ABV from 0 to 100.');
+      return;
+    }
+    const tank = tanksWithContents.find((item) => item.id === onHandTankId);
+    if (tank && tank.capacity_gal > 0 && volumeGal > tank.capacity_gal) {
+      if (!confirm(
+        `This is ${volumeGal.toFixed(1)} gal in ${tank.name} (capacity ${tank.capacity_gal} gal). Continue?`,
+      )) {
+        return;
+      }
+    }
+    try {
+      saveHoldingTankOnHand({
+        tankEquipmentId: onHandTankId,
+        volumeGal,
+        abv,
+        recordedAt: onHandForm.recorded_at,
+        notes: onHandForm.notes,
+      });
+      setOnHandTankId(null);
+      refresh();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Could not save the tank volume.');
+    }
+  };
+
+  const handleClearOnHand = () => {
+    if (!onHandTankId) return;
+    if (!confirm('Remove the on-hand reading? The tank goes back to only what production records add and remove.')) {
+      return;
+    }
+    try {
+      clearHoldingTankOnHand(onHandTankId);
+      setOnHandTankId(null);
+      refresh();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Could not clear the on-hand reading.');
+    }
+  };
+
   const handleDeleteDiscard = (id: number) => {
     if (confirm('Delete this leftover record? The gallons go back into the fermenter when it is empty or still holds this wash.')) {
       try {
@@ -448,7 +519,8 @@ export function TankTransfer() {
       <div className="detail-panel">
         <h4>Tanks</h4>
         <p className="field-hint" style={{ marginTop: '-0.5rem' }}>
-          Select a tank with spirit to transfer it.
+          Starting today, choose Set volume and enter the gallons and ABV already in each tank.
+          After that, record only new transfers and production — those gallons are already counted.
         </p>
         {tanksWithContents.length === 0 ? (
           <p style={{ color: 'var(--text-muted)' }}>No holding tanks or collection vessels on the floor plan.</p>
@@ -489,6 +561,16 @@ export function TankTransfer() {
                         />
                       </td>
                       <td className="td-actions">
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-secondary"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            openOnHand(tank.id);
+                          }}
+                        >
+                          Set volume
+                        </button>
                         {canTransfer && (
                           <button
                             type="button"
@@ -750,6 +832,67 @@ export function TankTransfer() {
             <button type="button" className="btn btn-primary" onClick={handleSaveFermenterTransfer}>
               {fermenterForm.dest_equipment_id === DISCARD_DESTINATION ? 'Record leftovers' : 'Transfer'}
             </button>
+          </div>
+        </Modal>
+      )}
+
+      {onHandTankId != null && (
+        <Modal title="Set tank volume" onClose={() => setOnHandTankId(null)}>
+          <p className="field-hint" style={{ marginTop: 0 }}>
+            Enter what is in {tanksWithContents.find((tank) => tank.id === onHandTankId)?.name} today.
+            This does not create a wash or distillation. Later transfers, blends, charges, and bottling
+            add to or take from this amount.
+          </p>
+          <div className="form-grid">
+            <div className="form-group">
+              <label htmlFor="on-hand-date">Date</label>
+              <DatePicker
+                id="on-hand-date"
+                value={onHandForm.recorded_at}
+                onChange={(recorded_at) => setOnHandForm({ ...onHandForm, recorded_at })}
+              />
+            </div>
+            <div className="form-group">
+              <label htmlFor="on-hand-volume">Volume (gal)</label>
+              <input
+                id="on-hand-volume"
+                type="number"
+                min={0}
+                step="0.1"
+                value={onHandForm.volume_gal}
+                onChange={(e) => setOnHandForm({ ...onHandForm, volume_gal: e.target.value })}
+              />
+            </div>
+            <div className="form-group">
+              <label htmlFor="on-hand-abv">ABV (%)</label>
+              <input
+                id="on-hand-abv"
+                type="number"
+                min={0}
+                max={100}
+                step="0.1"
+                value={onHandForm.abv}
+                onChange={(e) => setOnHandForm({ ...onHandForm, abv: e.target.value })}
+              />
+            </div>
+            <div className="form-group full-width">
+              <label htmlFor="on-hand-notes">Notes</label>
+              <input
+                id="on-hand-notes"
+                value={onHandForm.notes}
+                onChange={(e) => setOnHandForm({ ...onHandForm, notes: e.target.value })}
+                placeholder="On hand when tracking started"
+              />
+            </div>
+          </div>
+          <div className="form-actions">
+            {getHoldingTankOnHand(onHandTankId) && (
+              <button type="button" className="btn btn-ghost" onClick={handleClearOnHand}>
+                Clear reading
+              </button>
+            )}
+            <button type="button" className="btn btn-secondary" onClick={() => setOnHandTankId(null)}>Cancel</button>
+            <button type="button" className="btn btn-primary" onClick={handleSaveOnHand}>Save volume</button>
           </div>
         </Modal>
       )}

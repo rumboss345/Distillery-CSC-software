@@ -322,6 +322,20 @@ CREATE TABLE IF NOT EXISTS holding_tank_transfers (
 CREATE INDEX IF NOT EXISTS idx_tank_transfers_source ON holding_tank_transfers(source_tank_equipment_id);
 CREATE INDEX IF NOT EXISTS idx_tank_transfers_dest ON holding_tank_transfers(dest_tank_equipment_id);
 
+CREATE TABLE IF NOT EXISTS holding_tank_opening_balances (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tank_equipment_id INTEGER NOT NULL UNIQUE REFERENCES floor_equipment(id),
+  volume_gal REAL NOT NULL,
+  alcohol_gal REAL NOT NULL,
+  measured_volume_gal REAL NOT NULL,
+  measured_abv REAL NOT NULL,
+  recorded_at TEXT NOT NULL,
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_tank_opening_tank ON holding_tank_opening_balances(tank_equipment_id);
+
 CREATE INDEX IF NOT EXISTS idx_fermentation_mash ON fermentation_logs(mash_batch_id);
 CREATE INDEX IF NOT EXISTS idx_fermentation_fermenter ON fermentation_logs(floor_equipment_id);
 CREATE INDEX IF NOT EXISTS idx_cuts_run ON distillation_cuts(distillation_run_id);
