@@ -5,9 +5,9 @@ export function runAsksForStillage(runType: DistillationRunType | string | null 
   return runType === 'wash' || runType === 'heavy_rum';
 }
 
-/** A stillage tank is a holding tank or collection vessel whose name says stillage. */
-export function isStillageTankName(name: string | null | undefined): boolean {
-  return /stillage/i.test(name ?? '');
+/** Distillation stillage can be stored only in equipment of type Stillage Tank. */
+export function isStillageTankType(type: string | null | undefined): boolean {
+  return type === 'stillage_tank';
 }
 
 export function distillationStillageTankError(tankName: string): string {

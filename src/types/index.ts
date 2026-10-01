@@ -27,6 +27,7 @@ export type EquipmentType =
   | 'fermenter'
   | 'mash_tun'
   | 'holding_tank'
+  | 'stillage_tank'
   | 'collection_vessel'
   | 'pot_still'
   | 'column_still'
