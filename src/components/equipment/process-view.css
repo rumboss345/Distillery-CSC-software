@@ -3,7 +3,8 @@
   border: 1px solid #c5ccd6;
   border-radius: var(--radius, 10px);
   background: #eceef1;
-  overflow: hidden;
+  /* clip keeps the rounded corners without trapping the sticky sidebar */
+  overflow: clip;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
@@ -660,7 +661,12 @@
   background: #eef1f5;
   overflow: hidden;
   min-width: 0;
-  max-height: min(78vh, 820px);
+  align-self: start;
+  position: sticky;
+  top: 0;
+  max-height: 100vh;
+  max-height: 100dvh;
+  z-index: 2;
   /* Light panel: override app dark-theme body text */
   color: #0f172a;
 }
@@ -1233,6 +1239,7 @@
   }
 
   .process-sidebar {
+    position: static;
     border-left: none;
     border-top: 1px solid #c5ccd6;
     max-height: none;
