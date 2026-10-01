@@ -531,6 +531,26 @@ body.nav-open {
   border-color: var(--accent);
 }
 
+/* Number plus unit menu. A plain flex row lets the select's width: 100% swallow the field. */
+.amount-unit-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+  max-width: 24rem;
+}
+
+.form-group .amount-unit-row > input {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 6.5rem;
+}
+
+.form-group .amount-unit-row > select {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 7.25rem;
+}
+
 .form-group textarea {
   resize: vertical;
   min-height: 80px;
