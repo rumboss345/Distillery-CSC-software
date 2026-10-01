@@ -2217,7 +2217,7 @@ export function Blending() {
       )}
 
       {showWizard && (
-        <Modal title={currentStep.title} onClose={() => setShowWizard(false)}>
+        <Modal title={isLocked ? 'Produced batch' : currentStep.title} onClose={() => setShowWizard(false)}>
           <div className="blend-wizard">
             <nav className="blend-wizard-steps" aria-label="Batch progress">
               {WIZARD_STEPS.map((step) => (
