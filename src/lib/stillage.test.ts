@@ -1,23 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import {
-  distillationStillageTankError,
-  isStillageTankName,
-  persistedStillage,
-  runAsksForStillage,
-  stillageSaveError,
-  stillageSummary,
-} from './stillage';
+import { persistedStillage, runAsksForStillage, stillageSaveError, stillageSummary } from './stillage';
 
 describe('stillage on completed low wine and heavy rum runs', () => {
-  it('treats only tanks named stillage as stillage tanks', () => {
-    expect(isStillageTankName('Stillage Storage tank')).toBe(true);
-    expect(isStillageTankName('stillage tank 2')).toBe(true);
-    expect(isStillageTankName('Dunder tank')).toBe(false);
-    expect(isStillageTankName('Low wines storage Tank 5')).toBe(false);
-    expect(isStillageTankName('Latina 500L')).toBe(false);
-    expect(distillationStillageTankError('Dunder tank')).toMatch(/stillage tank/);
-  });
-
   it('asks only for low wine and heavy rum runs', () => {
     expect(runAsksForStillage('wash')).toBe(true);
     expect(runAsksForStillage('heavy_rum')).toBe(true);

@@ -63,7 +63,7 @@ import {
   spiritChargeDetail,
   type SpiritProofPlace,
 } from '../lib/spirit-charge-proof';
-import { isStillageTankName, runAsksForStillage, stillageSaveError, stillageSummary } from '../lib/stillage';
+import { runAsksForStillage, stillageSaveError, stillageSummary } from '../lib/stillage';
 import type {
   DistillationCutView,
   DistillationRun,
@@ -111,12 +111,8 @@ export function Distillation() {
   const runs = getDistillationRuns();
   const mashes = getMashBatches();
   const collectionVessels = getCollectionVessels();
-  const stillageTanks = [
-    ...getHoldingTanks({ includeUnavailable: true }),
-    ...getCollectionVessels({ includeUnavailable: true }),
-  ]
-    .filter((tank) => isStillageTankName(tank.name))
-    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+  const stillageHoldingTanks = getHoldingTanks({ includeUnavailable: true });
+  const stillageCollectionVessels = getCollectionVessels({ includeUnavailable: true });
   const tanksWithContents = getSpiritTransferVesselsWithContents();
   const equipment = getFloorEquipment();
   const [showRunForm, setShowRunForm] = useState(false);
@@ -1277,8 +1273,7 @@ export function Distillation() {
                 <label>Stillage left in the still</label>
                 <p className="field-hint">
                   Spent wash left after this {runForm.run_type === 'heavy_rum' ? 'heavy rum' : 'low wine'} run.
-                  Enter 0 if none is left. Store the rest in a stillage tank, or discard it.
-                  Stillage can be transferred into another tank later.
+                  Enter 0 if none is left. Any volume has to be stored in a tank or discarded.
                 </p>
                 <div className="form-grid">
                   <div className="form-group">
@@ -1329,18 +1324,23 @@ export function Distillation() {
                         <option value="">Choose…</option>
                         <option value="discarded">Discarded</option>
                         {runForm.stillage_holding_tank_equipment_id
-                          && !stillageTanks.some((tank) => tank.id === runForm.stillage_holding_tank_equipment_id) && (
+                          && !stillageHoldingTanks.some((tank) => tank.id === runForm.stillage_holding_tank_equipment_id)
+                          && !stillageCollectionVessels.some((tank) => tank.id === runForm.stillage_holding_tank_equipment_id) && (
                           <option value={runForm.stillage_holding_tank_equipment_id}>
                             {equipment.find((item) => item.id === runForm.stillage_holding_tank_equipment_id)?.name ?? 'Selected tank'}
                           </option>
                         )}
-                        {stillageTanks.map((tank) => (
-                          <option key={tank.id} value={tank.id}>{tank.name}</option>
-                        ))}
+                        <optgroup label="Holding tanks">
+                          {stillageHoldingTanks.map((tank) => (
+                            <option key={tank.id} value={tank.id}>{tank.name}</option>
+                          ))}
+                        </optgroup>
+                        <optgroup label="Collection vessels">
+                          {stillageCollectionVessels.map((tank) => (
+                            <option key={tank.id} value={tank.id}>{tank.name}</option>
+                          ))}
+                        </optgroup>
                       </select>
-                      {stillageTanks.length === 0 && (
-                        <p className="field-hint">No stillage tank is set up. Name a holding tank or collection vessel with "stillage", or discard this stillage.</p>
-                      )}
                     </div>
                   )}
                 </div>

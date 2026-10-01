@@ -8,10 +8,8 @@ import {
   collectionVesselAcceptsIncomingCut,
   collectionVesselContentsLabel,
   collectionVesselCutMixMessage,
-  inflowsAreStillageOnly,
   storedCutTypeFromInflows,
   type StoredCutType,
-  type VesselInflow,
 } from '../lib/collection-vessel-cuts';
 import { isFermenterSourcedRun, isTankSourcedRun, runUsesDestHoldingTank } from '../lib/distillation-run-types';
 import {
@@ -36,7 +34,7 @@ import { countActiveFermentations, fermenterShowsAssignedWash } from '../lib/mas
 import { compareStoredDatesDesc } from '../lib/date-input';
 import { eventDateWhenLeavingPlanned, localIsoDate } from '../lib/planned-event-date';
 import { DISCARD_DESTINATION, fermenterTransferError } from '../lib/fermenter-transfer';
-import { distillationStillageTankError, isStillageTankName, persistedStillage, stillageSaveError } from '../lib/stillage';
+import { persistedStillage, stillageSaveError } from '../lib/stillage';
 import {
   normalizeWarehouseLocationName,
   warehouseLocationNameError,
@@ -1453,77 +1451,8 @@ function findCollectionVesselByKeywords(
   return match?.id ?? vessels[0]?.id ?? null;
 }
 
-function tankVolumeInflows(tankId: number, seen: Set<number>): VesselInflow[] {
-  const cuts = queryAll<{ cut_type: CutType; volume_gal: number; occurred_at: string }>(`
-    SELECT c.cut_type, c.volume_gal, c.start_time as occurred_at
-    FROM distillation_cuts c
-    JOIN distillation_runs r ON r.id = c.distillation_run_id
-    WHERE c.holding_tank_equipment_id = ?
-      AND c.volume_gal > 0
-      AND r.status IN ('running', 'complete')
-  `, [tankId]);
-  const transfers = queryAll<{
-    volume_gal: number;
-    occurred_at: string;
-    source_tank_equipment_id: number;
-  }>(`
-    SELECT volume_gal, transfer_date as occurred_at, source_tank_equipment_id
-    FROM holding_tank_transfers
-    WHERE dest_tank_equipment_id = ?
-      AND volume_gal > 0
-  `, [tankId]);
-  const stillage = queryAll<{ volume_gal: number; occurred_at: string }>(`
-    SELECT stillage_volume_gal as volume_gal, run_date as occurred_at
-    FROM distillation_runs
-    WHERE stillage_holding_tank_equipment_id = ?
-      AND status = 'complete'
-      AND COALESCE(stillage_discarded, 0) = 0
-      AND stillage_volume_gal > 0
-  `, [tankId]);
-  return [
-    ...cuts.map((cut) => ({
-      occurredAt: cut.occurred_at,
-      volumeGal: cut.volume_gal,
-      cutType: cut.cut_type,
-      stillage: false,
-    })),
-    ...transfers.map((transfer) => ({
-      occurredAt: transfer.occurred_at,
-      volumeGal: transfer.volume_gal,
-      cutType: null as CutType | null,
-      stillage: sourceMayMoveStillageFreely(transfer.source_tank_equipment_id, seen),
-    })),
-    ...stillage.map((row) => ({
-      occurredAt: row.occurred_at,
-      volumeGal: row.volume_gal,
-      cutType: null as CutType | null,
-      stillage: true,
-    })),
-  ]
-    .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
-    .map(({ volumeGal, cutType, stillage }) => ({ volumeGal, cutType, stillage }));
-}
-
-/**
- * True when the gallons being moved are stillage, including stillage that was
- * already transferred out of a stillage tank. Spirit cuts stay on the cut rule.
- */
-export function sourceMayMoveStillageFreely(tankId: number, seen = new Set<number>()): boolean {
-  if (seen.has(tankId) || seen.size > 8) return false;
-  seen.add(tankId);
-  const tank = queryOne<{ name: string }>(
-    'SELECT name FROM floor_equipment WHERE id = ?',
-    [tankId],
-  );
-  if (!tank) return false;
-  const volume = getHoldingTankContents(tankId).volume_gal;
-  if (volume <= 0.05) return isStillageTankName(tank.name);
-  return inflowsAreStillageOnly(tankVolumeInflows(tankId, seen), volume);
-}
-
 function assertCollectionVesselCutTransfer(sourceId: number, destId: number): void {
   if (!isCollectionVesselEquipmentId(destId)) return;
-  if (sourceMayMoveStillageFreely(sourceId)) return;
   const destCut = getCollectionVesselStoredCutType(destId);
   const sourceCut = getCollectionVesselStoredCutType(sourceId);
   if (sourceCut === 'mixed') {
@@ -2798,20 +2727,7 @@ function assertStillageFitsTank(tankId: number, volumeGal: number, runId?: numbe
   );
   if (!tank) throw new Error('Stillage tank not found.');
   if (tank.equipment_type !== 'holding_tank' && tank.equipment_type !== 'collection_vessel') {
-    throw new Error(`${tank.name} cannot store stillage. Choose a stillage tank, or discard it.`);
-  }
-  const alreadyStoredHere = Boolean(
-    runId
-    && queryOne<{ id: number }>(`
-      SELECT id FROM distillation_runs
-      WHERE id = ?
-        AND status = 'complete'
-        AND stillage_holding_tank_equipment_id = ?
-        AND COALESCE(stillage_discarded, 0) = 0
-    `, [runId, tankId]),
-  );
-  if (!isStillageTankName(tank.name) && !alreadyStoredHere) {
-    throw new Error(distillationStillageTankError(tank.name));
+    throw new Error(`${tank.name} cannot store stillage. Choose a holding tank or collection vessel, or discard it.`);
   }
   if (!(tank.capacity_gal > 0)) return;
   const contents = getHoldingTankContents(tankId);
