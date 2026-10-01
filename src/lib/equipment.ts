@@ -5,7 +5,6 @@ export const EQUIPMENT_TYPES: { value: EquipmentType; label: string }[] = [
   { value: 'fermenter', label: 'Fermenter' },
   { value: 'mash_tun', label: 'Wash Tank' },
   { value: 'holding_tank', label: 'Holding Tank' },
-  { value: 'stillage_tank', label: 'Stillage Tank' },
   { value: 'collection_vessel', label: 'Collection Vessels' },
   { value: 'pot_still', label: 'Pot Still' },
   { value: 'column_still', label: 'Column Still' },
@@ -26,7 +25,6 @@ export const TYPE_COLORS: Record<EquipmentType, string> = {
   fermenter: '#6b9e78',
   mash_tun: '#8b7355',
   holding_tank: '#6a9ec9',
-  stillage_tank: '#6b6258',
   collection_vessel: '#7c8fd4',
   pot_still: '#c8956c',
   column_still: '#d4a04a',
@@ -66,7 +64,7 @@ export function getEquipmentDisplayColor(
       return getFermenterInUseDisplayColor(options?.fermenterLatestBrix);
     }
     if (known === 'pot_still' || known === 'column_still') return IN_USE_COLORS.still;
-    if (known === 'holding_tank' || known === 'stillage_tank' || known === 'collection_vessel') return IN_USE_COLORS.holding_tank;
+    if (known === 'holding_tank' || known === 'collection_vessel') return IN_USE_COLORS.holding_tank;
     return IN_USE_COLORS.default;
   }
   if (status === 'cleaning') return '#eab308';
@@ -83,7 +81,6 @@ export const TYPE_DEFAULTS: Record<EquipmentType, { width_ft: number; depth_ft: 
   fermenter: { width_ft: 10, depth_ft: 10, capacity_gal: 1000 },
   mash_tun: { width_ft: 14, depth_ft: 12, capacity_gal: 600 },
   holding_tank: { width_ft: 8, depth_ft: 6, capacity_gal: 100 },
-  stillage_tank: { width_ft: 10, depth_ft: 8, capacity_gal: 5000 },
   collection_vessel: { width_ft: 7, depth_ft: 6, capacity_gal: 80 },
   pot_still: { width_ft: 12, depth_ft: 14, capacity_gal: 200 },
   column_still: { width_ft: 8, depth_ft: 20, capacity_gal: 300 },
@@ -102,7 +99,6 @@ export function equipmentIconShowsVolume(icon: string): boolean {
   return icon === 'fermenter'
     || icon === 'mash_tun'
     || icon === 'holding_tank'
-    || icon === 'stillage_tank'
     || icon === 'collection_vessel'
     || icon === 'pot_still'
     || icon === 'column_still';
@@ -121,10 +117,5 @@ export function equipmentTypeLabel(type: string): string {
 }
 
 export function isLiquidVesselEquipmentType(type: string): boolean {
-  return isSpiritLedgerEquipmentType(type);
-}
-
-/** Holding tanks, stillage tanks, and collection vessels share the spirit ledger. */
-export function isSpiritLedgerEquipmentType(type: string): boolean {
-  return type === 'holding_tank' || type === 'stillage_tank' || type === 'collection_vessel';
+  return type === 'holding_tank' || type === 'collection_vessel';
 }

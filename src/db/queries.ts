@@ -8,10 +8,8 @@ import {
   collectionVesselAcceptsIncomingCut,
   collectionVesselContentsLabel,
   collectionVesselCutMixMessage,
-  inflowsAreStillageOnly,
   storedCutTypeFromInflows,
   type StoredCutType,
-  type VesselInflow,
 } from '../lib/collection-vessel-cuts';
 import { isFermenterSourcedRun, isTankSourcedRun, runUsesDestHoldingTank } from '../lib/distillation-run-types';
 import {
@@ -30,13 +28,13 @@ import {
 } from '../lib/equipment-maintenance';
 import { equipmentCleaningStatusLabel, equipmentNeedsCleaning, equipmentStatusWhenReturningToPlanned } from '../lib/equipment-cleaning';
 import { assertEnteredAbv } from '../lib/abv-limits';
-import { EQUIPMENT_TYPES, isSpiritLedgerEquipmentType, resolveEquipmentIcon } from '../lib/equipment';
+import { EQUIPMENT_TYPES, resolveEquipmentIcon } from '../lib/equipment';
 import { equipmentTypeNameError, normalizeEquipmentTypeName } from '../lib/equipment-type';
 import { countActiveFermentations, fermenterShowsAssignedWash } from '../lib/mash-fermenter-fill';
 import { compareStoredDatesDesc } from '../lib/date-input';
 import { eventDateWhenLeavingPlanned, localIsoDate } from '../lib/planned-event-date';
 import { DISCARD_DESTINATION, fermenterTransferError } from '../lib/fermenter-transfer';
-import { distillationStillageTankError, isStillageTankType, persistedStillage, stillageSaveError } from '../lib/stillage';
+import { persistedStillage, stillageSaveError } from '../lib/stillage';
 import {
   normalizeWarehouseLocationName,
   warehouseLocationNameError,
@@ -904,14 +902,6 @@ export function getCollectionVessels(options?: EquipmentListOptions): FloorEquip
   );
 }
 
-export function getStillageTanks(options?: EquipmentListOptions): FloorEquipment[] {
-  syncHoldingTankStatuses();
-  return listForProduction(
-    getFloorEquipment().filter((e) => isStillageTankType(e.equipment_type)),
-    options,
-  );
-}
-
 /** Cut type of the spirit still in the vessel. Empty vessels are not locked to a run or a cut. */
 export function getCollectionVesselStoredCutType(
   vesselId: number,
@@ -1032,7 +1022,7 @@ export function getCollectionVesselsForCutType(
 export function getSpiritTransferVessels(): FloorEquipment[] {
   syncHoldingTankStatuses();
   return onlyProductionUsable(getFloorEquipment().filter(
-    (e) => isSpiritLedgerEquipmentType(e.equipment_type),
+    (e) => e.equipment_type === 'holding_tank' || e.equipment_type === 'collection_vessel',
   ));
 }
 
@@ -1051,8 +1041,8 @@ function assertSpiritTransferVessel(equipmentId: number, role: 'source' | 'desti
   if (!row) {
     throw new Error(`${role === 'source' ? 'Source' : 'Destination'} tank not found.`);
   }
-  if (!isSpiritLedgerEquipmentType(row.equipment_type)) {
-    throw new Error(`${row.name} cannot be used for spirit transfers — choose a holding tank, stillage tank, or collection vessel.`);
+  if (row.equipment_type !== 'holding_tank' && row.equipment_type !== 'collection_vessel') {
+    throw new Error(`${row.name} cannot be used for spirit transfers — choose a holding tank or collection vessel.`);
   }
 }
 
@@ -1461,77 +1451,8 @@ function findCollectionVesselByKeywords(
   return match?.id ?? vessels[0]?.id ?? null;
 }
 
-function tankVolumeInflows(tankId: number, seen: Set<number>): VesselInflow[] {
-  const cuts = queryAll<{ cut_type: CutType; volume_gal: number; occurred_at: string }>(`
-    SELECT c.cut_type, c.volume_gal, c.start_time as occurred_at
-    FROM distillation_cuts c
-    JOIN distillation_runs r ON r.id = c.distillation_run_id
-    WHERE c.holding_tank_equipment_id = ?
-      AND c.volume_gal > 0
-      AND r.status IN ('running', 'complete')
-  `, [tankId]);
-  const transfers = queryAll<{
-    volume_gal: number;
-    occurred_at: string;
-    source_tank_equipment_id: number;
-  }>(`
-    SELECT volume_gal, transfer_date as occurred_at, source_tank_equipment_id
-    FROM holding_tank_transfers
-    WHERE dest_tank_equipment_id = ?
-      AND volume_gal > 0
-  `, [tankId]);
-  const stillage = queryAll<{ volume_gal: number; occurred_at: string }>(`
-    SELECT stillage_volume_gal as volume_gal, run_date as occurred_at
-    FROM distillation_runs
-    WHERE stillage_holding_tank_equipment_id = ?
-      AND status = 'complete'
-      AND COALESCE(stillage_discarded, 0) = 0
-      AND stillage_volume_gal > 0
-  `, [tankId]);
-  return [
-    ...cuts.map((cut) => ({
-      occurredAt: cut.occurred_at,
-      volumeGal: cut.volume_gal,
-      cutType: cut.cut_type,
-      stillage: false,
-    })),
-    ...transfers.map((transfer) => ({
-      occurredAt: transfer.occurred_at,
-      volumeGal: transfer.volume_gal,
-      cutType: null as CutType | null,
-      stillage: sourceMayMoveStillageFreely(transfer.source_tank_equipment_id, seen),
-    })),
-    ...stillage.map((row) => ({
-      occurredAt: row.occurred_at,
-      volumeGal: row.volume_gal,
-      cutType: null as CutType | null,
-      stillage: true,
-    })),
-  ]
-    .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
-    .map(({ volumeGal, cutType, stillage }) => ({ volumeGal, cutType, stillage }));
-}
-
-/**
- * True when the gallons being moved are stillage, including stillage that was
- * already transferred out of a stillage tank. Spirit cuts stay on the cut rule.
- */
-export function sourceMayMoveStillageFreely(tankId: number, seen = new Set<number>()): boolean {
-  if (seen.has(tankId) || seen.size > 8) return false;
-  seen.add(tankId);
-  const tank = queryOne<{ equipment_type: string }>(
-    'SELECT equipment_type FROM floor_equipment WHERE id = ?',
-    [tankId],
-  );
-  if (!tank) return false;
-  const volume = getHoldingTankContents(tankId).volume_gal;
-  if (volume <= 0.05) return isStillageTankType(tank.equipment_type);
-  return inflowsAreStillageOnly(tankVolumeInflows(tankId, seen), volume);
-}
-
 function assertCollectionVesselCutTransfer(sourceId: number, destId: number): void {
   if (!isCollectionVesselEquipmentId(destId)) return;
-  if (sourceMayMoveStillageFreely(sourceId)) return;
   const destCut = getCollectionVesselStoredCutType(destId);
   const sourceCut = getCollectionVesselStoredCutType(sourceId);
   if (sourceCut === 'mixed') {
@@ -2225,7 +2146,7 @@ export function emptyAllHoldingTanks(): {
 
 export function syncHoldingTankStatuses(): void {
   const tanks = queryAll<FloorEquipment>(
-    "SELECT * FROM floor_equipment WHERE equipment_type IN ('holding_tank', 'stillage_tank', 'collection_vessel')",
+    "SELECT * FROM floor_equipment WHERE equipment_type IN ('holding_tank', 'collection_vessel')",
   );
   for (const tank of tanks) {
     const contents = getHoldingTankContents(tank.id);
@@ -2805,18 +2726,8 @@ function assertStillageFitsTank(tankId: number, volumeGal: number, runId?: numbe
     [tankId],
   );
   if (!tank) throw new Error('Stillage tank not found.');
-  const alreadyStoredHere = Boolean(
-    runId
-    && queryOne<{ id: number }>(`
-      SELECT id FROM distillation_runs
-      WHERE id = ?
-        AND status = 'complete'
-        AND stillage_holding_tank_equipment_id = ?
-        AND COALESCE(stillage_discarded, 0) = 0
-    `, [runId, tankId]),
-  );
-  if (!isStillageTankType(tank.equipment_type) && !alreadyStoredHere) {
-    throw new Error(distillationStillageTankError(tank.name));
+  if (tank.equipment_type !== 'holding_tank' && tank.equipment_type !== 'collection_vessel') {
+    throw new Error(`${tank.name} cannot store stillage. Choose a holding tank or collection vessel, or discard it.`);
   }
   if (!(tank.capacity_gal > 0)) return;
   const contents = getHoldingTankContents(tankId);
@@ -3456,7 +3367,7 @@ export function fillBarrelFromHoldingTank(input: FillBarrelFromTankInput): void 
   if (!(input.volumeGal > 0)) throw new Error('Fill volume must be greater than zero.');
 
   const tank = queryOne<FloorEquipment>(
-    `SELECT * FROM floor_equipment WHERE id = ? AND equipment_type IN ('holding_tank', 'stillage_tank', 'collection_vessel')`,
+    `SELECT * FROM floor_equipment WHERE id = ? AND equipment_type IN ('holding_tank', 'collection_vessel')`,
     [input.sourceHoldingTankEquipmentId],
   );
   if (!tank) throw new Error('Holding tank not found.');
@@ -4474,7 +4385,7 @@ function collectionVesselContentsDetail(vesselId: number, volumeGal: number): st
 export function getEquipmentVolumeReport(): EquipmentVolumeReport[] {
   const equipment = getAllFloorEquipmentWithContext();
   return equipment.map((eq) => {
-    if (isSpiritLedgerEquipmentType(eq.equipment_type)) {
+    if (eq.equipment_type === 'holding_tank' || eq.equipment_type === 'collection_vessel') {
       const contents = getHoldingTankContents(eq.id);
       const detail = eq.equipment_type === 'collection_vessel'
         ? collectionVesselContentsDetail(eq.id, contents.volume_gal)
@@ -4626,7 +4537,7 @@ export function getFloorEquipmentWithContext(planId = 1): FloorEquipmentView[] {
   syncHoldingTankStatuses();
   const equipment = getFloorEquipment(planId);
   return equipment.map((eq) => {
-    if (isSpiritLedgerEquipmentType(eq.equipment_type)) {
+    if (eq.equipment_type === 'holding_tank' || eq.equipment_type === 'collection_vessel') {
       const contents = getHoldingTankContents(eq.id);
       if (contents.volume_gal <= 0) return eq;
       return {

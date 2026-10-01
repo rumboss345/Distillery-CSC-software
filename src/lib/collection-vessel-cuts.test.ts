@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   collectionVesselAcceptsIncomingCut,
   collectionVesselContentsLabel,
-  inflowsAreStillageOnly,
   storedCutTypeFromInflows,
 } from './collection-vessel-cuts';
 
@@ -38,31 +37,6 @@ describe('collection vessel cut type rule', () => {
     )).toBe('mixed');
     expect(collectionVesselAcceptsIncomingCut('mixed', 'hearts')).toBe(false);
     expect(collectionVesselAcceptsIncomingCut('heads', 'hearts')).toBe(false);
-  });
-
-  it('recognizes a vessel whose current gallons are only stillage', () => {
-    expect(inflowsAreStillageOnly(
-      [{ volumeGal: 40, cutType: null, stillage: true }],
-      40,
-    )).toBe(true);
-    expect(inflowsAreStillageOnly(
-      [
-        { volumeGal: 15, cutType: null, stillage: true },
-        { volumeGal: 40, cutType: 'hearts' },
-      ],
-      15,
-    )).toBe(true);
-    expect(inflowsAreStillageOnly(
-      [
-        { volumeGal: 10, cutType: 'tails' },
-        { volumeGal: 30, cutType: null, stillage: true },
-      ],
-      20,
-    )).toBe(false);
-    expect(inflowsAreStillageOnly(
-      [{ volumeGal: 10, cutType: null, stillage: true }],
-      25,
-    )).toBe(false);
   });
 
   it('names the spirit, stillage, or mix currently in a collection vessel', () => {

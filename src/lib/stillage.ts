@@ -5,15 +5,6 @@ export function runAsksForStillage(runType: DistillationRunType | string | null 
   return runType === 'wash' || runType === 'heavy_rum';
 }
 
-/** Distillation stillage can be stored only in equipment of type Stillage Tank. */
-export function isStillageTankType(type: string | null | undefined): boolean {
-  return type === 'stillage_tank';
-}
-
-export function distillationStillageTankError(tankName: string): string {
-  return `${tankName} is not a stillage tank. Stillage from a distillation can only go into a stillage tank, or be discarded.`;
-}
-
 export interface StillageAnswer {
   status: string;
   runType: string;

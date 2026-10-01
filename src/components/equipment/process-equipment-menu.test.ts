@@ -81,7 +81,7 @@ describe('buildProcessEquipmentContextMenu', () => {
     const stillage = buildProcessEquipmentContextMenu(source({
       id: 10,
       name: 'Stillage Storage tank',
-      equipment_type: 'stillage_tank',
+      equipment_type: 'holding_tank',
       volumeGal: 200,
       abv: 1,
       liquidName: 'Stillage',

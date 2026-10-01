@@ -77,7 +77,6 @@ export function ProcessEquipmentDetailPanel({
   const dirty = equipmentNeedsCleaning(equipment);
   const hasLiquid = visual.currentVolumeGal > 0;
   const isTransferVessel = equipment.equipment_type === 'holding_tank'
-    || equipment.equipment_type === 'stillage_tank'
     || equipment.equipment_type === 'collection_vessel';
   const isHoldingTank = equipment.equipment_type === 'holding_tank';
   const liquidClass = classifyProcessLiquid(visual.name, visual.liquidName);
@@ -284,7 +283,7 @@ export function ProcessEquipmentDetailPanel({
         </div>
       )}
 
-      {(equipment.equipment_type === 'holding_tank' || equipment.equipment_type === 'stillage_tank' || equipment.equipment_type === 'collection_vessel') && (
+      {(equipment.equipment_type === 'holding_tank' || equipment.equipment_type === 'collection_vessel') && (
         <HoldingTankIntakeHistory
           tankId={equipment.id}
           selectedKey={selectedIntakeKey}
