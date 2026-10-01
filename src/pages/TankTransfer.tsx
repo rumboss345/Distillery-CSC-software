@@ -74,7 +74,7 @@ export function TankTransfer() {
   const { key, refresh } = useRefreshKey();
   const spiritTransferVessels = getSpiritTransferVessels();
   const tanksWithContents = getFloorEquipment()
-    .filter((item) => item.equipment_type === 'holding_tank' || item.equipment_type === 'collection_vessel')
+    .filter((item) => item.equipment_type === 'holding_tank' || item.equipment_type === 'stillage_tank' || item.equipment_type === 'collection_vessel')
     .map((tank) => ({
       ...tank,
       ...getHoldingTankContents(tank.id),

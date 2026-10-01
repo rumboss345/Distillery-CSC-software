@@ -30,13 +30,13 @@ import {
 } from '../lib/equipment-maintenance';
 import { equipmentCleaningStatusLabel, equipmentNeedsCleaning, equipmentStatusWhenReturningToPlanned } from '../lib/equipment-cleaning';
 import { assertEnteredAbv } from '../lib/abv-limits';
-import { EQUIPMENT_TYPES, resolveEquipmentIcon } from '../lib/equipment';
+import { EQUIPMENT_TYPES, isSpiritLedgerEquipmentType, resolveEquipmentIcon } from '../lib/equipment';
 import { equipmentTypeNameError, normalizeEquipmentTypeName } from '../lib/equipment-type';
 import { countActiveFermentations, fermenterShowsAssignedWash } from '../lib/mash-fermenter-fill';
 import { compareStoredDatesDesc } from '../lib/date-input';
 import { eventDateWhenLeavingPlanned, localIsoDate } from '../lib/planned-event-date';
 import { DISCARD_DESTINATION, fermenterTransferError } from '../lib/fermenter-transfer';
-import { distillationStillageTankError, isStillageTankName, persistedStillage, stillageSaveError } from '../lib/stillage';
+import { distillationStillageTankError, isStillageTankType, persistedStillage, stillageSaveError } from '../lib/stillage';
 import {
   normalizeWarehouseLocationName,
   warehouseLocationNameError,
@@ -904,6 +904,14 @@ export function getCollectionVessels(options?: EquipmentListOptions): FloorEquip
   );
 }
 
+export function getStillageTanks(options?: EquipmentListOptions): FloorEquipment[] {
+  syncHoldingTankStatuses();
+  return listForProduction(
+    getFloorEquipment().filter((e) => isStillageTankType(e.equipment_type)),
+    options,
+  );
+}
+
 /** Cut type of the spirit still in the vessel. Empty vessels are not locked to a run or a cut. */
 export function getCollectionVesselStoredCutType(
   vesselId: number,
@@ -1024,7 +1032,7 @@ export function getCollectionVesselsForCutType(
 export function getSpiritTransferVessels(): FloorEquipment[] {
   syncHoldingTankStatuses();
   return onlyProductionUsable(getFloorEquipment().filter(
-    (e) => e.equipment_type === 'holding_tank' || e.equipment_type === 'collection_vessel',
+    (e) => isSpiritLedgerEquipmentType(e.equipment_type),
   ));
 }
 
@@ -1043,8 +1051,8 @@ function assertSpiritTransferVessel(equipmentId: number, role: 'source' | 'desti
   if (!row) {
     throw new Error(`${role === 'source' ? 'Source' : 'Destination'} tank not found.`);
   }
-  if (row.equipment_type !== 'holding_tank' && row.equipment_type !== 'collection_vessel') {
-    throw new Error(`${row.name} cannot be used for spirit transfers — choose a holding tank or collection vessel.`);
+  if (!isSpiritLedgerEquipmentType(row.equipment_type)) {
+    throw new Error(`${row.name} cannot be used for spirit transfers — choose a holding tank, stillage tank, or collection vessel.`);
   }
 }
 
@@ -1511,13 +1519,13 @@ function tankVolumeInflows(tankId: number, seen: Set<number>): VesselInflow[] {
 export function sourceMayMoveStillageFreely(tankId: number, seen = new Set<number>()): boolean {
   if (seen.has(tankId) || seen.size > 8) return false;
   seen.add(tankId);
-  const tank = queryOne<{ name: string }>(
-    'SELECT name FROM floor_equipment WHERE id = ?',
+  const tank = queryOne<{ equipment_type: string }>(
+    'SELECT equipment_type FROM floor_equipment WHERE id = ?',
     [tankId],
   );
   if (!tank) return false;
   const volume = getHoldingTankContents(tankId).volume_gal;
-  if (volume <= 0.05) return isStillageTankName(tank.name);
+  if (volume <= 0.05) return isStillageTankType(tank.equipment_type);
   return inflowsAreStillageOnly(tankVolumeInflows(tankId, seen), volume);
 }
 
@@ -2217,7 +2225,7 @@ export function emptyAllHoldingTanks(): {
 
 export function syncHoldingTankStatuses(): void {
   const tanks = queryAll<FloorEquipment>(
-    "SELECT * FROM floor_equipment WHERE equipment_type IN ('holding_tank', 'collection_vessel')",
+    "SELECT * FROM floor_equipment WHERE equipment_type IN ('holding_tank', 'stillage_tank', 'collection_vessel')",
   );
   for (const tank of tanks) {
     const contents = getHoldingTankContents(tank.id);
@@ -2797,9 +2805,6 @@ function assertStillageFitsTank(tankId: number, volumeGal: number, runId?: numbe
     [tankId],
   );
   if (!tank) throw new Error('Stillage tank not found.');
-  if (tank.equipment_type !== 'holding_tank' && tank.equipment_type !== 'collection_vessel') {
-    throw new Error(`${tank.name} cannot store stillage. Choose a stillage tank, or discard it.`);
-  }
   const alreadyStoredHere = Boolean(
     runId
     && queryOne<{ id: number }>(`
@@ -2810,7 +2815,7 @@ function assertStillageFitsTank(tankId: number, volumeGal: number, runId?: numbe
         AND COALESCE(stillage_discarded, 0) = 0
     `, [runId, tankId]),
   );
-  if (!isStillageTankName(tank.name) && !alreadyStoredHere) {
+  if (!isStillageTankType(tank.equipment_type) && !alreadyStoredHere) {
     throw new Error(distillationStillageTankError(tank.name));
   }
   if (!(tank.capacity_gal > 0)) return;
@@ -3451,7 +3456,7 @@ export function fillBarrelFromHoldingTank(input: FillBarrelFromTankInput): void 
   if (!(input.volumeGal > 0)) throw new Error('Fill volume must be greater than zero.');
 
   const tank = queryOne<FloorEquipment>(
-    `SELECT * FROM floor_equipment WHERE id = ? AND equipment_type IN ('holding_tank', 'collection_vessel')`,
+    `SELECT * FROM floor_equipment WHERE id = ? AND equipment_type IN ('holding_tank', 'stillage_tank', 'collection_vessel')`,
     [input.sourceHoldingTankEquipmentId],
   );
   if (!tank) throw new Error('Holding tank not found.');
@@ -4469,7 +4474,7 @@ function collectionVesselContentsDetail(vesselId: number, volumeGal: number): st
 export function getEquipmentVolumeReport(): EquipmentVolumeReport[] {
   const equipment = getAllFloorEquipmentWithContext();
   return equipment.map((eq) => {
-    if (eq.equipment_type === 'holding_tank' || eq.equipment_type === 'collection_vessel') {
+    if (isSpiritLedgerEquipmentType(eq.equipment_type)) {
       const contents = getHoldingTankContents(eq.id);
       const detail = eq.equipment_type === 'collection_vessel'
         ? collectionVesselContentsDetail(eq.id, contents.volume_gal)
@@ -4621,7 +4626,7 @@ export function getFloorEquipmentWithContext(planId = 1): FloorEquipmentView[] {
   syncHoldingTankStatuses();
   const equipment = getFloorEquipment(planId);
   return equipment.map((eq) => {
-    if (eq.equipment_type === 'holding_tank' || eq.equipment_type === 'collection_vessel') {
+    if (isSpiritLedgerEquipmentType(eq.equipment_type)) {
       const contents = getHoldingTankContents(eq.id);
       if (contents.volume_gal <= 0) return eq;
       return {

@@ -40,7 +40,7 @@ export const CSC_FLOOR_EQUIPMENT: CscFloorEquipmentSeed[] = [
   { name: 'Gin Storage milk can 2', equipment_type: 'holding_tank', capacity_gal: 50 },
   { name: 'Gin Storage milk can 3', equipment_type: 'holding_tank', capacity_gal: 50 },
   { name: 'Low wines collection tank of Vendome', equipment_type: 'collection_vessel', capacity_gal: 300 },
-  { name: 'Stillage Storage tank', equipment_type: 'holding_tank', capacity_gal: 5000 },
+  { name: 'Stillage Storage tank', equipment_type: 'stillage_tank', capacity_gal: 5000 },
   { name: 'Dunder tank', equipment_type: 'holding_tank', capacity_gal: 1000, notes: 'Backset / dunder storage' },
 ];
 
