@@ -2523,6 +2523,35 @@ tr:hover td {
   margin-top: 0.15rem;
 }
 
+.intake-view-summary {
+  margin: 0 0 1rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.intake-view-list {
+  display: grid;
+  grid-template-columns: 6.5rem minmax(0, 1fr);
+  gap: 0.55rem 0.75rem;
+  margin: 0;
+}
+
+.intake-view-list dt {
+  margin: 0;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.intake-view-list dd {
+  margin: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.intake-view-actions {
+  margin: 1.25rem 0 0;
+}
+
 .form-hint {
   margin-bottom: 0;
 }

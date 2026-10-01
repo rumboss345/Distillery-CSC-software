@@ -272,6 +272,9 @@ export interface HoldingTankIntakeEntry {
   abv: number;
   summary: string;
   detail?: string;
+  notes?: string;
+  /** Distillation run this cut or stillage came from. */
+  distillationRunId?: number;
 }
 
 export interface HoldingTankTransfer {

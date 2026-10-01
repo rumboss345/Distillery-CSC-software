@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { HoldingTankIntakeHistory } from '../HoldingTankIntakeHistory';
+import { Modal } from '../Modal';
 import { StatusBadge } from '../StatusBadge';
 import { AssigneeSelect } from '../AssigneeSelect';
 import { holdingTankIntakeKey, markEquipmentCleaned } from '../../db/queries';
 import { STATUS_LABELS, formatGal } from './equipment-visual-shared';
 import { classifyProcessLiquid } from './process-floor-label';
 import type { EquipmentVisualData } from './equipment-visual.types';
-import type { FloorEquipmentView } from '../../types';
+import type { FloorEquipmentView, HoldingTankIntakeEntry } from '../../types';
 import { equipmentCleaningStatusLabel, equipmentNeedsCleaning } from '../../lib/equipment-cleaning';
 import {
   equipmentBlocksProduction,
@@ -16,6 +18,18 @@ import {
 import { formatRecordedAt } from '../../lib/date-input';
 import { FERMENTATION_READY_MAX_BRIX, isBrixReadyForDistillation } from '../../lib/fermentation';
 import type { AssignedEmployee } from '../../lib/assignee';
+
+const INTAKE_KIND_LABELS: Record<HoldingTankIntakeEntry['kind'], string> = {
+  cut: 'Cut',
+  transfer: 'Transfer',
+  blend: 'Blend',
+  stillage: 'Stillage',
+};
+
+function intakeAbvLabel(entry: HoldingTankIntakeEntry): string {
+  if (entry.kind === 'stillage') return '—';
+  return `${entry.abv.toFixed(1)}%`;
+}
 
 interface ProcessEquipmentDetailPanelProps {
   equipment: FloorEquipmentView | null;
@@ -35,6 +49,7 @@ export function ProcessEquipmentDetailPanel({
   onEquipmentUpdated,
 }: ProcessEquipmentDetailPanelProps) {
   const [selectedIntakeKey, setSelectedIntakeKey] = useState<string | null>(null);
+  const [viewedIntake, setViewedIntake] = useState<HoldingTankIntakeEntry | null>(null);
   const [cleanedBy, setCleanedBy] = useState<AssignedEmployee>({
     assigned_user_id: null,
     assigned_user_name: null,
@@ -42,6 +57,7 @@ export function ProcessEquipmentDetailPanel({
 
   useEffect(() => {
     setSelectedIntakeKey(null);
+    setViewedIntake(null);
     setCleanedBy({ assigned_user_id: null, assigned_user_name: null });
   }, [equipment?.id]);
 
@@ -271,16 +287,54 @@ export function ProcessEquipmentDetailPanel({
           tankId={equipment.id}
           selectedKey={selectedIntakeKey}
           title="Intake history"
-          hint={false}
+          hint="Click an entry to view it."
           emptyMessage="No cuts or transfers into this tank yet."
           onSelect={(entry) => {
-            setSelectedIntakeKey(
-              selectedIntakeKey === holdingTankIntakeKey(entry)
-                ? null
-                : holdingTankIntakeKey(entry),
-            );
+            setSelectedIntakeKey(holdingTankIntakeKey(entry));
+            setViewedIntake(entry);
           }}
         />
+      )}
+
+      {viewedIntake && createPortal(
+        <Modal
+          title={`${INTAKE_KIND_LABELS[viewedIntake.kind]} intake`}
+          onClose={() => setViewedIntake(null)}
+        >
+          <p className="intake-view-summary">{viewedIntake.summary}</p>
+          <dl className="intake-view-list">
+            <dt>When</dt>
+            <dd>{formatRecordedAt(viewedIntake.occurred_at)}</dd>
+            <dt>Volume</dt>
+            <dd>{viewedIntake.volume_gal.toFixed(1)} gal</dd>
+            <dt>ABV</dt>
+            <dd>{intakeAbvLabel(viewedIntake)}</dd>
+            {viewedIntake.detail && (
+              <>
+                <dt>Source</dt>
+                <dd>{viewedIntake.detail}</dd>
+              </>
+            )}
+            {viewedIntake.notes && (
+              <>
+                <dt>Notes</dt>
+                <dd>{viewedIntake.notes}</dd>
+              </>
+            )}
+          </dl>
+          {viewedIntake.distillationRunId != null && (
+            <p className="intake-view-actions">
+              <Link
+                className="btn btn-sm btn-primary"
+                to={`/distillation?cutsRun=${viewedIntake.distillationRunId}`}
+                onClick={() => setViewedIntake(null)}
+              >
+                {viewedIntake.kind === 'stillage' ? 'View run' : 'View cuts'}
+              </Link>
+            </p>
+          )}
+        </Modal>,
+        document.body,
       )}
 
       {(onEdit || onRemove) && (
