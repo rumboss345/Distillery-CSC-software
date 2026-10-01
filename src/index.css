@@ -322,6 +322,36 @@ body.nav-open {
   min-width: 12rem;
 }
 
+.trace-hit.selected td {
+  background: rgba(200, 149, 108, 0.16);
+}
+
+.trace-path {
+  margin-top: 1.5rem;
+}
+
+.trace-path-title {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.trace-path td:nth-child(1),
+.trace-path td:nth-child(2),
+.trace-path td:nth-child(3) {
+  white-space: nowrap;
+}
+
+.trace-gaps {
+  margin: 0.75rem 0 0;
+  padding-left: 1.15rem;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.trace-gaps li + li {
+  margin-top: 0.25rem;
+}
+
 .exception-badge {
   display: inline-block;
   padding: 0.15rem 0.45rem;
