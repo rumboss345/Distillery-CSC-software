@@ -27,6 +27,8 @@ import {
   maintenanceStatusLabel,
 } from '../lib/equipment-maintenance';
 import { equipmentCleaningStatusLabel, equipmentNeedsCleaning, equipmentStatusWhenReturningToPlanned } from '../lib/equipment-cleaning';
+import { EQUIPMENT_TYPES } from '../lib/equipment';
+import { equipmentTypeNameError, normalizeEquipmentTypeName } from '../lib/equipment-type';
 import { countActiveFermentations, fermenterShowsAssignedWash } from '../lib/mash-fermenter-fill';
 import { compareStoredDatesDesc } from '../lib/date-input';
 import { eventDateWhenLeavingPlanned, localIsoDate } from '../lib/planned-event-date';
@@ -4485,6 +4487,25 @@ export function updateEquipmentMaintenance(
     recorded_by_user_id: recordedByUserId,
     recorded_by_user_name: recordedByUserName,
   });
+}
+
+export function getEquipmentTypeOptions(): { value: string; label: string }[] {
+  const custom = queryAll<{ name: string }>(
+    'SELECT name FROM equipment_types ORDER BY name COLLATE NOCASE',
+  );
+  return [
+    ...EQUIPMENT_TYPES.map((type) => ({ value: type.value, label: type.label })),
+    ...custom.map((row) => ({ value: row.name, label: row.name })),
+  ];
+}
+
+export function addEquipmentType(name: string): string {
+  const normalized = normalizeEquipmentTypeName(name);
+  const existing = queryAll<{ name: string }>('SELECT name FROM equipment_types');
+  const error = equipmentTypeNameError(normalized, existing.map((row) => row.name));
+  if (error) throw new Error(error);
+  insertRow('INSERT INTO equipment_types (name) VALUES (?)', [normalized]);
+  return normalized;
 }
 
 export function saveFloorEquipment(

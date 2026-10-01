@@ -167,7 +167,11 @@ export function FloorCanvas({
                 {(item.equipment_type === 'holding_tank'
                   || item.equipment_type === 'collection_vessel'
                   || item.equipment_type === 'boiler'
-                  || item.equipment_type === 'other') && (
+                  || item.equipment_type === 'other'
+                  || (item.equipment_type !== 'fermenter'
+                    && item.equipment_type !== 'pot_still'
+                    && item.equipment_type !== 'column_still'
+                    && item.equipment_type !== 'mash_tun')) && (
                   <div className="eq-shape eq-tank" />
                 )}
               </div>
@@ -208,7 +212,7 @@ export function FloorLegend() {
         {Object.entries(TYPE_COLORS).map(([type, color]) => (
           <div key={type} className="floor-legend-item">
             <span className="floor-legend-swatch" style={{ background: color }} />
-            {equipmentTypeLabel(type as FloorEquipment['equipment_type'])}
+            {equipmentTypeLabel(type)}
           </div>
         ))}
       </div>

@@ -71,7 +71,7 @@ export interface FloorEquipment {
   id: number;
   floor_plan_id: number;
   name: string;
-  equipment_type: EquipmentType;
+  equipment_type: string;
   pos_x_ft: number;
   pos_y_ft: number;
   process_pos_x: number | null;
@@ -560,7 +560,7 @@ export interface YieldReport {
 export interface EquipmentVolumeReport {
   id: number;
   name: string;
-  equipment_type: EquipmentType;
+  equipment_type: string;
   status: EquipmentStatus;
   capacity_gal: number;
   volume_gal: number;

@@ -5,7 +5,9 @@ import {
   getAllFloorEquipmentWithContext,
   getFloorEquipmentWithContext,
   getHoldingTanksWithContents,
+  addEquipmentType,
   addFloorPlan,
+  getEquipmentTypeOptions,
   saveFloorEquipment,
   updateEquipmentPosition,
   moveEquipmentToPlan,
@@ -20,16 +22,15 @@ import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
 import { holdingTankIntakeKey } from '../db/queries';
 import {
-  EQUIPMENT_TYPES,
   EQUIPMENT_STATUSES,
-  TYPE_DEFAULTS,
+  equipmentTypeDefaults,
   equipmentTypeLabel,
   isLiquidVesselEquipmentType,
 } from '../lib/equipment';
-import type { EquipmentStatus, EquipmentType, FloorEquipment } from '../types';
+import type { EquipmentStatus, FloorEquipment } from '../types';
 
-const emptyEquipment = (planId: number, type: EquipmentType = 'fermenter'): Omit<FloorEquipment, 'id' | 'created_at'> => {
-  const defaults = TYPE_DEFAULTS[type];
+const emptyEquipment = (planId: number, type = 'fermenter'): Omit<FloorEquipment, 'id' | 'created_at'> => {
+  const defaults = equipmentTypeDefaults(type);
   return {
     floor_plan_id: planId,
     name: '',
@@ -69,6 +70,10 @@ export function FloorPlanPage() {
   const [dropTargetPlanId, setDropTargetPlanId] = useState<number | null>(null);
   const [selectedIntakeKey, setSelectedIntakeKey] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'process' | 'classic'>('process');
+  const [showTypeForm, setShowTypeForm] = useState(false);
+  const [typeName, setTypeName] = useState('');
+  const [typeError, setTypeError] = useState('');
+  const equipmentTypes = getEquipmentTypeOptions();
 
   void key;
 
@@ -112,8 +117,14 @@ export function FloorPlanPage() {
     setShowForm(true);
   };
 
-  const handleTypeChange = (type: EquipmentType) => {
-    const defaults = TYPE_DEFAULTS[type];
+  const openTypeForm = () => {
+    setTypeName('');
+    setTypeError('');
+    setShowTypeForm(true);
+  };
+
+  const handleTypeChange = (type: string) => {
+    const defaults = equipmentTypeDefaults(type);
     setForm({
       ...form,
       equipment_type: type,
@@ -127,6 +138,19 @@ export function FloorPlanPage() {
     saveFloorEquipment(form, editId);
     setShowForm(false);
     refresh();
+  };
+
+  const handleSaveType = () => {
+    try {
+      const created = addEquipmentType(typeName);
+      setShowTypeForm(false);
+      setTypeName('');
+      setTypeError('');
+      if (showForm) handleTypeChange(created);
+      refresh();
+    } catch (err) {
+      setTypeError(err instanceof Error ? err.message : 'Could not add equipment type.');
+    }
   };
 
   const handleAddPage = () => {
@@ -231,6 +255,7 @@ export function FloorPlanPage() {
         </p>
         <div className="page-actions">
           <button className="btn btn-primary" onClick={openNew}>+ Add Equipment</button>
+          <button className="btn btn-secondary" onClick={openTypeForm}>+ Add equipment type</button>
           {viewMode === 'classic' && (
             <button className="btn btn-secondary" onClick={() => { setPageName(''); setShowPageForm(true); }}>+ Add Page</button>
           )}
@@ -429,12 +454,15 @@ export function FloorPlanPage() {
               <label>Equipment Type</label>
               <select
                 value={form.equipment_type}
-                onChange={(e) => handleTypeChange(e.target.value as EquipmentType)}
+                onChange={(e) => handleTypeChange(e.target.value)}
               >
-                {EQUIPMENT_TYPES.map((t) => (
+                {equipmentTypes.map((t) => (
                   <option key={t.value} value={t.value}>{t.label}</option>
                 ))}
               </select>
+              <button type="button" className="btn btn-sm btn-ghost" onClick={openTypeForm}>
+                Add equipment type
+              </button>
             </div>
             <div className="form-group">
               <label>Status</label>
@@ -500,6 +528,33 @@ export function FloorPlanPage() {
           <div className="form-actions">
             <button className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
             <button className="btn btn-primary" onClick={handleSave} disabled={!form.name.trim()}>Save</button>
+          </div>
+        </Modal>
+      )}
+
+      {showTypeForm && (
+        <Modal title="Add equipment type" onClose={() => setShowTypeForm(false)}>
+          <div className="form-group">
+            <label>Type name</label>
+            <input
+              value={typeName}
+              onChange={(e) => {
+                setTypeName(e.target.value);
+                setTypeError('');
+              }}
+              placeholder="e.g. Gin basket, Thumper, Pump"
+              autoFocus
+            />
+          </div>
+          {typeError && <div className="auth-error">{typeError}</div>}
+          <p className="form-hint">
+            The new type is available when you add equipment and gets its own section on the process view.
+          </p>
+          <div className="form-actions">
+            <button className="btn btn-secondary" onClick={() => setShowTypeForm(false)}>Cancel</button>
+            <button className="btn btn-primary" onClick={handleSaveType} disabled={!typeName.trim()}>
+              Add type
+            </button>
           </div>
         </Modal>
       )}

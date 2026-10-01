@@ -609,6 +609,20 @@ function runMigrations(): void {
     persistDb();
   }
 
+  const hasEquipmentTypes = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='equipment_types'",
+  );
+  if (!hasEquipmentTypes) {
+    db.run(`
+      CREATE TABLE equipment_types (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
+    persistDb();
+  }
+
   seedPackagingBottles();
   migratePackagingBottleColumn();
   migrateBottlingTankSourceColumns();

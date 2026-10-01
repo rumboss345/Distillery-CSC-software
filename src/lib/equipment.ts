@@ -42,22 +42,32 @@ export function getFermenterInUseDisplayColor(latestBrix: number | null | undefi
   return IN_USE_COLORS.fermenterHighBrix;
 }
 
+function builtInEquipmentType(type: string): EquipmentType | null {
+  return EQUIPMENT_TYPES.some((item) => item.value === type) ? type as EquipmentType : null;
+}
+
 export function getEquipmentDisplayColor(
-  type: EquipmentType,
+  type: string,
   status: EquipmentStatus,
   options?: { fermenterLatestBrix?: number | null },
 ): string {
+  const known = builtInEquipmentType(type);
   if (status === 'in_use') {
-    if (type === 'fermenter') {
+    if (known === 'fermenter') {
       return getFermenterInUseDisplayColor(options?.fermenterLatestBrix);
     }
-    if (type === 'pot_still' || type === 'column_still') return IN_USE_COLORS.still;
-    if (type === 'holding_tank' || type === 'collection_vessel') return IN_USE_COLORS.holding_tank;
+    if (known === 'pot_still' || known === 'column_still') return IN_USE_COLORS.still;
+    if (known === 'holding_tank' || known === 'collection_vessel') return IN_USE_COLORS.holding_tank;
     return IN_USE_COLORS.default;
   }
   if (status === 'cleaning') return '#eab308';
   if (status === 'offline') return '#64748b';
-  return TYPE_COLORS[type];
+  return known ? TYPE_COLORS[known] : TYPE_COLORS.other;
+}
+
+export function equipmentTypeDefaults(type: string): { width_ft: number; depth_ft: number; capacity_gal: number } {
+  const known = builtInEquipmentType(type);
+  return known ? TYPE_DEFAULTS[known] : TYPE_DEFAULTS.other;
 }
 
 export const TYPE_DEFAULTS: Record<EquipmentType, { width_ft: number; depth_ft: number; capacity_gal: number }> = {
@@ -71,10 +81,10 @@ export const TYPE_DEFAULTS: Record<EquipmentType, { width_ft: number; depth_ft: 
   other: { width_ft: 8, depth_ft: 8, capacity_gal: 0 },
 };
 
-export function equipmentTypeLabel(type: EquipmentType): string {
+export function equipmentTypeLabel(type: string): string {
   return EQUIPMENT_TYPES.find((t) => t.value === type)?.label ?? type;
 }
 
-export function isLiquidVesselEquipmentType(type: EquipmentType): boolean {
+export function isLiquidVesselEquipmentType(type: string): boolean {
   return type === 'holding_tank' || type === 'collection_vessel';
 }

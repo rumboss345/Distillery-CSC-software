@@ -1,4 +1,3 @@
-import type { EquipmentType } from '../../types';
 import type { TankVisualStatus } from './tank-visual.types';
 
 export type EquipmentVisualStatus = TankVisualStatus;
@@ -7,7 +6,7 @@ export interface EquipmentVisualData {
   id: number;
   code: string;
   name: string;
-  equipmentType: EquipmentType;
+  equipmentType: string;
   typeLabel: string;
   capacityGal: number;
   currentVolumeGal: number;

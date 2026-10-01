@@ -1,4 +1,4 @@
-import type { EquipmentMaintenanceStatus, EquipmentType, FloorEquipment } from '../types';
+import type { EquipmentMaintenanceStatus, FloorEquipment } from '../types';
 import { equipmentNeedsCleaning } from './equipment-cleaning';
 import { EQUIPMENT_TYPES } from './equipment';
 
@@ -44,20 +44,24 @@ export function maintenanceStatusLabel(status: EquipmentMaintenanceStatus | null
 
 export function groupEquipmentByCategory<T extends Pick<FloorEquipment, 'equipment_type'>>(
   items: T[],
-): { type: EquipmentType; label: string; items: T[] }[] {
-  const byType = new Map<EquipmentType, T[]>();
+): { type: string; label: string; items: T[] }[] {
+  const byType = new Map<string, T[]>();
   for (const item of items) {
     const list = byType.get(item.equipment_type) ?? [];
     list.push(item);
     byType.set(item.equipment_type, list);
   }
-  return EQUIPMENT_TYPES.map(({ value, label }) => ({
+  const sortItems = (list: T[]) => list.slice().sort((a, b) => {
+    const an = 'name' in a ? String((a as { name: string }).name) : '';
+    const bn = 'name' in b ? String((b as { name: string }).name) : '';
+    return an.localeCompare(bn, undefined, { sensitivity: 'base' });
+  });
+  const extraTypes = [...byType.keys()]
+    .filter((type) => !EQUIPMENT_TYPES.some((item) => item.value === type))
+    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  return [...EQUIPMENT_TYPES.map((item) => item.value), ...extraTypes].map((value) => ({
     type: value,
-    label,
-    items: (byType.get(value) ?? []).slice().sort((a, b) => {
-      const an = 'name' in a ? String((a as { name: string }).name) : '';
-      const bn = 'name' in b ? String((b as { name: string }).name) : '';
-      return an.localeCompare(bn, undefined, { sensitivity: 'base' });
-    }),
-  })).filter((g) => g.items.length > 0);
+    label: EQUIPMENT_TYPES.find((item) => item.value === value)?.label ?? value,
+    items: sortItems(byType.get(value) ?? []),
+  })).filter((group) => group.items.length > 0);
 }

@@ -22,8 +22,9 @@ const CODE_PREFIX: Record<EquipmentType, string> = {
   other: 'E',
 };
 
-export function equipmentCode(type: EquipmentType, id: number): string {
-  return `${CODE_PREFIX[type]}${id}`;
+export function equipmentCode(type: string, id: number): string {
+  const prefix = CODE_PREFIX[type as EquipmentType] ?? (type.trim().charAt(0) || 'E').toUpperCase();
+  return `${prefix}${id}`;
 }
 
 export function mapVisualStatus(
