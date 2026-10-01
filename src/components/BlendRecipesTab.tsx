@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BlendAbvConfirmation } from './BlendAbvConfirmation';
+import { BlendAbvConfirmation, ProofingWaterSuggestion } from './BlendAbvConfirmation';
 import { limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
 import {
+  ABV_CONFIRM_TOLERANCE,
   computeRecipeTheoreticalAbv,
   ingredientsWithProofingWater,
   proofingWaterForRecipe,
@@ -119,6 +120,15 @@ export function BlendRecipesTab() {
     ),
     [syncedSpiritSources, ingredients],
   );
+
+  const proofingWater = useMemo(() => {
+    if (form.target_abv == null) return null;
+    return proofingWaterForRecipe(
+      syncedSpiritSources.map(toSpiritRecipeInput),
+      ingredients,
+      form.target_abv,
+    );
+  }, [syncedSpiritSources, ingredients, form.target_abv]);
 
   useEffect(() => {
     setAbvConfirmed(false);
@@ -596,6 +606,15 @@ export function BlendRecipesTab() {
                   + Add additive
                 </button>
               </div>
+              {form.target_abv != null
+                && calculatedRecipe.abv != null
+                && calculatedRecipe.abv > form.target_abv + ABV_CONFIRM_TOLERANCE && (
+                <ProofingWaterSuggestion
+                  targetAbv={form.target_abv}
+                  waterGal={proofingWater?.waterGal ?? null}
+                  onApply={handleCalculateProofingWater}
+                />
+              )}
               {ingredients.length === 0 ? (
                 <p className="field-hint blend-recipe-empty-hint">No additives — add water, sugar, or flavorings if this recipe needs them.</p>
               ) : (
@@ -751,7 +770,6 @@ export function BlendRecipesTab() {
                 targetAbv={form.target_abv}
                 confirmed={abvConfirmed}
                 onConfirmChange={setAbvConfirmed}
-                onCalculateProofingWater={handleCalculateProofingWater}
               />
             </section>
 
