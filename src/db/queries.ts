@@ -49,6 +49,12 @@ import {
   warehouseLocationNameError,
 } from '../lib/warehouse-locations';
 import { normalizeNutrientUnit, nutrientAmountInUnit } from '../lib/wash-recipe-nutrients';
+import {
+  blendRecipeSnapshotKey,
+  buildBlendRecipeSnapshot,
+  parseBlendRecipeSnapshot,
+} from '../lib/blend-recipe-version';
+import { inventoryQuantityDelta } from '../lib/inventory-units';
 import { mashStatusFromFermentations } from '../lib/wash-stage';
 import type {
   EquipmentMaintenanceLogEventType,
@@ -69,6 +75,7 @@ import type {
   BlendRecipeIngredient,
   BlendRecipeSpiritSource,
   BlendRecipeSpiritSourceInput,
+  BlendRecipeVersion,
   BlendRecipeView,
   BlendSpiritSource,
   BlendSpiritSourceInput,
@@ -3694,7 +3701,9 @@ export function deleteBottlingRun(id: number): void {
 
 // ── Blend Recipes ──────────────────────────────────────────
 
-function attachBlendRecipeDetails(recipes: BlendRecipe[]): BlendRecipeView[] {
+function attachBlendRecipeDetails(
+  recipes: (BlendRecipe & { current_version_number?: number | null })[],
+): BlendRecipeView[] {
   const spiritSources = queryAll<BlendRecipeSpiritSource>(
     'SELECT * FROM blend_recipe_spirit_sources ORDER BY sort_order, id',
   );
@@ -3715,10 +3724,17 @@ function attachBlendRecipeDetails(recipes: BlendRecipe[]): BlendRecipeView[] {
   }
   return recipes.map((recipe) => ({
     ...recipe,
+    current_version_number: recipe.current_version_number ?? null,
     spirit_sources: spiritsByRecipe.get(recipe.id) ?? [],
     ingredients: ingredientsByRecipe.get(recipe.id) ?? [],
   }));
 }
+
+const BLEND_RECIPE_SELECT = `
+  SELECT r.*,
+    (SELECT MAX(v.version_number) FROM blend_recipe_versions v WHERE v.blend_recipe_id = r.id) AS current_version_number
+  FROM blend_recipes r
+`;
 
 function persistBlendRecipeSpiritSources(
   recipeId: number,
@@ -3765,14 +3781,64 @@ function persistBlendRecipeIngredients(
 }
 
 export function getBlendRecipes(): BlendRecipeView[] {
-  const recipes = queryAll<BlendRecipe>('SELECT * FROM blend_recipes ORDER BY name');
+  const recipes = queryAll<BlendRecipe & { current_version_number: number | null }>(
+    `${BLEND_RECIPE_SELECT} ORDER BY r.name`,
+  );
   return attachBlendRecipeDetails(recipes);
 }
 
 export function getBlendRecipe(id: number): BlendRecipeView | undefined {
-  const recipe = queryOne<BlendRecipe>('SELECT * FROM blend_recipes WHERE id = ?', [id]);
+  const recipe = queryOne<BlendRecipe & { current_version_number: number | null }>(
+    `${BLEND_RECIPE_SELECT} WHERE r.id = ?`,
+    [id],
+  );
   if (!recipe) return undefined;
   return attachBlendRecipeDetails([recipe])[0];
+}
+
+export function getBlendRecipeVersions(recipeId: number): BlendRecipeVersion[] {
+  return queryAll<BlendRecipeVersion>(
+    'SELECT * FROM blend_recipe_versions WHERE blend_recipe_id = ? ORDER BY version_number DESC',
+    [recipeId],
+  );
+}
+
+export function getBlendRecipeVersion(id: number): BlendRecipeVersion | null {
+  return queryOne<BlendRecipeVersion>(
+    'SELECT * FROM blend_recipe_versions WHERE id = ?',
+    [id],
+  );
+}
+
+export function getLatestBlendRecipeVersion(recipeId: number): BlendRecipeVersion | null {
+  return queryOne<BlendRecipeVersion>(
+    `SELECT * FROM blend_recipe_versions WHERE blend_recipe_id = ? ORDER BY version_number DESC LIMIT 1`,
+    [recipeId],
+  );
+}
+
+function recordBlendRecipeVersion(
+  recipeId: number,
+  snapshot: ReturnType<typeof buildBlendRecipeSnapshot>,
+): number {
+  const key = blendRecipeSnapshotKey(snapshot);
+  const latest = queryOne<{ id: number; version_number: number; snapshot_json: string }>(
+    `SELECT id, version_number, snapshot_json FROM blend_recipe_versions
+     WHERE blend_recipe_id = ? ORDER BY version_number DESC LIMIT 1`,
+    [recipeId],
+  );
+  if (latest) {
+    const previous = parseBlendRecipeSnapshot(latest.snapshot_json);
+    if (previous && blendRecipeSnapshotKey(buildBlendRecipeSnapshot(previous)) === key) {
+      return latest.id;
+    }
+  }
+  const next = (latest?.version_number ?? 0) + 1;
+  return insertRow(
+    `INSERT INTO blend_recipe_versions (blend_recipe_id, version_number, snapshot_json, notes)
+     VALUES (?, ?, ?, ?)`,
+    [recipeId, next, JSON.stringify(snapshot), ''],
+  );
 }
 
 export function saveBlendRecipe(
@@ -3791,13 +3857,16 @@ export function saveBlendRecipe(
   if (id) {
     runQuery(
       `UPDATE blend_recipes SET
-        name = ?, product_name = ?, target_abv = ?, target_brix = ?, scale_factor = ?, source_type = ?, notes = ?, updated_at = datetime('now')
+        name = ?, product_name = ?, target_abv = ?, target_brix = ?, target_sugar_g_per_l = ?, target_volume_gal = ?,
+        scale_factor = ?, source_type = ?, notes = ?, updated_at = datetime('now')
        WHERE id = ?`,
       [
         recipe.name.trim(),
         recipe.product_name,
         recipe.target_abv,
         recipe.target_brix,
+        recipe.target_sugar_g_per_l ?? null,
+        recipe.target_volume_gal ?? null,
         recipe.scale_factor ?? 1,
         sourceType,
         recipe.notes,
@@ -3806,13 +3875,16 @@ export function saveBlendRecipe(
     );
   } else {
     id = insertRow(
-      `INSERT INTO blend_recipes (name, product_name, target_abv, target_brix, scale_factor, source_type, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO blend_recipes (
+        name, product_name, target_abv, target_brix, target_sugar_g_per_l, target_volume_gal, scale_factor, source_type, notes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         recipe.name.trim(),
         recipe.product_name,
         recipe.target_abv,
         recipe.target_brix,
+        recipe.target_sugar_g_per_l ?? null,
+        recipe.target_volume_gal ?? null,
         recipe.scale_factor ?? 1,
         sourceType,
         recipe.notes,
@@ -3822,10 +3894,24 @@ export function saveBlendRecipe(
 
   persistBlendRecipeSpiritSources(id, spiritSources);
   persistBlendRecipeIngredients(id, ingredients);
+  recordBlendRecipeVersion(id, buildBlendRecipeSnapshot({
+    product_name: recipe.product_name,
+    target_abv: recipe.target_abv,
+    target_brix: recipe.target_brix,
+    target_sugar_g_per_l: recipe.target_sugar_g_per_l ?? null,
+    target_volume_gal: recipe.target_volume_gal ?? null,
+    scale_factor: recipe.scale_factor ?? 1,
+    source_type: sourceType,
+    notes: recipe.notes,
+    spirit_sources: spiritSources,
+    ingredients,
+  }));
   return id;
 }
 
 export function deleteBlendRecipe(id: number): void {
+  runQuery('UPDATE blend_products SET blend_recipe_version_id = NULL WHERE blend_recipe_id = ?', [id]);
+  runQuery('DELETE FROM blend_recipe_versions WHERE blend_recipe_id = ?', [id]);
   runQuery('DELETE FROM blend_recipes WHERE id = ?', [id]);
 }
 
@@ -3865,6 +3951,8 @@ export function saveBlendRecipeFromWizard(
       scale_factor: product.scale_factor ?? 1,
       source_type: 'tank',
       notes: product.notes,
+      target_sugar_g_per_l: null,
+      target_volume_gal: null,
     },
     blendRecipeSpiritSourcesFromWizard(spiritSources),
     ingredients.filter((ingredient) => ingredient.amount > 0 || ingredient.name.trim()),
@@ -3881,11 +3969,13 @@ export type BlendFormulaSaveInput = Omit<
 
 export function getBlendProducts(): BlendProductView[] {
   return queryAll(
-    `SELECT b.*, fe.name as source_tank_name, out_fe.name as output_tank_name, br.name as blend_recipe_name
+    `SELECT b.*, fe.name as source_tank_name, out_fe.name as output_tank_name, br.name as blend_recipe_name,
+        brv.version_number as blend_recipe_version_number
      FROM blend_products b
      JOIN floor_equipment fe ON fe.id = b.source_holding_tank_equipment_id
      LEFT JOIN floor_equipment out_fe ON out_fe.id = b.output_holding_tank_equipment_id
      LEFT JOIN blend_recipes br ON br.id = b.blend_recipe_id
+     LEFT JOIN blend_recipe_versions brv ON brv.id = b.blend_recipe_version_id
      ORDER BY b.blend_date DESC`,
   );
 }
@@ -4065,6 +4155,7 @@ export function saveBlendFormula(
     status: product.status,
     output_holding_tank_equipment_id: product.output_holding_tank_equipment_id ?? null,
     blend_recipe_id: product.blend_recipe_id ?? null,
+    blend_recipe_version_id: product.blend_recipe_version_id ?? null,
     assigned_user_id: product.assigned_user_id,
     assigned_user_name: product.assigned_user_name ?? '',
     notes: product.notes,
@@ -4080,7 +4171,7 @@ export function saveBlendFormula(
         batch_number=?, product_name=?, source_holding_tank_equipment_id=?, base_spirit_volume_gal=?, base_spirit_abv=?,
         blend_date=?, target_abv=?, target_brix=?, scale_factor=?, formula_version=?, formulation_phase=?,
         final_volume_gal=?, final_abv=?, theoretical_volume_gal=?, theoretical_abv=?, theoretical_density=?, theoretical_brix=?,
-        actual_volume_gal=?, actual_weight_lbs=?, actual_abv=?, actual_density=?, actual_brix=?, status=?, output_holding_tank_equipment_id=?, blend_recipe_id=?, assigned_user_id=?, assigned_user_name=?, notes=?
+        actual_volume_gal=?, actual_weight_lbs=?, actual_abv=?, actual_density=?, actual_brix=?, status=?, output_holding_tank_equipment_id=?, blend_recipe_id=?, blend_recipe_version_id=?, assigned_user_id=?, assigned_user_name=?, notes=?
        WHERE id=?`,
       [
         row.batch_number, row.product_name, row.source_holding_tank_equipment_id,
@@ -4089,7 +4180,7 @@ export function saveBlendFormula(
         row.final_volume_gal, row.final_abv,
         row.theoretical_volume_gal, row.theoretical_abv, row.theoretical_density, row.theoretical_brix,
         row.actual_volume_gal, row.actual_weight_lbs, row.actual_abv, row.actual_density, row.actual_brix,
-        row.status, row.output_holding_tank_equipment_id, row.blend_recipe_id, row.assigned_user_id, row.assigned_user_name, row.notes, id,
+        row.status, row.output_holding_tank_equipment_id, row.blend_recipe_id, row.blend_recipe_version_id, row.assigned_user_id, row.assigned_user_name, row.notes, id,
       ],
     );
   } else {
@@ -4098,8 +4189,8 @@ export function saveBlendFormula(
         batch_number, product_name, source_holding_tank_equipment_id, base_spirit_volume_gal, base_spirit_abv,
         blend_date, target_abv, target_brix, scale_factor, formula_version, formulation_phase,
         final_volume_gal, final_abv, theoretical_volume_gal, theoretical_abv, theoretical_density, theoretical_brix,
-        actual_volume_gal, actual_weight_lbs, actual_abv, actual_density, actual_brix, status, output_holding_tank_equipment_id, blend_recipe_id, assigned_user_id, assigned_user_name, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        actual_volume_gal, actual_weight_lbs, actual_abv, actual_density, actual_brix, status, output_holding_tank_equipment_id, blend_recipe_id, blend_recipe_version_id, assigned_user_id, assigned_user_name, notes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         row.batch_number, row.product_name, row.source_holding_tank_equipment_id,
         row.base_spirit_volume_gal, row.base_spirit_abv, row.blend_date,
@@ -4107,7 +4198,7 @@ export function saveBlendFormula(
         row.final_volume_gal, row.final_abv,
         row.theoretical_volume_gal, row.theoretical_abv, row.theoretical_density, row.theoretical_brix,
         row.actual_volume_gal, row.actual_weight_lbs, row.actual_abv, row.actual_density, row.actual_brix,
-        row.status, row.output_holding_tank_equipment_id, row.blend_recipe_id, row.assigned_user_id, row.assigned_user_name, row.notes,
+        row.status, row.output_holding_tank_equipment_id, row.blend_recipe_id, row.blend_recipe_version_id, row.assigned_user_id, row.assigned_user_name, row.notes,
       ],
     );
   }
@@ -4187,6 +4278,28 @@ function assertSpiritAvailability(
   }
 }
 
+function inventoryDeductionsForBlend(
+  ingredients: { inventory_item_id: number | null; amount: number; unit: string; name: string }[],
+): { id: number; quantity: number }[] {
+  const deductions: { id: number; quantity: number }[] = [];
+  for (const ing of ingredients) {
+    if (!ing.inventory_item_id || ing.amount <= 0) continue;
+    const item = queryOne<{ unit: string; name: string }>(
+      'SELECT unit, name FROM inventory_items WHERE id = ?',
+      [ing.inventory_item_id],
+    );
+    if (!item) throw new Error(`Inventory item for ${ing.name} not found.`);
+    const quantity = inventoryQuantityDelta(ing.amount, ing.unit, item.unit);
+    if (quantity == null) {
+      throw new Error(
+        `${ing.name} is entered in ${ing.unit}, but ${item.name} is tracked in ${item.unit}. Use the same kind of unit before producing.`,
+      );
+    }
+    deductions.push({ id: ing.inventory_item_id, quantity });
+  }
+  return deductions;
+}
+
 /** Approved execution — consumes tank spirit and inventory lots; deposits finished liquid into a holding tank. */
 export function executeBlendProduct(id: number, outputTankId: number): void {
   const product = queryOne<BlendProduct>('SELECT * FROM blend_products WHERE id = ?', [id]);
@@ -4249,15 +4362,8 @@ export function executeBlendProduct(id: number, outputTankId: number): void {
   }
 
   const ingredients = getBlendIngredients(id);
-  for (const ing of ingredients) {
-    if (ing.inventory_item_id && ing.amount > 0) {
-      const item = queryOne<{ quantity: number; unit: string; name: string }>(
-        'SELECT quantity, unit, name FROM inventory_items WHERE id = ?',
-        [ing.inventory_item_id],
-      );
-      if (!item) throw new Error(`Inventory item for ${ing.name} not found.`);
-      adjustInventory(ing.inventory_item_id, -ing.amount);
-    }
+  for (const deduction of inventoryDeductionsForBlend(ingredients)) {
+    adjustInventory(deduction.id, -deduction.quantity);
   }
 
   const formulation = computeBlendFormulation(sources, ingredients.map((i) => ({
@@ -4354,10 +4460,8 @@ export function undoBlendProduction(id: number): void {
   }
 
   const ingredients = getBlendIngredients(id);
-  for (const ing of ingredients) {
-    if (ing.inventory_item_id && ing.amount > 0) {
-      adjustInventory(ing.inventory_item_id, ing.amount);
-    }
+  for (const deduction of inventoryDeductionsForBlend(ingredients)) {
+    adjustInventory(deduction.id, deduction.quantity);
   }
 
   runQuery(

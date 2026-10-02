@@ -10,7 +10,9 @@ import {
   getBlendIngredients,
   getBlendProducts,
   getBlendRecipe,
+  getBlendRecipeVersion,
   getBlendRecipes,
+  getLatestBlendRecipeVersion,
   getBlendSpiritSources,
   getChargeableHoldingTanksForBlend,
   getHoldingTankContents,
@@ -29,6 +31,7 @@ import {
 } from '../lib/barrel-blending';
 import { AbvTemperatureInput, correctedAbvFromInputs } from '../components/AbvTemperatureInput';
 import { BlendAbvConfirmation } from '../components/BlendAbvConfirmation';
+import { BlendDesigner } from '../components/BlendDesigner';
 import { BlendProductionWorksheet } from '../components/BlendProductionWorksheet';
 import { AssigneeCell, AssigneeSelect } from '../components/AssigneeSelect';
 import { DatePicker } from '../components/DatePicker';
@@ -57,6 +60,7 @@ import {
   unitsForMeasureMode,
   type MeasureMode,
 } from '../lib/blending';
+import { parseBlendRecipeSnapshot } from '../lib/blend-recipe-version';
 import {
   compensateProofingWater,
   computeBatchCorrection,
@@ -213,6 +217,7 @@ const emptyProduct = (): FormulaForm => ({
   status: 'draft',
   output_holding_tank_equipment_id: null,
   blend_recipe_id: null,
+  blend_recipe_version_id: null,
   assigned_user_id: null,
   assigned_user_name: null,
   notes: '',
@@ -335,6 +340,7 @@ export function Blending() {
   const blendRecipes = getBlendRecipes();
   const barrelInventory = useMemo(() => getBarrelsForBlend(), [key]);
   const inventoryItems = getInventoryItems();
+  const [pageMode, setPageMode] = useState<'batches' | 'designer'>('batches');
   const [showWizard, setShowWizard] = useState(false);
   const [wizardStep, setWizardStep] = useState(1);
   const [editId, setEditId] = useState<number | undefined>();
@@ -574,15 +580,27 @@ export function Blending() {
     const recipe = getBlendRecipe(recipeId);
     if (!recipe) return;
     setWizardSpiritSource(recipe.source_type ?? 'tank');
-    const template: RecipeTemplate = {
-      spirit_sources: recipe.spirit_sources.map((source) => ({
-        spirit_label: source.spirit_label,
-        volume_gal: source.volume_gal,
-        abv: source.abv,
-        barrel_id: source.barrel_id ?? null,
-      })),
-      ingredients: recipe.ingredients.map((ingredient) => blendIngredientFromRecord(ingredient)),
-    };
+    const latest = getLatestBlendRecipeVersion(recipeId);
+    const snapshot = latest ? parseBlendRecipeSnapshot(latest.snapshot_json) : null;
+    const template: RecipeTemplate = snapshot
+      ? {
+        spirit_sources: snapshot.spirit_sources.map((source) => ({
+          spirit_label: source.spirit_label,
+          volume_gal: source.volume_gal,
+          abv: source.abv,
+          barrel_id: source.barrel_id ?? null,
+        })),
+        ingredients: snapshot.ingredients.map((ingredient) => blendIngredientFromRecord(ingredient)),
+      }
+      : {
+        spirit_sources: recipe.spirit_sources.map((source) => ({
+          spirit_label: source.spirit_label,
+          volume_gal: source.volume_gal,
+          abv: source.abv,
+          barrel_id: source.barrel_id ?? null,
+        })),
+        ingredients: recipe.ingredients.map((ingredient) => blendIngredientFromRecord(ingredient)),
+      };
     setEditId(undefined);
     setSelectedRecipeId(recipeId);
     setRecipeTemplate(template);
@@ -590,12 +608,13 @@ export function Blending() {
     setForm({
       ...emptyProduct(),
       ...defaultAssignee(user),
-      product_name: recipe.product_name,
-      target_abv: recipe.target_abv,
-      target_brix: recipe.target_brix,
+      product_name: snapshot?.product_name || recipe.product_name,
+      target_abv: snapshot?.target_abv ?? recipe.target_abv,
+      target_brix: snapshot?.target_brix ?? recipe.target_brix,
       scale_factor: snappedFactor,
       blend_recipe_id: recipeId,
-      notes: recipe.notes,
+      blend_recipe_version_id: latest?.id ?? null,
+      notes: snapshot?.notes || recipe.notes,
     });
     applyScaledRecipeAmounts(
       template,
@@ -760,23 +779,39 @@ export function Blending() {
       status: blend.status === 'blended' ? 'executed' : blend.status,
       output_holding_tank_equipment_id: blend.output_holding_tank_equipment_id,
       blend_recipe_id: blend.blend_recipe_id,
+      blend_recipe_version_id: blend.blend_recipe_version_id,
       assigned_user_id: blend.assigned_user_id,
       assigned_user_name: blend.assigned_user_name,
       notes: blend.notes,
     });
+    const pinned = blend.blend_recipe_version_id
+      ? parseBlendRecipeSnapshot(getBlendRecipeVersion(blend.blend_recipe_version_id)?.snapshot_json ?? '')
+      : null;
     if (blend.blend_recipe_id) {
       const recipe = getBlendRecipe(blend.blend_recipe_id);
-      if (recipe) {
-        setSelectedRecipeId(recipe.id);
-        setRecipeTemplate({
-          spirit_sources: recipe.spirit_sources.map((source) => ({
-            spirit_label: source.spirit_label,
-            volume_gal: source.volume_gal,
-            abv: source.abv,
-          })),
-          ingredients: recipe.ingredients.map((ingredient) => blendIngredientFromRecord(ingredient)),
-        });
-        const baseSpirits = recipe.spirit_sources
+      if (recipe || pinned) {
+        setSelectedRecipeId(recipe?.id ?? blend.blend_recipe_id);
+        setRecipeTemplate(pinned
+          ? {
+            spirit_sources: pinned.spirit_sources.map((source) => ({
+              spirit_label: source.spirit_label,
+              volume_gal: source.volume_gal,
+              abv: source.abv,
+              barrel_id: source.barrel_id ?? null,
+            })),
+            ingredients: pinned.ingredients.map((ingredient) => blendIngredientFromRecord(ingredient)),
+          }
+          : {
+            spirit_sources: (recipe?.spirit_sources ?? []).map((source) => ({
+              spirit_label: source.spirit_label,
+              volume_gal: source.volume_gal,
+              abv: source.abv,
+            })),
+            ingredients: (recipe?.ingredients ?? []).map((ingredient) => blendIngredientFromRecord(ingredient)),
+          });
+        const yieldSources = pinned?.spirit_sources ?? recipe?.spirit_sources ?? [];
+        const yieldIngredients = pinned?.ingredients ?? recipe?.ingredients ?? [];
+        const baseSpirits = yieldSources
           .filter((source) => source.volume_gal > 0)
           .map((source) => ({
             holding_tank_equipment_id: 0,
@@ -786,7 +821,7 @@ export function Blending() {
         if (baseSpirits.length > 0) {
           const base = computeBlendFormulation(
             baseSpirits,
-            recipe.ingredients.map((ingredient) => blendIngredientFromRecord(ingredient)),
+            yieldIngredients.map((ingredient) => blendIngredientFromRecord(ingredient)),
           );
           setTargetYieldInput((base.theoretical.volumeGal * (blend.scale_factor ?? 1)).toFixed(1));
         }
@@ -1402,7 +1437,7 @@ export function Blending() {
                           setSpiritSources([emptySpiritSource()]);
                           setIngredients([]);
                           setTargetYieldInput('');
-                          setForm((prev) => ({ ...prev, scale_factor: 1, blend_recipe_id: null }));
+                          setForm((prev) => ({ ...prev, scale_factor: 1, blend_recipe_id: null, blend_recipe_version_id: null }));
                         }
                       }}
                     >
@@ -2144,14 +2179,44 @@ export function Blending() {
     <div>
       <div className="page-header">
         <h2>Blending</h2>
-        <p>Tank batches use saved recipes and holding tanks. Barrel blending pulls directly from aging barrel inventory.</p>
-        <div className="page-actions">
-          <button type="button" className="btn btn-primary" onClick={openNew}>+ New tank batch</button>
-          <button type="button" className="btn btn-secondary" onClick={openBarrelBlending}>+ Barrel blending</button>
+        <p>Tank batches use saved recipes and holding tanks. Barrel blending pulls directly from aging barrel inventory. The blend designer calculates a formula before you start a batch.</p>
+        <div className="measure-mode-buttons" style={{ margin: '0.75rem 0' }}>
+          <button
+            type="button"
+            className={`btn btn-sm ${pageMode === 'batches' ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setPageMode('batches')}
+          >
+            Batches
+          </button>
+          <button
+            type="button"
+            className={`btn btn-sm ${pageMode === 'designer' ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setPageMode('designer')}
+          >
+            Blend designer
+          </button>
         </div>
+        {pageMode === 'batches' && (
+          <div className="page-actions">
+            <button type="button" className="btn btn-primary" onClick={openNew}>+ New tank batch</button>
+            <button type="button" className="btn btn-secondary" onClick={openBarrelBlending}>+ Barrel blending</button>
+          </div>
+        )}
       </div>
 
-      {blends.length === 0 ? (
+      {pageMode === 'designer' && (
+        <BlendDesigner
+          onUseForBatch={(recipeId) => {
+            setPageMode('batches');
+            setWizardSpiritSource('tank');
+            applyBlendRecipe(recipeId, 1);
+            setWizardStep(2);
+            setShowWizard(true);
+          }}
+        />
+      )}
+
+      {pageMode === 'designer' ? null : blends.length === 0 ? (
         <div className="empty-state">
           <p>No batches yet. Start a tank batch from a saved recipe, or use barrel blending to pull from aging barrels.</p>
           <div className="page-actions" style={{ marginTop: '1rem', justifyContent: 'center' }}>
@@ -2182,7 +2247,10 @@ export function Blending() {
                 <tr key={b.id}>
                   <td><strong>{b.batch_number}</strong></td>
                   <td>{b.product_name}</td>
-                  <td>{b.blend_recipe_name ?? '—'}</td>
+                  <td>
+                    {b.blend_recipe_name ?? '—'}
+                    {b.blend_recipe_version_number != null ? ` V${b.blend_recipe_version_number}` : ''}
+                  </td>
                   <td>{b.scale_factor !== 1 ? `${b.scale_factor}×` : '1×'}</td>
                   <td>{b.target_abv != null ? `${b.target_abv}%` : '—'}</td>
                   <td><AssigneeCell name={b.assigned_user_name} /></td>

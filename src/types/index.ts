@@ -425,6 +425,7 @@ export interface BlendProduct {
   executed_at: string | null;
   output_holding_tank_equipment_id: number | null;
   blend_recipe_id: number | null;
+  blend_recipe_version_id: number | null;
   assigned_user_id: number | null;
   assigned_user_name: string | null;
   notes: string;
@@ -462,6 +463,7 @@ export interface BlendProductView extends BlendProduct {
   source_tank_name?: string;
   output_tank_name?: string;
   blend_recipe_name?: string;
+  blend_recipe_version_number?: number | null;
 }
 
 export interface BlendIngredientInput {
@@ -490,6 +492,8 @@ export interface BlendRecipe {
   product_name: string;
   target_abv: number | null;
   target_brix: number | null;
+  target_sugar_g_per_l: number | null;
+  target_volume_gal: number | null;
   scale_factor: number;
   source_type: BlendRecipeSourceType;
   notes: string;
@@ -533,6 +537,16 @@ export interface BlendRecipeIngredient {
 export interface BlendRecipeView extends BlendRecipe {
   spirit_sources: BlendRecipeSpiritSource[];
   ingredients: BlendRecipeIngredient[];
+  current_version_number: number | null;
+}
+
+export interface BlendRecipeVersion {
+  id: number;
+  blend_recipe_id: number;
+  version_number: number;
+  snapshot_json: string;
+  notes: string;
+  created_at: string;
 }
 
 export interface BlendFormulaVersion {

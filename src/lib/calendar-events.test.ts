@@ -204,6 +204,7 @@ describe('buildCalendarEventsFromData', () => {
         executed_at: null,
         output_holding_tank_equipment_id: null,
         blend_recipe_id: null,
+        blend_recipe_version_id: null,
         assigned_user_id: null,
         assigned_user_name: null,
         notes: '',

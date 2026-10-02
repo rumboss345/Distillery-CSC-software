@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BlendAbvConfirmation } from './BlendAbvConfirmation';
 import { limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
+import { parseBlendRecipeSnapshot } from '../lib/blend-recipe-version';
 import { computeRecipeTheoreticalAbv } from '../lib/blend-abv-confirm';
 import {
   deleteBlendRecipe,
   getBlendRecipes,
+  getBlendRecipeVersions,
   getInventoryItems,
   saveBlendRecipe,
   useRefreshKey,
@@ -81,6 +83,8 @@ const emptyRecipeForm = () => ({
   product_name: '',
   target_abv: null as number | null,
   target_brix: null as number | null,
+  target_sugar_g_per_l: null as number | null,
+  target_volume_gal: null as number | null,
   scale_factor: 1,
   notes: '',
 });
@@ -138,6 +142,8 @@ export function BlendRecipesTab() {
       product_name: recipe.product_name,
       target_abv: recipe.target_abv,
       target_brix: recipe.target_brix,
+      target_sugar_g_per_l: recipe.target_sugar_g_per_l,
+      target_volume_gal: recipe.target_volume_gal,
       scale_factor: recipe.scale_factor ?? 1,
       notes: recipe.notes,
     });
@@ -270,6 +276,7 @@ export function BlendRecipesTab() {
             <thead>
               <tr>
                 <th>Recipe</th>
+                <th>Version</th>
                 <th>Product</th>
                 <th>Target Proof</th>
                 <th>Spirit pulls</th>
@@ -286,6 +293,7 @@ export function BlendRecipesTab() {
                   style={{ cursor: 'pointer' }}
                 >
                   <td><strong>{recipe.name}</strong></td>
+                  <td>{recipe.current_version_number != null ? `V${recipe.current_version_number}` : '—'}</td>
                   <td>{recipe.product_name || '—'}</td>
                   <td>{recipe.target_abv != null ? `${recipe.target_abv}%` : '—'}</td>
                   <td>{recipe.spirit_sources.length}</td>
@@ -312,12 +320,30 @@ export function BlendRecipesTab() {
             <dt>Product</dt><dd>{selected.product_name || '—'}</dd>
             <dt>Target proof</dt><dd>{selected.target_abv != null ? `${selected.target_abv}%` : '—'}</dd>
             <dt>Target Brix</dt><dd>{selected.target_brix ?? '—'}</dd>
+            <dt>Sugar</dt><dd>{selected.target_sugar_g_per_l != null ? `${selected.target_sugar_g_per_l} g/L` : '—'}</dd>
+            <dt>Version</dt><dd>{selected.current_version_number != null ? `V${selected.current_version_number}` : '—'}</dd>
             {selected.notes && (
               <>
                 <dt>Notes</dt><dd>{selected.notes}</dd>
               </>
             )}
           </dl>
+          <h4>Versions</h4>
+          <ul>
+            {getBlendRecipeVersions(selected.id).map((version) => {
+              const snapshot = parseBlendRecipeSnapshot(version.snapshot_json);
+              const when = version.created_at.slice(0, 10);
+              return (
+                <li key={version.id}>
+                  V{version.version_number}
+                  {when ? ` · ${when}` : ''}
+                  {snapshot?.target_abv != null ? ` · ${snapshot.target_abv}% ABV` : ''}
+                  {snapshot?.target_sugar_g_per_l != null ? ` · ${snapshot.target_sugar_g_per_l} g/L sugar` : ''}
+                </li>
+              );
+            })}
+          </ul>
+          <p className="field-hint">Editing this recipe saves a new version. A batch keeps the version it was started from.</p>
           {selected.spirit_sources.length > 0 && (
             <>
               <h4>Spirit pulls</h4>
