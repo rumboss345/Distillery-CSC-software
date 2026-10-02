@@ -3885,6 +3885,15 @@ tr:hover td {
   align-items: end;
 }
 
+.formulation-results-table td:nth-child(2),
+.formulation-results-table td:nth-child(3) {
+  white-space: nowrap;
+}
+
+.formulation-results-table tr.formulation-total td {
+  font-weight: 600;
+}
+
 .formulation-warning {
   color: var(--text);
   background: rgba(224, 177, 90, 0.12);
