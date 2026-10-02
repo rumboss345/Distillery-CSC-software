@@ -2020,7 +2020,7 @@ export function Blending() {
               </table>
             </div>
             {form.scale_factor !== 1 && (
-              <p className="field-hint">Batch sized at {form.scale_factor}× the saved recipe.</p>
+              <p className="field-hint">Batch sized at {Number(form.scale_factor.toFixed(3))}× the saved recipe.</p>
             )}
             <BlendAbvConfirmation
               calculatedAbv={formulation.theoretical.abv}
