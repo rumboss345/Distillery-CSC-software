@@ -51,7 +51,11 @@ import {
   additiveSupportsAbv,
   amountFromSpiritVolumeGal,
   defaultUnitForMode,
+  formatReviewVolume,
+  formatReviewWeight,
   inferMeasureMode,
+  ingredientVolumeGal,
+  ingredientWeightLbs,
   measureAlternate,
   recommendMeasureMode,
   spiritMeasureAlternate,
@@ -1943,60 +1947,80 @@ export function Blending() {
           </>
         );
 
-      case 5:
+      case 5: {
+        const reviewLines = [
+          ...activeSources.map((source) => {
+            const tank = getHoldingTanks().find((t) => t.id === source.holding_tank_equipment_id);
+            const barrel = source.barrel_id
+              ? barrelInventory.find((b) => b.id === source.barrel_id)
+              : undefined;
+            const sourceName = barrel
+              ? spiritLabelForBarrel(barrel)
+              : (tank?.name ?? 'Spirit');
+            const weightLb = spiritWeightLbsFromVolumeGal(source.volume_gal, source.abv);
+            return {
+              label: `${sourceName} @ ${source.abv.toFixed(1)}%`,
+              volumeGal: source.volume_gal,
+              weightLb,
+            };
+          }),
+          ...ingredients
+            .filter((ingredient) => ingredient.amount > 0 && ingredient.ingredient_type !== 'water')
+            .map((ingredient) => ({
+              label: ingredient.name.trim() || BLEND_INGREDIENT_TYPES.find((type) => type.value === ingredient.ingredient_type)?.label || 'Additive',
+              volumeGal: ingredientVolumeGal(ingredient),
+              weightLb: ingredientWeightLbs(ingredient),
+            })),
+          ...ingredients
+            .filter((ingredient) => ingredient.amount > 0 && ingredient.ingredient_type === 'water')
+            .map((ingredient) => ({
+              label: ingredient.name.trim() || 'Proofing water',
+              volumeGal: ingredientVolumeGal(ingredient),
+              weightLb: ingredientWeightLbs(ingredient),
+            })),
+        ];
+        const finishedWeightLb = reviewLines.reduce((sum, line) => sum + line.weightLb, 0);
         return (
           <div className="wizard-review-card">
             <h4>{form.product_name || 'Your product'}</h4>
             <p className="wizard-yield-line">
-              Expected yield: <strong>{formulation.theoretical.volumeGal.toFixed(1)} gallons</strong> at{' '}
+              Expected yield:{' '}
+              <strong>{formatReviewVolume(formulation.theoretical.volumeGal)}</strong>
+              {' · '}
+              <strong>{formatReviewWeight(finishedWeightLb)}</strong>
+              {' at '}
               <strong>{formulation.theoretical.abv.toFixed(1)}% ABV</strong>
               {form.target_abv != null && (
                 <span> (target {form.target_abv}%)</span>
               )}
             </p>
-            <div className="wizard-recipe-summary">
-              <h5>Spirit</h5>
-              <ul>
-                {activeSources.map((s, i) => {
-                  const tank = getHoldingTanks().find((t) => t.id === s.holding_tank_equipment_id);
-                  const barrel = s.barrel_id
-                    ? barrelInventory.find((b) => b.id === s.barrel_id)
-                    : undefined;
-                  const alt = s.amount > 0 ? spiritMeasureAlternate(s.amount, s.unit, s.abv) : null;
-                  const sourceName = barrel
-                    ? spiritLabelForBarrel(barrel)
-                    : (tank?.name ?? 'tank');
-                  return (
-                    <li key={i}>
-                      {s.amount > 0 ? `${s.amount} ${s.unit}` : `${s.volume_gal.toFixed(1)} gal`} from {sourceName} @ {s.abv.toFixed(1)}%
-                      {alt ? ` — ${alt.label}` : ''}
-                    </li>
-                  );
-                })}
-              </ul>
-              {ingredients.some((i) => i.amount > 0 && i.ingredient_type !== 'water') && (
-                <>
-                  <h5>Additives</h5>
-                  <ul>
-                    {ingredients.filter((i) => i.amount > 0 && i.ingredient_type !== 'water').map((i, idx) => (
-                      <li key={idx}>{i.amount} {i.unit} {i.name || i.ingredient_type}</li>
-                    ))}
-                  </ul>
-                </>
-              )}
-              {ingredients.some((i) => i.amount > 0 && i.ingredient_type === 'water') && (
-                <>
-                  <h5>Proofing water</h5>
-                  <ul>
-                    {ingredients.filter((i) => i.amount > 0 && i.ingredient_type === 'water').map((i, idx) => (
-                      <li key={idx}>{i.amount} {i.unit} {i.name || 'Proofing water'}</li>
-                    ))}
-                  </ul>
-                </>
-              )}
+            <div className="table-wrap" data-testid="recipe-review-measures">
+              <table className="formulation-results-table">
+                <thead>
+                  <tr>
+                    <th>Ingredient</th>
+                    <th>Volume</th>
+                    <th>Weight</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reviewLines.map((line, index) => (
+                    <tr key={`${line.label}-${index}`}>
+                      <td>{line.label}</td>
+                      <td>{formatReviewVolume(line.volumeGal)}</td>
+                      <td>{formatReviewWeight(line.weightLb)}</td>
+                    </tr>
+                  ))}
+                  <tr className="formulation-total">
+                    <td>Finished blend</td>
+                    <td>{formatReviewVolume(formulation.theoretical.volumeGal)}</td>
+                    <td>{formatReviewWeight(finishedWeightLb)}</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
             {form.scale_factor !== 1 && (
-              <p className="field-hint">Batch sized at {form.scale_factor}× the saved recipe.</p>
+              <p className="field-hint">Batch sized at {Number(form.scale_factor.toFixed(3))}× the saved recipe.</p>
             )}
             <BlendAbvConfirmation
               calculatedAbv={formulation.theoretical.abv}
@@ -2012,6 +2036,7 @@ export function Blending() {
             <p className="field-hint">Next: run a lab test on a trial batch, or approve if you are confident in the numbers.</p>
           </div>
         );
+      }
 
       case 6:
         return (
@@ -2345,7 +2370,7 @@ export function Blending() {
       )}
 
       {showWizard && (
-        <Modal title={isLocked ? 'Produced batch' : currentStep.title} onClose={() => setShowWizard(false)}>
+        <Modal title={isLocked ? 'Produced batch' : currentStep.title} onClose={() => setShowWizard(false)} wide={wizardStep === 5}>
           <div className="blend-wizard">
             <nav className="blend-wizard-steps" aria-label="Batch progress">
               {WIZARD_STEPS.map((step) => (
