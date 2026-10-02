@@ -30,9 +30,10 @@ import {
   type WeightUnitId,
 } from '../lib/unit-converter';
 import { limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
+import { BatchCorrectionPanel, ConcentrationPanel } from '../components/FormulationCalculatorPanels';
 import { ML_PER_GALLON } from '../types';
 
-type CalculatorTab = 'gauging' | 'dilution' | 'volume' | 'weight';
+type CalculatorTab = 'gauging' | 'dilution' | 'concentration' | 'correction' | 'volume' | 'weight';
 type InputMode = 'weight' | 'volume';
 type WeightUnit = 'lb' | 'kg';
 type VolumeUnit = 'gal' | 'l';
@@ -498,7 +499,7 @@ export function SpiritWeightCalculator() {
         <div>
           <h1>Spirit Calculator</h1>
           <p className="page-subtitle">
-            TTB Table No. 3 gauging, alcohol dilution, and plain volume and weight conversion. Enter observed ABV and sample temperature where applicable; gauging values are corrected to 60 °F before use.
+            TTB Table No. 3 gauging, alcohol dilution, density and sugar concentration, batch correction, and plain volume and weight conversion. Enter observed ABV and sample temperature where applicable; gauging values are corrected to 60 °F before use.
           </p>
         </div>
       </div>
@@ -520,6 +521,20 @@ export function SpiritWeightCalculator() {
         </button>
         <button
           type="button"
+          className={`btn btn-sm ${tab === 'concentration' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => setTab('concentration')}
+        >
+          Density &amp; sugar
+        </button>
+        <button
+          type="button"
+          className={`btn btn-sm ${tab === 'correction' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => setTab('correction')}
+        >
+          Batch correction
+        </button>
+        <button
+          type="button"
           className={`btn btn-sm ${tab === 'volume' ? 'btn-primary' : 'btn-secondary'}`}
           onClick={() => setTab('volume')}
         >
@@ -536,6 +551,10 @@ export function SpiritWeightCalculator() {
 
       {tab === 'dilution' ? (
         <AlcoholDilutionCalculator />
+      ) : tab === 'concentration' ? (
+        <ConcentrationPanel />
+      ) : tab === 'correction' ? (
+        <BatchCorrectionPanel />
       ) : tab === 'volume' ? (
         <VolumeConverter />
       ) : tab === 'weight' ? (

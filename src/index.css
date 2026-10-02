@@ -3877,3 +3877,19 @@ tr:hover td {
     display: none;
   }
 }
+
+.formulation-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75rem 1rem;
+  align-items: end;
+}
+
+.formulation-warning {
+  color: var(--text);
+  background: rgba(224, 177, 90, 0.12);
+  border: 1px solid var(--warning);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin: 0.75rem 0;
+}

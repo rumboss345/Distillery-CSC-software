@@ -199,6 +199,8 @@ CREATE TABLE IF NOT EXISTS blend_recipes (
   product_name TEXT NOT NULL DEFAULT '',
   target_abv REAL,
   target_brix REAL,
+  target_sugar_g_per_l REAL,
+  target_volume_gal REAL,
   scale_factor REAL NOT NULL DEFAULT 1,
   source_type TEXT NOT NULL DEFAULT 'tank',
   notes TEXT NOT NULL DEFAULT '',
@@ -233,6 +235,18 @@ CREATE TABLE IF NOT EXISTS blend_recipe_ingredients (
 CREATE INDEX IF NOT EXISTS idx_blend_recipe_spirit_sources_recipe ON blend_recipe_spirit_sources(blend_recipe_id);
 CREATE INDEX IF NOT EXISTS idx_blend_recipe_ingredients_recipe ON blend_recipe_ingredients(blend_recipe_id);
 
+CREATE TABLE IF NOT EXISTS blend_recipe_versions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  blend_recipe_id INTEGER NOT NULL REFERENCES blend_recipes(id) ON DELETE CASCADE,
+  version_number INTEGER NOT NULL,
+  snapshot_json TEXT NOT NULL,
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (blend_recipe_id, version_number)
+);
+
+CREATE INDEX IF NOT EXISTS idx_blend_recipe_versions_recipe ON blend_recipe_versions(blend_recipe_id);
+
 CREATE TABLE IF NOT EXISTS blend_products (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   batch_number TEXT NOT NULL UNIQUE,
@@ -261,6 +275,7 @@ CREATE TABLE IF NOT EXISTS blend_products (
   executed_at TEXT,
   output_holding_tank_equipment_id INTEGER REFERENCES floor_equipment(id),
   blend_recipe_id INTEGER REFERENCES blend_recipes(id),
+  blend_recipe_version_id INTEGER REFERENCES blend_recipe_versions(id),
   assigned_user_id INTEGER,
   assigned_user_name TEXT NOT NULL DEFAULT '',
   notes TEXT NOT NULL DEFAULT '',

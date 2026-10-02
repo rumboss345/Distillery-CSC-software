@@ -1,5 +1,6 @@
 import initSqlJs, { Database, SqlValue } from 'sql.js/dist/sql-wasm.js';
 import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
+import { buildBlendRecipeSnapshot } from '../lib/blend-recipe-version';
 import { BLEND_RECIPES_2024 } from '../lib/blend-recipes-2024';
 import { buildCscFloorEquipmentRows, CSC_FLOOR_PLAN_SIZE } from '../lib/csc-floor-equipment';
 import { PACKAGING_BOTTLES } from '../lib/packaging-bottles';
@@ -853,6 +854,108 @@ function seedBlendRecipes2024(): void {
     if (!row) continue;
     insertBlendRecipeSpiritSources(row.id, recipe.spirit_sources);
     insertBlendRecipeIngredients(row.id, recipe.ingredients);
+  }
+  migrateBlendRecipeVersions();
+}
+
+function migrateBlendRecipeVersions(): void {
+  if (!db) return;
+  const hasRecipes = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='blend_recipes'",
+  );
+  if (!hasRecipes) return;
+
+  for (const [name, def] of [
+    ['target_sugar_g_per_l', 'REAL'],
+    ['target_volume_gal', 'REAL'],
+  ] as const) {
+    const has = queryOne<{ name: string }>(
+      "SELECT name FROM pragma_table_info('blend_recipes') WHERE name=?",
+      [name],
+    );
+    if (!has) db.run(`ALTER TABLE blend_recipes ADD COLUMN ${name} ${def}`);
+  }
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS blend_recipe_versions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      blend_recipe_id INTEGER NOT NULL REFERENCES blend_recipes(id) ON DELETE CASCADE,
+      version_number INTEGER NOT NULL,
+      snapshot_json TEXT NOT NULL,
+      notes TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE (blend_recipe_id, version_number)
+    )
+  `);
+  db.run(`
+    CREATE INDEX IF NOT EXISTS idx_blend_recipe_versions_recipe ON blend_recipe_versions(blend_recipe_id)
+  `);
+
+  const hasProducts = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='blend_products'",
+  );
+  if (hasProducts) {
+    const hasVersion = queryOne<{ name: string }>(
+      "SELECT name FROM pragma_table_info('blend_products') WHERE name='blend_recipe_version_id'",
+    );
+    if (!hasVersion) {
+      db.run('ALTER TABLE blend_products ADD COLUMN blend_recipe_version_id INTEGER REFERENCES blend_recipe_versions(id)');
+    }
+  }
+
+  const hasBarrel = queryOne<{ name: string }>(
+    "SELECT name FROM pragma_table_info('blend_recipe_spirit_sources') WHERE name='barrel_id'",
+  );
+  const spiritSql = hasBarrel
+    ? 'SELECT spirit_label, volume_gal, abv, barrel_id FROM blend_recipe_spirit_sources WHERE blend_recipe_id = ? ORDER BY sort_order, id'
+    : 'SELECT spirit_label, volume_gal, abv, NULL as barrel_id FROM blend_recipe_spirit_sources WHERE blend_recipe_id = ? ORDER BY sort_order, id';
+
+  const recipes = queryAll<{
+    id: number;
+    product_name: string;
+    target_abv: number | null;
+    target_brix: number | null;
+    target_sugar_g_per_l: number | null;
+    target_volume_gal: number | null;
+    scale_factor: number;
+    source_type: string | null;
+    notes: string;
+  }>('SELECT * FROM blend_recipes');
+
+  for (const recipe of recipes) {
+    const existing = queryOne<{ id: number }>(
+      'SELECT id FROM blend_recipe_versions WHERE blend_recipe_id = ? LIMIT 1',
+      [recipe.id],
+    );
+    if (existing) continue;
+    const spiritSources = queryAll<{
+      spirit_label: string;
+      volume_gal: number;
+      abv: number;
+      barrel_id: number | null;
+    }>(spiritSql, [recipe.id]);
+    const ingredients = queryAll<BlendIngredientInput>(
+      `SELECT ingredient_type, name, amount, unit, abv, cost_per_unit, lot_number, inventory_item_id, notes
+       FROM blend_recipe_ingredients WHERE blend_recipe_id = ? ORDER BY id`,
+      [recipe.id],
+    );
+    const snapshot = buildBlendRecipeSnapshot({
+      product_name: recipe.product_name ?? '',
+      target_abv: recipe.target_abv,
+      target_brix: recipe.target_brix,
+      target_sugar_g_per_l: recipe.target_sugar_g_per_l,
+      target_volume_gal: recipe.target_volume_gal,
+      scale_factor: recipe.scale_factor ?? 1,
+      source_type: recipe.source_type ?? 'tank',
+      notes: recipe.notes ?? '',
+      spirit_sources: spiritSources,
+      ingredients,
+    });
+    db.run(
+      `INSERT INTO blend_recipe_versions (blend_recipe_id, version_number, snapshot_json, notes)
+       VALUES (?, 1, ?, ?)`,
+      [recipe.id, JSON.stringify(snapshot), 'Version 1'],
+    );
   }
 }
 
