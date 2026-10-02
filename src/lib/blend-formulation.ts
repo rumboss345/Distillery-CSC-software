@@ -3,6 +3,7 @@ import {
   formatSpiritCorrectionWithAlternate,
   ingredientPureAlcoholGal,
   ingredientVolumeGal,
+  spiritDensityGPerMl,
   toLbs,
 } from './blending';
 import type { BlendIngredientType } from '../types';
@@ -130,7 +131,7 @@ export function computeTheoreticalBlend(
     ? round2(brixParts.reduce((s, b) => s + b, 0))
     : null;
   const density = !sugarOrFlavor && abv > 0
-    ? round3(0.79 + abv * 0.0011)
+    ? round3(spiritDensityGPerMl(abv))
     : null;
 
   return {

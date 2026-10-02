@@ -5,6 +5,7 @@ import {
   inferMeasureMode,
   measureAlternate,
   recommendMeasureMode,
+  spiritDensityGPerMl,
   spiritLbsPerGallon,
   spiritMeasureAlternate,
   amountFromSpiritVolumeGal,
@@ -40,8 +41,10 @@ describe('ingredientVolumeGal', () => {
     expect(ingredientVolumeGal({ amount: 128, unit: 'fl oz', ingredient_type: 'water' })).toBe(1);
   });
 
-  it('converts sugar weight using bulk density from blending workbook', () => {
+  it('converts sugar weight with the dissolved sucrose factor 0.6219 ml/g', () => {
     const gal = ingredientVolumeGal({ amount: 10, unit: 'lbs', ingredient_type: 'sugar' });
+    const expected = (10 * 453.59237 * 0.6219) / (3.785411784 * 1000);
+    expect(gal).toBeCloseTo(expected, 6);
     expect(gal).toBeGreaterThan(0.7);
     expect(gal).toBeLessThan(0.8);
   });
@@ -58,8 +61,19 @@ describe('ingredientWeightLbs', () => {
     expect(ingredientWeightLbs({ amount: 16, unit: 'oz', ingredient_type: 'sugar' })).toBe(1);
   });
 
-  it('converts water volume to weight', () => {
-    expect(ingredientWeightLbs({ amount: 1, unit: 'gal', ingredient_type: 'water' })).toBeCloseTo(8.34, 1);
+  it('converts water volume with the TTB §30.41 factor', () => {
+    expect(ingredientWeightLbs({ amount: 1, unit: 'gal', ingredient_type: 'water' })).toBeCloseTo(1 / 0.120074, 6);
+  });
+
+  it('weighs Class I color at specific gravity 1.30', () => {
+    const lbs = ingredientWeightLbs({ amount: 1, unit: 'gal', ingredient_type: 'color' });
+    expect(lbs).toBeCloseTo((3.785411784 * 1000 * 1.3) / 453.59237, 6);
+  });
+
+  it('weighs alcoholic flavoring with Table 3 instead of water', () => {
+    const lbs = ingredientWeightLbs({ amount: 1, unit: 'gal', ingredient_type: 'flavoring', abv: 40 });
+    expect(lbs).toBe(spiritWeightLbsFromVolumeGal(1, 40));
+    expect(lbs).toBeLessThan(ingredientWeightLbs({ amount: 1, unit: 'gal', ingredient_type: 'water' }));
   });
 });
 
@@ -95,10 +109,19 @@ describe('spirit measurement', () => {
     expect(gal).toBeLessThan(20);
   });
 
+  it('derives spirit density from Table 3 so it falls as ABV rises', () => {
+    expect(spiritDensityGPerMl(93)).toBeLessThan(spiritDensityGPerMl(40));
+    expect(spiritDensityGPerMl(40)).toBeLessThan(spiritDensityGPerMl(0));
+    expect(spiritDensityGPerMl(0)).toBeCloseTo((spiritLbsPerGallon(0) * 453.59237) / (3.785411784 * 1000), 8);
+    expect(spiritDensityGPerMl(93)).toBeCloseTo((spiritLbsPerGallon(93) * 453.59237) / (3.785411784 * 1000), 8);
+  });
+
   it('converts spirit volume to weight via TTB Table No. 3', () => {
     const lbs = spiritWeightLbsFromVolumeGal(10, 40);
     expect(lbs).toBe(weightFromWineGallons(10, proofFromAbv(40)));
-    expect(spiritLbsPerGallon(93)).toBeCloseTo(weightFromWineGallons(1, proofFromAbv(93)), 2);
+    expect(spiritLbsPerGallon(93) * 1000).toBeCloseTo(weightFromWineGallons(1000, proofFromAbv(93)), 2);
+    expect(spiritLbsPerGallon(93)).toBeGreaterThan(6.8);
+    expect(spiritLbsPerGallon(93)).toBeLessThan(6.9);
   });
 
   it('matches Table No. 3 for 85.27 gal at 93% ABV', () => {

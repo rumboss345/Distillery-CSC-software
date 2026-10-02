@@ -1,6 +1,11 @@
 import { WATER_LBS_PER_US_GALLON } from './alcohol-dilution';
 import { abvExceedsLimit, MAX_ENTERED_ABV } from './abv-limits';
 import { toLbs } from './blending';
+import {
+  CLASS_I_CARAMEL_DENSITY_G_PER_ML,
+  SUCROSE_APPARENT_SPECIFIC_VOLUME_ML_PER_G,
+  SYRUP_BULK_DENSITY_G_PER_ML,
+} from './material-densities';
 import { laaLitersFromVolumeAbv } from './reporting/alcohol-units';
 import {
   LITERS_PER_US_GALLON,
@@ -11,25 +16,18 @@ import {
 } from '../services/spirit-gauging';
 import { correctAbvTo60F } from '../services/temperature-correction';
 
-/**
- * Apparent specific volume of sucrose in aqueous solution at 20 °C.
- * Flanagan's sucrose functions, citing Bureau of Standards Bulletin 14 (1918–1919)
- * and the CRC Handbook, use a mean of 0.6219 cm³/g above 1208.2 g/L.
- * Dilute solutions are nearer 0.612 cm³/g. This estimates how much volume dissolved
- * sugar adds. It is not an OIML ethanol–water–sucrose density table.
- */
-export const SUCROSE_APPARENT_SPECIFIC_VOLUME_ML_PER_G = 0.6219;
-
-/** Dry sucrose bulk density from the distillery blending sheet. Used only to turn a measured dry volume into mass. */
-export const SUCROSE_BULK_DENSITY_G_PER_ML = 1.59;
-
-/** CS1 syrup bulk density from the distillery blending sheet (g/ml). */
-export const SYRUP_BULK_DENSITY_G_PER_ML = 1.368;
+export {
+  SUCROSE_APPARENT_SPECIFIC_VOLUME_ML_PER_G,
+  SYRUP_BULK_DENSITY_G_PER_ML,
+} from './material-densities';
 
 export const FORMULATION_CITATION =
   'Unsweetened blends conserve proof gallons and weight with TTB Table No. 3 (27 CFR §30.63) at 60 °F. '
-  + 'Dissolved sucrose adds about 0.6219 ml per gram (Bureau of Standards Bulletin 14 / CRC, via Flanagan). '
-  + 'That is not a full ethanol–water–sugar density table. Lab ABV is authoritative once sugar or flavor is present.';
+  + 'Proofing water uses 0.120074 wine gallons per pound (27 CFR §30.41). '
+  + 'Dissolved sucrose adds 0.6219 ml per gram (Bureau of Standards Bulletin 14 / CRC, via Flanagan). '
+  + 'Class I caramel color uses specific gravity 1.30 (spirit-grade Class I, not a YT75 lot specification). '
+  + 'CS1 syrup uses the plant sheet density 1.368 g/ml. Flavoring without an ABV is weighed as water. '
+  + 'This is not a full ethanol–water–sugar density table. Lab ABV is authoritative once sugar or flavor is present.';
 
 const ML_PER_GALLON = LITERS_PER_US_GALLON * 1000;
 const GRAMS_PER_LB = 453.592;
@@ -252,8 +250,8 @@ function prepareBlend(components: FormulationComponent[]): PreparedBlend | Formu
       if (grams == null) {
         const volumeGal = volumeToGal(component.amount, component.unit);
         if (volumeGal == null) return { ok: false, message: `${name} needs a weight.` };
-        grams = volumeGal * ML_PER_GALLON * SUCROSE_BULK_DENSITY_G_PER_ML;
-        warnings.push(`${name} volume was converted to mass with the dry-sugar density ${SUCROSE_BULK_DENSITY_G_PER_ML} g/ml from the blending sheet.`);
+        grams = (volumeGal * ML_PER_GALLON) / SUCROSE_APPARENT_SPECIFIC_VOLUME_ML_PER_G;
+        warnings.push(`${name} was entered by volume. Its mass uses dissolved sucrose at ${SUCROSE_APPARENT_SPECIFIC_VOLUME_ML_PER_G} ml/g, not a dry scoop density.`);
       }
       sugarGrams += grams;
       obscured = true;
@@ -284,14 +282,25 @@ function prepareBlend(components: FormulationComponent[]): PreparedBlend | Formu
       continue;
     }
 
-    const volumeGal = volumeToGal(component.amount, component.unit);
-    if (volumeGal == null) {
-      warnings.push(`${name} is a weight without a density, so its volume was left out.`);
-      obscured = true;
-      continue;
+    const densityGPerMl = component.kind === 'color' ? CLASS_I_CARAMEL_DENSITY_G_PER_ML : null;
+    let volumeGal = volumeToGal(component.amount, component.unit);
+    let grams = massToGrams(component.amount, component.unit);
+    if (volumeGal == null && grams == null) {
+      return { ok: false, message: `${name} needs a volume or a weight.` };
     }
-    extraVolumeGal += volumeGal;
-    if (volumeGal > 0) obscured = true;
+    if (volumeGal == null && grams != null) {
+      volumeGal = densityGPerMl != null
+        ? grams / (densityGPerMl * ML_PER_GALLON)
+        : (grams / GRAMS_PER_LB) / WATER_LBS_PER_US_GALLON;
+    }
+    if (grams == null && volumeGal != null) {
+      grams = densityGPerMl != null
+        ? volumeGal * ML_PER_GALLON * densityGPerMl
+        : volumeGal * WATER_LBS_PER_US_GALLON * GRAMS_PER_LB;
+    }
+    extraVolumeGal += volumeGal ?? 0;
+    extraWeightLb += (grams ?? 0) / GRAMS_PER_LB;
+    if ((volumeGal ?? 0) > 0) obscured = true;
   }
 
   hydro.volumeGal = inputHydroGal;

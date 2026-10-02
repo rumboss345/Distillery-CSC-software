@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeAlcoholDilution, waterLitersToWeightLb } from './alcohol-dilution';
+import { computeAlcoholDilution, WATER_LBS_PER_US_GALLON, waterLitersToWeightLb } from './alcohol-dilution';
 
 describe('computeAlcoholDilution', () => {
   it('applies Table No. 3 contraction (volume before dilution)', () => {
@@ -29,8 +29,9 @@ describe('computeAlcoholDilution', () => {
     expect(result!.waterVolumeLiters).toBeCloseTo(1.13, 1);
   });
 
-  it('converts water volume to weight at 8.34 lb/gal', () => {
-    expect(waterLitersToWeightLb(3.785411784)).toBeCloseTo(8.34, 2);
+  it('converts one wine gallon of water with the TTB §30.41 factor', () => {
+    expect(WATER_LBS_PER_US_GALLON).toBeCloseTo(1 / 0.120074, 12);
+    expect(waterLitersToWeightLb(3.785411784)).toBe(8.33);
   });
 
   it('rejects target ABV not lower than starting ABV', () => {

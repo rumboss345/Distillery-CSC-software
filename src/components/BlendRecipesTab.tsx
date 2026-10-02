@@ -688,7 +688,7 @@ export function BlendRecipesTab() {
                           </div>
                         </div>
                         {isWater && (
-                          <p className="field-hint">Proofing water is not tied to inventory; ABV math uses gallon-equivalent volume (8.34 lb/gal when weighed).</p>
+                          <p className="field-hint">Proofing water is not tied to inventory. Weighed water uses 0.120074 wine gallons per pound at 60 °F (27 CFR §30.41), about 8.328 lb/gal.</p>
                         )}
                         <div className="wizard-additive-amount-row blend-recipe-amount-row">
                           <div className="form-group">

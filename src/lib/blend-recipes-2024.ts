@@ -1,11 +1,13 @@
 import type { BlendIngredientInput, BlendRecipeSpiritSourceInput } from '../types';
 import { computeTheoreticalBlend, type AdditiveInput, type SpiritSourceInput } from './blend-formulation';
+import { spiritLbsPerGallon } from './blending';
+import { WATER_LBS_PER_US_GALLON } from './material-densities';
 
-/** Approximate bulk density for high-proof rum (93% ABV). */
-export const LBS_PER_GAL_93_RUM = 7.0;
-export const LBS_PER_GAL_WATER = 8.34;
-export const LBS_PER_GAL_45_SPIRIT = 7.6;
-export const LBS_PER_GAL_40_SPIRIT = 7.7;
+/** TTB Table No. 3 pounds per wine gallon. Used only to turn workbook weights into gallons for a new install. */
+export const LBS_PER_GAL_93_RUM = spiritLbsPerGallon(93);
+export const LBS_PER_GAL_WATER = WATER_LBS_PER_US_GALLON;
+export const LBS_PER_GAL_45_SPIRIT = spiritLbsPerGallon(45);
+export const LBS_PER_GAL_40_SPIRIT = spiritLbsPerGallon(40);
 export const LITERS_PER_GALLON = 3.785411784;
 
 export interface BlendRecipeSeed {
@@ -617,7 +619,7 @@ export const BLEND_RECIPES_2024: BlendRecipeSeed[] = [
     target_brix: null,
     notes: '422 lbs GNS + 282 lbs corn vodka + 1,277 lbs water = 1,981 lbs total. Source: RECEIPES 2024.',
     spirit_sources: [
-      spiritFromLbs(422, 'GNS tote', 95, LBS_PER_GAL_93_RUM),
+      spiritFromLbs(422, 'GNS tote', 95, spiritLbsPerGallon(95)),
       spiritFromLbs(282, 'Corn vodka (tank)', 40, LBS_PER_GAL_40_SPIRIT),
     ],
     ingredients: [waterFromLbs(1277)],

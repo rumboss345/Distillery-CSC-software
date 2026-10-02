@@ -331,6 +331,7 @@ function AlcoholDilutionCalculator() {
           <p className="field-hint">
             <strong>Example:</strong>{' '}
             {formatDilutionSummary(dilutionResult, volumeUnit)}
+            {' '}Water weight uses 0.120074 wine gallons per pound at 60 °F (27 CFR §30.41).
           </p>
         </div>
       ) : (
