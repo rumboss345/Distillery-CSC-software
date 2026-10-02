@@ -263,6 +263,22 @@ export function spiritWeightLbsFromVolumeGal(volumeGal: number, abv: number): nu
   return weightFromWineGallons(volumeGal, proofFromAbv(abv));
 }
 
+const KG_PER_LB = 1 / 2.2046226218;
+
+/** Review line: gallons and liters. */
+export function formatReviewVolume(volumeGal: number): string {
+  if (!(volumeGal > 0)) return '—';
+  const liters = (volumeGal * ML_PER_GALLON) / 1000;
+  return `${volumeGal.toFixed(2)} gal · ${liters.toFixed(1)} L`;
+}
+
+/** Review line: pounds and kilograms. */
+export function formatReviewWeight(weightLb: number): string {
+  if (!(weightLb > 0)) return '—';
+  const kg = weightLb * KG_PER_LB;
+  return `${weightLb.toFixed(2)} lb · ${kg.toFixed(2)} kg`;
+}
+
 export function formatSpiritPullWeightLbs(volumeGal: number, abv: number): string | null {
   const lbs = spiritWeightLbsFromVolumeGal(volumeGal, abv);
   if (lbs <= 0) return null;

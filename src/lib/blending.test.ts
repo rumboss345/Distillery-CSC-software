@@ -12,6 +12,8 @@ import {
   filterInventoryForBlendIngredient,
   formatBlendRecipeAdditive,
   formatBlendRecipeSpiritPull,
+  formatReviewVolume,
+  formatReviewWeight,
   formatSpiritPullWeightLbs,
   unitOptionsForBlendIngredient,
   spiritWeightLbsFromVolumeGal,
@@ -115,6 +117,13 @@ describe('spirit measurement', () => {
     const alt = spiritMeasureAlternate(10, 'gal', 40);
     expect(alt).not.toBeNull();
     expect(alt!.label).toContain('lbs');
+  });
+
+  it('formats a review line in gallons, liters, pounds, and kilograms', () => {
+    expect(formatReviewVolume(10)).toBe('10.00 gal · 37.9 L');
+    expect(formatReviewWeight(10)).toBe('10.00 lb · 4.54 kg');
+    expect(formatReviewVolume(0)).toBe('—');
+    expect(formatReviewWeight(0)).toBe('—');
   });
 
   it('formats blend recipe spirit pulls with weight and volume', () => {
