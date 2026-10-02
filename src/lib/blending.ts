@@ -204,6 +204,48 @@ export function spiritLbsPerGallon(abv: number): number {
   return weightFromWineGallons(1, proofFromAbv(abv));
 }
 
+/** Amount in `unit` for a wine-gallon spirit pull. Inverse of spiritVolumeGalFromAmount. */
+export function amountFromSpiritVolumeGal(volumeGal: number, unit: string, abv: number): number {
+  if (!(volumeGal > 0)) return 0;
+  if (isVolumeUnit(unit)) {
+    let amount = volumeGal;
+    switch (unit.toLowerCase()) {
+      case 'ml':
+        amount = volumeGal * ML_PER_GALLON;
+        break;
+      case 'l':
+        amount = volumeGal / 0.264172;
+        break;
+      case 'fl oz':
+      case 'floz':
+        amount = volumeGal * 128;
+        break;
+      default:
+        amount = volumeGal;
+    }
+    return Math.round(amount * 1000) / 1000;
+  }
+  if (isWeightUnit(unit)) {
+    const lbs = spiritWeightLbsFromVolumeGal(volumeGal, abv);
+    let amount = lbs;
+    switch (unit.toLowerCase()) {
+      case 'oz':
+        amount = lbs * 16;
+        break;
+      case 'kg':
+        amount = lbs / 2.20462;
+        break;
+      case 'g':
+        amount = lbs * 453.592;
+        break;
+      default:
+        amount = lbs;
+    }
+    return Math.round(amount * 100) / 100;
+  }
+  return Math.round(volumeGal * 1000) / 1000;
+}
+
 export function spiritVolumeGalFromAmount(amount: number, unit: string, abv: number): number {
   if (amount <= 0) return 0;
   if (isVolumeUnit(unit)) return toGallonsFromVolumeUnit(amount, unit);

@@ -7,6 +7,7 @@ import {
   recommendMeasureMode,
   spiritLbsPerGallon,
   spiritMeasureAlternate,
+  amountFromSpiritVolumeGal,
   spiritVolumeGalFromAmount,
   filterInventoryForBlendIngredient,
   formatBlendRecipeAdditive,
@@ -101,6 +102,13 @@ describe('spirit measurement', () => {
   it('matches Table No. 3 for 85.27 gal at 93% ABV', () => {
     expect(spiritWeightLbsFromVolumeGal(85.27, 93)).toBe(584.75);
     expect(formatSpiritPullWeightLbs(85.27, 93)).toBe('584.8 lbs');
+  });
+
+  it('writes a spirit pull back into gallons or pounds', () => {
+    expect(amountFromSpiritVolumeGal(87.833, 'gal', 90)).toBeCloseTo(87.833, 3);
+    const lbs = amountFromSpiritVolumeGal(87.833, 'lbs', 90);
+    expect(spiritVolumeGalFromAmount(lbs, 'lbs', 90)).toBeCloseTo(87.833, 1);
+    expect(spiritVolumeGalFromAmount(amountFromSpiritVolumeGal(10, 'fl oz', 40), 'fl oz', 40)).toBeCloseTo(10, 2);
   });
 
   it('shows alternate measure for spirit', () => {

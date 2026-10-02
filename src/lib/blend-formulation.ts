@@ -211,6 +211,36 @@ export interface ProofingWaterCompensation {
 }
 
 /**
+ * Gallons to pull so this source carries the same pure alcohol as the recipe line.
+ * A weaker tank increases the pull. A stronger tank decreases it.
+ * Proofing water then moves by the same gallons so the batch size and ABV stay put.
+ */
+export function spiritVolumeForSourceAbv(
+  recipeVolumeGal: number,
+  recipeAbv: number,
+  sourceAbv: number,
+): number {
+  if (!(recipeVolumeGal > 0)) return 0;
+  if (!(recipeAbv > 0) || !(sourceAbv > 0)) return round3(Math.max(0, recipeVolumeGal));
+  if (Math.abs(sourceAbv - recipeAbv) <= 0.05) return round3(recipeVolumeGal);
+  return round3(recipeVolumeGal * (recipeAbv / sourceAbv));
+}
+
+/**
+ * Proofing water that offsets a spirit-volume change.
+ * Finished volume stays at the recipe batch size when water can absorb the difference.
+ */
+export function proofingWaterForSameBatchSize(
+  recipeSpiritGal: number,
+  actualSpiritGal: number,
+  recipeWaterGal: number,
+): { waterGal: number; shortfallGal: number } {
+  const raw = recipeWaterGal - (actualSpiritGal - recipeSpiritGal);
+  if (raw >= -0.0005) return { waterGal: round3(Math.max(0, raw)), shortfallGal: 0 };
+  return { waterGal: 0, shortfallGal: round3(-raw) };
+}
+
+/**
  * When tank ABV differs from the recipe, recalculate proofing water for the target ABV.
  * Returns null when no compensation is needed or inputs are incomplete.
  */

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   compensateProofingWater,
+  proofingWaterForSameBatchSize,
+  spiritVolumeForSourceAbv,
   computeBatchCorrection,
   computeTheoreticalBlend,
   reconcileMeasurements,
@@ -89,6 +91,51 @@ describe('solveWaterForTargetAbv', () => {
     expect(withSugar).not.toBeNull();
     expect(withSugar!.waterGal).toBeLessThan(withoutSugar!.waterGal);
     expect(withSugar!.result.abv).toBeCloseTo(35, 0);
+  });
+});
+
+describe('spirit pull follows source ABV', () => {
+  it('increases the pull when the source is weaker and keeps the batch size and ABV', () => {
+    const recipeGal = 85;
+    const recipeAbv = 93;
+    const sourceAbv = 90;
+    const pull = spiritVolumeForSourceAbv(recipeGal, recipeAbv, sourceAbv);
+    expect(pull).toBeCloseTo((recipeGal * recipeAbv) / sourceAbv, 3);
+    expect(pull * sourceAbv).toBeCloseTo(recipeGal * recipeAbv, 1);
+    const recipeWater = 120;
+    const water = proofingWaterForSameBatchSize(recipeGal, pull, recipeWater);
+    expect(water.shortfallGal).toBe(0);
+    const recipeBlend = computeTheoreticalBlend(
+      [{ volumeGal: recipeGal, abv: recipeAbv }],
+      [{ ingredientType: 'water', name: 'Water', amount: recipeWater, unit: 'gal' }],
+    );
+    const actualBlend = computeTheoreticalBlend(
+      [{ volumeGal: pull, abv: sourceAbv }],
+      [{ ingredientType: 'water', name: 'Water', amount: water.waterGal, unit: 'gal' }],
+    );
+    expect(actualBlend.volumeGal).toBeCloseTo(recipeBlend.volumeGal, 2);
+    expect(actualBlend.abv).toBeCloseTo(recipeBlend.abv, 2);
+  });
+
+  it('decreases the pull when the source is stronger than the recipe', () => {
+    const pull = spiritVolumeForSourceAbv(85, 93, 95);
+    expect(pull).toBeLessThan(85);
+    expect(pull * 95).toBeCloseTo(85 * 93, 1);
+    const water = proofingWaterForSameBatchSize(85, pull, 40);
+    expect(water.waterGal).toBeGreaterThan(40);
+    expect(water.waterGal + pull).toBeCloseTo(40 + 85, 2);
+  });
+
+  it('leaves the pull unchanged when the source matches the recipe', () => {
+    expect(spiritVolumeForSourceAbv(85, 93, 93)).toBe(85);
+    expect(spiritVolumeForSourceAbv(85, 93, 93.04)).toBe(85);
+  });
+
+  it('reports a shortfall when proofing water cannot absorb the extra spirit', () => {
+    const pull = spiritVolumeForSourceAbv(80, 93, 70);
+    const water = proofingWaterForSameBatchSize(80, pull, 5);
+    expect(water.waterGal).toBe(0);
+    expect(water.shortfallGal).toBeGreaterThan(0);
   });
 });
 
