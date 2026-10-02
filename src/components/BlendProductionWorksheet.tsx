@@ -54,7 +54,10 @@ export function BlendProductionWorksheet({
   abvDeltas,
   notes,
 }: BlendProductionWorksheetProps) {
-  const additives = ingredients.filter((i) => i.amount > 0);
+  const additives = [
+    ...ingredients.filter((i) => i.amount > 0 && i.ingredient_type !== 'water'),
+    ...ingredients.filter((i) => i.amount > 0 && i.ingredient_type === 'water'),
+  ];
   const expectedBatchWeightLabel = formatSpiritPullWeightLbs(expectedYieldGal, expectedAbv);
   const totalSpiritWeightLbs = spiritLines.reduce(
     (sum, line) => sum + spiritWeightLbsFromVolumeGal(line.volumeGal, line.abv),
@@ -177,7 +180,7 @@ export function BlendProductionWorksheet({
       </section>
 
       <section className="blend-worksheet-section">
-        <h2>2. Additives &amp; proofing water</h2>
+        <h2>2. Additives, then proofing water</h2>
         <table className="blend-worksheet-table blend-worksheet-checklist">
           <thead>
             <tr>
@@ -209,8 +212,8 @@ export function BlendProductionWorksheet({
         <h2>3. Production checklist</h2>
         <ul className="blend-worksheet-steps">
           <li><span className="blend-worksheet-box" /> Pull spirit from source tank(s) per amounts above</li>
-          <li><span className="blend-worksheet-box" /> Add proofing water and dissolve sugars/syrups as needed</li>
-          <li><span className="blend-worksheet-box" /> Add flavors, color, and other additives</li>
+          <li><span className="blend-worksheet-box" /> Add sugar, flavors, color, and other additives</li>
+          <li><span className="blend-worksheet-box" /> Add proofing water</li>
           <li><span className="blend-worksheet-box" /> Mix thoroughly; let rest per SOP if required</li>
           <li><span className="blend-worksheet-box" /> Transfer finished batch to {outputTankName ?? 'output tank'}</li>
           <li><span className="blend-worksheet-box" /> Record any deviations on this sheet</li>
