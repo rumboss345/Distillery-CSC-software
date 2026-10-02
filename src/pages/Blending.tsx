@@ -49,6 +49,7 @@ import {
   BLEND_INGREDIENT_TYPES,
   SPIRIT_MEASURE_RECOMMENDATION,
   additiveSupportsAbv,
+  amountFromSpiritVolumeGal,
   defaultUnitForMode,
   inferMeasureMode,
   measureAlternate,
@@ -62,11 +63,12 @@ import {
 } from '../lib/blending';
 import { parseBlendRecipeSnapshot } from '../lib/blend-recipe-version';
 import {
-  compensateProofingWater,
   computeBatchCorrection,
+  proofingWaterForSameBatchSize,
   solveSugarForTargetBrix,
   solveWaterForTargetAbv,
   spiritAbvDeltas,
+  spiritVolumeForSourceAbv,
   type BatchCorrectionAction,
   type AdditiveInput,
   type SpiritSourceInput,
@@ -386,11 +388,6 @@ export function Blending() {
 
   const isBarrelBlendWizard = wizardSpiritSource === 'barrel';
 
-  const nonWaterIngredients = useMemo(
-    () => ingredients.filter((i) => i.ingredient_type !== 'water'),
-    [ingredients],
-  );
-
   const syncedSpiritSources = useMemo(
     () => spiritSources.map(syncSpiritVolume),
     [spiritSources],
@@ -408,48 +405,56 @@ export function Blending() {
     if (!recipeTemplate || form.target_abv == null) return;
     if (wizardStep < 2 || wizardStep > 4) return;
 
-    const spiritInputs: SpiritSourceInput[] = syncedSpiritSources
-      .filter((s) => s.volume_gal > 0 && s.abv > 0)
-      .map((s) => ({ volumeGal: s.volume_gal, abv: s.abv }));
-    if (spiritInputs.length === 0) {
-      setWaterAdjustmentNote(null);
-      return;
-    }
-
+    const factor = form.scale_factor || 1;
     const recipeWaterBase = recipeTemplate.ingredients.find((i) => i.ingredient_type === 'water')?.amount ?? 0;
-    const scaledRecipeWater = roundScaledAmount(recipeWaterBase * (form.scale_factor || 1));
-    const compensation = compensateProofingWater(
+    const scaledRecipeWater = roundScaledAmount(recipeWaterBase * factor);
+    let recipeSpiritGal = 0;
+    let actualSpiritGal = 0;
+    recipeTemplate.spirit_sources.forEach((recipe, index) => {
+      const scaledGal = roundScaledAmount(recipe.volume_gal * factor);
+      recipeSpiritGal += scaledGal;
+      const actual = syncedSpiritSources[index];
+      actualSpiritGal += actual && actual.volume_gal > 0 ? actual.volume_gal : scaledGal;
+    });
+    const deltas = spiritAbvDeltas(
       recipeTemplate.spirit_sources,
-      spiritInputs,
-      toAdditiveInputs(nonWaterIngredients),
-      form.target_abv,
-      scaledRecipeWater,
+      syncedSpiritSources.map((source) => ({ abv: source.abv, volume_gal: source.volume_gal })),
     );
-
-    if (!compensation) {
+    if (deltas.length === 0) {
       setWaterAdjustmentNote(null);
+      setIngredients((prev) => {
+        const waterIdx = prev.findIndex((ing) => ing.ingredient_type === 'water');
+        if (waterIdx < 0 || !prev[waterIdx].notes?.startsWith('ABV compensation')) return prev;
+        return prev.map((ing, i) => (
+          i === waterIdx ? { ...ing, amount: scaledRecipeWater, notes: '' } : ing
+        ));
+      });
       return;
     }
 
+    const water = proofingWaterForSameBatchSize(recipeSpiritGal, actualSpiritGal, scaledRecipeWater);
+    const deltaNotes = deltas
+      .map((d) => `${d.label}: ${d.actualAbv.toFixed(1)}% tank vs ${d.recipeAbv.toFixed(1)}% recipe`)
+      .join('; ');
+    const shortfallNote = water.shortfallGal > 0
+      ? ` Proofing water is fully used, so this batch is about ${water.shortfallGal.toFixed(1)} gal larger.`
+      : '';
     setWaterAdjustmentNote(
-      `Proofing water adjusted to ${compensation.waterGal.toFixed(1)} gal `
-      + `(recipe ${compensation.recipeWaterGal.toFixed(1)} gal at ${form.target_abv}% `
-      + 'with recipe ABV) because tank strength differs.',
+      `Proofing water is ${water.waterGal.toFixed(1)} gal `
+      + `(recipe ${scaledRecipeWater.toFixed(1)} gal) so the batch stays the same size at ${form.target_abv}% ABV.`
+      + shortfallNote,
     );
 
     setIngredients((prev) => {
       const waterIdx = prev.findIndex((i) => i.ingredient_type === 'water');
       const prevWater = waterIdx >= 0 ? prev[waterIdx].amount : 0;
-      if (Math.abs(prevWater - compensation.waterGal) < 0.01) return prev;
+      if (Math.abs(prevWater - water.waterGal) < 0.01 && waterIdx >= 0) return prev;
 
-      const deltaNotes = compensation.deltas
-        .map((d) => `${d.label}: ${d.actualAbv.toFixed(1)}% tank vs ${d.recipeAbv.toFixed(1)}% recipe`)
-        .join('; ');
       const waterLine: BlendIngredientInput = {
         ...(waterIdx >= 0 ? prev[waterIdx] : emptyIngredient('water')),
         ingredient_type: 'water',
         name: 'Proofing water',
-        amount: compensation.waterGal,
+        amount: water.waterGal,
         unit: 'gal',
         notes: `ABV compensation — ${deltaNotes}`,
       };
@@ -463,7 +468,6 @@ export function Blending() {
     form.target_abv,
     form.scale_factor,
     recipeTemplate,
-    nonWaterIngredients,
     wizardStep,
   ]);
 
@@ -551,10 +555,32 @@ export function Blending() {
   const applyScaledRecipeAmounts = (
     template: RecipeTemplate,
     factor: number,
-    preserveTankIds: number[] = [],
+    previous: SpiritSourceRow[] = [],
   ) => {
+    const scaled = scaleSpiritSources(
+      template.spirit_sources,
+      factor,
+      previous.map((source) => source.holding_tank_equipment_id),
+    );
     setSpiritSources(
-      scaleSpiritSources(template.spirit_sources, factor, preserveTankIds).map(spiritRowWithObservedAbv),
+      scaled.map((row, index) => {
+        const prevRow = previous[index];
+        const sourceSelected = !!prevRow && (
+          prevRow.holding_tank_equipment_id > 0
+          || (prevRow.barrel_id != null && prevRow.barrel_id > 0)
+        );
+        const actualAbv = sourceSelected && prevRow.abv > 0 ? prevRow.abv : row.abv;
+        const volumeGal = spiritVolumeForSourceAbv(row.volume_gal, row.recipe_abv || row.abv, actualAbv);
+        const unit = sourceSelected ? (prevRow.unit || 'gal') : 'gal';
+        return spiritRowWithObservedAbv({
+          ...row,
+          barrel_id: prevRow?.barrel_id ?? row.barrel_id,
+          abv: actualAbv,
+          unit,
+          amount: amountFromSpiritVolumeGal(volumeGal, unit, actualAbv),
+          volume_gal: volumeGal,
+        });
+      }),
     );
     setIngredients(scaleIngredients(template.ingredients, factor));
   };
@@ -566,11 +592,7 @@ export function Blending() {
       factor,
     );
     setForm((prev) => ({ ...prev, scale_factor: safeFactor }));
-    applyScaledRecipeAmounts(
-      recipeTemplate,
-      safeFactor,
-      spiritSources.map((source) => source.holding_tank_equipment_id),
-    );
+    applyScaledRecipeAmounts(recipeTemplate, safeFactor, spiritSources);
     if (baseYieldGal > 0) {
       setTargetYieldInput((baseYieldGal * safeFactor).toFixed(1));
     }
@@ -616,26 +638,17 @@ export function Blending() {
       blend_recipe_version_id: latest?.id ?? null,
       notes: snapshot?.notes || recipe.notes,
     });
-    applyScaledRecipeAmounts(
-      template,
-      snappedFactor,
-      prefilledTankId.current ? [prefilledTankId.current] : [],
-    );
+    const preservedSources: SpiritSourceRow[] = [];
     if (prefilledTankId.current) {
       const tankId = prefilledTankId.current;
       const contents = getHoldingTankContents(tankId);
-      setSpiritSources((prev) => prev.map((src, index) => {
-        if (index !== 0) return src;
-        const abv = contents.abv > 0 ? contents.abv : src.abv;
-        return {
-          ...src,
-          holding_tank_equipment_id: tankId,
-          abv,
-          observed_abv: abv > 0 ? (Math.round(abv * 10) / 10).toString() : src.observed_abv,
-          sample_temp_f: '60',
-        };
-      }));
+      preservedSources[0] = {
+        ...emptySpiritSource(),
+        holding_tank_equipment_id: tankId,
+        abv: contents.abv > 0 ? contents.abv : 0,
+      };
     }
+    applyScaledRecipeAmounts(template, snappedFactor, preservedSources);
     const baseSpirits = template.spirit_sources
       .filter((source) => source.volume_gal > 0)
       .map((source) => ({
@@ -902,9 +915,21 @@ export function Blending() {
         next.sample_temp_f = tempF;
         if (corrected != null) next.abv = corrected;
       }
-      if (next.abv !== src.abv && !patch.amount) {
-        // Re-sync volume when ABV changes and user is weighing spirit
-        next = syncSpiritVolume(next);
+      const userEditedAmount = patch.amount !== undefined;
+      const abvChanged = Math.abs((next.abv || 0) - (src.abv || 0)) > 0.001;
+      const sourceChosen = patch.holding_tank_equipment_id != null || patch.barrel_id !== undefined;
+      if (!userEditedAmount && next.abv > 0 && (abvChanged || sourceChosen)) {
+        const recipeLine = recipeTemplate?.spirit_sources[index];
+        const recipeAbv = recipeLine?.abv ?? next.recipe_abv;
+        const recipeVolume = recipeLine
+          ? roundScaledAmount(recipeLine.volume_gal * (form.scale_factor || 1))
+          : 0;
+        if (recipeVolume > 0 && recipeAbv > 0) {
+          const volumeGal = spiritVolumeForSourceAbv(recipeVolume, recipeAbv, next.abv);
+          next.recipe_abv = recipeAbv;
+          next.amount = amountFromSpiritVolumeGal(volumeGal, next.unit || 'gal', next.abv);
+          next.volume_gal = volumeGal;
+        }
       }
       return syncSpiritVolume(next);
     }));
@@ -943,13 +968,15 @@ export function Blending() {
     }
     const barrel = barrelInventory.find((b) => b.id === barrelId);
     if (!barrel) return;
+    const recipeLine = recipeTemplate?.spirit_sources[index];
+    const hasRecipePull = !!recipeLine && recipeLine.volume_gal > 0 && recipeLine.abv > 0;
     updateSpiritSource(index, {
       barrel_id: barrel.id,
       holding_tank_equipment_id: 0,
       abv: barrel.initial_abv,
       observed_abv: barrel.initial_abv > 0 ? barrel.initial_abv.toString() : '',
-      amount: recipeTemplate?.spirit_sources[index]?.volume_gal ?? barrel.current_volume_gal,
       unit: 'gal',
+      ...(hasRecipePull ? {} : { amount: barrel.current_volume_gal }),
     });
   };
 
@@ -1595,9 +1622,9 @@ export function Blending() {
         return (
           <>
             {spiritAbvMismatch.length > 0 && form.target_abv != null && (
-              <p className="wizard-result-banner">
-                Tank ABV differs from the recipe — proofing water will be recalculated for{' '}
-                {form.target_abv}% target on the next steps.
+              <p className="wizard-result-banner" data-testid="spirit-abv-compensation-banner">
+                Source strength differs from the recipe. The pull changes so this batch stays the same size and still reaches{' '}
+                {form.target_abv}% ABV. Proofing water moves by the same gallons.
               </p>
             )}
             {spiritSources.map((src, index) => {
@@ -1607,9 +1634,14 @@ export function Blending() {
                 ? spiritMeasureAlternate(src.amount, src.unit, src.abv)
                 : null;
               const unitOptions = spiritUnitsForMeasureMode(measureMode);
-              const recipeAbv = recipeTemplate?.spirit_sources[index]?.abv ?? src.recipe_abv;
+              const recipeLine = recipeTemplate?.spirit_sources[index];
+              const recipeAbv = recipeLine?.abv ?? src.recipe_abv;
+              const recipeVolumeGal = recipeLine
+                ? roundScaledAmount(recipeLine.volume_gal * (form.scale_factor || 1))
+                : 0;
               const abvDiffers = recipeAbv > 0 && src.abv > 0 && Math.abs(src.abv - recipeAbv) > 0.05;
-              const spiritLabel = recipeTemplate?.spirit_sources[index]?.spirit_label ?? `Spirit ${index + 1}`;
+              const pullAdjusted = abvDiffers && recipeVolumeGal > 0 && Math.abs(synced.volume_gal - recipeVolumeGal) > 0.01;
+              const spiritLabel = recipeLine?.spirit_label ?? `Spirit ${index + 1}`;
               return (
                 <div key={index} className="wizard-additive-card">
                   <div className="form-group">
@@ -1677,6 +1709,7 @@ export function Blending() {
                       <input
                         type="number"
                         step="0.1"
+                        data-testid={`spirit-pull-amount-${index}`}
                         value={src.amount || ''}
                         onChange={(e) => updateSpiritSource(index, { amount: parseFloat(e.target.value) || 0 })}
                       />
@@ -1708,9 +1741,14 @@ export function Blending() {
                       {alternate ? ` (${alternate.label})` : ''}
                     </p>
                   )}
-                  {abvDiffers && (
-                    <p className="field-hint">
-                      Tank {src.abv.toFixed(1)}% vs recipe {recipeAbv.toFixed(1)}% — water will be adjusted to compensate.
+                  {pullAdjusted && (
+                    <p className="field-hint" data-testid={`spirit-abv-compensation-${index}`}>
+                      Recipe calls for {recipeVolumeGal.toFixed(2)} gal at {recipeAbv.toFixed(1)}%.
+                      This source is {src.abv.toFixed(1)}%, so pull {synced.volume_gal.toFixed(2)} gal
+                      {form.target_abv != null
+                        ? ` to keep the same batch size and ${form.target_abv}% ABV.`
+                        : ' to keep the same batch size and the same strength.'}
+                      {' '}({spiritWeightLbsFromVolumeGal(synced.volume_gal, src.abv).toFixed(2)} lb on a scale.)
                     </p>
                   )}
                   {spiritSources.length > 1 && (
