@@ -94,8 +94,8 @@ import type {
 const WIZARD_STEPS = [
   { id: 1, label: 'Recipe', title: 'Choose recipe & batch size' },
   { id: 2, label: 'Spirits', title: 'Select your spirits' },
-  { id: 3, label: 'Proof', title: 'Set the target proof (ABV)' },
-  { id: 4, label: 'Additives', title: 'Add sugar, flavors & color' },
+  { id: 3, label: 'Additives', title: 'Add sugar, flavors & color' },
+  { id: 4, label: 'Proof', title: 'Set the target proof (ABV)' },
   { id: 5, label: 'Review', title: 'Review your recipe' },
   { id: 6, label: 'Lab test', title: 'Record lab results' },
   { id: 7, label: 'Approve', title: 'Approve for production' },
@@ -106,8 +106,8 @@ const WIZARD_STEPS = [
 const STEP_HINTS: Record<number, string> = {
   1: 'Pick a saved blend recipe, then choose any batch size. Recipes with sugar step in whole 50 lb bags so you don\'t open a partial bag.',
   2: 'Choose holding tanks and how much spirit to pull — by the gallon (recommended) or by weight on a scale.',
-  3: 'Enter the proof you want to bottle at. We can calculate how much water to add.',
-  4: 'Add sweetener, flavorings, or color if this product needs them. Skip if not.',
+  3: 'Add sweetener, flavorings, or color before proofing water. Skip this step for straight spirits.',
+  4: 'Set the proof you want to bottle at. Water is calculated with the sugar, flavor, and color already in the batch.',
   5: 'Confirm the calculated proof matches your expectations before saving or running a lab trial.',
   6: 'Enter what the lab actually measured. If it is off, use Correct This Batch below.',
   7: 'Once you are satisfied with the lab results, approve the recipe for production.',
@@ -1108,16 +1108,16 @@ export function Blending() {
       alert('Each barrel can only be used once per blend. Select a different barrel for each pull.');
       return false;
     }
-    if (step === 3 && form.target_abv == null) {
-      alert('Please enter your target proof (ABV).');
-      return false;
-    }
-    if (step === 4) {
+    if (step === 3) {
       const sugarIssue = sugarBagScaleIssue(totalSugarLbs(ingredients));
       if (sugarIssue) {
         alert(sugarIssue);
         return false;
       }
+    }
+    if (step === 4 && form.target_abv == null) {
+      alert('Please enter your target proof (ABV).');
+      return false;
     }
     if (step === 5) {
       if (formulation.theoretical.volumeGal <= 0 || formulation.theoretical.abv <= 0) {
@@ -1763,9 +1763,10 @@ export function Blending() {
           </>
         );
 
-      case 3:
+      case 4:
         return (
           <>
+            <p className="field-hint">Sugar, flavor, and color from the previous step are already in this batch. The water below brings the blend to the target proof.</p>
             {waterAdjustmentNote && (
               <p className="wizard-result-banner">{waterAdjustmentNote}</p>
             )}
@@ -1803,10 +1804,10 @@ export function Blending() {
           </>
         );
 
-      case 4:
+      case 3:
         return (
           <>
-            <p className="field-hint">Only add what this product needs. You can skip this step for straight spirits.</p>
+            <p className="field-hint">Add these before proofing water. You can skip this step for straight spirits.</p>
             {ingredients.filter((i) => i.ingredient_type !== 'water').map((ing) => {
               const realIndex = ingredients.indexOf(ing);
               const measureMode = inferMeasureMode(ing.unit);
@@ -1936,7 +1937,7 @@ export function Blending() {
                 {form.target_abv != null && (
                   <span> (target {form.target_abv}%)</span>
                 )}
-                . You will confirm this on the review step.
+                . Proofing water is the next step.
               </p>
             )}
           </>
@@ -1973,12 +1974,22 @@ export function Blending() {
                   );
                 })}
               </ul>
-              {ingredients.filter((i) => i.amount > 0).length > 0 && (
+              {ingredients.some((i) => i.amount > 0 && i.ingredient_type !== 'water') && (
                 <>
                   <h5>Additives</h5>
                   <ul>
-                    {ingredients.filter((i) => i.amount > 0).map((i, idx) => (
+                    {ingredients.filter((i) => i.amount > 0 && i.ingredient_type !== 'water').map((i, idx) => (
                       <li key={idx}>{i.amount} {i.unit} {i.name || i.ingredient_type}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              {ingredients.some((i) => i.amount > 0 && i.ingredient_type === 'water') && (
+                <>
+                  <h5>Proofing water</h5>
+                  <ul>
+                    {ingredients.filter((i) => i.amount > 0 && i.ingredient_type === 'water').map((i, idx) => (
+                      <li key={idx}>{i.amount} {i.unit} {i.name || 'Proofing water'}</li>
                     ))}
                   </ul>
                 </>
