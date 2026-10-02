@@ -1,18 +1,27 @@
 import { useState } from 'react';
 import { limitAbvInput } from '../lib/abv-limits';
+import { WATER_LBS_PER_US_GALLON } from '../lib/alcohol-dilution';
 import { sugarBagScaleIssue } from '../lib/blend-recipe-scale';
-import { ingredientVolumeGal, spiritVolumeGalFromAmount } from '../lib/blending';
+import {
+  ingredientVolumeGal,
+  ingredientWeightLbs,
+  isWeightUnit,
+  spiritVolumeGalFromAmount,
+  spiritWeightLbsFromVolumeGal,
+  toLbs,
+} from '../lib/blending';
 import {
   analyzeFormulation,
   designFormulation,
   FORMULATION_CITATION,
+  sucroseApparentVolumeGal,
   type FormulationAnalysis,
   type FormulationComponent,
   type FormulationDesign,
 } from '../lib/formulation-engine';
 import { getLatestBlendRecipeVersion, saveBlendRecipe } from '../db/queries';
 import { LITERS_PER_US_GALLON } from '../services/spirit-gauging';
-import type { BlendIngredientInput, BlendRecipeSpiritSourceInput } from '../types';
+import type { BlendIngredientInput, BlendIngredientType, BlendRecipeSpiritSourceInput } from '../types';
 
 interface SpiritRow {
   name: string;
@@ -50,6 +59,32 @@ function readNumber(value: string): number | null {
 function volumeToGal(amount: number, unit: string): number {
   if (unit === 'L' || unit === 'l') return amount / LITERS_PER_US_GALLON;
   return amount;
+}
+
+const GRAMS_PER_LB = 453.592;
+
+interface ResultLine {
+  label: string;
+  volume: string;
+  weight: string;
+  total?: boolean;
+}
+
+function formatVolumeGal(gal: number): string {
+  if (!(gal > 0)) return '—';
+  const liters = gal * LITERS_PER_US_GALLON;
+  return `${gal.toFixed(2)} gal · ${liters.toFixed(1)} L`;
+}
+
+function formatWeightLb(lb: number): string {
+  if (!(lb > 0)) return '—';
+  const kg = lb / 2.2046226218;
+  return `${lb.toFixed(2)} lb · ${kg.toFixed(2)} kg`;
+}
+
+function sugarDissolvedGal(lb: number): number {
+  if (!(lb > 0)) return 0;
+  return sucroseApparentVolumeGal(lb * GRAMS_PER_LB);
 }
 
 export function BlendDesigner({ onUseForBatch }: { onUseForBatch: (recipeId: number) => void }) {
@@ -241,6 +276,80 @@ export function BlendDesigner({ onUseForBatch }: { onUseForBatch: (recipeId: num
     return id;
   };
 
+  const resultLines = (): ResultLine[] => {
+    const lines: ResultLine[] = [];
+    const push = (label: string, volume: string, weight: string, total = false) => {
+      if (volume === '—' && weight === '—') return;
+      lines.push({ label, volume, weight, total });
+    };
+    const pushSpirit = (label: string, gal: number, abv: number) => {
+      push(label, formatVolumeGal(gal), formatWeightLb(spiritWeightLbsFromVolumeGal(gal, abv)));
+    };
+    const pushAdditive = (label: string, kind: BlendIngredientType, amount: number, unit: string, abv?: number | null) => {
+      if (abv != null && abv > 0) {
+        const gal = spiritVolumeGalFromAmount(amount, unit, abv);
+        pushSpirit(label, gal, abv);
+        return;
+      }
+      if (kind === 'sugar') {
+        const lb = isWeightUnit(unit)
+          ? toLbs(amount, unit)
+          : ingredientWeightLbs({ amount, unit, ingredient_type: 'sugar' });
+        push(label, `${formatVolumeGal(sugarDissolvedGal(lb))} dissolved`, formatWeightLb(lb));
+        return;
+      }
+      const gal = ingredientVolumeGal({ amount, unit, ingredient_type: kind });
+      const lb = kind === 'water' && isWeightUnit(unit)
+        ? toLbs(amount, unit)
+        : ingredientWeightLbs({ amount, unit, ingredient_type: kind });
+      const waterLb = kind === 'water' ? gal * WATER_LBS_PER_US_GALLON : lb;
+      push(label, formatVolumeGal(gal), formatWeightLb(kind === 'water' ? waterLb : lb));
+    };
+
+    if (design?.ok) {
+      for (const component of spiritComponents()) {
+        const gal = spiritVolumeGalFromAmount(component.amount, component.unit, component.abv ?? 0);
+        pushSpirit(`${component.name} already included`, gal, component.abv ?? 0);
+      }
+      for (const component of otherComponents()) {
+        if (component.kind === 'spirit' || component.kind === 'water' || component.kind === 'sugar') continue;
+        pushAdditive(`${component.name} already included`, component.kind, component.amount, component.unit, component.abv);
+      }
+      if (design.spiritGal > 0) {
+        pushSpirit(`Spirit to add (${design.spiritAbv.toFixed(1)}% ABV)`, design.spiritGal, design.spiritAbv);
+      }
+      if (design.waterGal > 0) {
+        push('Water to add', formatVolumeGal(design.waterGal), formatWeightLb(design.waterGal * WATER_LBS_PER_US_GALLON));
+      }
+      if (design.sugarLbs > 0) {
+        push(
+          'Sugar to add',
+          `${formatVolumeGal(sucroseApparentVolumeGal(design.sugarGrams))} dissolved`,
+          formatWeightLb(design.sugarLbs),
+        );
+      }
+    } else if (analysis) {
+      for (const component of spiritComponents()) {
+        const gal = spiritVolumeGalFromAmount(component.amount, component.unit, component.abv ?? 0);
+        pushSpirit(component.name, gal, component.abv ?? 0);
+      }
+      const water = readNumber(waterAmount);
+      if (water != null && water > 0) pushAdditive('Water', 'water', water, waterUnit);
+      const sugar = readNumber(sugarAmount);
+      if (sugar != null && sugar > 0) pushAdditive('Sugar', 'sugar', sugar, sugarUnit);
+      for (const component of otherComponents()) {
+        if (component.kind === 'spirit' || component.kind === 'water' || component.kind === 'sugar') continue;
+        pushAdditive(component.name, component.kind, component.amount, component.unit, component.abv);
+      }
+    }
+
+    if (analysis && analysis.volumeGal > 0) {
+      push('Finished blend', formatVolumeGal(analysis.volumeGal), formatWeightLb(analysis.weightLb), true);
+    }
+    return lines;
+  };
+
+  const lines = resultLines();
   const sugarNote = design?.ok ? sugarBagScaleIssue(design.sugarLbs) : null;
 
   return (
@@ -399,12 +508,38 @@ export function BlendDesigner({ onUseForBatch }: { onUseForBatch: (recipeId: num
         <div className="card" style={{ marginTop: '1rem' }} data-testid="formulation-result">
           <h3>Result</h3>
           <p><strong>{message}</strong></p>
+          {lines.length > 0 && (
+            <div className="table-wrap">
+              <table className="formulation-results-table">
+                <thead>
+                  <tr>
+                    <th>Ingredient</th>
+                    <th>Volume</th>
+                    <th>Weight</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lines.map((line, index) => (
+                    <tr key={`${line.label}-${index}`} className={line.total ? 'formulation-total' : undefined}>
+                      <td>{line.label}</td>
+                      <td>{line.volume}</td>
+                      <td>{line.weight}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {lines.some((line) => line.volume.includes('dissolved')) && (
+            <p className="field-hint">Sugar volume is the room it takes once dissolved, weighed on a scale. It is not a dry scoop measure.</p>
+          )}
           {analysis && (
             <dl className="detail-grid">
               <dt>Volume</dt><dd>{analysis.liters.toFixed(2)} L · {analysis.volumeGal.toFixed(2)} gal</dd>
+              <dt>Weight</dt><dd>{formatWeightLb(analysis.weightLb)}</dd>
               <dt>ABV</dt><dd>{analysis.abv.toFixed(2)}%</dd>
-              <dt>LAA</dt><dd>{analysis.laaLiters.toFixed(2)} liters</dd>
-              <dt>Sugar</dt><dd>{analysis.sugarGPerL != null ? `${analysis.sugarGPerL.toFixed(1)} g/L` : 'None'}</dd>
+              <dt>LAA</dt><dd>{analysis.pureAlcoholGal.toFixed(2)} gal · {analysis.laaLiters.toFixed(2)} L</dd>
+              <dt>Sugar</dt><dd>{analysis.sugarGPerL != null ? `${analysis.sugarGPerL.toFixed(1)} g/L · ${analysis.sugarGrams.toFixed(0)} g` : 'None'}</dd>
               <dt>Contraction</dt><dd>{analysis.contractionGal.toFixed(3)} gal</dd>
               <dt>{analysis.obscured ? 'Estimated density' : 'Density'}</dt>
               <dd>{analysis.densityGPerMl != null ? `${analysis.densityGPerMl.toFixed(4)} g/ml` : '—'}</dd>
