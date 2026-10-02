@@ -2022,6 +2022,11 @@ export function Blending() {
             {form.scale_factor !== 1 && (
               <p className="field-hint">Batch sized at {Number(form.scale_factor.toFixed(3))}× the saved recipe.</p>
             )}
+            <p className="field-hint">
+              Spirit weight is TTB Table 3. Water is 8.328 lb/gal (27 CFR §30.41). Dissolved sugar adds 0.6219 ml/g.
+              Class I color uses specific gravity 1.30, which is class-typical and not a YT75 lot specification.
+              Flavoring without an ABV is weighed as water.
+            </p>
             <BlendAbvConfirmation
               calculatedAbv={formulation.theoretical.abv}
               calculatedVolumeGal={formulation.theoretical.volumeGal}

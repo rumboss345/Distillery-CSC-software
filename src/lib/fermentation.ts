@@ -1,3 +1,5 @@
+import { SUCROSE_APPARENT_SPECIFIC_VOLUME_ML_PER_G } from './material-densities';
+
 /** Moving a wash into fermenting requires the measured start Brix. */
 export function washMoveNeedsActualStartBrix(
   status: string,
@@ -59,8 +61,8 @@ export function formatAbvEstimate(abv: number | null): string {
 
 const LBS_PER_KG = 2.20462;
 const LITERS_PER_US_GAL = 3.78541;
-/** Liters of volume occupied by 1 kg sucrose when dissolved. */
-const SUGAR_DISPLACEMENT_L_PER_KG = 0.63;
+/** Liters occupied by 1 kg dissolved sucrose (0.6219 ml/g). */
+const SUGAR_DISPLACEMENT_L_PER_KG = SUCROSE_APPARENT_SPECIFIC_VOLUME_ML_PER_G;
 /** Homedistiller / Essential Distilling SG factor: 1 + (kg sugar / L) × 0.386 */
 const SUGAR_WASH_SG_FACTOR = 0.386;
 /** Classic wash ABV divisor: ((SG − 1) × 1000) / 7.46 */

@@ -1,6 +1,14 @@
 import type { BlendIngredientInput, BlendIngredientType, InventoryItem } from '../types';
 import { ML_PER_GALLON } from '../types';
 import { proofFromAbv, weightFromWineGallons, wineGallonsFromWeight } from '../services/spirit-gauging';
+import {
+  CLASS_I_CARAMEL_DENSITY_G_PER_ML,
+  dissolvedSucroseLbsPerGallon,
+  gPerMlFromLbsPerGallon,
+  lbsPerGallonFromGPerMl,
+  SYRUP_BULK_DENSITY_G_PER_ML,
+  WATER_LBS_PER_US_GALLON,
+} from './material-densities';
 
 export type MeasureMode = 'weight' | 'volume';
 
@@ -17,31 +25,32 @@ export const WEIGHT_UNITS = ['lbs', 'oz', 'kg', 'g'] as const;
 export const VOLUME_UNITS = ['gal', 'fl oz', 'ml', 'l'] as const;
 
 /**
- * Bulk density (g/ml) for converting weight → displaced liquid volume.
- * Sugar and CS1 syrup values from Liqour Blending FINAL (003).xlsx.
+ * Pounds per gallon of volume each additive occupies in a blend.
+ * Water is the TTB §30.41 factor. Sugar is dissolved apparent volume (0.6219 ml/g),
+ * not sucrose crystal density. Syrup is the plant CS1 sheet. Color is class-typical
+ * Class I caramel (SG 1.30), not a YT75 lot spec. Flavoring and other additives
+ * with no published density are weighed as water unless they carry an ABV.
  */
-const BULK_DENSITY_G_PER_ML: Record<BlendIngredientType, number> = {
-  water: 1.0,
-  sugar: 1.59,
-  syrup: 1.368,
-  flavoring: 1.0,
-  color: 1.0,
-  other: 1.0,
-};
-
-function lbsPerGallonFromDensity(densityGPerMl: number): number {
-  return (ML_PER_GALLON * densityGPerMl) / 453.592;
-}
-
-/** Approximate bulk density for converting weight → liquid volume added. */
 const LBS_PER_GALLON: Record<BlendIngredientType, number> = {
-  water: 8.34,
-  sugar: lbsPerGallonFromDensity(BULK_DENSITY_G_PER_ML.sugar),
-  syrup: lbsPerGallonFromDensity(BULK_DENSITY_G_PER_ML.syrup),
-  flavoring: lbsPerGallonFromDensity(BULK_DENSITY_G_PER_ML.flavoring),
-  color: lbsPerGallonFromDensity(BULK_DENSITY_G_PER_ML.color),
-  other: lbsPerGallonFromDensity(BULK_DENSITY_G_PER_ML.other),
+  water: WATER_LBS_PER_US_GALLON,
+  sugar: dissolvedSucroseLbsPerGallon(),
+  syrup: lbsPerGallonFromGPerMl(SYRUP_BULK_DENSITY_G_PER_ML),
+  flavoring: WATER_LBS_PER_US_GALLON,
+  color: lbsPerGallonFromGPerMl(CLASS_I_CARAMEL_DENSITY_G_PER_ML),
+  other: WATER_LBS_PER_US_GALLON,
 };
+
+type IngredientMeasure = Pick<BlendIngredientInput, 'amount' | 'unit' | 'ingredient_type'> & {
+  abv?: number | null;
+};
+
+/** Flavoring, color, and other additives with an ABV are gauged on Table 3. */
+function alcoholicGaugeAbv(ingredient: IngredientMeasure): number {
+  const abv = ingredient.abv ?? 0;
+  if (!(abv > 0)) return 0;
+  if (ingredient.ingredient_type === 'sugar' || ingredient.ingredient_type === 'water') return 0;
+  return abv;
+}
 
 export interface MeasureRecommendation {
   mode: MeasureMode;
@@ -193,15 +202,25 @@ export function spiritDefaultUnit(mode: MeasureMode): string {
   return spiritUnitsForMeasureMode(mode)[0];
 }
 
-/** Approximate spirit density (g/ml) from ABV — valid for unsugared spirits. */
+/**
+ * Density (g/ml) of an unsugared spirit from TTB Table No. 3 lb/gal.
+ * Density falls as ABV rises. At 0% ABV this is the TTB water factor, not a hydrometer reading.
+ */
 export function spiritDensityGPerMl(abv: number): number {
-  return 0.79 + abv * 0.0011;
+  return gPerMlFromLbsPerGallon(spiritLbsPerGallon(abv));
 }
 
-/** TTB Table No. 3 lb/US wine gal at the given ABV (percent). */
+/**
+ * TTB Table No. 3 lb/US wine gal at the given ABV (percent).
+ * Table 3 rounds proof gallons to 0.1, so the inverse of 1 gallon is coarse.
+ * A 1,000 gallon basis keeps the pounds-per-gallon factor stable (93% is about 6.86, not 6.75).
+ * Water at 0% uses 27 CFR §30.41.
+ */
+const SPIRIT_LBS_PER_GALLON_BASIS = 1000;
+
 export function spiritLbsPerGallon(abv: number): number {
-  if (abv <= 0) return 8.34;
-  return weightFromWineGallons(1, proofFromAbv(abv));
+  if (abv <= 0) return WATER_LBS_PER_US_GALLON;
+  return weightFromWineGallons(SPIRIT_LBS_PER_GALLON_BASIS, proofFromAbv(abv)) / SPIRIT_LBS_PER_GALLON_BASIS;
 }
 
 /** Amount in `unit` for a wine-gallon spirit pull. Inverse of spiritVolumeGalFromAmount. */
@@ -416,28 +435,24 @@ export function toGallonsFromVolumeUnit(amount: number, unit: string): number {
   }
 }
 
-export function ingredientWeightLbs(
-  ingredient: Pick<BlendIngredientInput, 'amount' | 'unit' | 'ingredient_type'>,
-): number {
+export function ingredientWeightLbs(ingredient: IngredientMeasure): number {
   if (isWeightUnit(ingredient.unit)) {
     return toLbs(ingredient.amount, ingredient.unit);
   }
   const volGal = toGallonsFromVolumeUnit(ingredient.amount, ingredient.unit);
   if (volGal <= 0) return 0;
+  const abv = alcoholicGaugeAbv(ingredient);
+  if (abv > 0) return spiritWeightLbsFromVolumeGal(volGal, abv);
   return volGal * LBS_PER_GALLON[ingredient.ingredient_type];
 }
 
-export function ingredientPureAlcoholGal(
-  ingredient: Pick<BlendIngredientInput, 'amount' | 'unit' | 'ingredient_type'> & { abv?: number | null },
-): number {
+export function ingredientPureAlcoholGal(ingredient: IngredientMeasure): number {
   const abv = ingredient.abv ?? 0;
   if (abv <= 0) return 0;
   return ingredientVolumeGal(ingredient) * abv / 100;
 }
 
-export function ingredientVolumeGal(
-  ingredient: Pick<BlendIngredientInput, 'amount' | 'unit' | 'ingredient_type'>,
-): number {
+export function ingredientVolumeGal(ingredient: IngredientMeasure): number {
   const { amount, unit, ingredient_type } = ingredient;
   if (amount <= 0) return 0;
 
@@ -447,7 +462,9 @@ export function ingredientVolumeGal(
 
   if (isWeightUnit(unit)) {
     const lbs = toLbs(amount, unit);
-    const lbsPerGal = LBS_PER_GALLON[ingredient_type] || 8.34;
+    const abv = alcoholicGaugeAbv(ingredient);
+    if (abv > 0) return wineGallonsFromWeight(lbs, proofFromAbv(abv));
+    const lbsPerGal = LBS_PER_GALLON[ingredient_type] || WATER_LBS_PER_US_GALLON;
     return lbs / lbsPerGal;
   }
 
@@ -461,9 +478,7 @@ export interface MeasureAlternate {
 }
 
 /** Show the equivalent in the other measure mode (e.g. lbs → gal). */
-export function measureAlternate(
-  ingredient: Pick<BlendIngredientInput, 'amount' | 'unit' | 'ingredient_type'>,
-): MeasureAlternate | null {
+export function measureAlternate(ingredient: IngredientMeasure): MeasureAlternate | null {
   if (ingredient.amount <= 0) return null;
 
   if (isWeightUnit(ingredient.unit)) {

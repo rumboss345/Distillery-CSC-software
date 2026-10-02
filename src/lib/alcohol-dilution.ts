@@ -1,5 +1,8 @@
 import { LITERS_PER_US_GALLON, proofFromAbv, weightFromWineGallons, wineGallonsFromLiters } from '../services/spirit-gauging';
+import { WATER_LBS_PER_US_GALLON } from './material-densities';
 import { ML_PER_GALLON } from '../types';
+
+export { WATER_LBS_PER_US_GALLON };
 
 /** Which volume field the user fixed (matches common dilution calculators). */
 export type DilutionVolumeBasis = 'before' | 'after';
@@ -82,9 +85,6 @@ export function computeAlcoholDilution(
 }
 
 const litersToUsGal = (liters: number) => (liters * 1000) / ML_PER_GALLON;
-
-/** Proofing water at 60 °F (8.34 lb/US wine gal). */
-export const WATER_LBS_PER_US_GALLON = 8.34;
 
 export function waterLitersToWeightLb(liters: number): number {
   if (!Number.isFinite(liters) || liters <= 0) return 0;

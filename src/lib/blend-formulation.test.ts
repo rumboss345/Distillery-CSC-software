@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { spiritDensityGPerMl } from './blending';
 import {
   compensateProofingWater,
   proofingWaterForSameBatchSize,
@@ -26,6 +27,8 @@ describe('computeTheoreticalBlend', () => {
     expect(result.volumeGal).toBe(20);
     expect(result.abv).toBe(40);
     expect(result.pureAlcoholGal).toBe(8);
+    expect(result.density).toBeCloseTo(spiritDensityGPerMl(40), 3);
+    expect(result.density!).toBeGreaterThan(0.9);
   });
 
   it('marks density unreliable when sugar or flavor is present', () => {
