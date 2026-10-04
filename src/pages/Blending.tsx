@@ -1616,11 +1616,11 @@ export function Blending() {
                 {baseYieldGal > 0 && (
                   <p className="field-hint" data-testid="batch-size-summary">
                     Saved recipe: {batchSizeUnit === 'l'
-                      ? `${formatBatchSizeAmount(baseYieldGal, 'l')} L (${baseYieldGal.toFixed(1)} gal)`
+                      ? `${formatBatchSizeAmount(baseYieldGal, 'l')} L (${baseYieldGal.toFixed(3)} gal)`
                       : `${baseYieldGal.toFixed(1)} gal`}
                     {' → '}
                     this batch: {batchSizeUnit === 'l'
-                      ? `${formatBatchSizeAmount(scaledYieldGal, 'l')} L (${scaledYieldGal.toFixed(1)} gal)`
+                      ? `${formatBatchSizeAmount(scaledYieldGal, 'l')} L (${scaledYieldGal.toFixed(3)} gal)`
                       : `${scaledYieldGal.toFixed(1)} gal`}
                     {form.target_abv != null ? ` at ${form.target_abv}%` : ''}
                     {baseSugarLbs > 0 ? ` · ${batchSugarBags * SUGAR_BAG_LBS} lb sugar` : ''}
