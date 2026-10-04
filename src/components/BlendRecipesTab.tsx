@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { BlendAbvConfirmation } from './BlendAbvConfirmation';
 import { limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
 import { parseBlendRecipeSnapshot } from '../lib/blend-recipe-version';
-import { computeRecipeTheoreticalAbv } from '../lib/blend-abv-confirm';
+import { computeRecipeTheoreticalAbv, proofingWaterGalForTarget } from '../lib/blend-abv-confirm';
 import {
   deleteBlendRecipe,
   getBlendRecipes,
@@ -198,6 +198,46 @@ export function BlendRecipesTab() {
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Could not save blend recipe.');
     }
+  };
+
+  const adjustProofingWater = () => {
+    if (form.target_abv == null) return;
+    const solved = proofingWaterGalForTarget(
+      syncedSpiritSources.map(toSpiritRecipeInput),
+      ingredients,
+      form.target_abv,
+    );
+    if ('error' in solved) {
+      alert(solved.error);
+      return;
+    }
+    const gallons = solved.waterGal;
+    setIngredients((prev) => {
+      const existing = prev.find((row) => row.ingredient_type === 'water');
+      const unit = existing?.unit && existing.unit !== 'each' ? existing.unit : 'gal';
+      const amount = unit === 'gal'
+        ? gallons
+        : convertIngredientAmount(
+          { amount: gallons, unit: 'gal', ingredient_type: 'water' },
+          unit,
+        );
+      const others = prev.filter((row) => row.ingredient_type !== 'water');
+      if (gallons <= 0) return others;
+      return [
+        ...others,
+        {
+          ingredient_type: 'water',
+          name: existing?.name?.trim() || 'Proofing water',
+          amount,
+          unit,
+          abv: null,
+          cost_per_unit: existing?.cost_per_unit ?? null,
+          lot_number: existing?.lot_number ?? '',
+          inventory_item_id: null,
+          notes: existing?.notes ?? '',
+        },
+      ];
+    });
   };
 
   const handleDelete = (id: number) => {
@@ -785,6 +825,7 @@ export function BlendRecipesTab() {
                     ? Math.round(calculatedRecipe.abv * 10) / 10
                     : null,
                 })}
+                onAdjustProofingWater={adjustProofingWater}
               />
             </section>
 

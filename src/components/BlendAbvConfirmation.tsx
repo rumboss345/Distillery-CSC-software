@@ -1,7 +1,11 @@
 import {
-  ABV_CONFIRM_TOLERANCE,
   abvMatchesTarget,
+  proofGapDescription,
 } from '../lib/blend-abv-confirm';
+
+function formatConfirmGallons(gallons: number): string {
+  return gallons.toFixed(gallons > 0 && gallons < 10 ? 2 : 1);
+}
 
 export interface BlendAbvConfirmationProps {
   calculatedAbv: number | null;
@@ -10,6 +14,7 @@ export interface BlendAbvConfirmationProps {
   confirmed: boolean;
   onConfirmChange: (confirmed: boolean) => void;
   onApplyCalculatedTarget?: () => void;
+  onAdjustProofingWater?: () => void;
 }
 
 export function BlendAbvConfirmation({
@@ -19,6 +24,7 @@ export function BlendAbvConfirmation({
   confirmed,
   onConfirmChange,
   onApplyCalculatedTarget,
+  onAdjustProofingWater,
 }: BlendAbvConfirmationProps) {
   if (calculatedAbv == null) {
     return (
@@ -32,28 +38,32 @@ export function BlendAbvConfirmation({
   }
 
   const onTarget = targetAbv != null && abvMatchesTarget(calculatedAbv, targetAbv);
-  const delta = targetAbv != null ? calculatedAbv - targetAbv : null;
 
   return (
     <div className={`wizard-abv-confirm ${onTarget ? 'on-target' : 'mismatch'}`}>
       <h5>Confirm proof (ABV)</h5>
       <p>
         Calculated from spirits and additives
-        {calculatedVolumeGal != null ? ` (${calculatedVolumeGal.toFixed(1)} gal)` : ''}:{' '}
+        {calculatedVolumeGal != null ? ` (${formatConfirmGallons(calculatedVolumeGal)} gal)` : ''}:{' '}
         <strong>{calculatedAbv.toFixed(1)}% ABV</strong>
       </p>
       {targetAbv != null && (
         <p>
           Target proof: <strong>{targetAbv.toFixed(1)}%</strong>
-          {delta != null && !onTarget && (
-            <span className="wizard-abv-delta">
-              {' '}— {Math.abs(delta).toFixed(1)}% {delta > 0 ? 'above' : 'below'} calculated
-            </span>
-          )}
-          {onTarget && (
-            <span className="wizard-abv-match"> — matches within {ABV_CONFIRM_TOLERANCE}%</span>
-          )}
+          <span className={onTarget ? 'wizard-abv-match' : 'wizard-abv-delta'}>
+            {' '}— {proofGapDescription(calculatedAbv, targetAbv)}
+          </span>
         </p>
+      )}
+      {!onTarget && targetAbv != null && onAdjustProofingWater && (
+        <button
+          type="button"
+          className="btn btn-sm btn-primary wizard-abv-apply"
+          data-testid="adjust-proofing-water"
+          onClick={onAdjustProofingWater}
+        >
+          Adjust proofing water to reach {targetAbv.toFixed(1)}%
+        </button>
       )}
       {!onTarget && targetAbv != null && onApplyCalculatedTarget && (
         <button
