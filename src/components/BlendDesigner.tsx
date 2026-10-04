@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { limitAbvInput } from '../lib/abv-limits';
 import { WATER_LBS_PER_US_GALLON } from '../lib/alcohol-dilution';
-import { sugarBagScaleIssue } from '../lib/blend-recipe-scale';
 import {
   ingredientVolumeGal,
   ingredientWeightLbs,
@@ -350,7 +349,6 @@ export function BlendDesigner({ onUseForBatch }: { onUseForBatch: (recipeId: num
   };
 
   const lines = resultLines();
-  const sugarNote = design?.ok ? sugarBagScaleIssue(design.sugarLbs) : null;
 
   return (
     <div data-testid="blend-designer">
@@ -550,7 +548,6 @@ export function BlendDesigner({ onUseForBatch }: { onUseForBatch: (recipeId: num
               Do not proof this blend from density. Lab ABV is authoritative once sugar or flavor is in it.
             </div>
           )}
-          {sugarNote && <p className="field-hint">{sugarNote} Starting a production batch rounds sugar to whole 50 lb bags.</p>}
           <p className="field-hint">{FORMULATION_CITATION}</p>
         </div>
       )}

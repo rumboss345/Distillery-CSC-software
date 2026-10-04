@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  adjacentSugarBagLbs,
   formatBatchSizeAmount,
   gallonsFromBatchSizeAmount,
   nearestSugarBagCount,
@@ -7,7 +8,6 @@ import {
   scaleFactorFromTargetYield,
   scaleIngredients,
   scaleSpiritSources,
-  sugarBagScaleIssue,
   sugarLbsAreWholeBags,
   totalSugarLbs,
 } from './blend-recipe-scale';
@@ -46,7 +46,7 @@ describe('sugar bag batch sizes', () => {
   it('leaves recipes without sugar at the requested size', () => {
     expect(totalSugarLbs([{ ingredient_type: 'water', amount: 10, unit: 'gal' }])).toBe(0);
     expect(scaleFactorForWholeSugarBags(0, 1.37)).toBe(1.37);
-    expect(sugarBagScaleIssue(0)).toBeNull();
+    expect(sugarLbsAreWholeBags(0)).toBe(true);
   });
 
   it('snaps a sugared recipe to whole 50 lb bags', () => {
@@ -55,12 +55,18 @@ describe('sugar bag batch sizes', () => {
     const factor = scaleFactorForWholeSugarBags(363, 1);
     expect(factor * 363).toBeCloseTo(350, 6);
     expect(sugarLbsAreWholeBags(factor * 363)).toBe(true);
-    expect(sugarBagScaleIssue(363)).toMatch(/7 bags \(350 lb\)/);
-    expect(sugarBagScaleIssue(350)).toBeNull();
+    expect(sugarLbsAreWholeBags(363)).toBe(false);
+    expect(sugarLbsAreWholeBags(350)).toBe(true);
   });
 
   it('steps a larger batch to the nearest bag count', () => {
     expect(nearestSugarBagCount(363 * 2)).toBe(15);
     expect(scaleFactorForWholeSugarBags(363, 2) * 363).toBeCloseTo(750, 6);
+  });
+
+  it('steps off a partial bag to the whole bags on either side', () => {
+    expect(adjacentSugarBagLbs(363)).toEqual({ fewerLbs: 350, moreLbs: 400 });
+    expect(adjacentSugarBagLbs(350)).toEqual({ fewerLbs: 300, moreLbs: 400 });
+    expect(adjacentSugarBagLbs(10)).toEqual({ fewerLbs: 0, moreLbs: 50 });
   });
 });
