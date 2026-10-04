@@ -402,6 +402,11 @@ export function defaultUnitForMode(type: BlendIngredientType, mode: MeasureMode)
   return units[0];
 }
 
+const LB_PER_KG = 2.20462;
+const G_PER_LB = 453.592;
+const FL_OZ_PER_GALLON = 128;
+const GALLONS_PER_LITER = 0.264172;
+
 export function toLbs(amount: number, unit: string): number {
   if (amount <= 0) return 0;
   switch (unit.toLowerCase()) {
@@ -410,9 +415,25 @@ export function toLbs(amount: number, unit: string): number {
     case 'oz':
       return amount / 16;
     case 'kg':
-      return amount * 2.20462;
+      return amount * LB_PER_KG;
     case 'g':
-      return amount / 453.592;
+      return amount / G_PER_LB;
+    default:
+      return 0;
+  }
+}
+
+export function lbsToUnit(lbs: number, unit: string): number {
+  if (lbs <= 0) return 0;
+  switch (unit.toLowerCase()) {
+    case 'lbs':
+      return lbs;
+    case 'oz':
+      return lbs * 16;
+    case 'kg':
+      return lbs / LB_PER_KG;
+    case 'g':
+      return lbs * G_PER_LB;
     default:
       return 0;
   }
@@ -426,13 +447,76 @@ export function toGallonsFromVolumeUnit(amount: number, unit: string): number {
     case 'ml':
       return amount / ML_PER_GALLON;
     case 'l':
-      return amount * 0.264172;
+      return amount * GALLONS_PER_LITER;
     case 'fl oz':
     case 'floz':
-      return amount / 128;
+      return amount / FL_OZ_PER_GALLON;
     default:
       return 0;
   }
+}
+
+export function gallonsToUnit(gallons: number, unit: string): number {
+  if (gallons <= 0) return 0;
+  switch (unit.toLowerCase()) {
+    case 'gal':
+      return gallons;
+    case 'ml':
+      return gallons * ML_PER_GALLON;
+    case 'l':
+      return gallons / GALLONS_PER_LITER;
+    case 'fl oz':
+    case 'floz':
+      return gallons * FL_OZ_PER_GALLON;
+    default:
+      return 0;
+  }
+}
+
+function roundMeasuredAmount(amount: number, unit: string): number {
+  const places = unit.toLowerCase() === 'g' || unit.toLowerCase() === 'ml' ? 2 : 3;
+  const factor = 10 ** places;
+  return Math.round((amount + Number.EPSILON) * factor) / factor;
+}
+
+function canConvertMeasureUnit(unit: string): boolean {
+  return unit.toLowerCase() !== 'each' && (isWeightUnit(unit) || isVolumeUnit(unit));
+}
+
+/**
+ * Same physical amount in another unit. Volume and mass use the additive density
+ * already used for recipe weights (TTB water, dissolved sugar, syrup, color, Table 3 when ABV is set).
+ */
+export function convertIngredientAmount(ingredient: IngredientMeasure, toUnit: string): number {
+  const fromUnit = ingredient.unit;
+  if (fromUnit.toLowerCase() === toUnit.toLowerCase()) return ingredient.amount;
+  if (!(ingredient.amount > 0)) return 0;
+  if (!canConvertMeasureUnit(fromUnit) || !canConvertMeasureUnit(toUnit)) return ingredient.amount;
+
+  if (isWeightUnit(toUnit)) {
+    return roundMeasuredAmount(lbsToUnit(ingredientWeightLbs(ingredient), toUnit), toUnit);
+  }
+  return roundMeasuredAmount(gallonsToUnit(ingredientVolumeGal(ingredient), toUnit), toUnit);
+}
+
+/** Same spirit pull in another unit. Mass uses TTB Table 3 at the pull's ABV. */
+export function convertSpiritAmount(amount: number, fromUnit: string, toUnit: string, abv: number): number {
+  if (fromUnit.toLowerCase() === toUnit.toLowerCase()) return amount;
+  if (!(amount > 0)) return 0;
+  if (!canConvertMeasureUnit(fromUnit) || !canConvertMeasureUnit(toUnit)) return amount;
+
+  const fromWeight = isWeightUnit(fromUnit);
+  const toWeight = isWeightUnit(toUnit);
+  if (fromWeight && toWeight) {
+    return roundMeasuredAmount(lbsToUnit(toLbs(amount, fromUnit), toUnit), toUnit);
+  }
+  if (!fromWeight && !toWeight) {
+    return roundMeasuredAmount(gallonsToUnit(toGallonsFromVolumeUnit(amount, fromUnit), toUnit), toUnit);
+  }
+  if (!(abv > 0)) return amount;
+  const gallons = spiritVolumeGalFromAmount(amount, fromUnit, abv);
+  if (!(gallons > 0)) return amount;
+  return amountFromSpiritVolumeGal(gallons, toUnit, abv);
 }
 
 export function ingredientWeightLbs(ingredient: IngredientMeasure): number {

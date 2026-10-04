@@ -9,6 +9,8 @@ import {
   spiritLbsPerGallon,
   spiritMeasureAlternate,
   amountFromSpiritVolumeGal,
+  convertIngredientAmount,
+  convertSpiritAmount,
   spiritVolumeGalFromAmount,
   filterInventoryForBlendIngredient,
   formatBlendRecipeAdditive,
@@ -208,6 +210,48 @@ describe('formatBlendRecipeAdditive', () => {
     });
     expect(line).toContain('2760 ml');
     expect(line).toContain('lbs');
+  });
+});
+
+describe('convertIngredientAmount', () => {
+  it('converts water gallons to pounds with the TTB factor and back', () => {
+    const lbs = convertIngredientAmount({ amount: 10, unit: 'gal', ingredient_type: 'water' }, 'lbs');
+    expect(lbs).toBeCloseTo(10 / 0.120074, 3);
+    const gal = convertIngredientAmount({ amount: lbs, unit: 'lbs', ingredient_type: 'water' }, 'gal');
+    expect(gal).toBeCloseTo(10, 2);
+  });
+
+  it('converts dissolved sugar pounds to gallons and back', () => {
+    const gal = convertIngredientAmount({ amount: 10, unit: 'lbs', ingredient_type: 'sugar' }, 'gal');
+    expect(gal).toBeCloseTo(ingredientVolumeGal({ amount: 10, unit: 'lbs', ingredient_type: 'sugar' }), 3);
+    const lbs = convertIngredientAmount({ amount: gal, unit: 'gal', ingredient_type: 'sugar' }, 'lbs');
+    expect(lbs).toBeCloseTo(10, 2);
+  });
+
+  it('converts within volume without changing the gallons', () => {
+    const ml = convertIngredientAmount({ amount: 1, unit: 'gal', ingredient_type: 'flavoring' }, 'ml');
+    expect(ml).toBeCloseTo(3785.41, 2);
+    expect(convertIngredientAmount({ amount: ml, unit: 'ml', ingredient_type: 'flavoring' }, 'gal')).toBeCloseTo(1, 3);
+  });
+
+  it('leaves a zero amount at zero', () => {
+    expect(convertIngredientAmount({ amount: 0, unit: 'gal', ingredient_type: 'water' }, 'lbs')).toBe(0);
+  });
+});
+
+describe('convertSpiritAmount', () => {
+  it('converts a spirit pull between gallons and pounds at its ABV', () => {
+    const lbs = convertSpiritAmount(10, 'gal', 'lbs', 40);
+    expect(lbs).toBeCloseTo(spiritWeightLbsFromVolumeGal(10, 40), 2);
+    expect(convertSpiritAmount(lbs, 'lbs', 'gal', 40)).toBeCloseTo(10, 1);
+  });
+
+  it('converts pounds to kilograms without needing a new density', () => {
+    expect(convertSpiritAmount(10, 'lbs', 'kg', 93)).toBeCloseTo(10 / 2.20462, 3);
+  });
+
+  it('keeps the entered amount when ABV is missing and the mode changes', () => {
+    expect(convertSpiritAmount(12, 'gal', 'lbs', 0)).toBe(12);
   });
 });
 
