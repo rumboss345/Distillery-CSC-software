@@ -1,5 +1,8 @@
 import type { BlendIngredientInput, BlendRecipeSpiritSourceInput } from '../types';
-import { ingredientWeightLbs } from './blending';
+import { gallonsToUnit, ingredientWeightLbs, toGallonsFromVolumeUnit } from './blending';
+
+/** Batch yield can be entered in wine gallons or liters. Scale math stays in gallons. */
+export type BatchSizeUnit = 'gal' | 'l';
 
 /** Granulated sugar is purchased in 50 lb bags. Batches should not open a partial bag. */
 export const SUGAR_BAG_LBS = 50;
@@ -63,6 +66,18 @@ export function scaleIngredients(
 export function scaleFactorFromTargetYield(baseYieldGal: number, targetYieldGal: number): number {
   if (baseYieldGal <= 0 || targetYieldGal <= 0) return 1;
   return roundScaledAmount(targetYieldGal / baseYieldGal);
+}
+
+export function formatBatchSizeAmount(gallons: number, unit: BatchSizeUnit): string {
+  if (!(gallons > 0)) return '';
+  const amount = unit === 'l' ? gallonsToUnit(gallons, 'l') : gallons;
+  const places = unit === 'l' ? 3 : 1;
+  return amount.toFixed(places);
+}
+
+export function gallonsFromBatchSizeAmount(amount: number, unit: BatchSizeUnit): number {
+  if (!(amount > 0)) return 0;
+  return unit === 'l' ? toGallonsFromVolumeUnit(amount, 'l') : amount;
 }
 
 export function totalSugarLbs(
