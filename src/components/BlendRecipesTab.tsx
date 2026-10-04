@@ -20,6 +20,8 @@ import {
   formatBlendRecipeSpiritPull,
   ingredientWeightLbs,
   filterInventoryForBlendIngredient,
+  convertIngredientAmount,
+  convertSpiritAmount,
   inferMeasureMode,
   measureAlternate,
   recommendMeasureMode,
@@ -209,6 +211,9 @@ export function BlendRecipesTab() {
     setIngredients((prev) => prev.map((row, i) => {
       if (i !== index) return row;
       const next = { ...row, ...patch };
+      if (patch.unit != null && patch.unit !== row.unit && patch.amount === undefined && !patch.ingredient_type) {
+        next.amount = convertIngredientAmount(row, patch.unit);
+      }
       if (patch.ingredient_type) {
         next.unit = defaultUnitForMode(
           patch.ingredient_type,
@@ -227,14 +232,24 @@ export function BlendRecipesTab() {
   const setIngredientMeasureMode = (index: number, mode: MeasureMode) => {
     setIngredients((prev) => prev.map((row, i) => {
       if (i !== index) return row;
-      return { ...row, unit: defaultUnitForMode(row.ingredient_type, mode) };
+      if (inferMeasureMode(row.unit) === mode) return row;
+      const unit = defaultUnitForMode(row.ingredient_type, mode);
+      return {
+        ...row,
+        unit,
+        amount: convertIngredientAmount(row, unit),
+      };
     }));
   };
 
   const updateSpiritSource = (index: number, patch: Partial<SpiritRecipeRow>) => {
     setSpiritSources((prev) => prev.map((row, i) => {
       if (i !== index) return row;
-      return syncSpiritRecipeVolume({ ...row, ...patch });
+      const next = { ...row, ...patch };
+      if (patch.unit != null && patch.unit !== row.unit && patch.amount === undefined) {
+        next.amount = convertSpiritAmount(row.amount, row.unit, patch.unit, next.abv);
+      }
+      return syncSpiritRecipeVolume(next);
     }));
   };
 
@@ -521,6 +536,7 @@ export function BlendRecipesTab() {
                         <div className="measure-mode-buttons">
                           <button
                             type="button"
+                            data-testid={`recipe-spirit-weight-${index}`}
                             className={`btn btn-sm ${measureMode === 'weight' ? 'btn-primary' : 'btn-secondary'}`}
                             onClick={() => setSpiritMeasureMode(index, 'weight')}
                           >
@@ -528,6 +544,7 @@ export function BlendRecipesTab() {
                           </button>
                           <button
                             type="button"
+                            data-testid={`recipe-spirit-volume-${index}`}
                             className={`btn btn-sm ${measureMode === 'volume' ? 'btn-primary' : 'btn-secondary'}`}
                             onClick={() => setSpiritMeasureMode(index, 'volume')}
                           >
@@ -545,6 +562,7 @@ export function BlendRecipesTab() {
                           <input
                             type="number"
                             step="0.1"
+                            data-testid={`recipe-spirit-amount-${index}`}
                             value={source.amount || ''}
                             onChange={(e) => updateSpiritSource(index, { amount: parseFloat(e.target.value) || 0 })}
                           />
@@ -552,6 +570,7 @@ export function BlendRecipesTab() {
                         <div className="form-group">
                           <label>Unit</label>
                           <select
+                            data-testid={`recipe-spirit-unit-${index}`}
                             value={source.unit}
                             onChange={(e) => updateSpiritSource(index, { unit: e.target.value })}
                           >
@@ -671,6 +690,7 @@ export function BlendRecipesTab() {
                           <div className="measure-mode-buttons">
                             <button
                               type="button"
+                              data-testid={`recipe-additive-weight-${index}`}
                               className={`btn btn-sm ${measureMode === 'weight' ? 'btn-primary' : 'btn-secondary'}`}
                               onClick={() => setIngredientMeasureMode(index, 'weight')}
                             >
@@ -679,6 +699,7 @@ export function BlendRecipesTab() {
                             </button>
                             <button
                               type="button"
+                              data-testid={`recipe-additive-volume-${index}`}
                               className={`btn btn-sm ${measureMode === 'volume' ? 'btn-primary' : 'btn-secondary'}`}
                               onClick={() => setIngredientMeasureMode(index, 'volume')}
                             >
@@ -696,6 +717,7 @@ export function BlendRecipesTab() {
                             <input
                               type="number"
                               step="0.01"
+                              data-testid={`recipe-additive-amount-${index}`}
                               value={ingredient.amount || ''}
                               onChange={(e) => updateIngredient(index, {
                                 amount: parseFloat(e.target.value) || 0,
@@ -709,6 +731,7 @@ export function BlendRecipesTab() {
                           <div className="form-group">
                             <label>Unit</label>
                             <select
+                              data-testid={`recipe-additive-unit-${index}`}
                               value={ingredient.unit}
                               onChange={(e) => updateIngredient(index, { unit: e.target.value })}
                             >
