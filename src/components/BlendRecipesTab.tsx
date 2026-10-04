@@ -256,12 +256,13 @@ export function BlendRecipesTab() {
   const setSpiritMeasureMode = (index: number, mode: MeasureMode) => {
     setSpiritSources((prev) => prev.map((row, i) => {
       if (i !== index) return row;
-      const synced = syncSpiritRecipeVolume(row);
-      if (mode === 'volume') {
-        return syncSpiritRecipeVolume({ ...synced, unit: 'gal', amount: synced.volume_gal });
-      }
-      const lbs = spiritWeightLbsFromVolumeGal(synced.volume_gal, synced.abv);
-      return syncSpiritRecipeVolume({ ...synced, unit: 'lbs', amount: lbs });
+      if (inferMeasureMode(row.unit) === mode) return row;
+      const unit = mode === 'volume' ? 'gal' : 'lbs';
+      return syncSpiritRecipeVolume({
+        ...row,
+        unit,
+        amount: convertSpiritAmount(row.amount, row.unit, unit, row.abv),
+      });
     }));
   };
 
