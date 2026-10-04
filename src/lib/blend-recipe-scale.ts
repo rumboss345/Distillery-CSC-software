@@ -4,7 +4,7 @@ import { gallonsToUnit, ingredientWeightLbs, toGallonsFromVolumeUnit } from './b
 /** Batch yield can be entered in wine gallons or liters. Scale math stays in gallons. */
 export type BatchSizeUnit = 'gal' | 'l';
 
-/** Granulated sugar is purchased in 50 lb bags. Batches should not open a partial bag. */
+/** Granulated sugar bag. Blending can use any batch size; bag buttons step by this weight. */
 export const SUGAR_BAG_LBS = 50;
 
 export interface ScaledSpiritRow {
@@ -102,7 +102,31 @@ export function sugarLbsAreWholeBags(sugarLbs: number, bagLbs = SUGAR_BAG_LBS): 
 }
 
 /**
- * Scale factor that keeps granulated sugar on whole 50 lb bags.
+ * Next smaller and larger whole-bag sugar weights.
+ * A batch already on a bag boundary steps one bag either way.
+ * Any other weight moves to the whole bags on either side, and the smaller side is 0 below one bag.
+ */
+export function adjacentSugarBagLbs(
+  sugarLbs: number,
+  bagLbs = SUGAR_BAG_LBS,
+): { fewerLbs: number; moreLbs: number } {
+  if (!(sugarLbs > 0) || !(bagLbs > 0)) return { fewerLbs: 0, moreLbs: bagLbs };
+  if (sugarLbsAreWholeBags(sugarLbs, bagLbs)) {
+    const bags = Math.round(sugarLbs / bagLbs);
+    return {
+      fewerLbs: Math.max(0, (bags - 1) * bagLbs),
+      moreLbs: (bags + 1) * bagLbs,
+    };
+  }
+  const bags = sugarLbs / bagLbs;
+  return {
+    fewerLbs: Math.floor(bags) * bagLbs,
+    moreLbs: Math.ceil(bags) * bagLbs,
+  };
+}
+
+/**
+ * Scale factor that lands granulated sugar on a whole 50 lb bag.
  * Recipes without sugar keep the requested factor.
  */
 export function scaleFactorForWholeSugarBags(
@@ -114,13 +138,4 @@ export function scaleFactorForWholeSugarBags(
   if (!(baseSugarLbs > 0)) return factor;
   const bags = nearestSugarBagCount(baseSugarLbs * factor, bagLbs);
   return (bags * bagLbs) / baseSugarLbs;
-}
-
-export function sugarBagScaleIssue(
-  sugarLbs: number,
-  bagLbs = SUGAR_BAG_LBS,
-): string | null {
-  if (!(sugarLbs > 0) || sugarLbsAreWholeBags(sugarLbs, bagLbs)) return null;
-  const bags = nearestSugarBagCount(sugarLbs, bagLbs);
-  return `Sugar has to be whole ${bagLbs} lb bags so you don't open a partial bag. This batch uses ${sugarLbs.toFixed(1)} lb. Use ${bags} bag${bags === 1 ? '' : 's'} (${bags * bagLbs} lb).`;
 }
