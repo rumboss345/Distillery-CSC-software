@@ -106,6 +106,17 @@ describe('formulation engine', () => {
     expect(corrected.message).toMatch(/already larger/i);
   });
 
+  it('hits a 0.2 gallon target instead of letting Table 3 rounding miss it', () => {
+    const designed = designFormulation({
+      targetVolumeGal: 0.2,
+      targetAbv: 35,
+      additionSpiritAbv: 93,
+    });
+    expect(designed.ok).toBe(true);
+    expect(designed.analysis?.abv).toBeCloseTo(35, 0);
+    expect(designed.analysis?.volumeGal).toBeCloseTo(0.2, 2);
+  });
+
   it('refuses a target ABV above 99%', () => {
     const designed = designFormulation({
       targetVolumeGal: 10,

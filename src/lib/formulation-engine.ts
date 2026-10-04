@@ -164,6 +164,49 @@ interface HydroPart {
   pureAlcoholGal: number;
 }
 
+/**
+ * Table 3 rounds proof gallons to 0.1 lb-column steps, so a direct lookup on a
+ * lab-sized blend (a few pounds) can miss the target by several proof points.
+ * Batches under this size use the pounds-per-gallon factor from a 1,000 gallon
+ * Table 3 lookup, which is the same factor the recipe spirit lines already use.
+ */
+const DIRECT_TABLE3_MIN_GALLONS = 20;
+const TABLE3_FACTOR_BASIS_GALLONS = 1000;
+const lbsPerGallonByProof = new Map<number, number>();
+
+function lbsPerWineGallon(proof: number): number {
+  const key = Math.round(proof * 10) / 10;
+  const cached = lbsPerGallonByProof.get(key);
+  if (cached != null) return cached;
+  const value = weightFromWineGallons(TABLE3_FACTOR_BASIS_GALLONS, key) / TABLE3_FACTOR_BASIS_GALLONS;
+  lbsPerGallonByProof.set(key, value);
+  return value;
+}
+
+/** Interpolate between tenth-proof Table 3 factors so 36.9% is not snapped to 37%. */
+function lbsPerWineGallonExact(proof: number): number {
+  const lower = Math.floor(proof * 10 + 1e-9) / 10;
+  const upper = Math.round((lower + 0.1) * 10) / 10;
+  if (upper <= lower) return lbsPerWineGallon(lower);
+  const fraction = (proof - lower) / (upper - lower);
+  return lbsPerWineGallon(lower) + (lbsPerWineGallon(upper) - lbsPerWineGallon(lower)) * fraction;
+}
+
+function weightLbAtProof(wineGallons: number, proof: number, direct = wineGallons >= DIRECT_TABLE3_MIN_GALLONS): number {
+  if (!(wineGallons > 0) || !(proof > 0)) return 0;
+  if (direct) return weightFromWineGallons(wineGallons, proof);
+  return lbsPerWineGallonExact(proof) * wineGallons;
+}
+
+function wineGallonsAtProof(weightLb: number, proof: number): number {
+  if (!(weightLb > 0) || !(proof > 0)) return 0;
+  const perGallon = lbsPerWineGallonExact(proof);
+  if (!(perGallon > 0)) return 0;
+  const scaled = weightLb / perGallon;
+  if (scaled >= DIRECT_TABLE3_MIN_GALLONS) return wineGallonsFromWeight(weightLb, proof);
+  return scaled;
+}
+
 function spiritPart(
   volumeGal: number,
   abv: number,
@@ -171,7 +214,7 @@ function spiritPart(
   const proof = proofFromAbv(abv);
   return {
     volumeGal,
-    weightLb: weightFromWineGallons(volumeGal, proof),
+    weightLb: weightLbAtProof(volumeGal, proof),
     pureAlcoholGal: volumeGal * abv / 100,
   };
 }
@@ -215,7 +258,7 @@ function prepareBlend(components: FormulationComponent[]): PreparedBlend | Formu
           return { ok: false, message: `${name} needs a volume or a weight.` };
         }
         const lbs = grams / GRAMS_PER_LB;
-        volumeGal = wineGallonsFromWeight(lbs, proofFromAbv(abv));
+        volumeGal = wineGallonsAtProof(lbs, proofFromAbv(abv));
       }
       if (volumeGal <= 0) continue;
       const part = spiritPart(volumeGal, abv);
@@ -323,13 +366,18 @@ function proofForWeightAndAlcohol(weightLb: number, pureAlcoholGal: number): num
     (pureAlcoholGal / (weightLb / WATER_LBS_PER_US_GALLON)) * 100,
   );
   const hint = proofFromAbv(approximateAbv);
+  const smallBatch = weightLb < weightLbAtProof(DIRECT_TABLE3_MIN_GALLONS, hint);
   let bestProof = hint;
   let bestScore = Number.POSITIVE_INFINITY;
-  for (let step = 1; step <= 2000; step += 1) {
-    const proof = step / 10;
-    const pg = proofGallonsFromWeight(weightLb, proof);
-    // Proof gallons are rounded to 0.1, so several proofs can tie. Prefer the one nearest the alcohol balance.
-    const score = Math.abs(pg - targetPg) + Math.abs(proof - hint) / 1000;
+  const steps = smallBatch ? 20000 : 2000;
+  for (let step = 1; step <= steps; step += 1) {
+    const proof = smallBatch ? step / 100 : step / 10;
+    const alcoholError = smallBatch
+      ? Math.abs((weightLb / lbsPerWineGallonExact(proof)) * (proof / 2) / 100 - pureAlcoholGal)
+      : Math.abs(proofGallonsFromWeight(weightLb, proof) - targetPg);
+    // Table 3 proof gallons tie at 0.1, so production batches keep a small preference for the alcohol-balance hint.
+    // Lab-sized blends use a continuous factor, and that same preference would drag 36.9% up to 37%.
+    const score = alcoholError + Math.abs(proof - hint) / (smallBatch ? 1e9 : 1000);
     if (score < bestScore) {
       bestScore = score;
       bestProof = proof;
@@ -344,7 +392,7 @@ function finishAnalysis(prepared: PreparedBlend): FormulationAnalysis {
   let hydroWeight = prepared.hydro.weightLb;
   if (prepared.hydro.pureAlcoholGal > 0 && hydroWeight > 0) {
     const proof = proofForWeightAndAlcohol(hydroWeight, prepared.hydro.pureAlcoholGal);
-    hydroWineGal = wineGallonsFromWeight(hydroWeight, proof);
+    hydroWineGal = wineGallonsAtProof(hydroWeight, proof);
   } else if (hydroWeight > 0) {
     hydroWineGal = hydroWeight / WATER_LBS_PER_US_GALLON;
   }
@@ -491,7 +539,8 @@ export function designFormulation(input: DesignInput): FormulationDesign {
     }
     spiritAbv = abvAt60(input.additionSpiritAbv, input.additionSpiritTemperatureF);
     spiritGal = alcoholToAdd / (spiritAbv / 100);
-    spiritWeight = weightFromWineGallons(spiritGal, proofFromAbv(spiritAbv));
+    const directTable = hydroGal >= DIRECT_TABLE3_MIN_GALLONS;
+    spiritWeight = weightLbAtProof(spiritGal, proofFromAbv(spiritAbv), directTable);
   }
 
   const hydroAbv = (current.hydro.pureAlcoholGal + Math.max(0, alcoholToAdd)) / hydroGal * 100;
@@ -502,8 +551,9 @@ export function designFormulation(input: DesignInput): FormulationDesign {
     };
   }
   const hydroProof = proofFromAbv(hydroAbv);
+  const directHydro = hydroGal >= DIRECT_TABLE3_MIN_GALLONS;
   const hydroWeight = hydroAbv > 0
-    ? weightFromWineGallons(hydroGal, hydroProof)
+    ? weightLbAtProof(hydroGal, hydroProof, directHydro)
     : hydroGal * WATER_LBS_PER_US_GALLON;
   const waterWeight = hydroWeight - current.hydro.weightLb - spiritWeight;
   if (waterWeight < -0.05) {
