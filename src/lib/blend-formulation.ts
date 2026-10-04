@@ -6,6 +6,7 @@ import {
   spiritDensityGPerMl,
   toLbs,
 } from './blending';
+import { designFormulation, gaugePouredBlend, type FormulationComponent } from './formulation-engine';
 import type { BlendIngredientType } from '../types';
 
 export interface SpiritSourceInput {
@@ -104,12 +105,41 @@ function additiveBrixContribution(additive: AdditiveInput, totalVolumeGal: numbe
   return 0;
 }
 
-/** Pure theoretical blend — never touches inventory. */
+function toFormulationComponents(
+  spirits: SpiritSourceInput[],
+  additives: AdditiveInput[],
+): FormulationComponent[] {
+  const components: FormulationComponent[] = [];
+  for (const spirit of spirits) {
+    if (!(spirit.volumeGal > 0) || !(spirit.abv > 0)) continue;
+    components.push({
+      kind: 'spirit',
+      name: spirit.label?.trim() || 'Spirit',
+      amount: spirit.volumeGal,
+      unit: 'gal',
+      abv: spirit.abv,
+      temperatureF: 60,
+    });
+  }
+  for (const additive of additives) {
+    if (!(additive.amount > 0)) continue;
+    components.push({
+      kind: additive.ingredientType,
+      name: additive.name?.trim() || additive.ingredientType,
+      amount: additive.amount,
+      unit: additive.unit,
+      abv: additive.abv ?? null,
+    });
+  }
+  return components;
+}
+
+/** Pure theoretical blend — never touches inventory. Finished gallons are gauged, not poured. */
 export function computeTheoreticalBlend(
   spirits: SpiritSourceInput[],
   additives: AdditiveInput[],
+  targetAbv?: number | null,
 ): TheoreticalBlendResult {
-  const spiritVolume = spirits.reduce((s, sp) => s + Math.max(0, sp.volumeGal), 0);
   const spiritAlcoholGal = spirits.reduce(
     (s, sp) => s + Math.max(0, sp.volumeGal) * Math.max(0, sp.abv) / 100,
     0,
@@ -119,12 +149,9 @@ export function computeTheoreticalBlend(
     0,
   );
   const pureAlcoholGal = spiritAlcoholGal + additiveAlcoholGal;
-  const additiveVolume = additives.reduce(
-    (s, a) => s + ingredientVolumeGal({ ...a, ingredient_type: a.ingredientType }),
-    0,
-  );
-  const volumeGal = spiritVolume + additiveVolume;
-  const abv = volumeGal > 0 ? (pureAlcoholGal / volumeGal) * 100 : 0;
+  const gauged = gaugePouredBlend(toFormulationComponents(spirits, additives), targetAbv);
+  const volumeGal = gauged?.volumeGal ?? 0;
+  const abv = gauged?.abv ?? 0;
   const sugarOrFlavor = hasDissolvedSolids(additives);
   const brixParts = additives.map((a) => additiveBrixContribution(a, volumeGal));
   const brix = volumeGal > 0 && brixParts.some((b) => b > 0)
@@ -145,7 +172,11 @@ export function computeTheoreticalBlend(
   };
 }
 
-/** Solve dilution water (gal) to hit target ABV. */
+/**
+ * Proofing water that hits a target ABV the same way as spirit proofing.
+ * Finished wine gallons come from the alcohol. Table 3 supplies the blend weight,
+ * and the water is the weight still missing after the spirit.
+ */
 export function solveWaterForTargetAbv(
   spirits: SpiritSourceInput[],
   additives: AdditiveInput[],
@@ -153,25 +184,37 @@ export function solveWaterForTargetAbv(
 ): { waterGal: number; result: TheoreticalBlendResult } | null {
   if (targetAbv <= 0) return null;
   const nonWater = additives.filter((a) => a.ingredientType !== 'water');
-  const pureAlcohol = spirits.reduce((s, sp) => s + sp.volumeGal * sp.abv / 100, 0)
+  const pureAlcohol = spirits.reduce((s, sp) => s + Math.max(0, sp.volumeGal) * Math.max(0, sp.abv) / 100, 0)
     + nonWater.reduce(
       (s, a) => s + ingredientPureAlcoholGal({ ...a, ingredient_type: a.ingredientType }),
       0,
     );
-  const fixedVolume = spirits.reduce((s, sp) => s + sp.volumeGal, 0)
-    + nonWater.reduce((s, a) => s + ingredientVolumeGal({ ...a, ingredient_type: a.ingredientType }), 0);
   if (pureAlcohol <= 0) return null;
 
-  const totalVolumeNeeded = pureAlcohol / (targetAbv / 100);
-  const waterGal = Math.max(0, totalVolumeNeeded - fixedVolume);
+  const targetVolumeGal = pureAlcohol / (targetAbv / 100);
+  const designed = designFormulation({
+    targetVolumeGal,
+    targetAbv,
+    fixed: toFormulationComponents(spirits, nonWater),
+  });
+  if (!designed.ok || designed.spiritGal > 0.05) return null;
+
+  const waterGal = round3(Math.max(0, designed.waterGal));
   const waterAdditive: AdditiveInput = {
     ingredientType: 'water',
     name: 'Proofing water (calculated)',
-    amount: round3(waterGal),
+    amount: waterGal,
     unit: 'gal',
   };
-  const result = computeTheoreticalBlend(spirits, [...nonWater, waterAdditive]);
-  return { waterGal: round3(waterGal), result };
+  const result = computeTheoreticalBlend(spirits, [...nonWater, ...(waterGal > 0 ? [waterAdditive] : [])]);
+  return {
+    waterGal,
+    result: {
+      ...result,
+      volumeGal: round3(targetVolumeGal),
+      abv: round2(targetAbv),
+    },
+  };
 }
 
 export interface SpiritAbvDelta {

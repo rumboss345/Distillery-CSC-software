@@ -451,6 +451,80 @@ function finishAnalysis(prepared: PreparedBlend): FormulationAnalysis {
   };
 }
 
+export interface PouredBlendGauge {
+  volumeGal: number;
+  abv: number;
+  weightLb: number;
+  pouredGal: number;
+  contractionGal: number;
+}
+
+/**
+ * Finished wine gallons for a pour, using the same Table 3 weight balance as spirit proofing.
+ * Proof gallons stay in the spirit. Water is heavier than the mix, so the gauged yield is
+ * smaller than the gallons poured.
+ */
+function predictedBlendWeight(blend: PreparedBlend, abv: number): number {
+  const alcohol = blend.hydro.pureAlcoholGal;
+  if (!(abv > 0) || !(alcohol > 0)) return Number.POSITIVE_INFINITY;
+  const totalVol = alcohol / (abv / 100);
+  const sugarVol = sucroseApparentVolumeGal(blend.sugarGrams);
+  const hydroGal = totalVol - sugarVol - blend.extraVolumeGal;
+  if (!(hydroGal > 0.0001)) return Number.POSITIVE_INFINITY;
+  const hydroAbv = (alcohol / hydroGal) * 100;
+  if (hydroAbv > MAX_ENTERED_ABV + 0.05) return Number.POSITIVE_INFINITY;
+  const hydroWeight = weightLbAtProof(hydroGal, proofFromAbv(hydroAbv));
+  return hydroWeight + gramsToLbs(blend.sugarGrams) + blend.extraWeightLb;
+}
+
+export function gaugePouredBlend(
+  components: FormulationComponent[],
+  targetAbv?: number | null,
+): PouredBlendGauge | null {
+  const prepared = prepareBlend(components);
+  if ('ok' in prepared && prepared.ok === false) return null;
+  const blend = prepared as PreparedBlend;
+  const weightLb = blend.hydro.weightLb + gramsToLbs(blend.sugarGrams) + blend.extraWeightLb;
+  const sugarVol = sucroseApparentVolumeGal(blend.sugarGrams);
+  const pouredGal = blend.inputHydroGal + sugarVol + blend.extraVolumeGal;
+  const alcohol = blend.hydro.pureAlcoholGal;
+  if (!(alcohol > 0) || !(weightLb > 0)) {
+    return { volumeGal: pouredGal, abv: 0, weightLb, pouredGal, contractionGal: 0 };
+  }
+
+  if (targetAbv != null && targetAbv > 0) {
+    const predicted = predictedBlendWeight(blend, targetAbv);
+    if (Number.isFinite(predicted) && Math.abs(predicted - weightLb) <= 0.1) {
+      const volumeGal = alcohol / (targetAbv / 100);
+      return {
+        volumeGal,
+        abv: targetAbv,
+        weightLb,
+        pouredGal,
+        contractionGal: pouredGal - volumeGal,
+      };
+    }
+  }
+
+  let low = 0.2;
+  let high = Math.min(MAX_ENTERED_ABV, 99.9);
+  for (let step = 0; step < 28; step += 1) {
+    const mid = (low + high) / 2;
+    const predicted = predictedBlendWeight(blend, mid);
+    if (!Number.isFinite(predicted) || predicted < weightLb) high = mid;
+    else low = mid;
+  }
+  const abv = (low + high) / 2;
+  const volumeGal = alcohol / (abv / 100);
+  return {
+    volumeGal,
+    abv,
+    weightLb,
+    pouredGal,
+    contractionGal: pouredGal - volumeGal,
+  };
+}
+
 /** What these ingredients make, using Table 3 for the unsweetened part. */
 export function analyzeFormulation(
   components: FormulationComponent[],

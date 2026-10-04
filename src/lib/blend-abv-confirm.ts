@@ -1,4 +1,5 @@
 import { ingredientVolumeGal } from './blending';
+import { solveWaterForTargetAbv } from './blend-formulation';
 import { analyzeFormulation, type FormulationComponent } from './formulation-engine';
 import type { BlendIngredientInput, BlendIngredientType, BlendRecipeSpiritSourceInput } from '../types';
 
@@ -99,27 +100,25 @@ export function proofingWaterGalForTarget(
     };
   }
 
-  let low = 0;
-  let high = Math.max(withoutWater.volumeGal, 0.1);
-  let highResult = analyzeRecipe(spirits, ingredients, high);
-  while (highResult && highResult.abv > targetAbv && high < 100000) {
-    high *= 2;
-    highResult = analyzeRecipe(spirits, ingredients, high);
-  }
-  if (!highResult) return { error: 'Could not calculate proofing water for this target.' };
-
-  for (let step = 0; step < 50; step += 1) {
-    const mid = (low + high) / 2;
-    const result = analyzeRecipe(spirits, ingredients, mid);
-    if (!result) return { error: 'Could not calculate proofing water for this target.' };
-    if (result.abv > targetAbv) low = mid;
-    else high = mid;
-  }
-
-  const waterGal = Math.round(high * 1000) / 1000;
-  const checked = analyzeRecipe(spirits, ingredients, waterGal);
-  if (!checked || !abvMatchesTarget(checked.abv, targetAbv, 0.15)) {
-    return { error: 'Proofing water could not bring this blend to the target proof.' };
-  }
-  return { waterGal };
+  const solved = solveWaterForTargetAbv(
+    spirits
+      .filter((spirit) => spirit.volume_gal > 0 && spirit.abv > 0)
+      .map((spirit) => ({
+        volumeGal: spirit.volume_gal,
+        abv: spirit.abv,
+        label: spirit.spirit_label,
+      })),
+    ingredients
+      .filter((ingredient) => ingredient.ingredient_type !== 'water' && ingredient.amount > 0)
+      .map((ingredient) => ({
+        ingredientType: ingredient.ingredient_type,
+        name: ingredient.name,
+        amount: ingredient.amount,
+        unit: ingredient.unit,
+        abv: ingredient.abv,
+      })),
+    targetAbv,
+  );
+  if (!solved) return { error: 'Proofing water could not bring this blend to the target proof.' };
+  return { waterGal: solved.waterGal };
 }
