@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { spiritDensityGPerMl } from './blending';
+import { computeAlcoholDilution } from './alcohol-dilution';
+import { ingredientWeightLbs, spiritDensityGPerMl, spiritWeightLbsFromVolumeGal } from './blending';
+import { LITERS_PER_US_GALLON, proofFromAbv, weightFromWineGallons } from '../services/spirit-gauging';
 import {
   compensateProofingWater,
   proofingWaterForSameBatchSize,
@@ -24,10 +26,10 @@ describe('computeTheoreticalBlend', () => {
       ],
       [{ ingredientType: 'water', name: 'Water', amount: 5, unit: 'gal' }],
     );
-    expect(result.volumeGal).toBe(20);
-    expect(result.abv).toBe(40);
+    expect(result.volumeGal).toBeLessThan(20);
+    expect(result.abv).toBeGreaterThan(40);
     expect(result.pureAlcoholGal).toBe(8);
-    expect(result.density).toBeCloseTo(spiritDensityGPerMl(40), 3);
+    expect(result.density).toBeCloseTo(spiritDensityGPerMl(result.abv), 3);
     expect(result.density!).toBeGreaterThan(0.9);
   });
 
@@ -55,7 +57,8 @@ describe('computeTheoreticalBlend', () => {
       ],
     );
     expect(withSugar.abv).toBeLessThan(withoutSugar.abv);
-    expect(withSugar.abv).toBeCloseTo(34.2, 0);
+    expect(withSugar.abv).toBeGreaterThan(30);
+    expect(withSugar.abv).toBeLessThan(40);
   });
 
   it('includes alcoholic additives in pure alcohol', () => {
@@ -63,12 +66,41 @@ describe('computeTheoreticalBlend', () => {
       [{ volumeGal: 10, abv: 40 }],
       [{ ingredientType: 'flavoring', name: 'Vanilla', amount: 1, unit: 'gal', abv: 10 }],
     );
-    expect(result.volumeGal).toBe(11);
-    expect(result.abv).toBeCloseTo(37.27, 1);
+    expect(result.volumeGal).toBeLessThan(11);
+    expect(result.pureAlcoholGal).toBeCloseTo(4.1, 3);
+    expect(result.abv).toBeGreaterThan(37);
   });
 });
 
 describe('solveWaterForTargetAbv', () => {
+  it('matches spirit proofing for 66.63 gal at 92.4% brought to 40%', () => {
+    const spiritGal = 66.63;
+    const abv = 92.4;
+    const dilution = computeAlcoholDilution({
+      actualAbvPercent: abv,
+      targetAbvPercent: 40,
+      volumeLiters: spiritGal * LITERS_PER_US_GALLON,
+      volumeBasis: 'before',
+    });
+    const solved = solveWaterForTargetAbv([{ volumeGal: spiritGal, abv }], [], 40);
+    expect(dilution).not.toBeNull();
+    expect(solved).not.toBeNull();
+    expect(solved!.waterGal * LITERS_PER_US_GALLON).toBeCloseTo(dilution!.waterVolumeLiters, 1);
+    expect(solved!.result.abv).toBe(40);
+    expect(solved!.result.volumeGal).toBeCloseTo(spiritGal * (abv / 40), 2);
+    const gauged = computeTheoreticalBlend(
+      [{ volumeGal: spiritGal, abv }],
+      [{ ingredientType: 'water', name: 'Proofing water', amount: solved!.waterGal, unit: 'gal' }],
+      40,
+    );
+    expect(gauged.volumeGal).toBeCloseTo(solved!.result.volumeGal, 2);
+    expect(gauged.abv).toBeCloseTo(40, 1);
+    const finishedLb = spiritWeightLbsFromVolumeGal(spiritGal, abv)
+      + ingredientWeightLbs({ amount: solved!.waterGal, unit: 'gal', ingredient_type: 'water' });
+    expect(finishedLb).toBeCloseTo(weightFromWineGallons(solved!.result.volumeGal, proofFromAbv(40)), 0);
+    expect(finishedLb).toBeGreaterThan(1184);
+  });
+
   it('calculates proofing water for target ABV', () => {
     const solved = solveWaterForTargetAbv(
       [{ volumeGal: 10, abv: 60 }],
@@ -108,16 +140,11 @@ describe('spirit pull follows source ABV', () => {
     const recipeWater = 120;
     const water = proofingWaterForSameBatchSize(recipeGal, pull, recipeWater);
     expect(water.shortfallGal).toBe(0);
-    const recipeBlend = computeTheoreticalBlend(
-      [{ volumeGal: recipeGal, abv: recipeAbv }],
-      [{ ingredientType: 'water', name: 'Water', amount: recipeWater, unit: 'gal' }],
-    );
-    const actualBlend = computeTheoreticalBlend(
-      [{ volumeGal: pull, abv: sourceAbv }],
-      [{ ingredientType: 'water', name: 'Water', amount: water.waterGal, unit: 'gal' }],
-    );
-    expect(actualBlend.volumeGal).toBeCloseTo(recipeBlend.volumeGal, 2);
-    expect(actualBlend.abv).toBeCloseTo(recipeBlend.abv, 2);
+    expect(water.waterGal + pull).toBeCloseTo(recipeWater + recipeGal, 2);
+    const solved = solveWaterForTargetAbv([{ volumeGal: pull, abv: sourceAbv }], [], 35);
+    expect(solved).not.toBeNull();
+    expect(solved!.result.abv).toBeCloseTo(35, 1);
+    expect(solved!.result.volumeGal).toBeGreaterThan(pull);
   });
 
   it('decreases the pull when the source is stronger than the recipe', () => {

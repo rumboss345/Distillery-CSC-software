@@ -302,8 +302,13 @@ export function computeBlendFormulation(
     density?: number | null;
     brix?: number | null;
   },
+  targetAbv?: number | null,
 ) {
-  const theoretical = computeTheoreticalBlend(toSpiritInputs(spiritSources), toAdditiveInputs(ingredients));
+  const theoretical = computeTheoreticalBlend(
+    toSpiritInputs(spiritSources),
+    toAdditiveInputs(ingredients),
+    targetAbv,
+  );
   const reconciliation = reconcileMeasurements(
     {
       volumeGal: theoretical.volumeGal,
