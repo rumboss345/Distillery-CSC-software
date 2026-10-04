@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  formatBatchSizeAmount,
+  gallonsFromBatchSizeAmount,
   nearestSugarBagCount,
   scaleFactorForWholeSugarBags,
   scaleFactorFromTargetYield,
@@ -28,6 +30,13 @@ describe('blend-recipe-scale', () => {
   it('derives scale factor from target yield', () => {
     expect(scaleFactorFromTargetYield(100, 150)).toBe(1.5);
     expect(scaleFactorFromTargetYield(0, 150)).toBe(1);
+  });
+
+  it('lets a batch size be entered in liters', () => {
+    expect(formatBatchSizeAmount(0.3, 'gal')).toBe('0.3');
+    expect(formatBatchSizeAmount(0.3, 'l')).toBe('1.136');
+    expect(scaleFactorFromTargetYield(0.3, gallonsFromBatchSizeAmount(1.136, 'l'))).toBe(1);
+    expect(scaleFactorFromTargetYield(0.3, gallonsFromBatchSizeAmount(1, 'l'))).toBe(0.881);
   });
 });
 

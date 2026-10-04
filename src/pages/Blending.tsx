@@ -78,6 +78,8 @@ import {
   type SpiritSourceInput,
 } from '../lib/blend-formulation';
 import {
+  formatBatchSizeAmount,
+  gallonsFromBatchSizeAmount,
   nearestSugarBagCount,
   roundScaledAmount,
   scaleFactorForWholeSugarBags,
@@ -87,6 +89,7 @@ import {
   SUGAR_BAG_LBS,
   sugarBagScaleIssue,
   totalSugarLbs,
+  type BatchSizeUnit,
 } from '../lib/blend-recipe-scale';
 import type {
   BlendIngredientInput,
@@ -375,6 +378,7 @@ export function Blending() {
   const [selectedRecipeId, setSelectedRecipeId] = useState<number | null>(null);
   const [recipeTemplate, setRecipeTemplate] = useState<RecipeTemplate | null>(null);
   const [targetYieldInput, setTargetYieldInput] = useState('');
+  const [batchSizeUnit, setBatchSizeUnit] = useState<BatchSizeUnit>('gal');
   const [waterAdjustmentNote, setWaterAdjustmentNote] = useState<string | null>(null);
   const [abvConfirmed, setAbvConfirmed] = useState(false);
   const [worksheetPdfExporting, setWorksheetPdfExporting] = useState(false);
@@ -598,7 +602,7 @@ export function Blending() {
     setForm((prev) => ({ ...prev, scale_factor: safeFactor }));
     applyScaledRecipeAmounts(recipeTemplate, safeFactor, spiritSources);
     if (baseYieldGal > 0) {
-      setTargetYieldInput((baseYieldGal * safeFactor).toFixed(1));
+      setTargetYieldInput(formatBatchSizeAmount(baseYieldGal * safeFactor, batchSizeUnit));
     }
   };
 
@@ -662,7 +666,7 @@ export function Blending() {
       }));
     if (baseSpirits.length > 0) {
       const base = computeBlendFormulation(baseSpirits, template.ingredients);
-      setTargetYieldInput((base.theoretical.volumeGal * snappedFactor).toFixed(1));
+      setTargetYieldInput(formatBatchSizeAmount(base.theoretical.volumeGal * snappedFactor, batchSizeUnit));
     } else {
       setTargetYieldInput('');
     }
@@ -680,6 +684,7 @@ export function Blending() {
     setSelectedRecipeId(null);
     setRecipeTemplate(null);
     setTargetYieldInput('');
+    setBatchSizeUnit('gal');
     setForm({
       ...emptyProduct(),
       ...defaultAssignee(user),
@@ -840,7 +845,10 @@ export function Blending() {
             baseSpirits,
             yieldIngredients.map((ingredient) => blendIngredientFromRecord(ingredient)),
           );
-          setTargetYieldInput((base.theoretical.volumeGal * (blend.scale_factor ?? 1)).toFixed(1));
+          setTargetYieldInput(formatBatchSizeAmount(
+            base.theoretical.volumeGal * (blend.scale_factor ?? 1),
+            batchSizeUnit,
+          ));
         }
       }
     } else {
@@ -1507,7 +1515,7 @@ export function Blending() {
               <div className="blend-size-panel">
                 <p className="blend-size-title">Size this batch</p>
                 <p className="field-hint">
-                  The saved recipe is one batch size. Enter any yield and the spirit, water, sugar, and flavor scale with it.
+                  The saved recipe is one batch size. Enter any yield in gallons or liters and the spirit, water, sugar, and flavor scale with it.
                 </p>
                 <div className="measure-mode-buttons">
                   {[0.5, 1, 1.5, 2].map((factor) => (
@@ -1523,20 +1531,46 @@ export function Blending() {
                 </div>
                 <div className="wizard-lab-inputs">
                   <label>
-                    Batch size (gal)
-                    <input
-                      type="number"
-                      step={oneBagYieldGal > 0 ? Number(oneBagYieldGal.toFixed(2)) : 0.1}
-                      min="0"
-                      value={targetYieldInput}
-                      onChange={(e) => setTargetYieldInput(e.target.value)}
-                      onBlur={() => {
-                        const target = parseFloat(targetYieldInput);
-                        if (baseYieldGal > 0 && target > 0) {
-                          setBatchScale(scaleFactorFromTargetYield(baseYieldGal, target));
-                        }
-                      }}
-                    />
+                    Batch size
+                    <span className="batch-size-entry">
+                      <input
+                        type="number"
+                        data-testid="batch-size-amount"
+                        step={oneBagYieldGal > 0
+                          ? Number(batchSizeUnit === 'l'
+                            ? formatBatchSizeAmount(oneBagYieldGal, 'l')
+                            : oneBagYieldGal.toFixed(2))
+                          : 0.1}
+                        min="0"
+                        value={targetYieldInput}
+                        onChange={(e) => setTargetYieldInput(e.target.value)}
+                        onBlur={() => {
+                          const target = parseFloat(targetYieldInput);
+                          const gallons = gallonsFromBatchSizeAmount(target, batchSizeUnit);
+                          if (baseYieldGal > 0 && gallons > 0) {
+                            setBatchScale(scaleFactorFromTargetYield(baseYieldGal, gallons));
+                          }
+                        }}
+                      />
+                      <select
+                        aria-label="Batch size unit"
+                        data-testid="batch-size-unit"
+                        value={batchSizeUnit}
+                        onChange={(e) => {
+                          const unit: BatchSizeUnit = e.target.value === 'l' ? 'l' : 'gal';
+                          setBatchSizeUnit(unit);
+                          if (baseYieldGal > 0) {
+                            setTargetYieldInput(formatBatchSizeAmount(
+                              baseYieldGal * (form.scale_factor || 1),
+                              unit,
+                            ));
+                          }
+                        }}
+                      >
+                        <option value="gal">gal</option>
+                        <option value="l">L</option>
+                      </select>
+                    </span>
                   </label>
                   <label>
                     Scale factor
@@ -1580,8 +1614,14 @@ export function Blending() {
                   </div>
                 )}
                 {baseYieldGal > 0 && (
-                  <p className="field-hint">
-                    Saved recipe: {baseYieldGal.toFixed(1)} gal → this batch: {scaledYieldGal.toFixed(1)} gal
+                  <p className="field-hint" data-testid="batch-size-summary">
+                    Saved recipe: {batchSizeUnit === 'l'
+                      ? `${formatBatchSizeAmount(baseYieldGal, 'l')} L (${baseYieldGal.toFixed(3)} gal)`
+                      : `${baseYieldGal.toFixed(1)} gal`}
+                    {' → '}
+                    this batch: {batchSizeUnit === 'l'
+                      ? `${formatBatchSizeAmount(scaledYieldGal, 'l')} L (${scaledYieldGal.toFixed(3)} gal)`
+                      : `${scaledYieldGal.toFixed(1)} gal`}
                     {form.target_abv != null ? ` at ${form.target_abv}%` : ''}
                     {baseSugarLbs > 0 ? ` · ${batchSugarBags * SUGAR_BAG_LBS} lb sugar` : ''}
                   </p>
