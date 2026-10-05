@@ -44,7 +44,7 @@ export function GinBotanicalFields({
               data-testid={`gin-botanical-name-${index}`}
               value={line.name}
               onChange={(e) => update(index, { name: e.target.value })}
-              placeholder="Juniper berries"
+              placeholder="Botanical name"
             />
           </div>
           <div className="form-group">
