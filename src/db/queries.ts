@@ -31,6 +31,7 @@ import {
 } from '../lib/equipment-maintenance';
 import { equipmentCleaningStatusLabel, equipmentNeedsCleaning, equipmentStatusWhenReturningToPlanned } from '../lib/equipment-cleaning';
 import { assertEnteredAbv } from '../lib/abv-limits';
+import { roundThousandths, tankVolumeVarianceGal } from '../lib/tank-volume-variance';
 import { EQUIPMENT_TYPES, isSpiritLedgerEquipmentType, resolveEquipmentIcon } from '../lib/equipment';
 import { equipmentTypeDeleteError, equipmentTypeNameError, normalizeEquipmentTypeName } from '../lib/equipment-type';
 import { countActiveFermentations, fermenterShowsAssignedWash } from '../lib/mash-fermenter-fill';
@@ -1240,6 +1241,58 @@ export interface HoldingTankOnHand {
   notes: string;
 }
 
+export interface HoldingTankVolumeVariance {
+  id: number;
+  tank_equipment_id: number;
+  tank_name: string;
+  book_volume_gal: number;
+  book_abv: number;
+  set_volume_gal: number;
+  set_abv: number;
+  variance_gal: number;
+  recorded_at: string;
+  notes: string;
+}
+
+function recordHoldingTankVolumeVariance(input: {
+  tankEquipmentId: number;
+  bookVolumeGal: number;
+  bookAbv: number;
+  setVolumeGal: number;
+  setAbv: number;
+  recordedAt: string;
+  notes: string;
+}): void {
+  const bookVolume = roundThousandths(input.bookVolumeGal);
+  const setVolume = roundThousandths(input.setVolumeGal);
+  insertRow(
+    `INSERT INTO holding_tank_volume_variances
+      (tank_equipment_id, book_volume_gal, book_abv, set_volume_gal, set_abv, variance_gal, recorded_at, notes)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      input.tankEquipmentId,
+      bookVolume,
+      roundThousandths(input.bookAbv),
+      setVolume,
+      roundThousandths(input.setAbv),
+      tankVolumeVarianceGal(bookVolume, setVolume),
+      input.recordedAt,
+      input.notes,
+    ],
+  );
+}
+
+export function getHoldingTankVolumeVariances(): HoldingTankVolumeVariance[] {
+  return queryAll<HoldingTankVolumeVariance>(`
+    SELECT v.id, v.tank_equipment_id, e.name as tank_name,
+           v.book_volume_gal, v.book_abv, v.set_volume_gal, v.set_abv,
+           v.variance_gal, v.recorded_at, v.notes
+    FROM holding_tank_volume_variances v
+    JOIN floor_equipment e ON e.id = v.tank_equipment_id
+    ORDER BY v.recorded_at DESC, v.id DESC
+  `);
+}
+
 export function getHoldingTankOnHand(tankId: number): HoldingTankOnHand | null {
   return queryOne<HoldingTankOnHand>(
     `SELECT id, tank_equipment_id, measured_volume_gal, measured_abv, recorded_at, notes
@@ -1271,6 +1324,15 @@ export function saveHoldingTankOnHand(input: {
   const measuredVolume = Math.round(input.volumeGal * 1000) / 1000;
   const measuredAbv = Math.round(input.abv * 1000) / 1000;
   const production = computeHoldingTankContents(input.tankEquipmentId);
+  recordHoldingTankVolumeVariance({
+    tankEquipmentId: input.tankEquipmentId,
+    bookVolumeGal: production.volume_gal,
+    bookAbv: production.abv,
+    setVolumeGal: measuredVolume,
+    setAbv: measuredAbv,
+    recordedAt: input.recordedAt,
+    notes: input.notes?.trim() ?? '',
+  });
   const adjustmentVolume = Math.round((measuredVolume - production.production_volume_gal) * 1000) / 1000;
   const adjustmentAlcohol = Math.round((measuredVolume * measuredAbv / 100 - production.production_gpa) * 1000) / 1000;
   const notes = input.notes?.trim() ?? '';
@@ -1301,6 +1363,25 @@ export function saveHoldingTankOnHand(input: {
 }
 
 export function clearHoldingTankOnHand(tankId: number): void {
+  const existing = queryOne<{ notes: string }>(
+    'SELECT notes FROM holding_tank_opening_balances WHERE tank_equipment_id = ?',
+    [tankId],
+  );
+  if (!existing) return;
+  const ledger = computeHoldingTankContents(tankId);
+  const returnedVolume = Math.max(0, ledger.production_volume_gal);
+  const returnedGpa = Math.max(0, ledger.production_gpa);
+  const returnedAbv = returnedVolume > 0 ? (returnedGpa / returnedVolume) * 100 : 0;
+  const priorNotes = existing.notes.trim();
+  recordHoldingTankVolumeVariance({
+    tankEquipmentId: tankId,
+    bookVolumeGal: ledger.volume_gal,
+    bookAbv: ledger.abv,
+    setVolumeGal: returnedVolume,
+    setAbv: returnedAbv,
+    recordedAt: localIsoDate(),
+    notes: priorNotes ? `On-hand reading removed. ${priorNotes}` : 'On-hand reading removed',
+  });
   runQuery('DELETE FROM holding_tank_opening_balances WHERE tank_equipment_id = ?', [tankId]);
   syncHoldingTankStatuses();
 }

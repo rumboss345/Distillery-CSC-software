@@ -640,6 +640,7 @@ function runMigrations(): void {
   migrateBlendRecipeVersions();
   clearAllBlendRecipesOnce();
   migrateStillageDiscardTransfers();
+  migrateHoldingTankVolumeVariances();
   db.run(`
     UPDATE floor_equipment
     SET equipment_type = 'stillage_tank'
@@ -650,6 +651,26 @@ function runMigrations(): void {
 }
 
 /** Stillage leaving a stillage tank can be discarded, so the destination tank is optional. */
+function migrateHoldingTankVolumeVariances(): void {
+  if (!db) return;
+  db.run(`
+    CREATE TABLE IF NOT EXISTS holding_tank_volume_variances (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tank_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
+      book_volume_gal REAL NOT NULL,
+      book_abv REAL NOT NULL,
+      set_volume_gal REAL NOT NULL,
+      set_abv REAL NOT NULL,
+      variance_gal REAL NOT NULL,
+      recorded_at TEXT NOT NULL,
+      notes TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  db.run('CREATE INDEX IF NOT EXISTS idx_tank_volume_variances_tank ON holding_tank_volume_variances(tank_equipment_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_tank_volume_variances_date ON holding_tank_volume_variances(recorded_at)');
+}
+
 function migrateStillageDiscardTransfers(): void {
   if (!db) return;
   const dest = queryOne<{ is_required: number }>(

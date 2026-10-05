@@ -5,7 +5,8 @@ import { HoldingTankIntakeHistory } from '../HoldingTankIntakeHistory';
 import { Modal } from '../Modal';
 import { StatusBadge } from '../StatusBadge';
 import { AssigneeSelect } from '../AssigneeSelect';
-import { holdingTankIntakeKey, markEquipmentCleaned } from '../../db/queries';
+import { getHoldingTankVolumeVariances, holdingTankIntakeKey, markEquipmentCleaned } from '../../db/queries';
+import { formatTankVolumeVariance, tankVolumeMatchesRecord } from '../../lib/tank-volume-variance';
 import { STATUS_LABELS, formatGal } from './equipment-visual-shared';
 import { classifyProcessLiquid } from './process-floor-label';
 import type { EquipmentVisualData } from './equipment-visual.types';
@@ -76,6 +77,12 @@ export function ProcessEquipmentDetailPanel({
   const statusLabel = STATUS_LABELS[visual.status] ?? equipment.status.replace('_', ' ');
   const dirty = equipmentNeedsCleaning(equipment);
   const hasLiquid = visual.currentVolumeGal > 0;
+  const isVolumeTank = equipment.equipment_type === 'holding_tank'
+    || equipment.equipment_type === 'stillage_tank'
+    || equipment.equipment_type === 'collection_vessel';
+  const latestVolumeVariance = isVolumeTank
+    ? getHoldingTankVolumeVariances().find((row) => row.tank_equipment_id === equipment.id) ?? null
+    : null;
   const isTransferVessel = equipment.equipment_type === 'holding_tank'
     || equipment.equipment_type === 'stillage_tank'
     || equipment.equipment_type === 'collection_vessel';
@@ -157,6 +164,18 @@ export function ProcessEquipmentDetailPanel({
           <>
             <dt>Proof</dt>
             <dd>{visual.abv.toFixed(1)}% ABV</dd>
+          </>
+        )}
+
+        {latestVolumeVariance && !tankVolumeMatchesRecord(latestVolumeVariance.variance_gal) && (
+          <>
+            <dt>Volume variance</dt>
+            <dd>
+              {formatTankVolumeVariance(latestVolumeVariance.variance_gal)}
+              {' · '}
+              {formatRecordedAt(latestVolumeVariance.recorded_at)}
+              {latestVolumeVariance.notes ? ` · ${latestVolumeVariance.notes}` : ''}
+            </dd>
           </>
         )}
 

@@ -351,6 +351,22 @@ CREATE TABLE IF NOT EXISTS holding_tank_opening_balances (
 
 CREATE INDEX IF NOT EXISTS idx_tank_opening_tank ON holding_tank_opening_balances(tank_equipment_id);
 
+CREATE TABLE IF NOT EXISTS holding_tank_volume_variances (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tank_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
+  book_volume_gal REAL NOT NULL,
+  book_abv REAL NOT NULL,
+  set_volume_gal REAL NOT NULL,
+  set_abv REAL NOT NULL,
+  variance_gal REAL NOT NULL,
+  recorded_at TEXT NOT NULL,
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_tank_volume_variances_tank ON holding_tank_volume_variances(tank_equipment_id);
+CREATE INDEX IF NOT EXISTS idx_tank_volume_variances_date ON holding_tank_volume_variances(recorded_at);
+
 CREATE INDEX IF NOT EXISTS idx_fermentation_mash ON fermentation_logs(mash_batch_id);
 CREATE INDEX IF NOT EXISTS idx_fermentation_fermenter ON fermentation_logs(floor_equipment_id);
 CREATE INDEX IF NOT EXISTS idx_cuts_run ON distillation_cuts(distillation_run_id);

@@ -1,5 +1,6 @@
 import { queryAll } from '../../db/database';
-import { getBottlingRuns, getEquipmentVolumeReport } from '../../db/queries';
+import { getBottlingRuns, getEquipmentVolumeReport, getHoldingTankVolumeVariances } from '../../db/queries';
+import { formatTankVolumeVariance } from '../tank-volume-variance';
 import { totalVolumeGal } from '../bottling-lines';
 import { buildBlendReportRows } from './blend-rows';
 import { compareStoredDatesDesc } from '../date-input';
@@ -78,6 +79,20 @@ export function buildProductionExceptions(range: ReportDateRange): ProductionExc
       occurred_at: r.run_date,
       reference: r.batch_number,
       message: `Completed run on ${r.still_name} has no hearts volume recorded.`,
+    });
+  }
+
+  for (const variance of getHoldingTankVolumeVariances()) {
+    if (!eventInReportRange(variance.recorded_at, range)) continue;
+    if (Math.abs(variance.variance_gal) < VARIANCE_GAL_THRESHOLD) continue;
+    const note = variance.notes.trim();
+    rows.push({
+      row_key: `tank_var:${variance.id}`,
+      severity: 'warning',
+      category: 'Tank volume',
+      occurred_at: variance.recorded_at,
+      reference: variance.tank_name,
+      message: `Set from ${variance.book_volume_gal.toFixed(2)} gal to ${variance.set_volume_gal.toFixed(2)} gal (${formatTankVolumeVariance(variance.variance_gal)})${note ? `. ${note}` : '.'}`,
     });
   }
 

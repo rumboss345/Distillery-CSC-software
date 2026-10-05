@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { DatePicker } from '../components/DatePicker';
 import { AbvVolumeTemperatureFields } from '../components/AbvVolumeTemperatureFields';
@@ -20,6 +20,7 @@ import {
   getHoldingTankIntakeHistory,
   getHoldingTankOnHand,
   getHoldingTankTransfers,
+  getHoldingTankVolumeVariances,
   getSpiritTransferVessels,
   saveFermenterWashTransfer,
   saveHoldingTankOnHand,
@@ -34,6 +35,7 @@ import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-p
 import { formatDateDisplay } from '../lib/date-input';
 import { localIsoDate } from '../lib/planned-event-date';
 import { latestCompleted } from '../lib/recent-completed';
+import { formatTankVolumeVariance, tankVolumeMatchesRecord, tankVolumeVarianceGal } from '../lib/tank-volume-variance';
 import { DISCARD_DESTINATION, fermenterTransferError } from '../lib/fermenter-transfer';
 const destAcceptsTransferFrom = (sourceId: number, destId: number): boolean => {
   const sourceIsStillage = sourceId > 0 && transferSourceIsStillage(sourceId);
@@ -91,6 +93,18 @@ export function TankTransfer() {
       ...getHoldingTankContents(tank.id),
     }));
   const tankTransfers = getHoldingTankTransfers();
+  const volumeVariances = getHoldingTankVolumeVariances();
+  const recentVariances = latestCompleted(
+    volumeVariances,
+    (row) => row.recorded_at,
+    (row) => row.id,
+  );
+  const latestVarianceByTank = new Map<number, (typeof volumeVariances)[number]>();
+  for (const row of volumeVariances) {
+    if (!latestVarianceByTank.has(row.tank_equipment_id)) {
+      latestVarianceByTank.set(row.tank_equipment_id, row);
+    }
+  }
   const recentTransfers = latestCompleted(
     tankTransfers,
     (transfer) => transfer.transfer_date,
@@ -117,6 +131,11 @@ export function TankTransfer() {
 
   void key;
 
+  const onHandBook = onHandTankId != null ? getHoldingTankContents(onHandTankId) : null;
+  const onHandEnteredGal = onHandForm.volume_gal.trim() === '' ? null : parseFloat(onHandForm.volume_gal);
+  const onHandVariance = onHandBook != null && onHandEnteredGal != null && Number.isFinite(onHandEnteredGal)
+    ? tankVolumeVarianceGal(onHandBook.volume_gal, onHandEnteredGal)
+    : null;
   const sourceTanksForTransfer = tanksWithContents.filter((t) => t.volume_gal > 0);
   const transferSourceInTankLine = (t: { id: number; volume_gal: number; abv: number }) => {
     const currentLabel = getHoldingTankIntakeHistory(t.id, 1)[0]?.summary;
@@ -406,7 +425,7 @@ export function TankTransfer() {
 
   const handleClearOnHand = () => {
     if (!isAdmin || !onHandTankId) return;
-    if (!confirm('Remove the on-hand reading? The tank goes back to only what production records add and remove.')) {
+    if (!confirm('Remove the on-hand reading? The tank goes back to only what production records add and remove. That change is saved as a variance.')) {
       return;
     }
     try {
@@ -549,7 +568,7 @@ export function TankTransfer() {
         <h4>Tanks</h4>
         <p className="field-hint" style={{ marginTop: '-0.5rem' }}>
           {isAdmin
-            ? 'Starting today, choose Set volume and enter the gallons and ABV already in each tank. After that, record only new transfers and production — those gallons are already counted.'
+            ? 'Set volume to the gallons and ABV actually in the tank. If a transfer or a recording error left the tank off from the record, the difference is saved as a variance. Later transfers and production add to or take from the volume you set.'
             : 'Select a tank with spirit to transfer it. An administrator sets the gallons already in a tank.'}
         </p>
         {tanksWithContents.length === 0 ? (
@@ -571,6 +590,7 @@ export function TankTransfer() {
               <tbody>
                 {tanksWithContents.map((tank) => {
                   const canTransfer = tank.volume_gal > 0.001;
+                  const latestVariance = latestVarianceByTank.get(tank.id);
                   return (
                     <tr
                       key={tank.id}
@@ -579,7 +599,14 @@ export function TankTransfer() {
                       title={canTransfer ? `Transfer from ${tank.name}` : undefined}
                     >
                       <td><strong>{tank.name}</strong></td>
-                      <td>{canTransfer ? `${tank.volume_gal.toFixed(1)} gal` : '—'}</td>
+                      <td>
+                        {canTransfer ? `${tank.volume_gal.toFixed(1)} gal` : '—'}
+                        {latestVariance && !tankVolumeMatchesRecord(latestVariance.variance_gal) && (
+                          <div className="field-hint" style={{ margin: 0 }}>
+                            Variance {formatTankVolumeVariance(latestVariance.variance_gal)}
+                          </div>
+                        )}
+                      </td>
                       <td>{canTransfer ? `${tank.abv.toFixed(1)}%` : '—'}</td>
                       <td>{tank.capacity_gal > 0 ? `${tank.capacity_gal} gal` : '—'}</td>
                       <td>{tankContentsSummary(tank.id, tank.volume_gal)}</td>
@@ -619,6 +646,50 @@ export function TankTransfer() {
                     </tr>
                   );
                 })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="detail-panel">
+        <h4>Volume variances</h4>
+        <p className="field-hint" style={{ marginTop: '-0.5rem' }}>
+          Each time a tank volume is set, the difference from the gallons already on the record is kept here.
+          A negative variance means the tank was short. A positive variance means it held more than the record.
+        </p>
+        {recentVariances.hiddenCount > 0 && (
+          <p className="field-hint" style={{ margin: '0.35rem 0 0.75rem' }}>
+            Showing the last {recentVariances.shown.length}. Differences of 0.25 gal or more also appear on{' '}
+            <Link to="/reports/exceptions">Exceptions</Link>.
+          </p>
+        )}
+        {recentVariances.total === 0 ? (
+          <p style={{ color: 'var(--text-muted)' }}>No volume variances yet.</p>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Tank</th>
+                  <th>On record</th>
+                  <th>Set to</th>
+                  <th>Variance</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentVariances.shown.map((row) => (
+                  <tr key={row.id}>
+                    <td>{formatDateDisplay(row.recorded_at)}</td>
+                    <td>{row.tank_name}</td>
+                    <td>{row.book_volume_gal.toFixed(1)} gal @ {row.book_abv.toFixed(1)}%</td>
+                    <td>{row.set_volume_gal.toFixed(1)} gal @ {row.set_abv.toFixed(1)}%</td>
+                    <td>{formatTankVolumeVariance(row.variance_gal)}</td>
+                    <td>{row.notes || '—'}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -882,8 +953,19 @@ export function TankTransfer() {
         <Modal title="Set tank volume" onClose={() => setOnHandTankId(null)}>
           <p className="field-hint" style={{ marginTop: 0 }}>
             Enter what is in {tanksWithContents.find((tank) => tank.id === onHandTankId)?.name} today.
-            This does not create a wash or distillation. Later transfers, blends, charges, and bottling
-            add to or take from this amount.
+            This sets the gallons already in the tank.
+            {onHandBook && (
+              <>
+                {' '}Records show {onHandBook.volume_gal.toFixed(1)} gal
+                {onHandBook.volume_gal > 0.001 ? ` at ${onHandBook.abv.toFixed(1)}% ABV` : ''}.
+                {' '}
+                {onHandVariance == null
+                  ? 'A difference from that amount is saved as a variance.'
+                  : tankVolumeMatchesRecord(onHandVariance)
+                    ? 'This matches the gallons on the record.'
+                    : `Saving records a variance of ${formatTankVolumeVariance(onHandVariance)}.`}
+              </>
+            )}
           </p>
           <div className="form-grid">
             <div className="form-group">
@@ -923,7 +1005,7 @@ export function TankTransfer() {
                 id="on-hand-notes"
                 value={onHandForm.notes}
                 onChange={(e) => setOnHandForm({ ...onHandForm, notes: e.target.value })}
-                placeholder="On hand when tracking started"
+                placeholder="Transfer was short, or an earlier entry was wrong"
               />
             </div>
           </div>
