@@ -13,14 +13,14 @@ export function emptyGinBotanical(): GinBotanicalInput {
 }
 
 export function botanicalHasMeasure(line: GinBotanicalInput): boolean {
-  return line.name.trim().length > 0 && (line.amount > 0 || line.weight > 0);
+  return line.name.trim().length > 0 && line.weight > 0;
 }
 
 export function activeGinBotanicals(lines: GinBotanicalInput[]): GinBotanicalInput[] {
   return lines.filter(botanicalHasMeasure).map((line) => ({
     name: line.name.trim(),
-    amount: line.amount > 0 ? line.amount : 0,
-    weight: line.weight > 0 ? line.weight : 0,
+    amount: 0,
+    weight: line.weight,
     weight_unit: normalizeBotanicalWeightUnit(line.weight_unit),
   }));
 }
@@ -31,10 +31,9 @@ export function botanicalsFromRecipe(lines: GinBotanicalInput[]): GinBotanicalIn
 }
 
 export function formatGinBotanicalLine(line: GinBotanicalInput): string {
-  const parts = [line.name.trim()];
-  if (line.amount > 0) parts.push(`amount ${line.amount}`);
-  if (line.weight > 0) parts.push(`${line.weight} ${nutrientUnitLabel(line.weight_unit)}`);
-  return parts.filter(Boolean).join(' · ');
+  const name = line.name.trim();
+  if (!(line.weight > 0)) return name;
+  return `${name} · ${line.weight} ${nutrientUnitLabel(line.weight_unit)}`;
 }
 
 export function formatGinBotanicalsSummary(lines: GinBotanicalInput[]): string {
