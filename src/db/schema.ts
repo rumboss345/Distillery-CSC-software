@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS inventory_items (
   quantity REAL NOT NULL DEFAULT 0,
   reorder_level REAL NOT NULL DEFAULT 0,
   notes TEXT NOT NULL DEFAULT '',
+  package_size_ml REAL,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );

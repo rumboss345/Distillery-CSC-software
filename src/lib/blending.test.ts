@@ -169,9 +169,9 @@ describe('spirit measurement', () => {
 
 describe('blend recipe inventory helpers', () => {
   const items = [
-    { id: 1, name: 'Raw Cane Sugar', category: 'sugar', unit: 'lbs', quantity: 10, reorder_level: 1, notes: '', created_at: '', updated_at: '' },
-    { id: 2, name: '750ml Bottles', category: 'packaging', unit: 'each', quantity: 100, reorder_level: 10, notes: '', created_at: '', updated_at: '' },
-    { id: 3, name: 'Vanilla', category: 'flavoring', unit: 'ml', quantity: 5000, reorder_level: 500, notes: '', created_at: '', updated_at: '' },
+    { id: 1, name: 'Raw Cane Sugar', category: 'sugar', unit: 'lbs', quantity: 10, reorder_level: 1, notes: '', package_size_ml: null, created_at: '', updated_at: '' },
+    { id: 2, name: '750ml Bottles', category: 'packaging', unit: 'each', quantity: 100, reorder_level: 10, notes: '', package_size_ml: 750, created_at: '', updated_at: '' },
+    { id: 3, name: 'Vanilla', category: 'flavoring', unit: 'ml', quantity: 5000, reorder_level: 500, notes: '', package_size_ml: null, created_at: '', updated_at: '' },
   ];
 
   it('filters inventory by additive type and excludes water', () => {

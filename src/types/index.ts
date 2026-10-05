@@ -123,6 +123,8 @@ export interface InventoryItem {
   quantity: number;
   reorder_level: number;
   notes: string;
+  /** Bottle or package size in milliliters. Set for packaging items. */
+  package_size_ml: number | null;
   created_at: string;
   updated_at: string;
 }

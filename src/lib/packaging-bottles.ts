@@ -26,6 +26,20 @@ export interface PackagingBottleOption {
   sizeMl: number | null;
 }
 
+export interface PackagingSizeSource {
+  name: string;
+  notes?: string | null;
+  package_size_ml?: number | null;
+}
+
+/** Saved bottle or package size, then a size written in the notes or name. */
+export function packagingItemSizeMl(item: PackagingSizeSource): number | null {
+  if (item.package_size_ml != null && item.package_size_ml > 0) {
+    return Math.round(item.package_size_ml);
+  }
+  return packagingSizeMlFromText(item.notes ?? '') ?? packagingSizeMlFromText(item.name);
+}
+
 /** Milliliters from a bottle name or note such as "500 ml bottle" or "1L Flask". */
 export function packagingSizeMlFromText(text: string): number | null {
   const ml = text.match(/(\d+(?:\.\d+)?)\s*ml\b/i);
@@ -46,9 +60,23 @@ export function packagingSizeMlFromText(text: string): number | null {
  * item that is not already on that list.
  */
 export function packagingBottleOptions(
-  inventory: { name: string; notes?: string | null }[],
+  inventory: PackagingSizeSource[],
 ): PackagingBottleOption[] {
+  const savedByName = new Map<string, PackagingSizeSource>();
+  for (const item of inventory) {
+    const name = item.name.trim();
+    if (!name) continue;
+    savedByName.set(name.toLowerCase(), item);
+  }
   const seen = new Set(PACKAGING_BOTTLES.map((bottle) => bottle.name.toLowerCase()));
+  const catalog = PACKAGING_BOTTLES.map((bottle) => {
+    const saved = savedByName.get(bottle.name.toLowerCase());
+    const explicit = saved?.package_size_ml;
+    return {
+      name: bottle.name,
+      sizeMl: explicit != null && explicit > 0 ? Math.round(explicit) : bottle.sizeMl,
+    };
+  });
   const extras: PackagingBottleOption[] = [];
   for (const item of inventory) {
     const name = item.name.trim();
@@ -56,14 +84,8 @@ export function packagingBottleOptions(
     const key = name.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
-    extras.push({
-      name,
-      sizeMl: packagingSizeMlFromText(item.notes ?? '') ?? packagingSizeMlFromText(name),
-    });
+    extras.push({ name, sizeMl: packagingItemSizeMl(item) });
   }
   extras.sort((a, b) => a.name.localeCompare(b.name));
-  return [
-    ...PACKAGING_BOTTLES.map((bottle) => ({ name: bottle.name, sizeMl: bottle.sizeMl })),
-    ...extras,
-  ];
+  return [...catalog, ...extras];
 }
