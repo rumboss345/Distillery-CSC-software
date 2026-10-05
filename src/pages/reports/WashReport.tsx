@@ -1,5 +1,6 @@
 import { formatDateDisplay } from '../../lib/date-input';
 import { buildWashHistoryRows } from '../../lib/reporting/wash-rows';
+import { washStatusLabel } from '../../lib/wash-stage';
 import { useReportContext } from './report-context';
 import { ReportTableShell } from './ReportTableShell';
 
@@ -16,20 +17,20 @@ export function WashReport() {
     row.sugar_lbs,
     row.volume_gal,
     row.start_date,
-    row.status,
+    washStatusLabel(row.status),
     row.operator,
   ]);
 
   return (
     <ReportTableShell
       title="Wash history"
-      description="Discarded washes that never started fermentation. The Wash page keeps the latest 10. Use the period above to look up older ones."
+      description="Every wash cook, including batches that moved on to fermentation. The Wash page keeps active washes and the latest 10 completed or discarded batches. Use the period above to look up older ones."
       periodLabel={range.label}
       csvFilename={`wash-${range.from ?? 'all'}`}
       csvHeaders={csvHeaders}
       csvRows={csvRows}
       isEmpty={rows.length === 0}
-      emptyMessage="No discarded washes in this period."
+      emptyMessage="No wash batches in this period."
     >
       <table>
         <thead>
@@ -51,7 +52,7 @@ export function WashReport() {
               <td>{row.sugar_lbs} lbs</td>
               <td>{row.volume_gal} gal</td>
               <td>{formatDateDisplay(row.start_date)}</td>
-              <td>{row.status}</td>
+              <td>{washStatusLabel(row.status)}</td>
               <td>{row.operator}</td>
             </tr>
           ))}

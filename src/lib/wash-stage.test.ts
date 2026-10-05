@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mashStatusFromFermentations, washRecordKind, washRecordPath } from './wash-stage';
+import { mashStatusFromFermentations, washPageListsBatch, washRecordKind, washRecordPath, washStatusLabel } from './wash-stage';
 
 describe('washRecordKind', () => {
   it('keeps planned and washing batches on the wash page', () => {
@@ -21,6 +21,16 @@ describe('washRecordKind', () => {
     expect(washRecordKind('discarded', { hasLogs: true, hasAssignments: false })).toBe('fermentation');
     expect(washRecordPath('fermenting')).toBe('/fermentation');
     expect(washRecordPath('complete')).toBe('/fermentation');
+  });
+
+  it('keeps fermenting and finished washes on the wash page as records', () => {
+    expect(washPageListsBatch('planned', { hasLogs: false, hasAssignments: false })).toBe(true);
+    expect(washPageListsBatch('mashing', { hasLogs: false, hasAssignments: false })).toBe(true);
+    expect(washPageListsBatch('fermenting', { hasLogs: true, hasAssignments: true })).toBe(true);
+    expect(washPageListsBatch('complete', { hasLogs: true, hasAssignments: false })).toBe(true);
+    expect(washPageListsBatch('discarded', { hasLogs: false, hasAssignments: false })).toBe(true);
+    expect(washPageListsBatch('discarded', { hasLogs: true, hasAssignments: false })).toBe(false);
+    expect(washStatusLabel('mashing')).toBe('washing');
   });
 });
 

@@ -37,10 +37,11 @@ import { formatDateDisplay } from '../lib/date-input';
 import { equipmentUnavailableForProduction } from '../lib/equipment-maintenance';
 import { eventDateWhenLeavingPlanned, localIsoDate } from '../lib/planned-event-date';
 import { latestCompleted } from '../lib/recent-completed';
-import { WASH_PAGE_STATUSES, washRecordKind } from '../lib/wash-stage';
+import { WASH_PAGE_STATUSES, washPageListsBatch } from '../lib/wash-stage';
 import type { MashBatch, MashStatus } from '../types';
 
 const WASH_STATUSES: MashStatus[] = WASH_PAGE_STATUSES;
+const WASH_LIST_STATUSES: MashStatus[] = ['planned', 'mashing', 'fermenting', 'complete', 'discarded'];
 
 const STATUS_LABELS: Record<MashStatus, string> = {
   planned: 'planned',
@@ -189,22 +190,22 @@ export function MashFermentation() {
     () => new Set(allLogSources.map((source) => source.mash_batch_id)),
     [allLogSources],
   );
-  const washBatches = batches.filter((batch) => washRecordKind(batch.status, {
+  const washBatches = batches.filter((batch) => washPageListsBatch(batch.status, {
     hasLogs: logBatchIds.has(batch.id),
     hasAssignments: assignmentBatchIds.has(batch.id),
-  }) === 'wash');
+  }));
 
   const batchesByStatus = useMemo(() => {
     const byStatus = Object.fromEntries(
-      WASH_STATUSES.map((status) => [status, [] as MashBatch[]]),
+      WASH_LIST_STATUSES.map((status) => [status, [] as MashBatch[]]),
     ) as Record<MashStatus, MashBatch[]>;
     for (const batch of washBatches) {
       if (byStatus[batch.status]) byStatus[batch.status].push(batch);
     }
-    return WASH_STATUSES
+    return WASH_LIST_STATUSES
       .map((status) => {
         const matching = byStatus[status];
-        if (status !== 'discarded') {
+        if (status !== 'complete' && status !== 'discarded') {
           return { status, items: matching, hiddenCount: 0 };
         }
         const recent = latestCompleted(matching, (batch) => batch.start_date, (batch) => batch.id);
@@ -245,7 +246,7 @@ export function MashFermentation() {
     <div>
       <div className="page-header">
         <h2>Wash</h2>
-        <p>Sugar, batch size, and the wash tank. Fermentations are recorded separately.</p>
+        <p>Sugar, batch size, and the wash tank. Washes stay here after fermentation starts. Fermenter logs are recorded separately.</p>
         <div className="page-actions">
           <button className="btn btn-primary" onClick={() => openNew()}>+ New Wash Batch</button>
         </div>
@@ -256,7 +257,7 @@ export function MashFermentation() {
           <p>
             {batches.length === 0
               ? 'No wash batches recorded yet.'
-              : 'No washes are waiting. Fermentations are on the Fermentation page.'}
+              : 'No wash records yet. Discarded fermentations stay on the Fermentation page.'}
           </p>
           <button className="btn btn-primary" onClick={() => openNew()} style={{ marginTop: '1rem' }}>
             Create your first batch
@@ -275,6 +276,12 @@ export function MashFermentation() {
                   {(items.length + hiddenCount) === 1 ? 'batch' : 'batches'}
                 </span>
               </header>
+              {(status === 'fermenting' || status === 'complete') && (
+                <p className="field-hint">Kept as a wash record. Fermenter logs are on the Fermentation page.</p>
+              )}
+              {status === 'complete' && (
+                <RecentCompletedNote hiddenCount={hiddenCount} to="/reports/wash" label="completed washes" />
+              )}
               {status === 'discarded' && (
                 <RecentCompletedNote hiddenCount={hiddenCount} to="/reports/wash" label="discarded batches" />
               )}
@@ -306,12 +313,21 @@ export function MashFermentation() {
                               Ferment
                             </Link>
                           )}
-                          <button className="btn btn-sm btn-ghost" onClick={() => openEdit(b)}>
-                            Edit
-                          </button>
-                          <button className="btn btn-sm btn-ghost" onClick={() => handleDelete(b)}>
-                            Delete
-                          </button>
+                          {(b.status === 'fermenting' || b.status === 'complete') && (
+                            <Link className="btn btn-sm btn-secondary" to="/fermentation">
+                              Fermentation
+                            </Link>
+                          )}
+                          {(b.status === 'planned' || b.status === 'mashing' || b.status === 'discarded') && (
+                            <>
+                              <button className="btn btn-sm btn-ghost" onClick={() => openEdit(b)}>
+                                Edit
+                              </button>
+                              <button className="btn btn-sm btn-ghost" onClick={() => handleDelete(b)}>
+                                Delete
+                              </button>
+                            </>
+                          )}
                         </td>
                       </tr>
                     ))}
