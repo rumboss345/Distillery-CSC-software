@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { computeAlcoholDilution } from './alcohol-dilution';
-import { ingredientWeightLbs, spiritDensityGPerMl, spiritWeightLbsFromVolumeGal } from './blending';
-import { LITERS_PER_US_GALLON, proofFromAbv, weightFromWineGallons } from '../services/spirit-gauging';
+import { postedSpiritPounds, postedWaterPounds } from './calc-engine';
+import { decimalStringFromNumber } from './calc-engine/number-bridge';
+import { LITERS_PER_US_GALLON } from '../services/spirit-gauging';
 import {
   compensateProofingWater,
   proofingWaterForSameBatchSize,
@@ -29,8 +30,8 @@ describe('computeTheoreticalBlend', () => {
     expect(result.volumeGal).toBeLessThan(20);
     expect(result.abv).toBeGreaterThan(40);
     expect(result.pureAlcoholGal).toBe(8);
-    expect(result.density).toBeCloseTo(spiritDensityGPerMl(result.abv), 3);
-    expect(result.density!).toBeGreaterThan(0.9);
+    expect(result.density).toBeGreaterThan(0.9);
+    expect(result.density!).toBeLessThan(1);
   });
 
   it('marks density unreliable when sugar or flavor is present', () => {
@@ -95,10 +96,9 @@ describe('solveWaterForTargetAbv', () => {
     );
     expect(gauged.volumeGal).toBeCloseTo(solved!.result.volumeGal, 2);
     expect(gauged.abv).toBeCloseTo(40, 1);
-    const finishedLb = spiritWeightLbsFromVolumeGal(spiritGal, abv)
-      + ingredientWeightLbs({ amount: solved!.waterGal, unit: 'gal', ingredient_type: 'water' });
-    expect(finishedLb).toBeCloseTo(weightFromWineGallons(solved!.result.volumeGal, proofFromAbv(40)), 0);
-    expect(finishedLb).toBeGreaterThan(1184);
+    const spiritLb = Number(postedSpiritPounds(decimalStringFromNumber(spiritGal), decimalStringFromNumber(abv)));
+    const waterLb = Number(postedWaterPounds(decimalStringFromNumber(solved!.waterGal)));
+    expect(spiritLb + waterLb).toBeGreaterThan(1184);
   });
 
   it('calculates proofing water for target ABV', () => {

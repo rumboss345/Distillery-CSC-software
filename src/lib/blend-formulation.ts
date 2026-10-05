@@ -6,6 +6,8 @@ import {
   spiritDensityGPerMl,
   toLbs,
 } from './blending';
+import { decimalStringFromNumber } from './calc-engine/number-bridge';
+import { postProofing, previewProofing, type ProofingRequest } from './calc-engine/proofing';
 import { designFormulation, gaugePouredBlend, type FormulationComponent } from './formulation-engine';
 import type { BlendIngredientType } from '../types';
 
@@ -134,6 +136,71 @@ function toFormulationComponents(
   return components;
 }
 
+function waterGallons(additives: AdditiveInput[]): number {
+  return additives.reduce((sum, additive) => {
+    if (additive.ingredientType !== 'water' || !(additive.amount > 0)) return sum;
+    return sum + ingredientVolumeGal({ ...additive, ingredient_type: additive.ingredientType });
+  }, 0);
+}
+
+function spiritCharges(spirits: SpiritSourceInput[]) {
+  return spirits
+    .filter((spirit) => spirit.volumeGal > 0 && spirit.abv > 0)
+    .map((spirit) => ({
+      quantity: decimalStringFromNumber(spirit.volumeGal),
+      unit: 'gal' as const,
+      abv: decimalStringFromNumber(spirit.abv),
+    }));
+}
+
+/**
+ * Table 6 proofing record for a straight spirit blend.
+ * Sweetened or flavored blends are not this calculation.
+ * Preview and post do not write inventory.
+ */
+export function proofingRecordForBlend(
+  spirits: SpiritSourceInput[],
+  additives: AdditiveInput[],
+  targetAbv: number | null,
+  mode: 'preview' | 'post' = 'preview',
+  context?: { sourceLot?: string | null; batchId?: string | null; trackProofingWater?: boolean },
+): { applies: false } | { applies: true; ok: boolean; snapshot: string; message: string | null } {
+  if (hasDissolvedSolids(additives)) return { applies: false };
+  const charges = spiritCharges(spirits);
+  if (charges.length === 0) return { applies: false };
+  const waterGal = waterGallons(additives);
+  const hasTarget = targetAbv != null && targetAbv > 0;
+  if (!(waterGal > 0) && !hasTarget) return { applies: false };
+  const request: ProofingRequest = {
+    kind: 'spirit-plus-water',
+    spirits: charges,
+    waterQuantity: decimalStringFromNumber(waterGal),
+    waterUnit: 'gal',
+    referenceTemperatureF: '60',
+    ...(hasTarget ? { targetAbv: decimalStringFromNumber(targetAbv as number) } : {}),
+  };
+  const result = mode === 'post'
+    ? postProofing(request, {
+      sourceLot: context?.sourceLot ?? null,
+      batchId: context?.batchId ?? null,
+      trackProofingWater: context?.trackProofingWater ?? false,
+    })
+    : previewProofing(request);
+  if (!result.ok) {
+    const message = 'warnings' in result && result.warnings.length > 0
+      ? result.warnings.join(' ')
+      : 'Proofing validation failed.';
+    const checks = 'checks' in result ? result.checks.filter((check) => !check.passed) : [];
+    return {
+      applies: true,
+      ok: false,
+      snapshot: result.snapshot,
+      message: checks.length > 0 ? checks.map((check) => check.detail).join(' ') : message,
+    };
+  }
+  return { applies: true, ok: true, snapshot: result.snapshot, message: null };
+}
+
 /** Pure theoretical blend — never touches inventory. Finished gallons are gauged, not poured. */
 export function computeTheoreticalBlend(
   spirits: SpiritSourceInput[],
@@ -149,16 +216,36 @@ export function computeTheoreticalBlend(
     0,
   );
   const pureAlcoholGal = spiritAlcoholGal + additiveAlcoholGal;
-  const gauged = gaugePouredBlend(toFormulationComponents(spirits, additives), targetAbv);
-  const volumeGal = gauged?.volumeGal ?? 0;
-  const abv = gauged?.abv ?? 0;
   const sugarOrFlavor = hasDissolvedSolids(additives);
+  let volumeGal = 0;
+  let abv = 0;
+  let density: number | null = null;
+  if (!sugarOrFlavor) {
+    const charges = spiritCharges(spirits);
+    if (charges.length > 0) {
+      const gaugedProof = previewProofing({
+        kind: 'spirit-plus-water',
+        spirits: charges,
+        waterQuantity: decimalStringFromNumber(waterGallons(additives)),
+        waterUnit: 'gal',
+        referenceTemperatureF: '60',
+      });
+      if (gaugedProof.ok && 'finishedVolumeGal' in gaugedProof) {
+        volumeGal = Number(gaugedProof.finishedVolumeGal);
+        abv = Number(gaugedProof.finalAbv);
+        density = Number(gaugedProof.finishedDensityGPerMl);
+      }
+    }
+  }
+  if (!(volumeGal > 0)) {
+    const gauged = gaugePouredBlend(toFormulationComponents(spirits, additives), targetAbv);
+    volumeGal = gauged?.volumeGal ?? 0;
+    abv = gauged?.abv ?? 0;
+    density = !sugarOrFlavor && abv > 0 ? round3(spiritDensityGPerMl(abv)) : null;
+  }
   const brixParts = additives.map((a) => additiveBrixContribution(a, volumeGal));
   const brix = volumeGal > 0 && brixParts.some((b) => b > 0)
     ? round2(brixParts.reduce((s, b) => s + b, 0))
-    : null;
-  const density = !sugarOrFlavor && abv > 0
-    ? round3(spiritDensityGPerMl(abv))
     : null;
 
   return {
@@ -173,9 +260,9 @@ export function computeTheoreticalBlend(
 }
 
 /**
- * Proofing water that hits a target ABV the same way as spirit proofing.
- * Finished wine gallons come from the alcohol. Table 3 supplies the blend weight,
- * and the water is the weight still missing after the spirit.
+ * Proofing water that hits a target ABV.
+ * Straight spirit uses the Table 6 mass balance. Sugar, syrup, flavor, or color
+ * stays on the sucrose-volume formulation, which is not a Table 6 proof.
  */
 export function solveWaterForTargetAbv(
   spirits: SpiritSourceInput[],
@@ -184,6 +271,36 @@ export function solveWaterForTargetAbv(
 ): { waterGal: number; result: TheoreticalBlendResult } | null {
   if (targetAbv <= 0) return null;
   const nonWater = additives.filter((a) => a.ingredientType !== 'water');
+  if (!hasDissolvedSolids(nonWater)) {
+    const charges = spiritCharges(spirits);
+    if (charges.length === 0) return null;
+    const solved = previewProofing({
+      kind: 'spirit-to-target',
+      spirits: charges,
+      targetAbv: decimalStringFromNumber(targetAbv),
+      referenceTemperatureF: '60',
+    });
+    if (!solved.ok || !('waterVolumeGal' in solved)) return null;
+    const waterGal = round3(Math.max(0, Number(solved.waterVolumeGal)));
+    const waterAdditive: AdditiveInput = {
+      ingredientType: 'water',
+      name: 'Proofing water (calculated)',
+      amount: waterGal,
+      unit: 'gal',
+    };
+    const blended = computeTheoreticalBlend(
+      spirits,
+      [...nonWater, ...(waterGal > 0 ? [waterAdditive] : [])],
+    );
+    return {
+      waterGal,
+      result: {
+        ...blended,
+        volumeGal: round3(Number(solved.finishedVolumeGal)),
+        abv: round2(targetAbv),
+      },
+    };
+  }
   const pureAlcohol = spirits.reduce((s, sp) => s + Math.max(0, sp.volumeGal) * Math.max(0, sp.abv) / 100, 0)
     + nonWater.reduce(
       (s, a) => s + ingredientPureAlcoholGal({ ...a, ingredient_type: a.ingredientType }),
@@ -431,8 +548,23 @@ export function computeBatchCorrection(
   if (Math.abs(abvDelta) <= ABV_TOLERANCE) {
     // ABV on target — check Brix if provided
   } else if (abvDelta > ABV_TOLERANCE) {
-    const targetVolume = pureAlcohol / (targetAbv / 100);
-    const waterGal = round3(Math.max(0, targetVolume - volumeGal));
+    let waterGal = 0;
+    if ((options?.measuredBrix ?? 0) > 0) {
+      const targetVolume = pureAlcohol / (targetAbv / 100);
+      waterGal = round3(Math.max(0, targetVolume - volumeGal));
+    } else {
+      const solved = previewProofing({
+        kind: 'spirit-to-target',
+        spiritQuantity: decimalStringFromNumber(volumeGal),
+        spiritUnit: 'gal',
+        startingAbv: decimalStringFromNumber(measuredAbv),
+        targetAbv: decimalStringFromNumber(targetAbv),
+        referenceTemperatureF: '60',
+      });
+      if (solved.ok && 'waterVolumeGal' in solved) {
+        waterGal = round3(Math.max(0, Number(solved.waterVolumeGal)));
+      }
+    }
     if (waterGal > 0.001) {
       workingVolume = volumeGal + waterGal;
       workingAbv = targetAbv;

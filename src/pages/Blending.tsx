@@ -67,6 +67,20 @@ import {
   type MeasureMode,
 } from '../lib/blending';
 import { parseBlendRecipeSnapshot } from '../lib/blend-recipe-version';
+import { decimalStringFromNumber } from '../lib/calc-engine/number-bridge';
+import { postedSpiritPounds, postedWaterPounds } from '../lib/calc-engine';
+
+function table6SpiritPounds(volumeGal: number, abv: number): number {
+  if (!(volumeGal > 0) || !(abv > 0)) return 0;
+  const posted = postedSpiritPounds(decimalStringFromNumber(volumeGal), decimalStringFromNumber(abv));
+  return posted == null ? 0 : Number(posted);
+}
+
+function table6WaterPounds(volumeGal: number): number {
+  if (!(volumeGal > 0)) return 0;
+  const posted = postedWaterPounds(decimalStringFromNumber(volumeGal));
+  return posted == null ? 0 : Number(posted);
+}
 import {
   computeBatchCorrection,
   proofingWaterForSameBatchSize,
@@ -1837,7 +1851,7 @@ export function Blending() {
                       {form.target_abv != null
                         ? ` to keep the same batch size and ${form.target_abv}% ABV.`
                         : ' to keep the same batch size and the same strength.'}
-                      {' '}({spiritWeightLbsFromVolumeGal(synced.volume_gal, src.abv).toFixed(2)} lb on a scale.)
+                      {' '}({table6SpiritPounds(synced.volume_gal, src.abv).toFixed(2)} lb on a scale.)
                     </p>
                   )}
                   {spiritSources.length > 1 && (
@@ -2033,6 +2047,9 @@ export function Blending() {
         );
 
       case 5: {
+        const straightSpirit = ingredients.every(
+          (ingredient) => ingredient.amount <= 0 || ingredient.ingredient_type === 'water',
+        );
         const reviewLines = [
           ...activeSources.map((source) => {
             const tank = getHoldingTanks().find((t) => t.id === source.holding_tank_equipment_id);
@@ -2042,7 +2059,9 @@ export function Blending() {
             const sourceName = barrel
               ? spiritLabelForBarrel(barrel)
               : (tank?.name ?? 'Spirit');
-            const weightLb = spiritWeightLbsFromVolumeGal(source.volume_gal, source.abv);
+            const weightLb = straightSpirit
+              ? table6SpiritPounds(source.volume_gal, source.abv)
+              : spiritWeightLbsFromVolumeGal(source.volume_gal, source.abv);
             return {
               label: `${sourceName} @ ${source.abv.toFixed(1)}%`,
               volumeGal: source.volume_gal,
@@ -2061,7 +2080,9 @@ export function Blending() {
             .map((ingredient) => ({
               label: ingredient.name.trim() || 'Proofing water',
               volumeGal: ingredientVolumeGal(ingredient),
-              weightLb: ingredientWeightLbs(ingredient),
+              weightLb: straightSpirit
+                ? table6WaterPounds(ingredientVolumeGal(ingredient))
+                : ingredientWeightLbs(ingredient),
             })),
         ];
         const finishedWeightLb = reviewLines.reduce((sum, line) => sum + line.weightLb, 0);
@@ -2111,14 +2132,15 @@ export function Blending() {
             )}
             {contractionGal > 0.05 && (
               <p className="field-hint" data-testid="blend-contraction-note">
-                Poured volume is {pouredGal.toFixed(2)} gal. Mixing contracts the blend by {contractionGal.toFixed(2)} gal.
-                Finished gallons and the proofing water are gauged the same way as spirit proofing.
+                Poured volume is {pouredGal.toFixed(2)} gal. Mixing contracts the blend by {contractionGal.toFixed(2)} gal
+                {pouredGal > 0 ? ` (${((contractionGal / pouredGal) * 100).toFixed(2)}%)` : ''}.
+                Finished gallons come from the finished mass and density, not from adding the poured gallons.
               </p>
             )}
             <p className="field-hint">
-              Spirit weight is TTB Table 3. Water is 8.328 lb/gal (27 CFR §30.41). Dissolved sugar adds 0.6219 ml/g.
-              Class I color uses specific gravity 1.30, which is class-typical and not a YT75 lot specification.
-              Flavoring without an ABV is weighed as water.
+              {straightSpirit
+                ? 'Straight spirit uses TTB Table 6 at 60 °F (27 CFR §30.66). Water is 8.32823 lb per wine gallon. Finished volume is mass divided by that density.'
+                : 'Sugar, syrup, flavor, or color is in this blend, so it is not a Table 6 proof. Spirit weight stays on TTB Table 3. Water is 8.328 lb/gal (27 CFR §30.41). Dissolved sugar adds 0.6219 ml/g. Class I color uses specific gravity 1.30, which is class-typical and not a YT75 lot specification. Flavoring without an ABV is weighed as water. Lab ABV is authoritative once those materials are present.'}
             </p>
             <BlendAbvConfirmation
               calculatedAbv={formulation.theoretical.abv}

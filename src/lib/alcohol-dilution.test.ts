@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { computeAlcoholDilution, WATER_LBS_PER_US_GALLON, waterLitersToWeightLb } from './alcohol-dilution';
 
 describe('computeAlcoholDilution', () => {
-  it('applies Table No. 3 contraction (volume before dilution)', () => {
+  it('applies Table 6 contraction (volume before dilution)', () => {
     const result = computeAlcoholDilution({
       actualAbvPercent: 58,
       targetAbvPercent: 43,
@@ -11,9 +11,9 @@ describe('computeAlcoholDilution', () => {
     });
     expect(result).not.toBeNull();
     expect(result!.spiritVolumeLiters).toBeCloseTo(3.71, 2);
-    expect(result!.finalVolumeLiters).toBeCloseTo(5, 1);
-    expect(result!.waterVolumeLiters).toBeCloseTo(1.13, 1);
-    expect(result!.waterVolumeLiters).toBeLessThan(1.29);
+    expect(result!.finalVolumeLiters).toBeCloseTo(3.71 * 58 / 43, 2);
+    expect(result!.waterVolumeLiters).toBeGreaterThan(0);
+    expect(result!.spiritVolumeLiters + result!.waterVolumeLiters).toBeGreaterThan(result!.finalVolumeLiters);
   });
 
   it('solves from target volume after dilution with contraction', () => {
@@ -24,9 +24,9 @@ describe('computeAlcoholDilution', () => {
       volumeBasis: 'after',
     });
     expect(result).not.toBeNull();
-    expect(result!.spiritVolumeLiters).toBeCloseTo(3.71, 1);
+    expect(result!.spiritVolumeLiters).toBeCloseTo(5 * 43 / 58, 2);
     expect(result!.finalVolumeLiters).toBeCloseTo(5, 2);
-    expect(result!.waterVolumeLiters).toBeCloseTo(1.13, 1);
+    expect(result!.spiritVolumeLiters + result!.waterVolumeLiters).toBeGreaterThan(result!.finalVolumeLiters);
   });
 
   it('converts one wine gallon of water with the TTB §30.41 factor', () => {

@@ -1,6 +1,6 @@
-import { computeAlcoholDilution } from './alcohol-dilution';
+import { decimalStringFromNumber } from './calc-engine/number-bridge';
+import { previewProofing } from './calc-engine/proofing';
 import { chargeExceedsStillCapacity } from './still-charge';
-import { ML_PER_GALLON } from '../types';
 
 /** Where proofing water is mixed with high-proof tails on a spirit run. */
 export type SpiritProofPlace = 'before_still' | 'in_still';
@@ -31,8 +31,6 @@ export interface SpiritChargeProofPlan {
   message: string | null;
 }
 
-const galToLiters = (gal: number) => (gal * ML_PER_GALLON) / 1000;
-const litersToGal = (liters: number) => (liters * 1000) / ML_PER_GALLON;
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
 interface DilutionGallons {
@@ -42,17 +40,19 @@ interface DilutionGallons {
 }
 
 function diluteGallons(spiritGal: number, spiritAbv: number, targetAbv: number): DilutionGallons | null {
-  const result = computeAlcoholDilution({
-    actualAbvPercent: spiritAbv,
-    targetAbvPercent: targetAbv,
-    volumeLiters: galToLiters(spiritGal),
-    volumeBasis: 'before',
+  const result = previewProofing({
+    kind: 'spirit-to-target',
+    spiritQuantity: decimalStringFromNumber(spiritGal),
+    spiritUnit: 'gal',
+    startingAbv: decimalStringFromNumber(spiritAbv),
+    targetAbv: decimalStringFromNumber(targetAbv),
+    referenceTemperatureF: '60',
   });
-  if (!result) return null;
+  if (!result.ok || !('waterVolumeGal' in result)) return null;
   return {
     spiritGal,
-    waterGal: litersToGal(result.waterVolumeLiters),
-    stillGal: litersToGal(result.finalVolumeLiters),
+    waterGal: Number(result.waterVolumeGal),
+    stillGal: Number(result.finishedVolumeGal),
   };
 }
 

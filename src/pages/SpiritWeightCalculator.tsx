@@ -1,12 +1,8 @@
 import { useMemo, useState } from 'react';
 import { AbvTemperatureInput, correctedAbvFromInputs } from '../components/AbvTemperatureInput';
-import {
-  computeAlcoholDilution,
-  formatDilutionSummary,
-  waterLitersToWeightKg,
-  waterLitersToWeightLb,
-  type DilutionVolumeBasis,
-} from '../lib/alcohol-dilution';
+import type { DilutionVolumeBasis } from '../lib/alcohol-dilution';
+import { decimalStringFromNumber } from '../lib/calc-engine/number-bridge';
+import { previewProofing, type ProofingRequest } from '../lib/calc-engine/proofing';
 import {
   gaugeFromLiters,
   gaugeFromWeightKg,
@@ -31,16 +27,11 @@ import {
 } from '../lib/unit-converter';
 import { limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
 import { BatchCorrectionPanel, ConcentrationPanel } from '../components/FormulationCalculatorPanels';
-import { ML_PER_GALLON } from '../types';
-
 type CalculatorTab = 'gauging' | 'dilution' | 'concentration' | 'correction' | 'volume' | 'weight';
 type InputMode = 'weight' | 'volume';
 type WeightUnit = 'lb' | 'kg';
 type VolumeUnit = 'gal' | 'l';
 type DilutionAmountMeasure = 'volume' | 'weight';
-
-const litersToUsGal = (liters: number) => (liters * 1000) / ML_PER_GALLON;
-const usGalToLiters = (gal: number) => (gal * ML_PER_GALLON) / 1000;
 
 function ResultPanel({
   result,
@@ -106,67 +97,80 @@ function AlcoholDilutionCalculator() {
   );
 
   const targetAbvNum = parseFloat(targetAbv);
+  const temperatureIs60 = !sampleTempF.trim() || Math.abs(parseFloat(sampleTempF) - 60) <= 0.05;
 
   const dilutionResult = useMemo(() => {
-    const amount = parseFloat(amountValue);
-    if (!Number.isFinite(amount) || amount <= 0) return null;
+    const amountText = amountValue.trim();
+    const targetText = targetAbv.trim();
+    if (!/^[+]?(?:\d+\.?\d*|\.\d+)$/.test(amountText)) return null;
+    if (!/^[+]?(?:\d+\.?\d*|\.\d+)$/.test(targetText)) return null;
     if (correctedActualAbv == null || correctedActualAbv <= 0) return null;
-    if (!Number.isFinite(targetAbvNum) || targetAbvNum <= 0) return null;
-
-    let volumeLiters: number | null;
-    if (amountMeasure === 'volume') {
-      volumeLiters = volumeUnit === 'l' ? amount : usGalToLiters(amount);
+    const startingAbv = temperatureIs60 && /^[+]?(?:\d+\.?\d*|\.\d+)$/.test(actualAbv.trim())
+      ? actualAbv.trim()
+      : decimalStringFromNumber(correctedActualAbv);
+    const observed = {
+      referenceTemperatureF: '60',
+      observedAbv: actualAbv.trim() || undefined,
+      observedTemperatureF: sampleTempF.trim() || '60',
+    };
+    let request: ProofingRequest;
+    if (volumeBasis === 'before' && amountMeasure === 'volume') {
+      request = {
+        kind: 'spirit-to-target',
+        spiritQuantity: amountText,
+        spiritUnit: volumeUnit === 'l' ? 'L' : 'gal',
+        startingAbv,
+        targetAbv: targetText,
+        ...observed,
+      };
+    } else if (volumeBasis === 'before') {
+      request = {
+        kind: 'spirit-to-target',
+        spiritQuantity: amountText,
+        spiritUnit: weightUnit,
+        startingAbv,
+        targetAbv: targetText,
+        ...observed,
+      };
+    } else if (amountMeasure === 'volume') {
+      request = {
+        kind: 'finished-volume',
+        finishedQuantity: amountText,
+        finishedUnit: volumeUnit === 'l' ? 'L' : 'gal',
+        startingAbv,
+        targetAbv: targetText,
+        ...observed,
+      };
     } else {
-      const abvForLookup = volumeBasis === 'before' ? correctedActualAbv : targetAbvNum;
-      const proof = proofFromAbv(abvForLookup);
-      const gauged = weightUnit === 'kg'
-        ? gaugeFromWeightKg(amount, proof)
-        : gaugeFromWeightLb(amount, proof);
-      volumeLiters = gauged?.liters ?? null;
+      request = {
+        kind: 'finished-mass',
+        finishedQuantity: amountText,
+        finishedUnit: weightUnit,
+        startingAbv,
+        targetAbv: targetText,
+        ...observed,
+      };
     }
-    if (volumeLiters == null || volumeLiters <= 0) return null;
-
-    return computeAlcoholDilution({
-      actualAbvPercent: correctedActualAbv,
-      targetAbvPercent: targetAbvNum,
-      volumeLiters,
-      volumeBasis,
-    });
+    return previewProofing(request);
   }, [
+    actualAbv,
     amountMeasure,
     amountValue,
     correctedActualAbv,
-    targetAbvNum,
+    sampleTempF,
+    targetAbv,
+    temperatureIs60,
     volumeBasis,
     volumeUnit,
     weightUnit,
   ]);
-
-  const displayVol = (liters: number, unit: VolumeUnit = volumeUnit) => (
-    unit === 'l'
-      ? `${liters.toFixed(2)} L`
-      : `${litersToUsGal(liters).toFixed(2)} US gal`
-  );
-
-  const spiritWeightFromLiters = (liters: number, abv: number) => {
-    const proof = proofFromAbv(abv);
-    return gaugeFromLiters(liters, proof);
-  };
-
-  const weightLine = (lb: number, kg: number) => (
-    <>
-      {lb.toFixed(2)} lb
-      <br />
-      {kg.toFixed(2)} kg
-    </>
-  );
 
   return (
     <>
       <div className="card">
         <h3>Alcohol dilution</h3>
         <p className="field-hint" style={{ marginTop: 0 }}>
-          Calculate proofing water to reach a target ABV. Mixing uses TTB Table No. 3 weights so alcohol–water volume contraction is included.
+          Proofing preview at 60 °F. Water mass comes from TTB Table 6 (27 CFR §30.66). Finished volume is the finished mass divided by the Table 6 density. This preview does not change inventory.
         </p>
 
         <div className="form-group full-width">
@@ -188,6 +192,7 @@ function AlcoholDilutionCalculator() {
               min="0"
               max={MAX_ENTERED_ABV}
               value={targetAbv}
+              data-testid="dilution-target-abv"
               onChange={(e) => setTargetAbv(limitAbvInput(e.target.value))}
             />
           </div>
@@ -207,7 +212,7 @@ function AlcoholDilutionCalculator() {
             className={`btn btn-sm ${amountMeasure === 'weight' ? 'btn-primary' : 'btn-secondary'}`}
             onClick={() => setAmountMeasure('weight')}
           >
-            Weight (Table No. 3)
+            Weight (Table 6 at 60 °F)
           </button>
         </div>
 
@@ -245,6 +250,7 @@ function AlcoholDilutionCalculator() {
               step={amountMeasure === 'weight' ? '0.1' : '0.01'}
               min="0"
               value={amountValue}
+              data-testid="dilution-amount"
               onChange={(e) => setAmountValue(e.target.value)}
             />
             {amountMeasure === 'volume' ? (
@@ -267,11 +273,11 @@ function AlcoholDilutionCalculator() {
           </div>
           {amountMeasure === 'weight' && (
             <p className="field-hint">
-              Weight is converted to wine gallons using TTB Table No. 3 at{' '}
+              Weight uses the Table 6 density at 60 °F for{' '}
               {volumeBasis === 'before'
                 ? `${correctedActualAbv?.toFixed(2) ?? '—'}% ABV (spirit)`
                 : `${targetAbvNum > 0 ? targetAbvNum.toFixed(2) : '—'}% ABV (finished blend)`}
-              .
+              . One liter of water is not treated as one kilogram.
             </p>
           )}
         </div>
@@ -283,60 +289,84 @@ function AlcoholDilutionCalculator() {
         )}
       </div>
 
-      {dilutionResult ? (
-        <div className="card spirit-calculator-results" style={{ marginTop: '1rem' }}>
-          <h3>Results</h3>
-          {(() => {
-            const spiritG = spiritWeightFromLiters(
-              dilutionResult.spiritVolumeLiters,
-              dilutionResult.actualAbvPercent,
-            );
-            const finalG = spiritWeightFromLiters(
-              dilutionResult.finalVolumeLiters,
-              dilutionResult.targetAbvPercent,
-            );
-            const waterLb = waterLitersToWeightLb(dilutionResult.waterVolumeLiters);
-            const waterKg = waterLitersToWeightKg(dilutionResult.waterVolumeLiters);
-            return (
+      {dilutionResult && 'finalAbv' in dilutionResult ? (
+        <div className="card spirit-calculator-results" style={{ marginTop: '1rem' }} data-testid="dilution-preview">
+          <h3>Preview at 60 °F</h3>
           <dl className="detail-grid">
-            <dt>Spirit to use</dt>
-            <dd>
-              {displayVol(dilutionResult.spiritVolumeLiters)} @ {dilutionResult.actualAbvPercent.toFixed(2)}% vol
-              {spiritG && (
-                <>
-                  <br />
-                  {weightLine(spiritG.weightLb, spiritG.weightKg)}
-                </>
-              )}
-            </dd>
-            <dt>Water to add</dt>
-            <dd>
-              {displayVol(dilutionResult.waterVolumeLiters)}
+            <dt>Spirit</dt>
+            <dd data-testid="dilution-spirit">
+              {dilutionResult.startingVolumeL} L · {dilutionResult.startingVolumeGal} US gal
               <br />
-              {weightLine(waterLb, waterKg)}
+              {dilutionResult.startingMassLb} lb · {dilutionResult.startingMassKg} kg
+              <br />
+              {dilutionResult.startingAbv}% ABV · {dilutionResult.startingProof} proof
+              <br />
+              SG {dilutionResult.startingSpecificGravity} · {dilutionResult.startingDensityLbPerGal} lb/gal
             </dd>
-            <dt>Final volume</dt>
+            <dt>Ethanol / water in the spirit</dt>
             <dd>
-              {displayVol(dilutionResult.finalVolumeLiters)} @ {dilutionResult.targetAbvPercent.toFixed(2)}% vol
-              {finalG && (
-                <>
-                  <br />
-                  {weightLine(finalG.weightLb, finalG.weightKg)}
-                </>
-              )}
+              Ethanol {dilutionResult.ethanolMassKg} kg ({dilutionResult.ethanolMassLb} lb)
+              <br />
+              Water already present {dilutionResult.spiritWaterMassKg} kg
+            </dd>
+            <dt>Proofing water</dt>
+            <dd data-testid="dilution-water">
+              {dilutionResult.waterVolumeL} L · {dilutionResult.waterVolumeGal} US gal
+              <br />
+              {dilutionResult.waterMassLb} lb · {dilutionResult.waterMassKg} kg
+            </dd>
+            <dt>Poured volume, before contraction</dt>
+            <dd>{dilutionResult.premixVolumeL} L · {dilutionResult.premixVolumeGal} US gal</dd>
+            <dt>Finished blend</dt>
+            <dd data-testid="dilution-finished">
+              {dilutionResult.finishedVolumeL} L · {dilutionResult.finishedVolumeGal} US gal
+              <br />
+              {dilutionResult.finishedMassLb} lb · {dilutionResult.finishedMassKg} kg
+              <br />
+              {dilutionResult.finalAbv}% ABV · {dilutionResult.finalProof} proof
+              <br />
+              SG {dilutionResult.finishedSpecificGravity} · {dilutionResult.finishedDensityLbPerGal} lb/gal
+              <br />
+              {dilutionResult.proofGallons} proof gallons
+            </dd>
+            <dt>Contraction</dt>
+            <dd data-testid="dilution-contraction">
+              {dilutionResult.contractionVolumeL} L · {dilutionResult.contractionVolumeGal} US gal
+              <br />
+              {dilutionResult.contractionPercent}% of the poured volume
             </dd>
           </dl>
-            );
-          })()}
+          <ul data-testid="dilution-validation">
+            {dilutionResult.checks.map((check) => (
+              <li key={check.name} style={{ color: check.passed ? undefined : 'var(--danger, #dc2626)' }}>
+                {check.passed ? 'Passed' : 'Failed'}: {check.detail}
+              </li>
+            ))}
+          </ul>
+          {!dilutionResult.ok && (
+            <p className="field-hint" style={{ color: 'var(--danger, #dc2626)' }}>
+              Posting is blocked until every check passes. Inventory was not changed.
+            </p>
+          )}
+          {dilutionResult.warnings.map((warning) => (
+            <p key={warning} className="field-hint">{warning}</p>
+          ))}
+          {!temperatureIs60 && (
+            <p className="field-hint">
+              The sample temperature was corrected to an ABV at 60 °F before this calculation. The density table was not applied at the sample temperature, and 20 °C OIML alcoholometry was not used.
+            </p>
+          )}
           <p className="field-hint">
-            <strong>Example:</strong>{' '}
-            {formatDilutionSummary(dilutionResult, volumeUnit)}
-            {' '}Water weight uses 0.120074 wine gallons per pound at 60 °F (27 CFR §30.41).
+            Preview only. Confirming these figures here does not consume spirit, consume water, or create a finished lot.
           </p>
         </div>
       ) : (
         <div className="card" style={{ marginTop: '1rem' }}>
-          <p className="field-hint">Enter starting ABV, target ABV, and a fixed volume or weight to calculate water to add.</p>
+          <p className="field-hint">
+            {dilutionResult && !dilutionResult.ok
+              ? dilutionResult.warnings.join(' ')
+              : 'Enter starting ABV, target ABV, and a fixed volume or weight to calculate water to add.'}
+          </p>
         </div>
       )}
     </>
