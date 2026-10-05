@@ -3917,3 +3917,101 @@ tr:hover td {
   padding: 0.75rem 1rem;
   margin: 0.75rem 0;
 }
+
+.dilution-result-lead {
+  font-size: 1.05rem;
+  line-height: 1.45;
+  margin: 0 0 1rem;
+}
+
+.dilution-figures {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.dilution-figure {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 0.85rem 1rem;
+  margin: 0;
+}
+
+.dilution-figure-step {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  margin: 0 0 0.35rem;
+}
+
+.dilution-figure-value {
+  font-size: 1.35rem;
+  font-weight: 600;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.dilution-figure-alt {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  line-height: 1.35;
+  margin: 0.4rem 0 0;
+}
+
+.dilution-unusable,
+.dilution-failed-checks {
+  color: var(--danger);
+  background: var(--danger-bg);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 1rem;
+  margin: 0 0 0.85rem;
+}
+
+.dilution-failed-checks {
+  margin-top: 0.85rem;
+  padding-left: 1.6rem;
+}
+
+.dilution-check-fail {
+  color: var(--danger);
+}
+
+.dilution-details {
+  margin-top: 1rem;
+}
+
+.dilution-details summary {
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.dilution-detail-list {
+  display: grid;
+  grid-template-columns: minmax(9rem, 14rem) 1fr;
+  gap: 0.35rem 1rem;
+  margin: 0.85rem 0;
+}
+
+.dilution-detail-list dt {
+  color: var(--text-muted);
+}
+
+.dilution-detail-list dd {
+  margin: 0;
+}
+
+.dilution-details ul {
+  margin: 0.5rem 0 0.75rem;
+  padding-left: 1.2rem;
+}
+
+.dilution-warnings {
+  color: var(--text-muted);
+}
+
+@media (max-width: 720px) {
+  .dilution-figures,
+  .dilution-detail-list {
+    grid-template-columns: 1fr;
+  }
+}
