@@ -32,22 +32,34 @@ import {
   getHoldingTankContents,
   getSpiritTransferVesselsWithContents,
   generateBatchNumber,
+  getGinRecipes,
+  getInventoryByCategory,
+  getRunBotanicals,
+  saveGinRecipe,
   useRefreshKey,
 } from '../db/queries';
 import { AbvVolumeTemperatureFields } from '../components/AbvVolumeTemperatureFields';
 import { AbvTemperatureInput, correctedAbvFromInputs } from '../components/AbvTemperatureInput';
 import { AdminCredentialConfirmModal } from '../components/AdminCredentialConfirmModal';
+import { GinBotanicalFields } from '../components/GinBotanicalFields';
 import { Modal } from '../components/Modal';
 import { RecentCompletedNote } from '../components/RecentCompletedNote';
 import { StatusBadge } from '../components/StatusBadge';
 import {
   ALL_RUN_TYPES,
   isFermenterSourcedRun,
+  isSpiritStyleRun,
   isTankSourcedRun,
   RUN_TYPE_BUTTON_LABELS,
   RUN_TYPE_LABELS,
+  runFormTitle,
   runTypeLabel,
 } from '../lib/distillation-run-types';
+import {
+  botanicalsFromRecipe,
+  emptyGinBotanical,
+  formatGinBotanicalsSummary,
+} from '../lib/gin-botanicals';
 import { FERMENTATION_READY_MAX_BRIX, isBrixReadyForDistillation } from '../lib/fermentation';
 import { eventDateWhenLeavingPlanned, localIsoDate, localIsoDateTime } from '../lib/planned-event-date';
 import {
@@ -67,6 +79,7 @@ import type {
   DistillationRun,
   DistillationRunType,
   DistillationRunView,
+  GinBotanicalInput,
   RunStatus,
   CutType,
 } from '../types';
@@ -138,6 +151,12 @@ export function Distillation() {
   const [chargeTempF, setChargeTempF] = useState('60');
   const [proofTarget, setProofTarget] = useState('');
   const [proofPlace, setProofPlace] = useState<SpiritProofPlace>('in_still');
+  const [botanicals, setBotanicals] = useState<GinBotanicalInput[]>([emptyGinBotanical()]);
+  const [ginRecipeId, setGinRecipeId] = useState<number | ''>('');
+  const [ginRecipeName, setGinRecipeName] = useState('');
+  const ginRecipes = getGinRecipes();
+  const botanicalNames = getInventoryByCategory('botanicals').map((item) => item.name);
+  const runBotanicals = getRunBotanicals();
   const cutsRunId = Number(searchParams.get('cutsRun')) || 0;
   if (!cutsRunId && appliedCutsRunId !== 0) {
     setAppliedCutsRunId(0);
@@ -227,6 +246,9 @@ export function Distillation() {
       assigned_user_name: runForm.assigned_user_name,
     });
     clearChargeProof();
+    setBotanicals(runType === 'gin' ? [emptyGinBotanical()] : []);
+    setGinRecipeId('');
+    setGinRecipeName('');
   };
 
   const handleFermenterSourceChange = (equipmentId: number | null) => {
@@ -297,6 +319,9 @@ export function Distillation() {
     setChargeAbvObserved('');
     setChargeTempF('60');
     clearChargeProof();
+    setBotanicals(runType === 'gin' ? [emptyGinBotanical()] : []);
+    setGinRecipeId('');
+    setGinRecipeName('');
     setShowRunForm(true);
   };
 
@@ -367,7 +392,7 @@ export function Distillation() {
       ...run,
       run_type: run.run_type ?? 'wash',
       source_holding_tank_equipment_id: run.source_holding_tank_equipment_id ?? null,
-      dest_holding_tank_equipment_id: (run.run_type ?? 'wash') === 'low_wines'
+      dest_holding_tank_equipment_id: isTankSourcedRun(run.run_type ?? 'wash')
         ? null
         : run.dest_holding_tank_equipment_id ?? null,
       charge_volume_gal: proofed ? run.proof_spirit_gal! : run.charge_volume_gal,
@@ -384,7 +409,36 @@ export function Distillation() {
     setChargeTempF('60');
     setProofTarget(proofed && run.charge_abv != null ? String(run.charge_abv) : '');
     setProofPlace(run.proof_place === 'before_still' ? 'before_still' : 'in_still');
+    const savedBotanicals = (run.run_type ?? 'wash') === 'gin'
+      ? getRunBotanicals(run.id)
+      : [];
+    setBotanicals(savedBotanicals.length > 0 ? botanicalsFromRecipe(savedBotanicals) : [emptyGinBotanical()]);
+    setGinRecipeId('');
+    setGinRecipeName('');
     setShowRunForm(true);
+  };
+
+  const applyGinRecipe = (recipeId: number | '') => {
+    setGinRecipeId(recipeId);
+    if (!recipeId) return;
+    const recipe = ginRecipes.find((item) => item.id === recipeId);
+    if (!recipe) return;
+    setBotanicals(botanicalsFromRecipe(recipe.botanicals));
+    setGinRecipeName(recipe.name);
+  };
+
+  const handleSaveGinRecipe = () => {
+    try {
+      const savedId = saveGinRecipe(
+        { name: ginRecipeName, notes: '' },
+        typeof ginRecipeId === 'number' ? ginRecipeId : undefined,
+        botanicals,
+      );
+      setGinRecipeId(savedId);
+      refresh();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Could not save gin recipe.');
+    }
   };
 
   const validateStillChargeVolume = (chargeGal = runForm.charge_volume_gal): boolean => {
@@ -542,7 +596,11 @@ export function Distillation() {
           proof_place: null,
         };
       try {
-        saveDistillationRun(savedRun, editRunId);
+        saveDistillationRun(
+          savedRun,
+          editRunId,
+          savedRun.run_type === 'gin' ? botanicals : undefined,
+        );
         setShowRunForm(false);
         refresh();
       } catch (error) {
@@ -805,7 +863,7 @@ export function Distillation() {
     <div>
       <div className="page-header">
         <h2>Distillation</h2>
-        <p>Low wine and heavy rum runs charge fermenters · Spirit runs use holding tanks · Brix below {FERMENTATION_READY_MAX_BRIX}° recommended before charging</p>
+        <p>Low wine and heavy rum runs charge fermenters · Spirit runs and gin runs use holding tanks · Brix below {FERMENTATION_READY_MAX_BRIX}° recommended before charging</p>
         <div className="page-actions">
           <button type="button" className="btn btn-primary" onClick={() => openNewRun('wash')}>
             {RUN_TYPE_BUTTON_LABELS.wash}
@@ -815,6 +873,9 @@ export function Distillation() {
           </button>
           <button type="button" className="btn btn-secondary" onClick={() => openNewRun('heavy_rum')}>
             {RUN_TYPE_BUTTON_LABELS.heavy_rum}
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={() => openNewRun('gin')}>
+            {RUN_TYPE_BUTTON_LABELS.gin}
           </button>
         </div>
       </div>
@@ -879,6 +940,11 @@ export function Distillation() {
                             {isTankSourcedRun(runType) && r.charge_abv != null ? ` @ ${r.charge_abv.toFixed(1)}%` : ''}
                             {spiritChargeDetail(r) && (
                               <div className="field-hint">{spiritChargeDetail(r)}</div>
+                            )}
+                            {runType === 'gin' && formatGinBotanicalsSummary(runBotanicals.filter((line) => line.distillation_run_id === r.id)) && (
+                              <div className="field-hint">
+                                {formatGinBotanicalsSummary(runBotanicals.filter((line) => line.distillation_run_id === r.id))}
+                              </div>
                             )}
                             {stillageLabel && (
                               <div className="field-hint">{stillageLabel}</div>
@@ -995,7 +1061,7 @@ export function Distillation() {
 
       {showRunForm && (
         <Modal
-          title={editRunId ? 'Edit Run' : `${RUN_TYPE_LABELS[runForm.run_type]} Run`}
+          title={editRunId ? 'Edit Run' : runFormTitle(runForm.run_type)}
           onClose={() => setShowRunForm(false)}
         >
           <div className="form-grid">
@@ -1231,6 +1297,41 @@ export function Distillation() {
                 </div>
               </div>
             )}
+            {runForm.run_type === 'gin' && (
+              <>
+                <div className="form-group">
+                  <label>Saved gin recipe</label>
+                  <select
+                    data-testid="gin-recipe-select"
+                    value={ginRecipeId}
+                    onChange={(e) => applyGinRecipe(e.target.value ? parseInt(e.target.value, 10) : '')}
+                  >
+                    <option value="">— Start from scratch —</option>
+                    {ginRecipes.map((recipe) => (
+                      <option key={recipe.id} value={recipe.id}>{recipe.name}</option>
+                    ))}
+                  </select>
+                  <p className="field-hint">Load a saved recipe to fill the botanicals, then change them for this run if you need to.</p>
+                </div>
+                <div className="form-group">
+                  <label>Save these botanicals as a recipe</label>
+                  <input
+                    data-testid="gin-run-recipe-name"
+                    value={ginRecipeName}
+                    onChange={(e) => setGinRecipeName(e.target.value)}
+                    placeholder="House gin"
+                  />
+                  <button type="button" className="btn btn-sm btn-secondary" style={{ marginTop: '0.4rem' }} onClick={handleSaveGinRecipe}>
+                    Save gin recipe
+                  </button>
+                </div>
+                <GinBotanicalFields
+                  lines={botanicals}
+                  onChange={setBotanicals}
+                  inventoryNames={botanicalNames}
+                />
+              </>
+            )}
             <div className="form-group">
               <label>Status</label>
               <select value={runForm.status} onChange={(e) => handleRunStatusChange(e.target.value as RunStatus)}>
@@ -1463,8 +1564,8 @@ export function Distillation() {
             Any collection vessel can take cuts from a low wine run, spirit run, or heavy rum run.
             A vessel can hold only one cut at a time — heads, hearts, or tails — including from later runs of the same cut.
             Empty it before switching cuts.
-            {selectedRun?.run_type === 'low_wines' && (
-              <> Hearts and tails on a spirit run may also go to <strong>High Wines Storage Tank</strong>.</>
+            {isSpiritStyleRun(selectedRun?.run_type) && (
+              <> Hearts and tails on a {selectedRun?.run_type === 'gin' ? 'gin' : 'spirit'} run may also go to <strong>High Wines Storage Tank</strong>.</>
             )}
             {' '}Heads may be discarded with no vessel. Transfer from collection vessels to holding tanks when ready.
           </p>

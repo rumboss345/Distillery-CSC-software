@@ -12,7 +12,7 @@ export type FermentationAssignmentStatus = 'fermenting' | 'complete' | 'discarde
 
 export type RunStatus = 'planned' | 'running' | 'complete';
 
-export type DistillationRunType = 'wash' | 'low_wines' | 'heavy_rum';
+export type DistillationRunType = 'wash' | 'low_wines' | 'heavy_rum' | 'gin';
 
 /** Where spirit-run proofing water is mixed. */
 export type SpiritProofPlace = 'before_still' | 'in_still';
@@ -243,6 +243,34 @@ export interface DistillationRunView extends DistillationRun {
   source_holding_tank_name?: string;
   dest_holding_tank_name?: string;
   stillage_tank_name?: string;
+}
+
+export interface GinBotanicalInput {
+  name: string;
+  /** Count or measure of this botanical, separate from the scale weight. */
+  amount: number;
+  /** Scale weight. */
+  weight: number;
+  weight_unit: string;
+}
+
+export interface DistillationRunBotanical extends GinBotanicalInput {
+  id: number;
+  distillation_run_id: number;
+}
+
+export interface GinRecipeBotanical extends GinBotanicalInput {
+  id: number;
+  gin_recipe_id: number;
+}
+
+export interface GinRecipe {
+  id: number;
+  name: string;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+  botanicals: GinRecipeBotanical[];
 }
 
 export interface DistillationCut {

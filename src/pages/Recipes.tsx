@@ -8,6 +8,7 @@ import {
 } from '../db/queries';
 import { Modal } from '../components/Modal';
 import { BlendRecipesTab } from '../components/BlendRecipesTab';
+import { GinRecipesTab } from '../components/GinRecipesTab';
 import { useAuth } from '../context/AuthContext';
 import {
   emptyRecipeNutrient,
@@ -31,12 +32,13 @@ const emptyRecipe = (): Omit<Recipe, 'id' | 'created_at' | 'updated_at'> => ({
   notes: '',
 });
 
-type RecipeTab = 'wash' | 'blend';
+type RecipeTab = 'wash' | 'gin' | 'blend';
 export function Recipes() {
   const { hasPermission } = useAuth();
   const canWash = hasPermission('wash');
+  const canGin = hasPermission('distillation');
   const canBlend = hasPermission('blending');
-  const defaultTab: RecipeTab = canWash ? 'wash' : 'blend';
+  const defaultTab: RecipeTab = canWash ? 'wash' : canGin ? 'gin' : 'blend';
   const { key, refresh } = useRefreshKey();
   const recipes = getRecipes();
   const sugarItems = getInventoryByCategory('sugar');
@@ -110,7 +112,7 @@ export function Recipes() {
     <div>
       <div className="page-header">
         <h2>Recipes</h2>
-        <p>Saved wash and blend formulas for repeat batches</p>
+        <p>Saved wash, gin, and blend formulas you can run again</p>
         {tab === 'wash' && canWash && (
           <div className="page-actions">
             <button type="button" className="btn btn-primary" onClick={openNew}>
@@ -120,26 +122,41 @@ export function Recipes() {
         )}
       </div>
 
-      {canWash && canBlend && (
+      {[canWash, canGin, canBlend].filter(Boolean).length > 1 && (
         <div className="recipe-tabs" role="tablist" aria-label="Recipe type">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === 'wash'}
-            className={`recipe-tab${tab === 'wash' ? ' active' : ''}`}
-            onClick={() => setTab('wash')}
-          >
-            Wash &amp; Fermentation
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === 'blend'}
-            className={`recipe-tab${tab === 'blend' ? ' active' : ''}`}
-            onClick={() => setTab('blend')}
-          >
-            Blending
-          </button>
+          {canWash && (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'wash'}
+              className={`recipe-tab${tab === 'wash' ? ' active' : ''}`}
+              onClick={() => setTab('wash')}
+            >
+              Wash &amp; Fermentation
+            </button>
+          )}
+          {canGin && (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'gin'}
+              className={`recipe-tab${tab === 'gin' ? ' active' : ''}`}
+              onClick={() => setTab('gin')}
+            >
+              Gin
+            </button>
+          )}
+          {canBlend && (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'blend'}
+              className={`recipe-tab${tab === 'blend' ? ' active' : ''}`}
+              onClick={() => setTab('blend')}
+            >
+              Blending
+            </button>
+          )}
         </div>
       )}
 
@@ -228,6 +245,8 @@ export function Recipes() {
           )}
         </>
       )}
+
+      {tab === 'gin' && canGin && <GinRecipesTab />}
 
       {tab === 'blend' && canBlend && <BlendRecipesTab />}
 

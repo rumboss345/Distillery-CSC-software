@@ -126,6 +126,38 @@ CREATE TABLE IF NOT EXISTS distillation_cuts (
   notes TEXT NOT NULL DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS distillation_run_botanicals (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  distillation_run_id INTEGER NOT NULL REFERENCES distillation_runs(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  amount REAL NOT NULL DEFAULT 0,
+  weight REAL NOT NULL DEFAULT 0,
+  weight_unit TEXT NOT NULL DEFAULT 'g',
+  sort_order INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_run_botanicals_run ON distillation_run_botanicals(distillation_run_id);
+
+CREATE TABLE IF NOT EXISTS gin_recipes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS gin_recipe_botanicals (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  gin_recipe_id INTEGER NOT NULL REFERENCES gin_recipes(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  amount REAL NOT NULL DEFAULT 0,
+  weight REAL NOT NULL DEFAULT 0,
+  weight_unit TEXT NOT NULL DEFAULT 'g',
+  sort_order INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_gin_recipe_botanicals_recipe ON gin_recipe_botanicals(gin_recipe_id);
+
 CREATE TABLE IF NOT EXISTS barrels (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   barrel_number TEXT NOT NULL UNIQUE,
