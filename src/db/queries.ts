@@ -414,15 +414,18 @@ function bottlingLinesToInventoryInput(lines: BottlingRunLine[]): BottlingRunLin
 }
 
 export function saveInventoryItem(item: Omit<InventoryItem, 'id' | 'created_at' | 'updated_at'>, id?: number): void {
+  const packageSizeMl = item.category === 'packaging' && item.package_size_ml != null && item.package_size_ml > 0
+    ? item.package_size_ml
+    : null;
   if (id) {
     runQuery(
-      `UPDATE inventory_items SET name=?, category=?, unit=?, quantity=?, reorder_level=?, notes=?, updated_at=datetime('now') WHERE id=?`,
-      [item.name, item.category, item.unit, item.quantity, item.reorder_level, item.notes, id],
+      `UPDATE inventory_items SET name=?, category=?, unit=?, quantity=?, reorder_level=?, notes=?, package_size_ml=?, updated_at=datetime('now') WHERE id=?`,
+      [item.name, item.category, item.unit, item.quantity, item.reorder_level, item.notes, packageSizeMl, id],
     );
   } else {
     insertRow(
-      `INSERT INTO inventory_items (name, category, unit, quantity, reorder_level, notes) VALUES (?, ?, ?, ?, ?, ?)`,
-      [item.name, item.category, item.unit, item.quantity, item.reorder_level, item.notes],
+      `INSERT INTO inventory_items (name, category, unit, quantity, reorder_level, notes, package_size_ml) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [item.name, item.category, item.unit, item.quantity, item.reorder_level, item.notes, packageSizeMl],
     );
   }
 }

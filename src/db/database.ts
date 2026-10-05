@@ -623,6 +623,7 @@ function runMigrations(): void {
     persistDb();
   }
 
+  migrateInventoryPackageSize();
   seedPackagingBottles();
   migratePackagingBottleColumn();
   migrateBottlingTankSourceColumns();
@@ -934,6 +935,17 @@ function seedPackagingBottles(): void {
       `INSERT INTO inventory_items (name, category, unit, quantity, reorder_level, notes) VALUES (?, 'packaging', 'each', 0, 100, ?)`,
       [bottle.name, `${bottle.sizeMl} ml bottle`],
     );
+  }
+}
+
+function migrateInventoryPackageSize(): void {
+  if (!db) return;
+  const hasColumn = queryOne<{ name: string }>(
+    "SELECT name FROM pragma_table_info('inventory_items') WHERE name='package_size_ml'",
+  );
+  if (!hasColumn) {
+    db.run('ALTER TABLE inventory_items ADD COLUMN package_size_ml REAL');
+    persistDb();
   }
 }
 

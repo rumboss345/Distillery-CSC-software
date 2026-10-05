@@ -9,6 +9,7 @@ import {
   useRefreshKey,
 } from '../db/queries';
 import { Modal } from '../components/Modal';
+import { packagingItemSizeMl } from '../lib/packaging-bottles';
 import type { InventoryCategory, InventoryItem } from '../types';
 
 const emptyItem = (): Omit<InventoryItem, 'id' | 'created_at' | 'updated_at'> => ({
@@ -18,6 +19,7 @@ const emptyItem = (): Omit<InventoryItem, 'id' | 'created_at' | 'updated_at'> =>
   quantity: 0,
   reorder_level: 0,
   notes: '',
+  package_size_ml: null,
 });
 
 export function Inventory() {
@@ -33,6 +35,7 @@ export function Inventory() {
   const [categoryError, setCategoryError] = useState('');
   const [adjustAmount, setAdjustAmount] = useState('');
   const [quantityInput, setQuantityInput] = useState('0');
+  const [sizeInput, setSizeInput] = useState('');
   const [filter, setFilter] = useState<InventoryCategory | 'all'>('all');
 
   void key;
@@ -41,15 +44,23 @@ export function Inventory() {
 
   const openNew = () => {
     setEditId(undefined);
-    setForm(emptyItem());
+    const category = filter !== 'all' ? filter : 'other';
+    setForm({
+      ...emptyItem(),
+      category,
+      unit: category === 'packaging' ? 'each' : 'lbs',
+    });
     setQuantityInput('0');
+    setSizeInput('');
     setShowForm(true);
   };
 
   const openEdit = (item: InventoryItem) => {
     setEditId(item.id);
-    setForm({ ...item });
+    setForm({ ...item, package_size_ml: item.package_size_ml ?? null });
     setQuantityInput(String(item.quantity));
+    const size = item.category === 'packaging' ? packagingItemSizeMl(item) : null;
+    setSizeInput(size ? String(size) : '');
     setShowForm(true);
   };
 
@@ -61,9 +72,14 @@ export function Inventory() {
 
   const handleSave = () => {
     const quantity = parseFloat(quantityInput);
+    const size = parseFloat(sizeInput);
+    const package_size_ml = form.category === 'packaging' && Number.isFinite(size) && size > 0
+      ? Math.round(size)
+      : null;
     saveInventoryItem({
       ...form,
       quantity: Number.isFinite(quantity) ? quantity : 0,
+      package_size_ml,
     }, editId);
     setShowForm(false);
     refresh();
@@ -153,7 +169,12 @@ export function Inventory() {
                 const low = i.quantity <= i.reorder_level;
                 return (
                   <tr key={i.id}>
-                    <td><strong>{i.name}</strong></td>
+                    <td>
+                      <strong>{i.name}</strong>
+                      {i.category === 'packaging' && i.package_size_ml != null && i.package_size_ml > 0 && (
+                        <div className="field-hint">{Math.round(i.package_size_ml)} ml</div>
+                      )}
+                    </td>
                     <td>{i.category}</td>
                     <td className={low ? 'low-stock' : ''}>{i.quantity} {i.unit}</td>
                     <td>{i.reorder_level} {i.unit}</td>
@@ -187,10 +208,35 @@ export function Inventory() {
             </div>
             <div className="form-group">
               <label>Category</label>
-              <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+              <select
+                value={form.category}
+                onChange={(e) => {
+                  const category = e.target.value;
+                  setForm({
+                    ...form,
+                    category,
+                    unit: category === 'packaging' && form.unit === 'lbs' ? 'each' : form.unit,
+                  });
+                }}
+              >
                 {categories.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
+            {form.category === 'packaging' && (
+              <div className="form-group">
+                <label>Bottle or package size (ml)</label>
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  data-testid="packaging-size-ml"
+                  value={sizeInput}
+                  onChange={(e) => setSizeInput(e.target.value)}
+                  placeholder="750"
+                />
+                <span className="field-hint">Used when you bottle with this item.</span>
+              </div>
+            )}
             <div className="form-group">
               <label>Unit</label>
               <input value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} placeholder="lbs, gal, each..." />
