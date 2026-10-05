@@ -27,7 +27,7 @@ import {
   totalBottleCount,
   totalVolumeGal,
 } from '../lib/bottling-lines';
-import { PACKAGING_BOTTLES, packagingBottleByName } from '../lib/packaging-bottles';
+import { packagingBottleOptions, type PackagingBottleOption } from '../lib/packaging-bottles';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
 import type { BottlingRunLineInput, BottlingRunView } from '../types';
 
@@ -85,6 +85,10 @@ export function Bottling() {
   const barrels = getBarrels().filter((b) => b.status === 'aging' || b.status === 'empty');
   const holdingTanks = getHoldingTanks();
   const packagingInventory = getInventoryByCategory('packaging');
+  const bottleOptions = useMemo(
+    () => packagingBottleOptions(packagingInventory),
+    [packagingInventory],
+  );
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<number | undefined>();
   const [form, setForm] = useState<RunHeaderForm>(emptyRun());
@@ -129,13 +133,14 @@ export function Bottling() {
     if (unbottledInTankGal == null || unbottledInTankGal <= 0 || isRumBottlingProduct(form.product_name)) {
       return [];
     }
-    return PACKAGING_BOTTLES
+    return bottleOptions
+      .filter((bottle): bottle is PackagingBottleOption & { sizeMl: number } => bottle.sizeMl != null && bottle.sizeMl > 0)
       .map((bottle) => ({
         ...bottle,
         maxCount: maxBottlesFromGallons(unbottledInTankGal, bottle.sizeMl),
       }))
       .filter((entry) => entry.maxCount > 0);
-  }, [unbottledInTankGal, form.product_name]);
+  }, [unbottledInTankGal, form.product_name, bottleOptions]);
 
   const remainingByLineSize = useMemo(() => {
     if (unbottledInTankGal == null || unbottledInTankGal <= 0 || !isRumBottling) return [];
@@ -243,11 +248,19 @@ export function Bottling() {
   };
 
   const handleLinePackagingSelect = (index: number, name: string) => {
-    const bottle = packagingBottleByName(name);
+    const bottle = bottleOptions.find((option) => option.name.toLowerCase() === name.toLowerCase());
     updateLine(index, {
       packaging_bottle: name,
       bottle_size_ml: bottle?.sizeMl ?? lines[index]?.bottle_size_ml ?? 750,
     });
+  };
+
+  const optionsForLine = (selected: string): PackagingBottleOption[] => {
+    const name = selected.trim();
+    if (!name || bottleOptions.some((option) => option.name.toLowerCase() === name.toLowerCase())) {
+      return bottleOptions;
+    }
+    return [...bottleOptions, { name, sizeMl: null }];
   };
 
   const addLine = () => setLines((prev) => [...prev, emptyLine()]);
@@ -343,7 +356,7 @@ export function Bottling() {
         <div className="card" style={{ marginBottom: '1.25rem' }}>
           <h3 className="section-title" style={{ marginTop: 0 }}>Packaging Bottles</h3>
           <p className="text-muted" style={{ marginBottom: '0.75rem' }}>
-            Standard bottle SKUs tracked in inventory under Packaging.
+            Bottle SKUs from Inventory, category Packaging. A bottle you add there shows up in this list and in the bottling dropdown.
           </p>
           <div className="table-wrap">
             <table>
@@ -356,14 +369,14 @@ export function Bottling() {
                 </tr>
               </thead>
               <tbody>
-                {PACKAGING_BOTTLES.map((bottle) => {
+                {bottleOptions.map((bottle) => {
                   const inv = packagingInventory.find(
                     (i) => i.name.toLowerCase() === bottle.name.toLowerCase(),
                   );
                   return (
                     <tr key={bottle.name}>
                       <td><strong>{bottle.name}</strong></td>
-                      <td>{bottle.sizeMl} ml</td>
+                      <td>{bottle.sizeMl != null ? `${bottle.sizeMl} ml` : '—'}</td>
                       <td>{inv ? `${inv.quantity.toLocaleString()} ${inv.unit}` : '—'}</td>
                       <td>{inv ? inv.reorder_level.toLocaleString() : '—'}</td>
                     </tr>
@@ -557,8 +570,10 @@ export function Bottling() {
                         onChange={(e) => handleLinePackagingSelect(index, e.target.value)}
                       >
                         <option value="">— Select —</option>
-                        {PACKAGING_BOTTLES.map((b) => (
-                          <option key={b.name} value={b.name}>{b.name} ({b.sizeMl} ml)</option>
+                        {optionsForLine(line.packaging_bottle).map((b) => (
+                          <option key={b.name} value={b.name}>
+                            {b.sizeMl != null ? `${b.name} (${b.sizeMl} ml)` : b.name}
+                          </option>
                         ))}
                       </select>
                     </div>
