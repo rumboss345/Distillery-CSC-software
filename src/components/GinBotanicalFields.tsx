@@ -33,7 +33,7 @@ export function GinBotanicalFields({
         </button>
       </div>
       <p className="field-hint">
-        Enter the weight of each botanical. That weight is the amount you add.
+        Enter the weight of each botanical.
       </p>
       {lines.map((line, index) => (
         <div key={index} className="form-grid" style={{ marginBottom: '0.75rem' }}>
