@@ -37,6 +37,12 @@ export const ROUNDING = {
   /** Table 4, gallons per pound. */
   gallonsPerPound: 6,
   temperatureF: 2,
+  /**
+   * Contraction as a percent of the poured (pre-mix) volume.
+   * The volume itself uses wineGallons or liters. Water additions use
+   * wineGallons, liters, pounds, and kilograms.
+   */
+  contractionPercent: 2,
   /** Inventory quantities. Six places, and negative balances are allowed. */
   inventoryQuantity: 6,
 } as const;

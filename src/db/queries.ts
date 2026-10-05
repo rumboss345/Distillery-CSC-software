@@ -123,6 +123,7 @@ import {
 } from './database';
 import {
   computeTheoreticalBlend,
+  proofingRecordForBlend,
   reconcileMeasurements,
   type AdditiveInput,
   type SpiritSourceInput,
@@ -4089,6 +4090,12 @@ function snapshotFormula(
         ingredients,
         theoretical: formulation.theoretical,
         reconciliation: formulation.reconciliation,
+        proofing: proofingRecordForBlend(
+          toSpiritInputs(spiritSources),
+          toAdditiveInputs(ingredients),
+          product.target_abv,
+          'preview',
+        ),
         savedAt: new Date().toISOString(),
       }),
       product.notes,
@@ -4344,6 +4351,31 @@ export function executeBlendProduct(id: number, outputTankId: number): void {
     }
   }
 
+  const ingredients = getBlendIngredients(id);
+  const proofing = proofingRecordForBlend(
+    sources.map((source) => ({ volumeGal: source.volume_gal, abv: source.abv })),
+    ingredients.map((ingredient) => ({
+      ingredientType: ingredient.ingredient_type,
+      name: ingredient.name,
+      amount: ingredient.amount,
+      unit: ingredient.unit,
+      abv: ingredient.abv,
+      inventoryItemId: ingredient.inventory_item_id,
+    })),
+    product.target_abv,
+    'post',
+    {
+      sourceLot: product.batch_number,
+      batchId: String(id),
+      trackProofingWater: ingredients.some(
+        (ingredient) => ingredient.ingredient_type === 'water' && ingredient.inventory_item_id != null,
+      ),
+    },
+  );
+  if (proofing.applies && !proofing.ok) {
+    throw new Error(proofing.message ?? 'Proofing validation failed. Inventory was not changed.');
+  }
+
   const sourceTankIds = new Set(
     sources.map((s) => s.holding_tank_equipment_id).filter((tankId) => tankId > 0),
   );
@@ -4366,7 +4398,6 @@ export function executeBlendProduct(id: number, outputTankId: number): void {
     );
   }
 
-  const ingredients = getBlendIngredients(id);
   for (const deduction of inventoryDeductionsForBlend(ingredients)) {
     adjustInventory(deduction.id, -deduction.quantity);
   }
@@ -4416,6 +4447,23 @@ export function executeBlendProduct(id: number, outputTankId: number): void {
       id,
     ],
   );
+
+  if (proofing.applies && proofing.ok) {
+    const version = queryOne<{ version_number: number }>(
+      'SELECT COALESCE(MAX(version_number), 0) AS version_number FROM blend_formula_versions WHERE blend_product_id = ?',
+      [id],
+    );
+    insertRow(
+      `INSERT INTO blend_formula_versions (blend_product_id, version_number, snapshot_json, notes)
+       VALUES (?, ?, ?, ?)`,
+      [
+        id,
+        (version?.version_number ?? 0) + 1,
+        proofing.snapshot,
+        'Posted proofing calculation. This snapshot is not recomputed when the engine changes.',
+      ],
+    );
+  }
 
   syncHoldingTankStatuses();
 }

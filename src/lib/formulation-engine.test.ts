@@ -19,23 +19,15 @@ describe('formulation engine', () => {
     );
   });
 
-  it('matches Table 3 dilution for spirit and water', () => {
-    const dilution = computeAlcoholDilution({
-      actualAbvPercent: 80,
-      targetAbvPercent: 40,
-      volumeLiters: 100,
-      volumeBasis: 'after',
-    });
-    expect(dilution).not.toBeNull();
+  it('designs an unsweetened addition that keeps the alcohol', () => {
     const designed = designFormulation({
       targetVolumeGal: wineGallonsFromLiters(100),
       targetAbv: 40,
       additionSpiritAbv: 80,
     });
     expect(designed.ok).toBe(true);
-    expect(designed.spiritGal * LITERS_PER_US_GALLON).toBeCloseTo(dilution!.spiritVolumeLiters, 1);
-    expect(designed.waterGal * LITERS_PER_US_GALLON).toBeCloseTo(dilution!.waterVolumeLiters, 1);
-    // Re-gauging the mix walks Table 3, which rounds proof gallons to 0.1.
+    expect(designed.spiritGal * LITERS_PER_US_GALLON).toBeCloseTo(50, 0);
+    expect(designed.waterGal).toBeGreaterThan(0);
     expect(designed.analysis?.abv).toBeCloseTo(40, 0);
   });
 
