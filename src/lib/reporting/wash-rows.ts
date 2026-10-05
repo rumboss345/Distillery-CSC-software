@@ -12,7 +12,7 @@ export interface WashHistoryRow {
   operator: string;
 }
 
-/** Discarded washes that never entered fermentation. Those stay on the Wash page's history. */
+/** Every wash cook. The Wash page keeps active batches and the latest finished ones. */
 export function buildWashHistoryRows(range: ReportDateRange): WashHistoryRow[] {
   const rows = queryAll<{
     id: number;
@@ -27,13 +27,6 @@ export function buildWashHistoryRows(range: ReportDateRange): WashHistoryRow[] {
     SELECT m.id, m.batch_number, m.recipe_name, m.grain_lbs, m.water_gal,
            m.start_date, m.status, m.assigned_user_name
     FROM mash_batches m
-    WHERE m.status = 'discarded'
-      AND NOT EXISTS (
-        SELECT 1 FROM mash_fermenter_assignments a WHERE a.mash_batch_id = m.id
-      )
-      AND NOT EXISTS (
-        SELECT 1 FROM fermentation_logs fl WHERE fl.mash_batch_id = m.id
-      )
     ORDER BY m.start_date DESC, m.id DESC
   `);
 

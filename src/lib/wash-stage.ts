@@ -7,8 +7,8 @@ export const WASH_PAGE_STATUSES: MashStatus[] = ['planned', 'mashing', 'discarde
 export const FERMENTATION_PAGE_STATUSES: MashStatus[] = ['fermenting', 'complete', 'discarded'];
 
 /**
- * A wash batch stays on the Wash page until it is fermenting, finished,
- * or discarded after fermentation logs or fermenter assignments exist.
+ * Where the batch is worked. Fermenting and finished cooks still stay
+ * on the Wash page as records; this only chooses the working page.
  */
 export function washRecordKind(
   status: MashStatus,
@@ -17,6 +17,31 @@ export function washRecordKind(
   if (status === 'fermenting' || status === 'complete') return 'fermentation';
   if (status === 'discarded' && (activity.hasLogs || activity.hasAssignments)) return 'fermentation';
   return 'wash';
+}
+
+/**
+ * The Wash page lists cooks still being made, discarded cooks that never
+ * fermented, and fermenting or finished cooks kept as records.
+ * A fermentation that was discarded stays on the Fermentation page.
+ */
+export function washPageListsBatch(
+  status: MashStatus,
+  activity: { hasLogs: boolean; hasAssignments: boolean },
+): boolean {
+  if (washRecordKind(status, activity) === 'wash') return true;
+  return status === 'fermenting' || status === 'complete';
+}
+
+const WASH_STATUS_LABELS: Record<string, string> = {
+  planned: 'planned',
+  mashing: 'washing',
+  fermenting: 'fermenting',
+  complete: 'complete',
+  discarded: 'discarded',
+};
+
+export function washStatusLabel(status: string): string {
+  return WASH_STATUS_LABELS[status] ?? status;
 }
 
 /** Calendar and shortcuts: fermentation records open the Fermentation page. */
