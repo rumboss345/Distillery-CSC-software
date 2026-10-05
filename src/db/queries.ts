@@ -14,7 +14,8 @@ import {
   type StoredCutType,
   type VesselInflow,
 } from '../lib/collection-vessel-cuts';
-import { isFermenterSourcedRun, isTankSourcedRun } from '../lib/distillation-run-types';
+import { isFermenterSourcedRun, isSpiritStyleRun, isTankSourcedRun } from '../lib/distillation-run-types';
+import { activeGinBotanicals, normalizeBotanicalWeightUnit } from '../lib/gin-botanicals';
 import {
   chargeExceedsStillCapacity,
   plannedRecordSkipsEquipmentStatus,
@@ -93,8 +94,12 @@ import type {
   HoldingTankTransfer,
   HoldingTankTransferView,
   DistillationRun,
+  DistillationRunBotanical,
   DistillationRunType,
   DistillationRunView,
+  GinBotanicalInput,
+  GinRecipe,
+  GinRecipeBotanical,
   FermentationLog,
   FermentationLogView,
   FermentationAssignmentStatus,
@@ -1438,7 +1443,7 @@ export function getCutDestinationsForRun(
   options?: EquipmentListOptions,
 ): FloorEquipment[] {
   const vessels = getCollectionVesselsForCutType(cutType, excludeCutId, options);
-  if (runType !== 'low_wines' || cutType === 'heads') return vessels;
+  if (!isSpiritStyleRun(runType) || cutType === 'heads') return vessels;
   const holding = getSpiritRunCutHoldingTanks(undefined, options);
   const seen = new Set(vessels.map((v) => v.id));
   return [...vessels, ...holding.filter((h) => !seen.has(h.id))];
@@ -1723,7 +1728,7 @@ export function defaultTankForCutType(
         const lowWineHearts = defaultLowWineRunHeartsCollectionVesselId(excludeTankId, excludeCutId);
         if (lowWineHearts) return lowWineHearts;
       }
-      if (run?.run_type === 'low_wines') {
+      if (isSpiritStyleRun(run?.run_type)) {
         const highWinesTank = defaultHighWinesTankId(excludeTankId);
         if (highWinesTank) return highWinesTank;
       }
@@ -1840,6 +1845,7 @@ export function getHoldingTankIntakeHistory(
   const runTypeLabels: Record<string, string> = {
     wash: 'low wine run',
     low_wines: 'spirit run',
+    gin: 'gin run',
     heavy_rum: 'heavy rum run',
   };
 
@@ -3172,7 +3178,11 @@ function releaseDistillationEquipmentForReturnToPlan(run: DistillationRun, runId
   }
 }
 
-export function saveDistillationRun(run: Omit<DistillationRun, 'id' | 'created_at'>, id?: number): void {
+export function saveDistillationRun(
+  run: Omit<DistillationRun, 'id' | 'created_at'>,
+  id?: number,
+  botanicals?: GinBotanicalInput[],
+): number {
   assertEnteredAbv(run.charge_abv, 'Charge ABV');
   assertEnteredAbv(run.proof_spirit_abv, 'Tails ABV');
   const runType = (run.run_type ?? 'wash') as DistillationRunType;
@@ -3226,6 +3236,7 @@ export function saveDistillationRun(run: Omit<DistillationRun, 'id' | 'created_a
     assertStillageFitsTank(stillage.tankId, stillage.volumeGal, id);
   }
   const runDate = eventDateWhenLeavingPlanned(previousRun?.status, run.status, run.run_date);
+  let runId = id ?? 0;
   if (id) {
     runQuery(
       `UPDATE distillation_runs SET batch_number=?, run_type=?, source_mash_batch_id=?, source_fermenter_equipment_id=?, source_holding_tank_equipment_id=?, dest_holding_tank_equipment_id=?, still_name=?, run_date=?, charge_volume_gal=?, charge_abv=?, proof_spirit_gal=?, proof_spirit_abv=?, proof_water_gal=?, proof_place=?, stillage_volume_gal=?, stillage_discarded=?, stillage_holding_tank_equipment_id=?, status=?, assigned_user_id=?, assigned_user_name=?, notes=? WHERE id=?`,
@@ -3255,7 +3266,7 @@ export function saveDistillationRun(run: Omit<DistillationRun, 'id' | 'created_a
       ],
     );
   } else {
-    insertRow(
+    runId = insertRow(
       `INSERT INTO distillation_runs (batch_number, run_type, source_mash_batch_id, source_fermenter_equipment_id, source_holding_tank_equipment_id, dest_holding_tank_equipment_id, still_name, run_date, charge_volume_gal, charge_abv, proof_spirit_gal, proof_spirit_abv, proof_water_gal, proof_place, stillage_volume_gal, stillage_discarded, stillage_holding_tank_equipment_id, status, assigned_user_id, assigned_user_name, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         run.batch_number,
@@ -3310,8 +3321,99 @@ export function saveDistillationRun(run: Omit<DistillationRun, 'id' | 'created_a
   }
   releaseStillAfterRunningRun(previousRun, run.still_name, run.status);
 
+  if (runType === 'gin' && botanicals) {
+    persistRunBotanicals(runId, botanicals);
+  }
   syncHoldingTankStatuses();
   syncFermenterAndStillStatuses();
+  return runId;
+}
+
+function persistRunBotanicals(runId: number, botanicals: GinBotanicalInput[]): void {
+  runQuery('DELETE FROM distillation_run_botanicals WHERE distillation_run_id = ?', [runId]);
+  activeGinBotanicals(botanicals).forEach((line, index) => {
+    insertRow(
+      `INSERT INTO distillation_run_botanicals
+        (distillation_run_id, name, amount, weight, weight_unit, sort_order)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [runId, line.name, line.amount, line.weight, line.weight_unit, index],
+    );
+  });
+}
+
+export function getRunBotanicals(runId?: number): DistillationRunBotanical[] {
+  if (runId != null) {
+    return queryAll<DistillationRunBotanical>(
+      `SELECT * FROM distillation_run_botanicals WHERE distillation_run_id = ? ORDER BY sort_order, id`,
+      [runId],
+    );
+  }
+  return queryAll<DistillationRunBotanical>(
+    'SELECT * FROM distillation_run_botanicals ORDER BY distillation_run_id, sort_order, id',
+  );
+}
+
+export function getGinRecipes(): GinRecipe[] {
+  const recipes = queryAll<Omit<GinRecipe, 'botanicals'>>('SELECT * FROM gin_recipes ORDER BY name COLLATE NOCASE');
+  const lines = queryAll<GinRecipeBotanical>(
+    'SELECT * FROM gin_recipe_botanicals ORDER BY sort_order, id',
+  );
+  const byRecipe = new Map<number, GinRecipeBotanical[]>();
+  for (const line of lines) {
+    const bucket = byRecipe.get(line.gin_recipe_id) ?? [];
+    bucket.push(line);
+    byRecipe.set(line.gin_recipe_id, bucket);
+  }
+  return recipes.map((recipe) => ({
+    ...recipe,
+    botanicals: byRecipe.get(recipe.id) ?? [],
+  }));
+}
+
+export function saveGinRecipe(
+  recipe: { name: string; notes: string },
+  id: number | undefined,
+  botanicals: GinBotanicalInput[],
+): number {
+  const name = recipe.name.trim();
+  if (!name) throw new Error('Enter a name for the gin recipe.');
+  const lines = activeGinBotanicals(botanicals);
+  if (lines.length === 0) {
+    throw new Error('Add at least one botanical with an amount or a weight.');
+  }
+  const named = queryOne<{ id: number }>(
+    'SELECT id FROM gin_recipes WHERE name = ? COLLATE NOCASE AND (? IS NULL OR id != ?)',
+    [name, id ?? null, id ?? 0],
+  );
+  if (named) throw new Error(`A gin recipe named "${name}" already exists.`);
+  const notes = recipe.notes.trim();
+  let recipeId = id ?? 0;
+  if (id) {
+    runQuery(
+      `UPDATE gin_recipes SET name=?, notes=?, updated_at=datetime('now') WHERE id=?`,
+      [name, notes, id],
+    );
+  } else {
+    recipeId = insertRow(
+      'INSERT INTO gin_recipes (name, notes) VALUES (?, ?)',
+      [name, notes],
+    );
+  }
+  runQuery('DELETE FROM gin_recipe_botanicals WHERE gin_recipe_id = ?', [recipeId]);
+  lines.forEach((line, index) => {
+    insertRow(
+      `INSERT INTO gin_recipe_botanicals
+        (gin_recipe_id, name, amount, weight, weight_unit, sort_order)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [recipeId, line.name, line.amount, line.weight, normalizeBotanicalWeightUnit(line.weight_unit), index],
+    );
+  });
+  return recipeId;
+}
+
+export function deleteGinRecipe(id: number): void {
+  runQuery('DELETE FROM gin_recipe_botanicals WHERE gin_recipe_id = ?', [id]);
+  runQuery('DELETE FROM gin_recipes WHERE id = ?', [id]);
 }
 
 export function deleteDistillationRun(id: number): void {
@@ -3322,6 +3424,7 @@ export function deleteDistillationRun(id: number): void {
   if (run && stillRunOccupiesEquipment(run.status)) {
     releaseStillAfterRunningRun(run, '', 'complete');
   }
+  runQuery('DELETE FROM distillation_run_botanicals WHERE distillation_run_id = ?', [id]);
   runQuery('DELETE FROM distillation_runs WHERE id = ?', [id]);
   syncHoldingTankStatuses();
   syncFermenterAndStillStatuses();
@@ -3362,7 +3465,7 @@ export function saveDistillationCut(cut: Omit<DistillationCut, 'id'>, id?: numbe
       'SELECT run_type FROM distillation_runs WHERE id = ?',
       [cut.distillation_run_id],
     )?.run_type;
-    const spiritRunHolding = runType === 'low_wines'
+    const spiritRunHolding = isSpiritStyleRun(runType)
       && cut.cut_type !== 'heads'
       && isSpiritRunCutHoldingTank(cut.holding_tank_equipment_id);
     if (!isCollectionVesselEquipmentId(cut.holding_tank_equipment_id) && !spiritRunHolding) {
@@ -4814,7 +4917,7 @@ export function getEquipmentVolumeReport(): EquipmentVolumeReport[] {
           [run.source_holding_tank_equipment_id],
         )?.name;
         if (tankName) {
-          const prefix = run.run_type === 'heavy_rum' ? 'Heavy rum from' : 'Spirit from';
+          const prefix = run.run_type === 'gin' ? 'Gin from' : 'Spirit from';
           detail = `${prefix} ${tankName} · ${detail}`;
         }
       }

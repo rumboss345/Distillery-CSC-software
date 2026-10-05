@@ -642,12 +642,70 @@ function runMigrations(): void {
   clearAllBlendRecipesOnce();
   migrateStillageDiscardTransfers();
   migrateHoldingTankVolumeVariances();
+  migrateGinRuns();
   db.run(`
     UPDATE floor_equipment
     SET equipment_type = 'stillage_tank'
     WHERE equipment_type = 'holding_tank'
       AND name LIKE '%stillage%' COLLATE NOCASE
   `);
+  persistDb();
+}
+
+function migrateGinRuns(): void {
+  if (!db) return;
+  db.run(`
+    CREATE TABLE IF NOT EXISTS distillation_run_botanicals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      distillation_run_id INTEGER NOT NULL REFERENCES distillation_runs(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      amount REAL NOT NULL DEFAULT 0,
+      weight REAL NOT NULL DEFAULT 0,
+      weight_unit TEXT NOT NULL DEFAULT 'g',
+      sort_order INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+  db.run('CREATE INDEX IF NOT EXISTS idx_run_botanicals_run ON distillation_run_botanicals(distillation_run_id)');
+  db.run(`
+    CREATE TABLE IF NOT EXISTS gin_recipes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      notes TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS gin_recipe_botanicals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      gin_recipe_id INTEGER NOT NULL REFERENCES gin_recipes(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      amount REAL NOT NULL DEFAULT 0,
+      weight REAL NOT NULL DEFAULT 0,
+      weight_unit TEXT NOT NULL DEFAULT 'g',
+      sort_order INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+  db.run('CREATE INDEX IF NOT EXISTS idx_gin_recipe_botanicals_recipe ON gin_recipe_botanicals(gin_recipe_id)');
+  db.run(`INSERT OR IGNORE INTO inventory_categories (name) VALUES ('botanicals')`);
+  const botanicals = [
+    'Juniper berries',
+    'Coriander seed',
+    'Angelica root',
+    'Orris root',
+    'Citrus peel',
+  ];
+  for (const name of botanicals) {
+    const exists = queryOne<{ id: number }>(
+      'SELECT id FROM inventory_items WHERE name = ? COLLATE NOCASE AND category = ?',
+      [name, 'botanicals'],
+    );
+    if (exists) continue;
+    db.run(
+      `INSERT INTO inventory_items (name, category, unit, quantity, reorder_level, notes) VALUES (?, 'botanicals', 'g', 0, 100, 'Gin botanical')`,
+      [name],
+    );
+  }
   persistDb();
 }
 
