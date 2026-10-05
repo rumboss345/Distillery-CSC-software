@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { AbvTemperatureInput, correctedAbvFromInputs } from '../components/AbvTemperatureInput';
 import type { DilutionVolumeBasis } from '../lib/alcohol-dilution';
 import { decimalStringFromNumber } from '../lib/calc-engine/number-bridge';
-import { previewProofing, type ProofingRequest } from '../lib/calc-engine/proofing';
+import { previewProofing, type ProofingCalculated, type ProofingRequest } from '../lib/calc-engine/proofing';
 import {
   gaugeFromLiters,
   gaugeFromWeightKg,
@@ -32,6 +32,211 @@ type InputMode = 'weight' | 'volume';
 type WeightUnit = 'lb' | 'kg';
 type VolumeUnit = 'gal' | 'l';
 type DilutionAmountMeasure = 'volume' | 'weight';
+
+function formatQty(value: string): string {
+  const negative = value.startsWith('-');
+  const unsigned = negative ? value.slice(1) : value;
+  const [whole, fraction] = unsigned.split('.');
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return `${negative ? '-' : ''}${grouped}${fraction != null ? `.${fraction}` : ''}`;
+}
+
+const DILUTION_CHECK_COPY: Record<string, string> = {
+  'mass-balance': 'Spirit weight plus water weight equals the finished weight.',
+  'alcohol-balance': 'The alcohol you started with is still in the blend. Only water was added.',
+  'target-proof': 'The finished strength matches the target.',
+  density: 'The finished weight per gallon matches the 60 °F alcohol table at this strength.',
+  volume: 'The finished volume comes from the weight and the density, not from adding the volumes you pour.',
+  contraction: 'The shrinkage is the poured volume minus the gauged volume.',
+};
+
+const DILUTION_WARNING_COPY: Record<string, string> = {
+  'Table 6 is printed at whole proofs. Water and specific gravity were interpolated between adjacent proofs.':
+    'This strength sits between two printed table rows, so the density was read between them.',
+  'Observed sample temperature was recorded only. Density and the ABV used here are at 60 °F.':
+    'The sample temperature was noted. The density and strength used here are at 60 °F.',
+  'Table 6 vacuum specific gravity is still the 60 °F gauging table, not OIML at 20 °C.':
+    'Vacuum specific gravity here is still the 60 °F table.',
+};
+
+function dilutionQty(value: string, unit: string): string {
+  return `${formatQty(value)} ${unit}`;
+}
+
+function dilutionFigure(
+  result: ProofingCalculated,
+  kind: 'starting' | 'water' | 'finished' | 'premix' | 'contraction',
+  measure: DilutionAmountMeasure,
+  preferVolume: VolumeUnit,
+  preferWeight: WeightUnit,
+): { headline: string; alt: string } {
+  const volumes = {
+    starting: [result.startingVolumeL, result.startingVolumeGal],
+    water: [result.waterVolumeL, result.waterVolumeGal],
+    finished: [result.finishedVolumeL, result.finishedVolumeGal],
+    premix: [result.premixVolumeL, result.premixVolumeGal],
+    contraction: [result.contractionVolumeL, result.contractionVolumeGal],
+  }[kind];
+  const masses = {
+    starting: [result.startingMassLb, result.startingMassKg],
+    water: [result.waterMassLb, result.waterMassKg],
+    finished: [result.finishedMassLb, result.finishedMassKg],
+    premix: null,
+    contraction: null,
+  }[kind];
+  const [liters, gallons] = volumes;
+  const volumeLine = preferVolume === 'l'
+    ? dilutionQty(liters, 'L')
+    : dilutionQty(gallons, 'US gal');
+  const otherVolume = preferVolume === 'l'
+    ? dilutionQty(gallons, 'US gal')
+    : dilutionQty(liters, 'L');
+  if (measure === 'weight' && masses) {
+    const [pounds, kilograms] = masses;
+    return {
+      headline: preferWeight === 'lb' ? dilutionQty(pounds, 'lb') : dilutionQty(kilograms, 'kg'),
+      alt: `${preferWeight === 'lb' ? dilutionQty(kilograms, 'kg') : dilutionQty(pounds, 'lb')} · ${dilutionQty(liters, 'L')} · ${dilutionQty(gallons, 'US gal')}`,
+    };
+  }
+  const weightLine = masses
+    ? `${dilutionQty(masses[0], 'lb')} · ${dilutionQty(masses[1], 'kg')}`
+    : '';
+  return {
+    headline: volumeLine,
+    alt: weightLine ? `${otherVolume} · ${weightLine}` : otherVolume,
+  };
+}
+
+function DilutionResultView({
+  result,
+  measure,
+  preferVolume,
+  preferWeight,
+  fixedAfter,
+  temperatureCorrected,
+}: {
+  result: ProofingCalculated;
+  measure: DilutionAmountMeasure;
+  preferVolume: VolumeUnit;
+  preferWeight: WeightUnit;
+  fixedAfter: boolean;
+  temperatureCorrected: boolean;
+}) {
+  const spirit = dilutionFigure(result, 'starting', measure, preferVolume, preferWeight);
+  const water = dilutionFigure(result, 'water', measure, preferVolume, preferWeight);
+  const finished = dilutionFigure(result, 'finished', measure, preferVolume, preferWeight);
+  const poured = dilutionFigure(result, 'premix', 'volume', preferVolume, preferWeight);
+  const gauged = dilutionFigure(result, 'finished', 'volume', preferVolume, preferWeight);
+  const shrink = dilutionFigure(result, 'contraction', 'volume', preferVolume, preferWeight);
+  const noWater = Number(result.waterVolumeL) === 0 && Number(result.waterMassLb) === 0;
+  const showsShrinkage = Number(result.contractionVolumeL) > 0;
+  const failedChecks = result.checks.filter((check) => !check.passed);
+  const detailWarnings = result.warnings.filter((warning) => (
+    !(temperatureCorrected && warning.startsWith('Observed sample temperature'))
+  ));
+
+  let lead = `Add ${water.headline} of water to ${spirit.headline} of ${result.startingAbv}% spirit. The blend gauges ${finished.headline} at ${result.finalAbv}% ABV.`;
+  if (noWater) {
+    lead = 'No water is needed. This spirit is already at the target strength.';
+  } else if (fixedAfter) {
+    lead = `Use ${spirit.headline} of ${result.startingAbv}% spirit and add ${water.headline} of water. That fills ${finished.headline} at ${result.finalAbv}% ABV.`;
+  }
+
+  const figures: { testId: string; step: string; title: string; headline: string; alt: string }[] = [
+    {
+      testId: 'dilution-spirit',
+      step: '1',
+      title: fixedAfter ? 'Spirit to use' : 'Spirit you have',
+      headline: spirit.headline,
+      alt: spirit.alt,
+    },
+    {
+      testId: 'dilution-water',
+      step: '2',
+      title: 'Water to add',
+      headline: water.headline,
+      alt: water.alt,
+    },
+    {
+      testId: 'dilution-finished',
+      step: '3',
+      title: 'Finished blend',
+      headline: finished.headline,
+      alt: `${finished.alt} · ${result.finalAbv}% ABV`,
+    },
+  ];
+
+  return (
+    <div className="card dilution-result" data-testid="dilution-preview" style={{ marginTop: '1rem' }}>
+      {!result.ok && (
+        <p className="dilution-unusable">
+          This result cannot be used. Nothing was changed.
+        </p>
+      )}
+      <h3>{noWater ? 'Already at strength' : 'What to add'}</h3>
+      {temperatureCorrected && (
+        <p className="field-hint" style={{ marginTop: 0 }}>
+          The strength was adjusted from the sample temperature to 60 °F. Volumes below are at 60 °F.
+        </p>
+      )}
+      <p className="dilution-result-lead">{lead}</p>
+      <div className="dilution-figures">
+        {figures.map((figure) => (
+          <figure key={figure.testId} className="dilution-figure" data-testid={figure.testId}>
+            <p className="dilution-figure-step">{figure.step} · {figure.title}</p>
+            <p className="dilution-figure-value">{figure.headline}</p>
+            <p className="dilution-figure-alt">{figure.alt}</p>
+          </figure>
+        ))}
+      </div>
+      {showsShrinkage && (
+        <p className="field-hint" data-testid="dilution-contraction">
+          You pour {poured.headline} of spirit and water together. After mixing, the blend gauges {gauged.headline}.
+          It shrinks by {shrink.headline} ({result.contractionPercent}%). The weight does not shrink.
+        </p>
+      )}
+      {!result.ok && failedChecks.length > 0 && (
+        <ul className="dilution-failed-checks">
+          {failedChecks.map((check) => (
+            <li key={check.name}>{check.detail}</li>
+          ))}
+        </ul>
+      )}
+      <details className="dilution-details">
+        <summary>How this was calculated</summary>
+        <dl className="dilution-detail-list">
+          <dt>Alcohol in the spirit</dt>
+          <dd>{dilutionQty(result.ethanolMassLb, 'lb')} · {dilutionQty(result.ethanolMassKg, 'kg')}</dd>
+          <dt>Water already in the spirit</dt>
+          <dd>{dilutionQty(result.spiritWaterMassLb, 'lb')} · {dilutionQty(result.spiritWaterMassKg, 'kg')}</dd>
+          <dt>Proof at 60 °F</dt>
+          <dd>{result.startingProof} proof before · {result.finalProof} proof after</dd>
+          <dt>Spirit density</dt>
+          <dd>SG {result.startingSpecificGravity} · {result.startingDensityLbPerGal} lb/US gal</dd>
+          <dt>Finished density</dt>
+          <dd>SG {result.finishedSpecificGravity} · {result.finishedDensityLbPerGal} lb/US gal</dd>
+          <dt>Proof gallons</dt>
+          <dd>{formatQty(result.proofGallons)} PG</dd>
+        </dl>
+        <ul data-testid="dilution-validation">
+          {result.checks.map((check) => (
+            <li key={check.name} className={check.passed ? undefined : 'dilution-check-fail'}>
+              {check.passed ? DILUTION_CHECK_COPY[check.name] : `${DILUTION_CHECK_COPY[check.name]} ${check.detail}`}
+            </li>
+          ))}
+        </ul>
+        {detailWarnings.length > 0 && (
+          <ul className="dilution-warnings">
+            {detailWarnings.map((warning) => (
+              <li key={warning}>{DILUTION_WARNING_COPY[warning] ?? warning}</li>
+            ))}
+          </ul>
+        )}
+        <p className="field-hint">TTB Gauging Manual Table 6 at 60 °F.</p>
+      </details>
+    </div>
+  );
+}
 
 function ResultPanel({
   result,
@@ -170,7 +375,7 @@ function AlcoholDilutionCalculator() {
       <div className="card">
         <h3>Alcohol dilution</h3>
         <p className="field-hint" style={{ marginTop: 0 }}>
-          Proofing preview at 60 °F. Water mass comes from TTB Table 6 (27 CFR §30.66). Finished volume is the finished mass divided by the Table 6 density. This preview does not change inventory.
+          Find how much water to add. Volumes below are at 60 °F. This is a preview and does not change a tank.
         </p>
 
         <div className="form-group full-width">
@@ -290,76 +495,14 @@ function AlcoholDilutionCalculator() {
       </div>
 
       {dilutionResult && 'finalAbv' in dilutionResult ? (
-        <div className="card spirit-calculator-results" style={{ marginTop: '1rem' }} data-testid="dilution-preview">
-          <h3>Preview at 60 °F</h3>
-          <dl className="detail-grid">
-            <dt>Spirit</dt>
-            <dd data-testid="dilution-spirit">
-              {dilutionResult.startingVolumeL} L · {dilutionResult.startingVolumeGal} US gal
-              <br />
-              {dilutionResult.startingMassLb} lb · {dilutionResult.startingMassKg} kg
-              <br />
-              {dilutionResult.startingAbv}% ABV · {dilutionResult.startingProof} proof
-              <br />
-              SG {dilutionResult.startingSpecificGravity} · {dilutionResult.startingDensityLbPerGal} lb/gal
-            </dd>
-            <dt>Ethanol / water in the spirit</dt>
-            <dd>
-              Ethanol {dilutionResult.ethanolMassKg} kg ({dilutionResult.ethanolMassLb} lb)
-              <br />
-              Water already present {dilutionResult.spiritWaterMassKg} kg
-            </dd>
-            <dt>Proofing water</dt>
-            <dd data-testid="dilution-water">
-              {dilutionResult.waterVolumeL} L · {dilutionResult.waterVolumeGal} US gal
-              <br />
-              {dilutionResult.waterMassLb} lb · {dilutionResult.waterMassKg} kg
-            </dd>
-            <dt>Poured volume, before contraction</dt>
-            <dd>{dilutionResult.premixVolumeL} L · {dilutionResult.premixVolumeGal} US gal</dd>
-            <dt>Finished blend</dt>
-            <dd data-testid="dilution-finished">
-              {dilutionResult.finishedVolumeL} L · {dilutionResult.finishedVolumeGal} US gal
-              <br />
-              {dilutionResult.finishedMassLb} lb · {dilutionResult.finishedMassKg} kg
-              <br />
-              {dilutionResult.finalAbv}% ABV · {dilutionResult.finalProof} proof
-              <br />
-              SG {dilutionResult.finishedSpecificGravity} · {dilutionResult.finishedDensityLbPerGal} lb/gal
-              <br />
-              {dilutionResult.proofGallons} proof gallons
-            </dd>
-            <dt>Contraction</dt>
-            <dd data-testid="dilution-contraction">
-              {dilutionResult.contractionVolumeL} L · {dilutionResult.contractionVolumeGal} US gal
-              <br />
-              {dilutionResult.contractionPercent}% of the poured volume
-            </dd>
-          </dl>
-          <ul data-testid="dilution-validation">
-            {dilutionResult.checks.map((check) => (
-              <li key={check.name} style={{ color: check.passed ? undefined : 'var(--danger, #dc2626)' }}>
-                {check.passed ? 'Passed' : 'Failed'}: {check.detail}
-              </li>
-            ))}
-          </ul>
-          {!dilutionResult.ok && (
-            <p className="field-hint" style={{ color: 'var(--danger, #dc2626)' }}>
-              Posting is blocked until every check passes. Inventory was not changed.
-            </p>
-          )}
-          {dilutionResult.warnings.map((warning) => (
-            <p key={warning} className="field-hint">{warning}</p>
-          ))}
-          {!temperatureIs60 && (
-            <p className="field-hint">
-              The sample temperature was corrected to an ABV at 60 °F before this calculation. The density table was not applied at the sample temperature, and 20 °C OIML alcoholometry was not used.
-            </p>
-          )}
-          <p className="field-hint">
-            Preview only. Confirming these figures here does not consume spirit, consume water, or create a finished lot.
-          </p>
-        </div>
+        <DilutionResultView
+          result={dilutionResult}
+          measure={amountMeasure}
+          preferVolume={amountMeasure === 'volume' ? volumeUnit : 'l'}
+          preferWeight={amountMeasure === 'weight' ? weightUnit : 'lb'}
+          fixedAfter={volumeBasis === 'after'}
+          temperatureCorrected={!temperatureIs60}
+        />
       ) : (
         <div className="card" style={{ marginTop: '1rem' }}>
           <p className="field-hint">
