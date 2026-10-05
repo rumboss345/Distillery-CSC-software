@@ -1,6 +1,7 @@
 import type { BlendIngredientInput, BlendIngredientType, InventoryItem } from '../types';
 import { ML_PER_GALLON } from '../types';
 import { proofFromAbv, weightFromWineGallons, wineGallonsFromWeight } from '../services/spirit-gauging';
+import { US_FL_OZ_PER_GALLON } from './unit-converter';
 import {
   CLASS_I_CARAMEL_DENSITY_G_PER_ML,
   dissolvedSucroseLbsPerGallon,
@@ -284,18 +285,38 @@ export function spiritWeightLbsFromVolumeGal(volumeGal: number, abv: number): nu
 
 const KG_PER_LB = 1 / 2.2046226218;
 
-/** Review line: gallons and liters. */
+function formatStepped(value: number, digits: number, unit: string): string {
+  const rounded = Number(value.toFixed(digits));
+  return `${rounded} ${unit}`;
+}
+
+/** Review line: gallons and liters, stepping down when a unit is below 1. */
 export function formatReviewVolume(volumeGal: number): string {
   if (!(volumeGal > 0)) return '—';
   const liters = (volumeGal * ML_PER_GALLON) / 1000;
-  return `${volumeGal.toFixed(2)} gal · ${liters.toFixed(1)} L`;
+  if (volumeGal >= 1) {
+    return `${volumeGal.toFixed(2)} gal · ${liters.toFixed(1)} L`;
+  }
+  const flOz = volumeGal * US_FL_OZ_PER_GALLON;
+  const volume = flOz >= 1 ? formatStepped(flOz, 2, 'fl oz') : null;
+  if (liters >= 1) {
+    return volume ? `${volume} · ${liters.toFixed(1)} L` : `${liters.toFixed(1)} L`;
+  }
+  const ml = formatStepped(liters * 1000, 0, 'ml');
+  return volume ? `${volume} · ${ml}` : ml;
 }
 
-/** Review line: pounds and kilograms. */
+/** Review line: pounds and kilograms, stepping down to grams when a unit is below 1. */
 export function formatReviewWeight(weightLb: number): string {
   if (!(weightLb > 0)) return '—';
   const kg = weightLb * KG_PER_LB;
-  return `${weightLb.toFixed(2)} lb · ${kg.toFixed(2)} kg`;
+  if (weightLb >= 1 && kg >= 1) {
+    return `${weightLb.toFixed(2)} lb · ${kg.toFixed(2)} kg`;
+  }
+  const grams = kg * 1000;
+  const gramLabel = formatStepped(grams, grams >= 100 ? 0 : 1, 'g');
+  if (weightLb >= 1) return `${weightLb.toFixed(2)} lb · ${gramLabel}`;
+  return gramLabel;
 }
 
 export function formatSpiritPullWeightLbs(volumeGal: number, abv: number): string | null {

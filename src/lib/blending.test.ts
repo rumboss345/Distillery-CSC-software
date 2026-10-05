@@ -151,6 +151,14 @@ describe('spirit measurement', () => {
     expect(formatReviewWeight(0)).toBe('—');
   });
 
+  it('steps a review amount below 1 into the next smaller unit', () => {
+    const pointThreeFourLiters = 0.34 * 1000 / 3785.41;
+    expect(formatReviewVolume(pointThreeFourLiters)).toBe('11.5 fl oz · 340 ml');
+    expect(formatReviewVolume(0.5)).toBe('64 fl oz · 1.9 L');
+    expect(formatReviewWeight(0.34)).toBe('154 g');
+    expect(formatReviewWeight(1.5)).toBe('1.50 lb · 680 g');
+  });
+
   it('formats blend recipe spirit pulls with weight and volume', () => {
     expect(formatSpiritPullWeightLbs(83.57, 93)).toContain('lbs');
     expect(formatBlendRecipeSpiritPull('93% rum', 83.57, 93)).toContain('93% rum');
