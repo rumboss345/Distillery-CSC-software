@@ -33,7 +33,7 @@ export function GinBotanicalFields({
         </button>
       </div>
       <p className="field-hint">
-        For each botanical, enter the amount you add and the weight from the scale.
+        Enter the weight of each botanical. That weight is the amount you add.
       </p>
       {lines.map((line, index) => (
         <div key={index} className="form-grid" style={{ marginBottom: '0.75rem' }}>
@@ -45,17 +45,6 @@ export function GinBotanicalFields({
               value={line.name}
               onChange={(e) => update(index, { name: e.target.value })}
               placeholder="Botanical name"
-            />
-          </div>
-          <div className="form-group">
-            <label>Amount</label>
-            <input
-              type="number"
-              min="0"
-              step="any"
-              data-testid={`gin-botanical-amount-${index}`}
-              value={line.amount || ''}
-              onChange={(e) => update(index, { amount: parseFloat(e.target.value) || 0 })}
             />
           </div>
           <div className="form-group">

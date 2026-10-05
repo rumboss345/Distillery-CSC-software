@@ -3379,7 +3379,7 @@ export function saveGinRecipe(
   if (!name) throw new Error('Enter a name for the gin recipe.');
   const lines = activeGinBotanicals(botanicals);
   if (lines.length === 0) {
-    throw new Error('Add at least one botanical with an amount or a weight.');
+    throw new Error('Add at least one botanical with a weight.');
   }
   const named = queryOne<{ id: number }>(
     'SELECT id FROM gin_recipes WHERE name = ? COLLATE NOCASE AND (? IS NULL OR id != ?)',
