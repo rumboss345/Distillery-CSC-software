@@ -5085,15 +5085,22 @@ export function getEquipmentMaintenanceLog(
   );
 }
 
-export function getAllEquipmentMaintenanceLog(limit = 500): EquipmentMaintenanceLogView[] {
-  return queryAll(
-    `SELECT l.*, fe.name AS equipment_name
+const EQUIPMENT_MAINTENANCE_LOG_SELECT = `SELECT l.*, fe.name AS equipment_name
      FROM equipment_maintenance_log l
      JOIN floor_equipment fe ON fe.id = l.floor_equipment_id
-     ORDER BY l.created_at DESC, l.id DESC
+     ORDER BY l.created_at DESC, l.id DESC`;
+
+export function getAllEquipmentMaintenanceLog(limit = 500): EquipmentMaintenanceLogView[] {
+  return queryAll(
+    `${EQUIPMENT_MAINTENANCE_LOG_SELECT}
      LIMIT ?`,
     [limit],
   );
+}
+
+/** Full maintenance and cleaning history for Reports. The working page keeps the latest 10. */
+export function getEquipmentMaintenanceReportLog(): EquipmentMaintenanceLogView[] {
+  return queryAll(EQUIPMENT_MAINTENANCE_LOG_SELECT);
 }
 
 export function updateEquipmentMaintenance(

@@ -10,6 +10,7 @@ const TABS = [
   { to: '/reports/tanks', label: 'Tanks' },
   { to: '/reports/blending', label: 'Blending' },
   { to: '/reports/bottling', label: 'Bottling' },
+  { to: '/reports/maintenance', label: 'Maintenance' },
   { to: '/reports/movements', label: 'Movements' },
   { to: '/reports/exceptions', label: 'Exceptions' },
   { to: '/reports/traceability', label: 'Traceability' },
