@@ -49,7 +49,7 @@ export function Recipes() {
   const nutrientItems = getInventoryByCategory('nutrients');
   const [tab, setTab] = useState<RecipeTab>(defaultTab);
   const [showDesigner, setShowDesigner] = useState(false);
-  const [blendCreateRequest, setBlendCreateRequest] = useState(0);
+  const [openBlendForm, setOpenBlendForm] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<number | undefined>();
   const [form, setForm] = useState(emptyRecipe());
@@ -68,7 +68,7 @@ export function Recipes() {
   const openBlendRecipe = () => {
     setShowDesigner(false);
     setTab('blend');
-    setBlendCreateRequest((current) => current + 1);
+    setOpenBlendForm(true);
   };
 
   const openNew = () => {
@@ -290,7 +290,9 @@ export function Recipes() {
 
       {!showDesigner && tab === 'gin' && canGin && <GinRecipesTab />}
 
-      {!showDesigner && tab === 'blend' && canBlend && <BlendRecipesTab openRequest={blendCreateRequest} />}
+      {!showDesigner && tab === 'blend' && canBlend && (
+        <BlendRecipesTab openForm={openBlendForm} onFormOpened={() => setOpenBlendForm(false)} />
+      )}
 
       {showForm && (
         <Modal title={editId ? 'Edit Recipe' : 'New Recipe'} onClose={() => setShowForm(false)}>

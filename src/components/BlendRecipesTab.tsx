@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { BlendAbvConfirmation } from './BlendAbvConfirmation';
 import { limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
 import { parseBlendRecipeSnapshot } from '../lib/blend-recipe-version';
@@ -91,9 +91,14 @@ const emptyRecipeForm = () => ({
   notes: '',
 });
 
-export function BlendRecipesTab({ openRequest = 0 }: { openRequest?: number }) {
+export function BlendRecipesTab({
+  openForm = false,
+  onFormOpened,
+}: {
+  openForm?: boolean;
+  onFormOpened?: () => void;
+}) {
   const { key, refresh } = useRefreshKey();
-  const seenOpenRequest = useRef(0);
   const recipes = useMemo(
     () => getBlendRecipes().filter((recipe) => (recipe.source_type ?? 'tank') !== 'barrel'),
     [key],
@@ -139,10 +144,10 @@ export function BlendRecipesTab({ openRequest = 0 }: { openRequest?: number }) {
   };
 
   useEffect(() => {
-    if (openRequest <= seenOpenRequest.current) return;
-    seenOpenRequest.current = openRequest;
+    if (!openForm) return;
     openNew();
-  }, [openRequest]);
+    onFormOpened?.();
+  }, [openForm]);
 
   const openEdit = (recipe: BlendRecipeView) => {
     setEditId(recipe.id);
