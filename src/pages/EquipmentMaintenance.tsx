@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   getAllEquipmentMaintenanceLog,
   getAllFloorEquipment,
@@ -10,7 +10,9 @@ import {
 } from '../db/queries';
 import { Modal } from '../components/Modal';
 import { AssigneeSelect } from '../components/AssigneeSelect';
+import { RecentCompletedNote } from '../components/RecentCompletedNote';
 import { EquipmentMaintenanceLogTable } from '../components/equipment/EquipmentMaintenanceLogTable';
+import { latestCompleted, RECENT_COMPLETED_LIMIT } from '../lib/recent-completed';
 import { equipmentTypeLabel } from '../lib/equipment';
 import { equipmentCleaningStatusLabel, equipmentNeedsCleaning } from '../lib/equipment-cleaning';
 import {
@@ -43,7 +45,14 @@ export function EquipmentMaintenance() {
     if (!focusEquipmentId) return;
     document.getElementById(`equipment-row-${focusEquipmentId}`)?.scrollIntoView({ block: 'center' });
   }, [focusEquipmentId, groups]);
-  const allLogEntries = useMemo(() => getAllEquipmentMaintenanceLog(300), [key]);
+  const recentLog = useMemo(
+    () => latestCompleted(
+      getAllEquipmentMaintenanceLog(RECENT_COMPLETED_LIMIT + 1),
+      (entry) => entry.created_at,
+      (entry) => entry.id,
+    ),
+    [key],
+  );
 
   const [editItem, setEditItem] = useState<FloorEquipment | null>(null);
   const [status, setStatus] = useState<EquipmentMaintenanceStatus>('broken');
@@ -113,7 +122,8 @@ export function EquipmentMaintenance() {
         <p>
           Mark equipment broken or under maintenance to block production use and show a red X on the process view.
           After use, emptied equipment shows a mop on the process view until someone marks it cleaned.
-          Every cleaning and maintenance action is stored in the traceable log below.
+          The log below keeps the latest 10 events. The full history is on{' '}
+          <Link to="/reports/maintenance">Reports</Link>.
         </p>
       </div>
 
@@ -200,7 +210,12 @@ export function EquipmentMaintenance() {
         <p className="field-hint" style={{ marginTop: 0 }}>
           Newest first — includes automatic “needs cleaning” after production use and manual clean / repair entries.
         </p>
-        <EquipmentMaintenanceLogTable entries={allLogEntries} showEquipment />
+        <RecentCompletedNote
+          hiddenCount={recentLog.hiddenCount}
+          to="/reports/maintenance"
+          label="events"
+        />
+        <EquipmentMaintenanceLogTable entries={recentLog.shown} showEquipment />
       </section>
 
       {editItem && (
