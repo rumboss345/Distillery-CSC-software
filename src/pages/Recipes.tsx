@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   getRecipes,
   getInventoryByCategory,
@@ -7,6 +8,7 @@ import {
   useRefreshKey,
 } from '../db/queries';
 import { Modal } from '../components/Modal';
+import { BlendDesigner } from '../components/BlendDesigner';
 import { BlendRecipesTab } from '../components/BlendRecipesTab';
 import { GinRecipesTab } from '../components/GinRecipesTab';
 import { useAuth } from '../context/AuthContext';
@@ -34,6 +36,7 @@ const emptyRecipe = (): Omit<Recipe, 'id' | 'created_at' | 'updated_at'> => ({
 
 type RecipeTab = 'wash' | 'gin' | 'blend';
 export function Recipes() {
+  const navigate = useNavigate();
   const { hasPermission } = useAuth();
   const canWash = hasPermission('wash');
   const canGin = hasPermission('distillation');
@@ -45,6 +48,8 @@ export function Recipes() {
   const yeastItems = getInventoryByCategory('yeast');
   const nutrientItems = getInventoryByCategory('nutrients');
   const [tab, setTab] = useState<RecipeTab>(defaultTab);
+  const [showDesigner, setShowDesigner] = useState(false);
+  const [blendCreateRequest, setBlendCreateRequest] = useState(0);
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<number | undefined>();
   const [form, setForm] = useState(emptyRecipe());
@@ -54,6 +59,17 @@ export function Recipes() {
   void key;
 
   const selected = recipes.find((r) => r.id === selectedId);
+
+  const selectTab = (next: RecipeTab) => {
+    setShowDesigner(false);
+    setTab(next);
+  };
+
+  const openBlendRecipe = () => {
+    setShowDesigner(false);
+    setTab('blend');
+    setBlendCreateRequest((current) => current + 1);
+  };
 
   const openNew = () => {
     setEditId(undefined);
@@ -113,7 +129,7 @@ export function Recipes() {
       <div className="page-header">
         <h2>Recipes</h2>
         <p>Saved wash, gin, and blend formulas you can run again</p>
-        {tab === 'wash' && canWash && (
+        {tab === 'wash' && canWash && !showDesigner && (
           <div className="page-actions">
             <button type="button" className="btn btn-primary" onClick={openNew}>
               + Add Wash Recipe
@@ -122,15 +138,37 @@ export function Recipes() {
         )}
       </div>
 
+      {canBlend && (
+        <div className="page-actions recipe-blend-actions">
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={openBlendRecipe}
+            data-testid="add-blend-recipe"
+          >
+            + Add blend recipe
+          </button>
+          <button
+            type="button"
+            className={`btn ${showDesigner ? 'btn-primary' : 'btn-secondary'}`}
+            aria-pressed={showDesigner}
+            onClick={() => setShowDesigner((open) => !open)}
+            data-testid="blend-designer"
+          >
+            Blend designer
+          </button>
+        </div>
+      )}
+
       {[canWash, canGin, canBlend].filter(Boolean).length > 1 && (
         <div className="recipe-tabs" role="tablist" aria-label="Recipe type">
           {canWash && (
             <button
               type="button"
               role="tab"
-              aria-selected={tab === 'wash'}
-              className={`recipe-tab${tab === 'wash' ? ' active' : ''}`}
-              onClick={() => setTab('wash')}
+              aria-selected={!showDesigner && tab === 'wash'}
+              className={`recipe-tab${!showDesigner && tab === 'wash' ? ' active' : ''}`}
+              onClick={() => selectTab('wash')}
             >
               Wash &amp; Fermentation
             </button>
@@ -139,9 +177,9 @@ export function Recipes() {
             <button
               type="button"
               role="tab"
-              aria-selected={tab === 'gin'}
-              className={`recipe-tab${tab === 'gin' ? ' active' : ''}`}
-              onClick={() => setTab('gin')}
+              aria-selected={!showDesigner && tab === 'gin'}
+              className={`recipe-tab${!showDesigner && tab === 'gin' ? ' active' : ''}`}
+              onClick={() => selectTab('gin')}
             >
               Gin
             </button>
@@ -150,9 +188,9 @@ export function Recipes() {
             <button
               type="button"
               role="tab"
-              aria-selected={tab === 'blend'}
-              className={`recipe-tab${tab === 'blend' ? ' active' : ''}`}
-              onClick={() => setTab('blend')}
+              aria-selected={!showDesigner && tab === 'blend'}
+              className={`recipe-tab${!showDesigner && tab === 'blend' ? ' active' : ''}`}
+              onClick={() => selectTab('blend')}
             >
               Blending
             </button>
@@ -160,7 +198,11 @@ export function Recipes() {
         </div>
       )}
 
-      {tab === 'wash' && canWash && (
+      {showDesigner && canBlend ? (
+        <BlendDesigner
+          onUseForBatch={(recipeId) => navigate(`/blending?recipe=${recipeId}`)}
+        />
+      ) : tab === 'wash' && canWash && (
         <>
           {recipes.length === 0 ? (
             <div className="empty-state card">
@@ -246,9 +288,9 @@ export function Recipes() {
         </>
       )}
 
-      {tab === 'gin' && canGin && <GinRecipesTab />}
+      {!showDesigner && tab === 'gin' && canGin && <GinRecipesTab />}
 
-      {tab === 'blend' && canBlend && <BlendRecipesTab />}
+      {!showDesigner && tab === 'blend' && canBlend && <BlendRecipesTab openRequest={blendCreateRequest} />}
 
       {showForm && (
         <Modal title={editId ? 'Edit Recipe' : 'New Recipe'} onClose={() => setShowForm(false)}>

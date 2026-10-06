@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { BlendAbvConfirmation } from './BlendAbvConfirmation';
 import { limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
 import { parseBlendRecipeSnapshot } from '../lib/blend-recipe-version';
@@ -91,8 +91,9 @@ const emptyRecipeForm = () => ({
   notes: '',
 });
 
-export function BlendRecipesTab() {
+export function BlendRecipesTab({ openRequest = 0 }: { openRequest?: number }) {
   const { key, refresh } = useRefreshKey();
+  const seenOpenRequest = useRef(0);
   const recipes = useMemo(
     () => getBlendRecipes().filter((recipe) => (recipe.source_type ?? 'tank') !== 'barrel'),
     [key],
@@ -136,6 +137,12 @@ export function BlendRecipesTab() {
     setAbvConfirmed(false);
     setShowForm(true);
   };
+
+  useEffect(() => {
+    if (openRequest <= seenOpenRequest.current) return;
+    seenOpenRequest.current = openRequest;
+    openNew();
+  }, [openRequest]);
 
   const openEdit = (recipe: BlendRecipeView) => {
     setEditId(recipe.id);
@@ -847,9 +854,6 @@ export function BlendRecipesTab() {
         </Modal>
       )}
 
-      <div className="page-actions" style={{ marginTop: '1rem' }}>
-        <button type="button" className="btn btn-primary" onClick={openNew}>+ Add blend recipe</button>
-      </div>
     </>
   );
 }
