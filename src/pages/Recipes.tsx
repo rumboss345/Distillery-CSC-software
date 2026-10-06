@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
+  getBlendRecipes,
+  getGinRecipes,
   getRecipes,
   getInventoryByCategory,
   saveRecipe,
@@ -12,6 +14,8 @@ import { BlendDesigner } from '../components/BlendDesigner';
 import { BlendRecipesTab } from '../components/BlendRecipesTab';
 import { GinRecipesTab } from '../components/GinRecipesTab';
 import { useAuth } from '../context/AuthContext';
+import { RECIPE_EXPORT_HEADERS, buildRecipeExportRows } from '../lib/recipe-export';
+import { downloadCsv, rowsToCsv } from '../lib/reporting/csv';
 import {
   emptyRecipeNutrient,
   formatRecipeNutrientLine,
@@ -116,6 +120,19 @@ export function Recipes() {
     refresh();
   };
 
+  const exportRecipes = () => {
+    const rows = buildRecipeExportRows({
+      wash: canWash ? recipes : [],
+      gin: canGin ? getGinRecipes() : [],
+      blend: canBlend ? getBlendRecipes() : [],
+    });
+    if (rows.length === 0) {
+      alert('No recipes to export.');
+      return;
+    }
+    downloadCsv('recipes', rowsToCsv([...RECIPE_EXPORT_HEADERS], rows));
+  };
+
   const handleDelete = (id: number) => {
     if (confirm('Delete this recipe?')) {
       deleteRecipe(id);
@@ -129,13 +146,21 @@ export function Recipes() {
       <div className="page-header">
         <h2>Recipes</h2>
         <p>Saved wash, gin, and blend formulas you can run again</p>
-        {tab === 'wash' && canWash && !showDesigner && (
-          <div className="page-actions">
+        <div className="page-actions">
+          {tab === 'wash' && canWash && !showDesigner && (
             <button type="button" className="btn btn-primary" onClick={openNew}>
               + Add Wash Recipe
             </button>
-          </div>
-        )}
+          )}
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={exportRecipes}
+            data-testid="export-recipes"
+          >
+            Export recipes
+          </button>
+        </div>
       </div>
 
       {canBlend && (
