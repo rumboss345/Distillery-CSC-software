@@ -91,7 +91,13 @@ const emptyRecipeForm = () => ({
   notes: '',
 });
 
-export function BlendRecipesTab() {
+export function BlendRecipesTab({
+  openForm = false,
+  onFormOpened,
+}: {
+  openForm?: boolean;
+  onFormOpened?: () => void;
+}) {
   const { key, refresh } = useRefreshKey();
   const recipes = useMemo(
     () => getBlendRecipes().filter((recipe) => (recipe.source_type ?? 'tank') !== 'barrel'),
@@ -136,6 +142,12 @@ export function BlendRecipesTab() {
     setAbvConfirmed(false);
     setShowForm(true);
   };
+
+  useEffect(() => {
+    if (!openForm) return;
+    openNew();
+    onFormOpened?.();
+  }, [openForm]);
 
   const openEdit = (recipe: BlendRecipeView) => {
     setEditId(recipe.id);
@@ -847,9 +859,6 @@ export function BlendRecipesTab() {
         </Modal>
       )}
 
-      <div className="page-actions" style={{ marginTop: '1rem' }}>
-        <button type="button" className="btn btn-primary" onClick={openNew}>+ Add blend recipe</button>
-      </div>
     </>
   );
 }

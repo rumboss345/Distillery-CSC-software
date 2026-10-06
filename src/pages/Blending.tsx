@@ -31,7 +31,6 @@ import {
 } from '../lib/barrel-blending';
 import { AbvTemperatureInput, correctedAbvFromInputs } from '../components/AbvTemperatureInput';
 import { BlendAbvConfirmation } from '../components/BlendAbvConfirmation';
-import { BlendDesigner } from '../components/BlendDesigner';
 import { BlendProductionWorksheet } from '../components/BlendProductionWorksheet';
 import { AssigneeCell, AssigneeSelect } from '../components/AssigneeSelect';
 import { DatePicker } from '../components/DatePicker';
@@ -400,7 +399,6 @@ export function Blending() {
   const blendRecipes = getBlendRecipes();
   const barrelInventory = useMemo(() => getBarrelsForBlend(), [key]);
   const inventoryItems = getInventoryItems();
-  const [pageMode, setPageMode] = useState<'batches' | 'designer'>('batches');
   const [showWizard, setShowWizard] = useState(false);
   const [wizardStep, setWizardStep] = useState(1);
   const [editId, setEditId] = useState<number | undefined>();
@@ -842,6 +840,8 @@ export function Blending() {
         openBarrelBlending();
       }
       applyBlendRecipe(recipeId, 1);
+      setWizardStep(2);
+      setShowWizard(true);
     }
   }, [searchParams, setSearchParams, blendRecipes, user]);
 
@@ -2373,44 +2373,14 @@ export function Blending() {
     <div>
       <div className="page-header">
         <h2>Blending</h2>
-        <p>Tank batches use saved recipes and holding tanks. Barrel blending pulls directly from aging barrel inventory. The blend designer calculates a formula before you start a batch.</p>
-        <div className="measure-mode-buttons" style={{ margin: '0.75rem 0' }}>
-          <button
-            type="button"
-            className={`btn btn-sm ${pageMode === 'batches' ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => setPageMode('batches')}
-          >
-            Batches
-          </button>
-          <button
-            type="button"
-            className={`btn btn-sm ${pageMode === 'designer' ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => setPageMode('designer')}
-          >
-            Blend designer
-          </button>
+        <p>Tank batches use saved recipes and holding tanks. Barrel blending pulls directly from aging barrel inventory. Blend designer is on the Recipes page.</p>
+        <div className="page-actions">
+          <button type="button" className="btn btn-primary" onClick={openNew}>+ New tank batch</button>
+          <button type="button" className="btn btn-secondary" onClick={openBarrelBlending}>+ Barrel blending</button>
         </div>
-        {pageMode === 'batches' && (
-          <div className="page-actions">
-            <button type="button" className="btn btn-primary" onClick={openNew}>+ New tank batch</button>
-            <button type="button" className="btn btn-secondary" onClick={openBarrelBlending}>+ Barrel blending</button>
-          </div>
-        )}
       </div>
 
-      {pageMode === 'designer' && (
-        <BlendDesigner
-          onUseForBatch={(recipeId) => {
-            setPageMode('batches');
-            setWizardSpiritSource('tank');
-            applyBlendRecipe(recipeId, 1);
-            setWizardStep(2);
-            setShowWizard(true);
-          }}
-        />
-      )}
-
-      {pageMode === 'designer' ? null : blends.length === 0 ? (
+      {blends.length === 0 ? (
         <div className="empty-state">
           <p>No batches yet. Start a tank batch from a saved recipe, or use barrel blending to pull from aging barrels.</p>
           <div className="page-actions" style={{ marginTop: '1rem', justifyContent: 'center' }}>
