@@ -1,5 +1,6 @@
 import type { BlendIngredientInput, BlendRecipeSpiritSourceInput } from '../types';
-import { gallonsToUnit, ingredientWeightLbs, toGallonsFromVolumeUnit } from './blending';
+import { gallonsToUnit, ingredientWeightLbs, spiritVolumeGalFromAmount, toGallonsFromVolumeUnit } from './blending';
+import { formatGallonDisplay } from './formulation-quantity';
 
 /** Batch yield can be entered in wine gallons or liters. Scale math stays in gallons. */
 export type BatchSizeUnit = 'gal' | 'l';
@@ -16,10 +17,15 @@ export interface ScaledSpiritRow {
   recipe_abv: number;
   amount: number;
   unit: string;
+  entered_amount?: number | null;
+  entered_unit?: string | null;
 }
 
 export function roundScaledAmount(value: number): number {
-  return Math.round(value * 1000) / 1000;
+  if (!Number.isFinite(value)) return 0;
+  const places = Math.abs(value) > 0 && Math.abs(value) < 1 ? 6 : 3;
+  const factor = 10 ** places;
+  return Math.round(value * factor) / factor;
 }
 
 export function scaleSpiritSources(
@@ -39,15 +45,22 @@ export function scaleSpiritSources(
     }];
   }
   return sources.map((source, index) => {
-    const volume = roundScaledAmount(source.volume_gal * safeFactor);
+    const enteredKnown = source.entered_amount != null && source.entered_amount > 0 && !!source.entered_unit;
+    const enteredAmount = enteredKnown ? roundScaledAmount(source.entered_amount! * safeFactor) : null;
+    const enteredUnit = enteredKnown ? source.entered_unit! : null;
+    const volume = enteredKnown
+      ? spiritVolumeGalFromAmount(enteredAmount!, enteredUnit!, source.abv)
+      : roundScaledAmount(source.volume_gal * safeFactor);
     return {
       holding_tank_equipment_id: tankIds[index] ?? 0,
       barrel_id: source.barrel_id ?? null,
       volume_gal: volume,
       abv: source.abv,
       recipe_abv: source.abv,
-      amount: volume,
-      unit: 'gal',
+      amount: enteredKnown ? enteredAmount! : volume,
+      unit: enteredKnown ? enteredUnit! : 'gal',
+      entered_amount: enteredAmount,
+      entered_unit: enteredUnit,
     };
   });
 }
@@ -71,6 +84,7 @@ export function scaleFactorFromTargetYield(baseYieldGal: number, targetYieldGal:
 export function formatBatchSizeAmount(gallons: number, unit: BatchSizeUnit): string {
   if (!(gallons > 0)) return '';
   const amount = unit === 'l' ? gallonsToUnit(gallons, 'l') : gallons;
+  if (unit === 'gal' && amount < 1) return formatGallonDisplay(amount);
   const places = unit === 'l' ? 3 : 1;
   return amount.toFixed(places);
 }

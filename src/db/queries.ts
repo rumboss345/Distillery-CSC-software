@@ -422,15 +422,18 @@ export function saveInventoryItem(item: Omit<InventoryItem, 'id' | 'created_at' 
   const packageSizeMl = item.category === 'packaging' && item.package_size_ml != null && item.package_size_ml > 0
     ? item.package_size_ml
     : null;
+  const density = item.density_g_per_ml != null && item.density_g_per_ml > 0 ? item.density_g_per_ml : null;
+  const densityReference = item.density_reference?.trim() ? item.density_reference.trim() : null;
+  const abv = item.abv != null && Number.isFinite(item.abv) ? item.abv : null;
   if (id) {
     runQuery(
-      `UPDATE inventory_items SET name=?, category=?, unit=?, quantity=?, reorder_level=?, notes=?, package_size_ml=?, updated_at=datetime('now') WHERE id=?`,
-      [item.name, item.category, item.unit, item.quantity, item.reorder_level, item.notes, packageSizeMl, id],
+      `UPDATE inventory_items SET name=?, category=?, unit=?, quantity=?, reorder_level=?, notes=?, package_size_ml=?, density_g_per_ml=?, density_reference=?, abv=?, updated_at=datetime('now') WHERE id=?`,
+      [item.name, item.category, item.unit, item.quantity, item.reorder_level, item.notes, packageSizeMl, density, densityReference, abv, id],
     );
   } else {
     insertRow(
-      `INSERT INTO inventory_items (name, category, unit, quantity, reorder_level, notes, package_size_ml) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [item.name, item.category, item.unit, item.quantity, item.reorder_level, item.notes, packageSizeMl],
+      `INSERT INTO inventory_items (name, category, unit, quantity, reorder_level, notes, package_size_ml, density_g_per_ml, density_reference, abv) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [item.name, item.category, item.unit, item.quantity, item.reorder_level, item.notes, packageSizeMl, density, densityReference, abv],
     );
   }
 }
@@ -3938,9 +3941,19 @@ function persistBlendRecipeSpiritSources(
     .filter((source) => source.volume_gal > 0)
     .forEach((source, index) => {
       insertRow(
-        `INSERT INTO blend_recipe_spirit_sources (blend_recipe_id, spirit_label, volume_gal, abv, barrel_id, sort_order)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [recipeId, source.spirit_label, source.volume_gal, source.abv, source.barrel_id ?? null, index],
+        `INSERT INTO blend_recipe_spirit_sources (
+          blend_recipe_id, spirit_label, volume_gal, abv, barrel_id, sort_order, entered_amount, entered_unit
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          recipeId,
+          source.spirit_label,
+          source.volume_gal,
+          source.abv,
+          source.barrel_id ?? null,
+          index,
+          source.entered_amount != null && source.entered_unit ? source.entered_amount : null,
+          source.entered_amount != null && source.entered_unit ? source.entered_unit : null,
+        ],
       );
     });
 }
@@ -3955,8 +3968,9 @@ function persistBlendRecipeIngredients(
     .forEach((ingredient) => {
       insertRow(
         `INSERT INTO blend_recipe_ingredients (
-          blend_recipe_id, ingredient_type, name, amount, unit, abv, cost_per_unit, lot_number, inventory_item_id, notes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          blend_recipe_id, ingredient_type, name, amount, unit, abv, cost_per_unit, lot_number, inventory_item_id, notes,
+          density_g_per_ml, density_assumption
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           recipeId,
           ingredient.ingredient_type,
@@ -3968,6 +3982,8 @@ function persistBlendRecipeIngredients(
           ingredient.lot_number ?? '',
           ingredient.inventory_item_id ?? null,
           ingredient.notes,
+          ingredient.density_g_per_ml != null && ingredient.density_g_per_ml > 0 ? ingredient.density_g_per_ml : null,
+          ingredient.density_assumption ?? null,
         ],
       );
     });

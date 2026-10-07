@@ -20,6 +20,9 @@ const emptyItem = (): Omit<InventoryItem, 'id' | 'created_at' | 'updated_at'> =>
   reorder_level: 0,
   notes: '',
   package_size_ml: null,
+  density_g_per_ml: null,
+  density_reference: '',
+  abv: null,
 });
 
 export function Inventory() {
@@ -36,6 +39,8 @@ export function Inventory() {
   const [adjustAmount, setAdjustAmount] = useState('');
   const [quantityInput, setQuantityInput] = useState('0');
   const [sizeInput, setSizeInput] = useState('');
+  const [densityInput, setDensityInput] = useState('');
+  const [abvInput, setAbvInput] = useState('');
   const [filter, setFilter] = useState<InventoryCategory | 'all'>('all');
 
   void key;
@@ -52,13 +57,23 @@ export function Inventory() {
     });
     setQuantityInput('0');
     setSizeInput('');
+    setDensityInput('');
+    setAbvInput('');
     setShowForm(true);
   };
 
   const openEdit = (item: InventoryItem) => {
     setEditId(item.id);
-    setForm({ ...item, package_size_ml: item.package_size_ml ?? null });
+    setForm({
+      ...item,
+      package_size_ml: item.package_size_ml ?? null,
+      density_g_per_ml: item.density_g_per_ml ?? null,
+      density_reference: item.density_reference ?? '',
+      abv: item.abv ?? null,
+    });
     setQuantityInput(String(item.quantity));
+    setDensityInput(item.density_g_per_ml != null ? String(item.density_g_per_ml) : '');
+    setAbvInput(item.abv != null ? String(item.abv) : '');
     const size = item.category === 'packaging' ? packagingItemSizeMl(item) : null;
     setSizeInput(size ? String(size) : '');
     setShowForm(true);
@@ -76,10 +91,14 @@ export function Inventory() {
     const package_size_ml = form.category === 'packaging' && Number.isFinite(size) && size > 0
       ? Math.round(size)
       : null;
+    const density = parseFloat(densityInput);
+    const abv = parseFloat(abvInput);
     saveInventoryItem({
       ...form,
       quantity: Number.isFinite(quantity) ? quantity : 0,
       package_size_ml,
+      density_g_per_ml: Number.isFinite(density) && density > 0 ? density : null,
+      abv: abvInput.trim() === '' || !Number.isFinite(abv) ? null : abv,
     }, editId);
     setShowForm(false);
     refresh();
@@ -249,6 +268,40 @@ export function Inventory() {
                 value={quantityInput}
                 onChange={(e) => setQuantityInput(e.target.value)}
               />
+            </div>
+            <div className="form-group">
+              <label>Density (g/mL) — optional</label>
+              <input
+                type="number"
+                step="0.001"
+                min="0"
+                data-testid="inventory-density"
+                value={densityInput}
+                onChange={(e) => setDensityInput(e.target.value)}
+                placeholder="Leave blank if unknown"
+              />
+              <span className="field-hint">Unknown density is not treated as water. The blend screen shows DENSITY NOT VERIFIED until a value is saved.</span>
+            </div>
+            <div className="form-group">
+              <label>Density source or reference temperature</label>
+              <input
+                value={form.density_reference ?? ''}
+                onChange={(e) => setForm({ ...form, density_reference: e.target.value })}
+                placeholder="Sheet, lot spec, or temperature note"
+              />
+            </div>
+            <div className="form-group">
+              <label>ABV % — optional</label>
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                data-testid="inventory-abv"
+                value={abvInput}
+                onChange={(e) => setAbvInput(e.target.value)}
+                placeholder="Blank if non-alcoholic or unknown"
+              />
+              <span className="field-hint">Alcohol in this ingredient counts toward total absolute alcohol.</span>
             </div>
             <div className="form-group">
               <label>Reorder Level</label>

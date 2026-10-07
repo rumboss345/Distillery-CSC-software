@@ -1,12 +1,14 @@
 import type { BlendIngredientInput, BlendIngredientType, InventoryItem } from '../types';
 import { ML_PER_GALLON } from '../types';
-import { proofFromAbv, weightFromWineGallons, wineGallonsFromWeight } from '../services/spirit-gauging';
-import { US_FL_OZ_PER_GALLON } from './unit-converter';
+import { proofFromAbv, weightFromWineGallons } from '../services/spirit-gauging';
+import { DENSITY_NOT_VERIFIED, formatGallonDisplay, formatQuantityDisplay } from './formulation-quantity';
 import {
   CLASS_I_CARAMEL_DENSITY_G_PER_ML,
   dissolvedSucroseLbsPerGallon,
+  GRAMS_PER_POUND,
   gPerMlFromLbsPerGallon,
   lbsPerGallonFromGPerMl,
+  LITERS_PER_US_GALLON,
   SYRUP_BULK_DENSITY_G_PER_ML,
   WATER_LBS_PER_US_GALLON,
 } from './material-densities';
@@ -26,24 +28,66 @@ export const WEIGHT_UNITS = ['lbs', 'oz', 'kg', 'g'] as const;
 export const VOLUME_UNITS = ['gal', 'fl oz', 'ml', 'l'] as const;
 
 /**
- * Pounds per gallon of volume each additive occupies in a blend.
+ * Pounds per gallon for materials whose density is part of the formulation model.
  * Water is the TTB §30.41 factor. Sugar is dissolved apparent volume (0.6219 ml/g),
- * not sucrose crystal density. Syrup is the plant CS1 sheet. Color is class-typical
- * Class I caramel (SG 1.30), not a YT75 lot spec. Flavoring and other additives
- * with no published density are weighed as water unless they carry an ABV.
+ * not sucrose crystal density. Syrup and color constants are used only when a
+ * documented assumption is explicitly selected, or when a verified density is stored.
+ * Unknown flavor, glycerin, syrup, concentrate, and other ingredients are not water.
  */
-const LBS_PER_GALLON: Record<BlendIngredientType, number> = {
-  water: WATER_LBS_PER_US_GALLON,
-  sugar: dissolvedSucroseLbsPerGallon(),
-  syrup: lbsPerGallonFromGPerMl(SYRUP_BULK_DENSITY_G_PER_ML),
-  flavoring: WATER_LBS_PER_US_GALLON,
-  color: lbsPerGallonFromGPerMl(CLASS_I_CARAMEL_DENSITY_G_PER_ML),
-  other: WATER_LBS_PER_US_GALLON,
-};
+function modelLbsPerGallon(type: BlendIngredientType): number | null {
+  switch (type) {
+    case 'water':
+      return WATER_LBS_PER_US_GALLON;
+    case 'sugar':
+      return dissolvedSucroseLbsPerGallon();
+    case 'syrup':
+      return lbsPerGallonFromGPerMl(SYRUP_BULK_DENSITY_G_PER_ML);
+    case 'color':
+      return lbsPerGallonFromGPerMl(CLASS_I_CARAMEL_DENSITY_G_PER_ML);
+    default:
+      return null;
+  }
+}
 
 type IngredientMeasure = Pick<BlendIngredientInput, 'amount' | 'unit' | 'ingredient_type'> & {
   abv?: number | null;
+  density_g_per_ml?: number | null;
+  density_assumption?: BlendIngredientInput['density_assumption'];
 };
+
+export interface IngredientDensityResolution {
+  lbsPerGallon: number | null;
+  notice: string | null;
+}
+
+/** Verified density, or a documented assumption the user selected. Otherwise unverified. */
+export function resolveIngredientDensity(ingredient: IngredientMeasure): IngredientDensityResolution {
+  if (ingredient.density_g_per_ml != null && ingredient.density_g_per_ml > 0) {
+    return { lbsPerGallon: lbsPerGallonFromGPerMl(ingredient.density_g_per_ml), notice: null };
+  }
+  if (ingredient.ingredient_type === 'water' || ingredient.ingredient_type === 'sugar') {
+    return { lbsPerGallon: modelLbsPerGallon(ingredient.ingredient_type), notice: null };
+  }
+  if (ingredient.density_assumption === 'water') {
+    return {
+      lbsPerGallon: WATER_LBS_PER_US_GALLON,
+      notice: 'Documented assumption: water density.',
+    };
+  }
+  if (ingredient.density_assumption === 'cs1-syrup') {
+    return {
+      lbsPerGallon: modelLbsPerGallon('syrup'),
+      notice: 'Documented assumption: CS1 syrup density 1.368 g/mL.',
+    };
+  }
+  if (ingredient.density_assumption === 'class-i-caramel') {
+    return {
+      lbsPerGallon: modelLbsPerGallon('color'),
+      notice: 'Documented assumption: Class I caramel specific gravity 1.30.',
+    };
+  }
+  return { lbsPerGallon: null, notice: DENSITY_NOT_VERIFIED };
+}
 
 /** Flavoring, color, and other additives with an ABV are gauged on Table 3. */
 function alcoholicGaugeAbv(ingredient: IngredientMeasure): number {
@@ -224,46 +268,19 @@ export function spiritLbsPerGallon(abv: number): number {
   return weightFromWineGallons(SPIRIT_LBS_PER_GALLON_BASIS, proofFromAbv(abv)) / SPIRIT_LBS_PER_GALLON_BASIS;
 }
 
-/** Amount in `unit` for a wine-gallon spirit pull. Inverse of spiritVolumeGalFromAmount. */
+/**
+ * Amount in `unit` for a wine-gallon spirit pull.
+ * Weight uses the continuous formulation factor, not Table 3 0.1 proof-gallon rounding.
+ * The returned number is full precision. Display helpers round separately.
+ */
 export function amountFromSpiritVolumeGal(volumeGal: number, unit: string, abv: number): number {
   if (!(volumeGal > 0)) return 0;
-  if (isVolumeUnit(unit)) {
-    let amount = volumeGal;
-    switch (unit.toLowerCase()) {
-      case 'ml':
-        amount = volumeGal * ML_PER_GALLON;
-        break;
-      case 'l':
-        amount = volumeGal / 0.264172;
-        break;
-      case 'fl oz':
-      case 'floz':
-        amount = volumeGal * 128;
-        break;
-      default:
-        amount = volumeGal;
-    }
-    return Math.round(amount * 1000) / 1000;
-  }
+  if (isVolumeUnit(unit)) return gallonsToUnit(volumeGal, unit);
   if (isWeightUnit(unit)) {
-    const lbs = spiritWeightLbsFromVolumeGal(volumeGal, abv);
-    let amount = lbs;
-    switch (unit.toLowerCase()) {
-      case 'oz':
-        amount = lbs * 16;
-        break;
-      case 'kg':
-        amount = lbs / 2.20462;
-        break;
-      case 'g':
-        amount = lbs * 453.592;
-        break;
-      default:
-        amount = lbs;
-    }
-    return Math.round(amount * 100) / 100;
+    if (!(abv > 0)) return 0;
+    return lbsToUnit(volumeGal * spiritLbsPerGallon(abv), unit);
   }
-  return Math.round(volumeGal * 1000) / 1000;
+  return volumeGal;
 }
 
 export function spiritVolumeGalFromAmount(amount: number, unit: string, abv: number): number {
@@ -271,8 +288,10 @@ export function spiritVolumeGalFromAmount(amount: number, unit: string, abv: num
   if (isVolumeUnit(unit)) return toGallonsFromVolumeUnit(amount, unit);
   if (isWeightUnit(unit)) {
     const lbs = toLbs(amount, unit);
-    if (abv <= 0) return 0;
-    return wineGallonsFromWeight(lbs, proofFromAbv(abv));
+    if (abv <= 0 || !(lbs > 0)) return 0;
+    const perGallon = spiritLbsPerGallon(abv);
+    if (!(perGallon > 0)) return 0;
+    return lbs / perGallon;
   }
   return 0;
 }
@@ -290,20 +309,15 @@ function formatStepped(value: number, digits: number, unit: string): string {
   return `${rounded} ${unit}`;
 }
 
-/** Review line: gallons and liters, stepping down when a unit is below 1. */
+/** Review line: gallons and liters. Below 1 gallon the gallon figure keeps at least 3 decimals. */
 export function formatReviewVolume(volumeGal: number): string {
   if (!(volumeGal > 0)) return '—';
-  const liters = (volumeGal * ML_PER_GALLON) / 1000;
+  const liters = volumeGal * LITERS_PER_US_GALLON;
   if (volumeGal >= 1) {
-    return `${volumeGal.toFixed(2)} gal · ${liters.toFixed(1)} L`;
+    return `${formatGallonDisplay(volumeGal)} gal · ${liters.toFixed(1)} L`;
   }
-  const flOz = volumeGal * US_FL_OZ_PER_GALLON;
-  const volume = flOz >= 1 ? formatStepped(flOz, 2, 'fl oz') : null;
-  if (liters >= 1) {
-    return volume ? `${volume} · ${liters.toFixed(1)} L` : `${liters.toFixed(1)} L`;
-  }
-  const ml = formatStepped(liters * 1000, 0, 'ml');
-  return volume ? `${volume} · ${ml}` : ml;
+  const ml = liters * 1000;
+  return `${formatGallonDisplay(volumeGal)} gal · ${formatQuantityDisplay(ml, 3)} ml`;
 }
 
 /** Review line: pounds and kilograms, stepping down to grams when a unit is below 1. */
@@ -329,11 +343,16 @@ export function formatBlendRecipeSpiritPull(
   label: string,
   volumeGal: number,
   abv: number,
+  entered?: { amount?: number | null; unit?: string | null },
 ): string {
   const name = label.trim() || 'Spirit';
-  const volume = `${volumeGal.toFixed(1)} gal @ ${abv.toFixed(1)}%`;
-  const weight = formatSpiritPullWeightLbs(volumeGal, abv);
-  return weight ? `${name}: ${weight} · ${volume}` : `${name}: ${volume}`;
+  const gallons = `${formatGallonDisplay(volumeGal)} gal`;
+  const proof = `${abv.toFixed(2)}%`;
+  if (entered?.amount != null && entered.amount > 0 && entered.unit) {
+    const charge = `${formatQuantityDisplay(entered.amount, 3)} ${entered.unit}`;
+    return `${name}: ${charge} @ ${proof} · ${gallons} calculated`;
+  }
+  return `${name}: ${gallons} @ ${proof} · original entered quantity not recorded`;
 }
 
 function formatAdditiveWeightLbs(lbs: number): string | null {
@@ -343,8 +362,8 @@ function formatAdditiveWeightLbs(lbs: number): string | null {
 
 function formatAdditiveVolumeGal(gal: number): string | null {
   if (gal <= 0) return null;
-  const liters = gal * ML_PER_GALLON / 1000;
-  const galLabel = `${gal.toFixed(2)} gal`;
+  const liters = gal * LITERS_PER_US_GALLON;
+  const galLabel = `${formatGallonDisplay(gal)} gal`;
   return liters >= 1 ? `${galLabel} (${liters.toFixed(1)} L)` : galLabel;
 }
 
@@ -358,23 +377,32 @@ export function formatBlendRecipeAdditive(
     ? ` @ ${ingredient.abv}% ABV`
     : '';
   if (ingredient.amount <= 0) return `${name}: ${primary}${abvNote}`;
+  const density = resolveIngredientDensity(ingredient);
+  const densityNote = density.notice ? ` · ${density.notice}` : '';
 
   if (isWeightUnit(ingredient.unit)) {
     const volume = formatAdditiveVolumeGal(ingredientVolumeGal(ingredient));
-    return volume ? `${name}: ${primary}${abvNote} · ${volume}` : `${name}: ${primary}${abvNote}`;
+    return volume
+      ? `${name}: ${primary}${abvNote} · ${volume}${densityNote}`
+      : `${name}: ${primary}${abvNote}${densityNote}`;
   }
 
   if (isVolumeUnit(ingredient.unit)) {
     const weight = formatAdditiveWeightLbs(ingredientWeightLbs(ingredient));
-    return weight ? `${name}: ${primary}${abvNote} · ${weight}` : `${name}: ${primary}${abvNote}`;
+    return weight
+      ? `${name}: ${primary}${abvNote} · ${weight}${densityNote}`
+      : `${name}: ${primary}${abvNote}${densityNote}`;
   }
 
-  return `${name}: ${primary}${abvNote}`;
+  return `${name}: ${primary}${abvNote}${densityNote}`;
 }
 
-/** Liquid additives that may contribute alcohol (e.g. extract-based flavorings). */
+/** Liquid additives that may contribute alcohol. Neutral spirit is not the only source. */
 export function additiveSupportsAbv(ingredientType: BlendIngredientType): boolean {
-  return ingredientType === 'flavoring' || ingredientType === 'syrup';
+  return ingredientType === 'flavoring'
+    || ingredientType === 'syrup'
+    || ingredientType === 'color'
+    || ingredientType === 'other';
 }
 
 export function spiritMeasureAlternate(amount: number, unit: string, abv: number): MeasureAlternate | null {
@@ -383,10 +411,10 @@ export function spiritMeasureAlternate(amount: number, unit: string, abv: number
   if (isWeightUnit(unit)) {
     const gal = spiritVolumeGalFromAmount(amount, unit, abv);
     if (gal <= 0) return null;
-    const liters = gal * ML_PER_GALLON / 1000;
-    const galLabel = `≈ ${gal.toFixed(2)} gal at ${abv.toFixed(1)}% ABV`;
-    const label = liters >= 1 ? `${galLabel} (${liters.toFixed(1)} L)` : galLabel;
-    return { amount: Math.round(gal * 100) / 100, unit: 'gal', label };
+    const liters = gal * LITERS_PER_US_GALLON;
+    const galLabel = `≈ ${formatGallonDisplay(gal)} gal at ${abv.toFixed(2)}% ABV`;
+    const label = liters >= 1 ? `${galLabel} (${formatQuantityDisplay(liters, 3)} L)` : galLabel;
+    return { amount: gal, unit: 'gal', label };
   }
 
   if (isVolumeUnit(unit)) {
@@ -423,10 +451,9 @@ export function defaultUnitForMode(type: BlendIngredientType, mode: MeasureMode)
   return units[0];
 }
 
-const LB_PER_KG = 2.20462;
-const G_PER_LB = 453.592;
+const LB_PER_KG = 1000 / GRAMS_PER_POUND;
 const FL_OZ_PER_GALLON = 128;
-const GALLONS_PER_LITER = 0.264172;
+const GALLONS_PER_LITER = 1 / LITERS_PER_US_GALLON;
 
 export function toLbs(amount: number, unit: string): number {
   if (amount <= 0) return 0;
@@ -438,7 +465,7 @@ export function toLbs(amount: number, unit: string): number {
     case 'kg':
       return amount * LB_PER_KG;
     case 'g':
-      return amount / G_PER_LB;
+      return amount / GRAMS_PER_POUND;
     default:
       return 0;
   }
@@ -454,7 +481,7 @@ export function lbsToUnit(lbs: number, unit: string): number {
     case 'kg':
       return lbs / LB_PER_KG;
     case 'g':
-      return lbs * G_PER_LB;
+      return lbs * GRAMS_PER_POUND;
     default:
       return 0;
   }
@@ -494,12 +521,6 @@ export function gallonsToUnit(gallons: number, unit: string): number {
   }
 }
 
-function roundMeasuredAmount(amount: number, unit: string): number {
-  const places = unit.toLowerCase() === 'g' || unit.toLowerCase() === 'ml' ? 2 : 3;
-  const factor = 10 ** places;
-  return Math.round((amount + Number.EPSILON) * factor) / factor;
-}
-
 function canConvertMeasureUnit(unit: string): boolean {
   return unit.toLowerCase() !== 'each' && (isWeightUnit(unit) || isVolumeUnit(unit));
 }
@@ -515,9 +536,9 @@ export function convertIngredientAmount(ingredient: IngredientMeasure, toUnit: s
   if (!canConvertMeasureUnit(fromUnit) || !canConvertMeasureUnit(toUnit)) return ingredient.amount;
 
   if (isWeightUnit(toUnit)) {
-    return roundMeasuredAmount(lbsToUnit(ingredientWeightLbs(ingredient), toUnit), toUnit);
+    return lbsToUnit(ingredientWeightLbs(ingredient), toUnit);
   }
-  return roundMeasuredAmount(gallonsToUnit(ingredientVolumeGal(ingredient), toUnit), toUnit);
+  return gallonsToUnit(ingredientVolumeGal(ingredient), toUnit);
 }
 
 /** Same spirit pull in another unit. Mass uses TTB Table 3 at the pull's ABV. */
@@ -529,10 +550,10 @@ export function convertSpiritAmount(amount: number, fromUnit: string, toUnit: st
   const fromWeight = isWeightUnit(fromUnit);
   const toWeight = isWeightUnit(toUnit);
   if (fromWeight && toWeight) {
-    return roundMeasuredAmount(lbsToUnit(toLbs(amount, fromUnit), toUnit), toUnit);
+    return lbsToUnit(toLbs(amount, fromUnit), toUnit);
   }
   if (!fromWeight && !toWeight) {
-    return roundMeasuredAmount(gallonsToUnit(toGallonsFromVolumeUnit(amount, fromUnit), toUnit), toUnit);
+    return gallonsToUnit(toGallonsFromVolumeUnit(amount, fromUnit), toUnit);
   }
   if (!(abv > 0)) return amount;
   const gallons = spiritVolumeGalFromAmount(amount, fromUnit, abv);
@@ -547,8 +568,10 @@ export function ingredientWeightLbs(ingredient: IngredientMeasure): number {
   const volGal = toGallonsFromVolumeUnit(ingredient.amount, ingredient.unit);
   if (volGal <= 0) return 0;
   const abv = alcoholicGaugeAbv(ingredient);
-  if (abv > 0) return spiritWeightLbsFromVolumeGal(volGal, abv);
-  return volGal * LBS_PER_GALLON[ingredient.ingredient_type];
+  if (abv > 0) return volGal * spiritLbsPerGallon(abv);
+  const density = resolveIngredientDensity(ingredient);
+  if (density.lbsPerGallon == null) return 0;
+  return volGal * density.lbsPerGallon;
 }
 
 export function ingredientPureAlcoholGal(ingredient: IngredientMeasure): number {
@@ -558,7 +581,7 @@ export function ingredientPureAlcoholGal(ingredient: IngredientMeasure): number 
 }
 
 export function ingredientVolumeGal(ingredient: IngredientMeasure): number {
-  const { amount, unit, ingredient_type } = ingredient;
+  const { amount, unit } = ingredient;
   if (amount <= 0) return 0;
 
   if (isVolumeUnit(unit)) {
@@ -568,9 +591,13 @@ export function ingredientVolumeGal(ingredient: IngredientMeasure): number {
   if (isWeightUnit(unit)) {
     const lbs = toLbs(amount, unit);
     const abv = alcoholicGaugeAbv(ingredient);
-    if (abv > 0) return wineGallonsFromWeight(lbs, proofFromAbv(abv));
-    const lbsPerGal = LBS_PER_GALLON[ingredient_type] || WATER_LBS_PER_US_GALLON;
-    return lbs / lbsPerGal;
+    if (abv > 0) {
+      const perGallon = spiritLbsPerGallon(abv);
+      return perGallon > 0 ? lbs / perGallon : 0;
+    }
+    const density = resolveIngredientDensity(ingredient);
+    if (density.lbsPerGallon == null || !(density.lbsPerGallon > 0)) return 0;
+    return lbs / density.lbsPerGallon;
   }
 
   return 0;
@@ -588,9 +615,12 @@ export function measureAlternate(ingredient: IngredientMeasure): MeasureAlternat
 
   if (isWeightUnit(ingredient.unit)) {
     const gal = ingredientVolumeGal(ingredient);
-    if (gal <= 0) return null;
-    const liters = gal * ML_PER_GALLON / 1000;
-    const galLabel = `≈ ${gal.toFixed(2)} gal added volume`;
+    if (gal <= 0) {
+      const notice = resolveIngredientDensity(ingredient).notice;
+      return notice ? { amount: 0, unit: '', label: notice } : null;
+    }
+    const liters = gal * LITERS_PER_US_GALLON;
+    const galLabel = `≈ ${formatGallonDisplay(gal)} gal added volume`;
     const label = liters >= 1
       ? `${galLabel} (${liters.toFixed(1)} L)`
       : galLabel;
@@ -599,7 +629,10 @@ export function measureAlternate(ingredient: IngredientMeasure): MeasureAlternat
 
   if (isVolumeUnit(ingredient.unit)) {
     const lbs = ingredientWeightLbs(ingredient);
-    if (lbs <= 0) return null;
+    if (lbs <= 0) {
+      const notice = resolveIngredientDensity(ingredient).notice;
+      return notice ? { amount: 0, unit: '', label: notice } : null;
+    }
     if (lbs < 1) {
       const oz = lbs * 16;
       return { amount: Math.round(oz * 10) / 10, unit: 'oz', label: `≈ ${oz.toFixed(1)} oz by weight` };

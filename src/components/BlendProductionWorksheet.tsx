@@ -1,11 +1,13 @@
 import {
   formatBlendRecipeAdditive,
   formatBlendRecipeSpiritPull,
-  formatSpiritPullWeightLbs,
+  isWeightUnit,
   measureAlternate,
   spiritMeasureAlternate,
-  spiritWeightLbsFromVolumeGal,
+  toLbs,
 } from '../lib/blending';
+import { formatGallonDisplay, formatQuantityDisplay } from '../lib/formulation-quantity';
+import { formulationSpiritWeightLb } from '../lib/formulation-spirit';
 import type { SpiritAbvDelta } from '../lib/blend-formulation';
 import type { BlendIngredientInput } from '../types';
 
@@ -58,13 +60,12 @@ export function BlendProductionWorksheet({
     ...ingredients.filter((i) => i.amount > 0 && i.ingredient_type !== 'water'),
     ...ingredients.filter((i) => i.amount > 0 && i.ingredient_type === 'water'),
   ];
-  const expectedBatchWeightLabel = formatSpiritPullWeightLbs(expectedYieldGal, expectedAbv);
-  const totalSpiritWeightLbs = spiritLines.reduce(
-    (sum, line) => sum + spiritWeightLbsFromVolumeGal(line.volumeGal, line.abv),
-    0,
-  );
+  const totalSpiritWeightLbs = spiritLines.reduce((sum, line) => {
+    if (line.amount > 0 && isWeightUnit(line.unit)) return sum + toLbs(line.amount, line.unit);
+    return sum + formulationSpiritWeightLb(line.volumeGal, line.abv);
+  }, 0);
   const totalSpiritWeightLabel = totalSpiritWeightLbs > 0
-    ? (totalSpiritWeightLbs >= 10 ? `${totalSpiritWeightLbs.toFixed(1)} lbs` : `${totalSpiritWeightLbs.toFixed(2)} lbs`)
+    ? `${formatQuantityDisplay(totalSpiritWeightLbs, 3)} lbs`
     : null;
 
   return (
@@ -88,22 +89,19 @@ export function BlendProductionWorksheet({
             <tr>
               <th>Target ABV</th>
               <td>{targetAbv != null ? `${targetAbv}%` : '—'}</td>
-              <th>Target Brix</th>
+              <th>Estimated sugar/Brix</th>
               <td>{targetBrix ?? '—'}</td>
             </tr>
             <tr>
               <th>Batch scale</th>
               <td>{scaleFactor !== 1 ? `${scaleFactor}× recipe` : '1× recipe'}</td>
-              <th>Expected yield</th>
-              <td>{expectedYieldGal.toFixed(1)} gal @ {expectedAbv.toFixed(1)}% ABV</td>
+              <th>Predicted finished volume</th>
+              <td>{formatGallonDisplay(expectedYieldGal)} gal @ {expectedAbv.toFixed(2)}% predicted ABV</td>
             </tr>
             <tr>
-              <th>Expected batch weight</th>
+              <th>Finished batch weight</th>
               <td colSpan={3}>
-                {expectedBatchWeightLabel ?? '—'}
-                {expectedBatchWeightLabel ? (
-                  <span className="blend-worksheet-weight-hint"> (finished blend on scale, TTB Table 3)</span>
-                ) : null}
+                Weigh the finished batch. Predicted volume is an estimate when sugar or flavor is present. Measured tank volume stays authoritative.
               </td>
             </tr>
             <tr>
@@ -150,18 +148,28 @@ export function BlendProductionWorksheet({
               const abvNote = line.recipeAbv != null && Math.abs(line.abv - line.recipeAbv) > 0.05
                 ? `Recipe ${line.recipeAbv.toFixed(1)}%`
                 : '';
-              const pullWeightLabel = formatSpiritPullWeightLbs(line.volumeGal, line.abv);
+              const enteredWeight = line.amount > 0 && isWeightUnit(line.unit);
+              const pullWeightLabel = enteredWeight
+                ? `${formatQuantityDisplay(toLbs(line.amount, line.unit), 3)} lbs entered`
+                : line.amount > 0
+                  ? `${formatQuantityDisplay(formulationSpiritWeightLb(line.volumeGal, line.abv), 3)} lbs calculated`
+                  : null;
               return (
                 <tr key={index}>
                   <td className="blend-worksheet-check"><span className="blend-worksheet-box" /></td>
                   <td>{line.tankName}</td>
                   <td>
-                    {line.amount > 0 ? `${line.amount} ${line.unit}` : `${line.volumeGal.toFixed(2)} gal`}
+                    {line.amount > 0 ? `${formatQuantityDisplay(line.amount, 3)} ${line.unit}` : `${formatGallonDisplay(line.volumeGal)} gal`}
                     {alt ? ` (${alt.label})` : ''}
                     <br />
-                    <small>{formatBlendRecipeSpiritPull(line.label, line.volumeGal, line.abv)}</small>
+                    <small>{formatBlendRecipeSpiritPull(
+                      line.label,
+                      line.volumeGal,
+                      line.abv,
+                      line.amount > 0 ? { amount: line.amount, unit: line.unit } : undefined,
+                    )}</small>
                   </td>
-                  <td>{pullWeightLabel ?? '—'}</td>
+                  <td>{pullWeightLabel ?? 'Original entered quantity not recorded'}</td>
                   <td>{line.abv.toFixed(1)}%</td>
                   <td>{abvNote}</td>
                 </tr>
