@@ -1380,6 +1380,7 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let pushTimer: ReturnType<typeof setTimeout> | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let serverRevision = 0;
+let lastSyncedPayload: string | null = null;
 let suspendPush = false;
 let pushing = false;
 let localDirty = false;
@@ -1486,6 +1487,7 @@ function applyDatabaseBytes(stored: string, revision: number, notify: boolean): 
     if (db) db.close();
     db = new sqlModule.Database(bytesFromBase64(stored));
     serverRevision = revision;
+    lastSyncedPayload = stored;
     runMigrations();
     cacheLocalDatabase();
     localDirty = false;
@@ -1500,11 +1502,35 @@ function applyDatabaseBytes(stored: string, revision: number, notify: boolean): 
 
 async function pushSharedDatabase(): Promise<void> {
   if (!db || !getStoredToken() || suspendPush || pushing) return;
-  const payload = toBase64(new Uint8Array(db.export()));
-  const baseRevision = serverRevision;
   pushing = true;
   try {
+    let payload = toBase64(new Uint8Array(db.export()));
+    const remote = await fetchSharedRecord();
+    if (!remote.database) {
+      if (remote.clearedAt && !seedEmptyServer) {
+        setSharedNotice('The shared distillery record was cleared. Waiting for the new record.');
+        return;
+      }
+      serverRevision = 0;
+    } else if (remote.database === payload) {
+      serverRevision = remote.revision;
+      lastSyncedPayload = payload;
+      localDirty = false;
+      if (sharedNotice?.startsWith('The shared record could not be saved')) setSharedNotice(null);
+      return;
+    } else if (remote.revision !== serverRevision) {
+      const basedOnCurrentServer = !lastSyncedPayload || remote.database === lastSyncedPayload;
+      if (!basedOnCurrentServer) {
+        applyDatabaseBytes(remote.database, remote.revision, true);
+        setSharedNotice('Someone else saved a change. This screen now shows the shared distillery record.');
+        return;
+      }
+      serverRevision = remote.revision;
+      payload = toBase64(new Uint8Array(db.export()));
+    }
+    const baseRevision = serverRevision;
     serverRevision = await putSharedRecord(baseRevision, payload);
+    lastSyncedPayload = payload;
     localDirty = false;
     if (sharedNotice?.startsWith('The shared record could not be saved')) setSharedNotice(null);
   } catch (error) {
@@ -1554,12 +1580,29 @@ function startSharedPolling(): void {
   }, 4000);
 }
 
+async function adoptServerRevisionIfUnchanged(): Promise<boolean> {
+  if (!db || !getStoredToken()) return false;
+  const full = await fetchSharedRecord();
+  if (!full.database) return false;
+  const local = toBase64(new Uint8Array(db.export()));
+  if (local !== full.database) return false;
+  serverRevision = full.revision;
+  lastSyncedPayload = local;
+  localDirty = false;
+  return true;
+}
+
 async function pollSharedDatabase(): Promise<void> {
   if (!getStoredToken() || !db || pushing || saveTimer || pushTimer) return;
-  if (typeof document !== 'undefined' && document.querySelector('.modal')) return;
+  const modalOpen = typeof document !== 'undefined' && document.querySelector('.modal');
   try {
     if (localDirty) {
-      await pushSharedDatabase();
+      if (!modalOpen) await pushSharedDatabase();
+      return;
+    }
+    if (modalOpen) {
+      const remote = await fetchSharedRevision();
+      if (remote.revision !== serverRevision) await adoptServerRevisionIfUnchanged();
       return;
     }
     const remote = await fetchSharedRevision();
@@ -1606,10 +1649,12 @@ async function loadDatabase(): Promise<Database> {
     const stored = localStorage.getItem(DB_STORAGE_KEY) ?? localStorage.getItem('distillery-tracker-db-v4');
     if (stored) {
       db = new sqlModule.Database(bytesFromBase64(stored));
+      lastSyncedPayload = stored;
       runMigrations();
       cacheLocalDatabase();
     } else {
       createFreshDatabase();
+      if (db) lastSyncedPayload = toBase64(new Uint8Array(db.export()));
     }
   } finally {
     suspendPush = false;
@@ -1681,6 +1726,7 @@ export function resetDatabase(): void {
   initPromise = null;
   sqlModule = null;
   serverRevision = 0;
+  lastSyncedPayload = null;
   localDirty = false;
   if (pollTimer) {
     clearInterval(pollTimer);
