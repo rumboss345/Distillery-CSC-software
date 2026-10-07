@@ -40,9 +40,13 @@ export function buildBlendRecipeSnapshot(input: {
     .filter((source) => source.volume_gal > 0)
     .map((source) => ({
       spirit_label: source.spirit_label.trim(),
-      volume_gal: round4req(source.volume_gal),
+      volume_gal: source.volume_gal > 0 && source.volume_gal < 1
+        ? Math.round(source.volume_gal * 1e6) / 1e6
+        : round4req(source.volume_gal),
       abv: round4req(source.abv),
       barrel_id: source.barrel_id ?? null,
+      entered_amount: source.entered_amount != null && source.entered_unit ? source.entered_amount : null,
+      entered_unit: source.entered_amount != null && source.entered_unit ? source.entered_unit : null,
     }))
     .sort((a, b) =>
       a.spirit_label.localeCompare(b.spirit_label)
@@ -58,6 +62,8 @@ export function buildBlendRecipeSnapshot(input: {
       amount: round4req(ingredient.amount),
       unit: ingredient.unit.trim(),
       abv: round4(ingredient.abv),
+      density_g_per_ml: ingredient.density_g_per_ml ?? null,
+      density_assumption: ingredient.density_assumption ?? null,
       cost_per_unit: round4(ingredient.cost_per_unit),
       lot_number: (ingredient.lot_number ?? '').trim(),
       inventory_item_id: ingredient.inventory_item_id ?? null,

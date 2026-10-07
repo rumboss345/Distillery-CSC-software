@@ -97,7 +97,12 @@ export function buildRecipeExportRows(input: RecipeExportInput): (string | numbe
     Source: recipe.source_type === 'barrel' ? 'Barrel' : 'Tank',
     Version: recipe.current_version_number ?? '',
     'Spirit pulls': recipe.spirit_sources
-      .map((source) => formatBlendRecipeSpiritPull(source.spirit_label, source.volume_gal, source.abv))
+      .map((source) => formatBlendRecipeSpiritPull(
+        source.spirit_label,
+        source.volume_gal,
+        source.abv,
+        { amount: source.entered_amount, unit: source.entered_unit },
+      ))
       .join(' | '),
     Additives: recipe.ingredients
       .map((ingredient) => formatBlendRecipeAdditive(ingredient))

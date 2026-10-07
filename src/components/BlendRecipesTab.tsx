@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BlendAbvConfirmation } from './BlendAbvConfirmation';
 import { limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
+import { roundScaledAmount } from '../lib/blend-recipe-scale';
 import { parseBlendRecipeSnapshot } from '../lib/blend-recipe-version';
-import { computeRecipeTheoreticalAbv, proofingWaterGalForTarget } from '../lib/blend-abv-confirm';
+import { computeRecipeTheoreticalAbv, previewProofingWaterAdjustment, type ProofingWaterPreview } from '../lib/blend-abv-confirm';
 import {
   deleteBlendRecipe,
   getBlendRecipes,
@@ -12,6 +13,7 @@ import {
   useRefreshKey,
 } from '../db/queries';
 import { Modal } from './Modal';
+import { ProofingWaterConfirm } from './ProofingWaterConfirm';
 import {
   BLEND_INGREDIENT_TYPES,
   additiveSupportsAbv,
@@ -29,10 +31,24 @@ import {
   spiritMeasureAlternate,
   spiritUnitsForMeasureMode,
   spiritVolumeGalFromAmount,
-  spiritWeightLbsFromVolumeGal,
+  toLbs,
   unitOptionsForBlendIngredient,
+  resolveIngredientDensity,
   type MeasureMode,
 } from '../lib/blending';
+import {
+  ESTIMATED_SUGAR_BRIX_LABEL,
+  ESTIMATED_SUGAR_BRIX_NOTE,
+  formatAbvDisplay,
+  formatGallonDisplay,
+  gramsFromPounds,
+  perLiterView,
+  PREDICTED_VOLUME_ESTIMATE_NOTE,
+  VOLUME_LABEL_PREDICTED,
+  VOLUME_LABEL_TARGET,
+} from '../lib/formulation-quantity';
+import { formulationSpiritWeightLb } from '../lib/formulation-spirit';
+import { LITERS_PER_US_GALLON } from '../lib/material-densities';
 import type {
   BlendIngredientInput,
   BlendRecipeSpiritSourceInput,
@@ -42,6 +58,8 @@ import type {
 interface SpiritRecipeRow extends BlendRecipeSpiritSourceInput {
   amount: number;
   unit: string;
+  /** False for older rows that stored gallons only. */
+  enteredQuantityKnown: boolean;
 }
 
 const emptySpiritLine = (): SpiritRecipeRow => ({
@@ -50,6 +68,9 @@ const emptySpiritLine = (): SpiritRecipeRow => ({
   abv: 0,
   amount: 0,
   unit: 'gal',
+  entered_amount: null,
+  entered_unit: null,
+  enteredQuantityKnown: true,
 });
 
 function syncSpiritRecipeVolume(row: SpiritRecipeRow): SpiritRecipeRow {
@@ -60,11 +81,17 @@ function syncSpiritRecipeVolume(row: SpiritRecipeRow): SpiritRecipeRow {
 }
 
 function toSpiritRecipeInput(row: SpiritRecipeRow): BlendRecipeSpiritSourceInput {
-  const synced = syncSpiritRecipeVolume(row);
+  const known = row.enteredQuantityKnown && row.amount > 0;
+  const volume_gal = known
+    ? spiritVolumeGalFromAmount(row.amount, row.unit, row.abv)
+    : row.volume_gal;
   return {
-    spirit_label: synced.spirit_label,
-    volume_gal: synced.volume_gal,
-    abv: synced.abv,
+    spirit_label: row.spirit_label,
+    volume_gal,
+    abv: row.abv,
+    barrel_id: row.barrel_id,
+    entered_amount: known ? row.amount : null,
+    entered_unit: known ? row.unit : null,
   };
 }
 
@@ -112,6 +139,8 @@ export function BlendRecipesTab({
   const [ingredients, setIngredients] = useState<BlendIngredientInput[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [abvConfirmed, setAbvConfirmed] = useState(false);
+  const [proofingPreview, setProofingPreview] = useState<ProofingWaterPreview | null>(null);
+  const [originalWater, setOriginalWater] = useState<BlendIngredientInput[]>([]);
 
   void key;
 
@@ -139,6 +168,8 @@ export function BlendRecipesTab({
     setForm(emptyRecipeForm());
     setSpiritSources([emptySpiritLine()]);
     setIngredients([]);
+    setOriginalWater([]);
+    setProofingPreview(null);
     setAbvConfirmed(false);
     setShowForm(true);
   };
@@ -163,28 +194,38 @@ export function BlendRecipesTab({
     });
     setSpiritSources(
       recipe.spirit_sources.length > 0
-        ? recipe.spirit_sources.map((source) => ({
-          spirit_label: source.spirit_label,
-          volume_gal: source.volume_gal,
-          abv: source.abv,
-          amount: source.volume_gal,
-          unit: 'gal',
-        }))
+        ? recipe.spirit_sources.map((source) => {
+          const known = source.entered_amount != null && source.entered_amount > 0 && !!source.entered_unit;
+          return {
+            spirit_label: source.spirit_label,
+            volume_gal: source.volume_gal,
+            abv: source.abv,
+            barrel_id: source.barrel_id,
+            amount: known ? source.entered_amount! : source.volume_gal,
+            unit: known ? source.entered_unit! : 'gal',
+            entered_amount: known ? source.entered_amount : null,
+            entered_unit: known ? source.entered_unit : null,
+            enteredQuantityKnown: known,
+          };
+        })
         : [emptySpiritLine()],
     );
-    setIngredients(
-      recipe.ingredients.map((ingredient) => ({
-        ingredient_type: ingredient.ingredient_type,
-        name: ingredient.name,
-        amount: ingredient.amount,
-        unit: ingredient.unit,
-        abv: ingredient.abv ?? null,
-        cost_per_unit: ingredient.cost_per_unit,
-        lot_number: ingredient.lot_number,
-        inventory_item_id: ingredient.inventory_item_id,
-        notes: ingredient.notes,
-      })),
-    );
+    const loadedIngredients = recipe.ingredients.map((ingredient) => ({
+      ingredient_type: ingredient.ingredient_type,
+      name: ingredient.name,
+      amount: ingredient.amount,
+      unit: ingredient.unit,
+      abv: ingredient.abv ?? null,
+      density_g_per_ml: ingredient.density_g_per_ml ?? null,
+      density_assumption: ingredient.density_assumption ?? null,
+      cost_per_unit: ingredient.cost_per_unit,
+      lot_number: ingredient.lot_number,
+      inventory_item_id: ingredient.inventory_item_id,
+      notes: ingredient.notes,
+    }));
+    setIngredients(loadedIngredients);
+    setOriginalWater(loadedIngredients.filter((ingredient) => ingredient.ingredient_type === 'water'));
+    setProofingPreview(null);
     setAbvConfirmed(false);
     setShowForm(true);
   };
@@ -212,27 +253,34 @@ export function BlendRecipesTab({
     }
   };
 
-  const adjustProofingWater = () => {
+  const requestProofingWater = () => {
     if (form.target_abv == null) return;
-    const solved = proofingWaterGalForTarget(
+    const preview = previewProofingWaterAdjustment(
       syncedSpiritSources.map(toSpiritRecipeInput),
       ingredients,
       form.target_abv,
     );
-    if ('error' in solved) {
-      alert(solved.error);
+    if ('error' in preview) {
+      alert(preview.error);
+      setProofingPreview(null);
       return;
     }
-    const gallons = solved.waterGal;
+    setProofingPreview(preview);
+  };
+
+  const confirmProofingWater = () => {
+    if (!proofingPreview) return;
+    const gallons = proofingPreview.proposedWaterGal;
     setIngredients((prev) => {
       const existing = prev.find((row) => row.ingredient_type === 'water');
       const unit = existing?.unit && existing.unit !== 'each' ? existing.unit : 'gal';
-      const amount = unit === 'gal'
+      const rawAmount = unit === 'gal'
         ? gallons
         : convertIngredientAmount(
           { amount: gallons, unit: 'gal', ingredient_type: 'water' },
           unit,
         );
+      const amount = roundScaledAmount(rawAmount);
       const others = prev.filter((row) => row.ingredient_type !== 'water');
       if (gallons <= 0) return others;
       return [
@@ -243,6 +291,8 @@ export function BlendRecipesTab({
           amount,
           unit,
           abv: null,
+          density_g_per_ml: null,
+          density_assumption: null,
           cost_per_unit: existing?.cost_per_unit ?? null,
           lot_number: existing?.lot_number ?? '',
           inventory_item_id: null,
@@ -250,6 +300,15 @@ export function BlendRecipesTab({
         },
       ];
     });
+    setProofingPreview(null);
+  };
+
+  const restoreOriginalWater = () => {
+    setIngredients((prev) => [
+      ...prev.filter((row) => row.ingredient_type !== 'water'),
+      ...originalWater.map((row) => ({ ...row })),
+    ]);
+    setProofingPreview(null);
   };
 
   const handleDelete = (id: number) => {
@@ -300,7 +359,9 @@ export function BlendRecipesTab({
       const next = { ...row, ...patch };
       if (patch.unit != null && patch.unit !== row.unit && patch.amount === undefined) {
         next.amount = convertSpiritAmount(row.amount, row.unit, patch.unit, next.abv);
+        next.enteredQuantityKnown = true;
       }
+      if (patch.amount !== undefined) next.enteredQuantityKnown = true;
       return syncSpiritRecipeVolume(next);
     }));
   };
@@ -314,6 +375,7 @@ export function BlendRecipesTab({
         ...row,
         unit,
         amount: convertSpiritAmount(row.amount, row.unit, unit, row.abv),
+        enteredQuantityKnown: true,
       });
     }));
   };
@@ -329,6 +391,9 @@ export function BlendRecipesTab({
       inventory_item_id: item.id,
       name: item.name,
       unit: item.unit,
+      abv: item.abv ?? null,
+      density_g_per_ml: item.density_g_per_ml ?? null,
+      density_assumption: null,
     });
   };
 
@@ -387,7 +452,8 @@ export function BlendRecipesTab({
           <dl className="detail-grid">
             <dt>Product</dt><dd>{selected.product_name || '—'}</dd>
             <dt>Target proof</dt><dd>{selected.target_abv != null ? `${selected.target_abv}%` : '—'}</dd>
-            <dt>Target Brix</dt><dd>{selected.target_brix ?? '—'}</dd>
+            <dt>{ESTIMATED_SUGAR_BRIX_LABEL}</dt><dd>{selected.target_brix ?? '—'}</dd>
+            <dt>{VOLUME_LABEL_TARGET}</dt><dd>{selected.target_volume_gal != null ? `${formatGallonDisplay(selected.target_volume_gal)} gal` : '—'}</dd>
             <dt>Sugar</dt><dd>{selected.target_sugar_g_per_l != null ? `${selected.target_sugar_g_per_l} g/L` : '—'}</dd>
             <dt>Version</dt><dd>{selected.current_version_number != null ? `V${selected.current_version_number}` : '—'}</dd>
             {selected.notes && (
@@ -422,20 +488,68 @@ export function BlendRecipesTab({
                       source.spirit_label || `Spirit ${index + 1}`,
                       source.volume_gal,
                       source.abv,
+                      { amount: source.entered_amount, unit: source.entered_unit },
                     )}
                   </li>
                 ))}
               </ul>
               {(() => {
-                const totalLbs = selected.spirit_sources.reduce(
-                  (sum, source) => sum + spiritWeightLbsFromVolumeGal(source.volume_gal, source.abv),
-                  0,
+                const known = selected.spirit_sources.filter((source) =>
+                  source.entered_amount != null && source.entered_unit && ['lbs', 'oz', 'kg', 'g'].includes(source.entered_unit.toLowerCase()),
                 );
-                if (totalLbs <= 0) return null;
+                if (known.length === 0) {
+                  return (
+                    <p className="field-hint" style={{ marginTop: '0.35rem' }}>
+                      Original entered quantity not recorded for these spirit pulls. Stored gallons are shown as saved.
+                    </p>
+                  );
+                }
+                const totalLbs = known.reduce((sum, source) => sum + toLbs(source.entered_amount ?? 0, source.entered_unit ?? 'lbs'), 0);
                 return (
                   <p className="field-hint" style={{ marginTop: '0.35rem' }}>
-                    Total spirit weight: {totalLbs >= 10 ? totalLbs.toFixed(1) : totalLbs.toFixed(2)} lbs
+                    Entered spirit weight: {totalLbs >= 10 ? totalLbs.toFixed(1) : totalLbs.toFixed(2)} lbs
                   </p>
+                );
+              })()}
+              {(() => {
+                const predicted = computeRecipeTheoreticalAbv(selected.spirit_sources, selected.ingredients);
+                if (!(predicted.volumeGal != null && predicted.volumeGal > 0)) return null;
+                const liters = predicted.volumeGal * LITERS_PER_US_GALLON;
+                const lines = [
+                  ...selected.spirit_sources.map((source) => {
+                    const enteredWeight = source.entered_amount != null && source.entered_unit
+                      && ['lbs', 'oz', 'kg', 'g'].includes(source.entered_unit.toLowerCase());
+                    const pounds = enteredWeight
+                      ? toLbs(source.entered_amount ?? 0, source.entered_unit ?? 'lbs')
+                      : formulationSpiritWeightLb(source.volume_gal, source.abv);
+                    return {
+                      name: enteredWeight ? (source.spirit_label || 'Spirit') : `${source.spirit_label || 'Spirit'} (from stored gallons)`,
+                      grams: gramsFromPounds(pounds),
+                    };
+                  }),
+                  ...selected.ingredients.map((ingredient) => ({
+                    name: ingredient.name || ingredient.ingredient_type,
+                    grams: gramsFromPounds(toLbs(ingredient.amount, ingredient.unit)),
+                  })),
+                ].filter((line) => line.grams > 0);
+                const view = perLiterView(lines, liters, 'predicted');
+                return (
+                  <>
+                    <h4>{VOLUME_LABEL_PREDICTED}</h4>
+                    <p>
+                      {formatGallonDisplay(liters)} L ({formatGallonDisplay(predicted.volumeGal)} gal)
+                      {predicted.abv != null ? ` at ${formatAbvDisplay(predicted.abv)} predicted ABV` : ''}
+                    </p>
+                    <p className="field-hint">{PREDICTED_VOLUME_ESTIMATE_NOTE}</p>
+                    <p className="field-hint">{view.note}</p>
+                    <ul>
+                      {view.lines.map((line) => (
+                        <li key={line.name}>
+                          {line.name}: {line.gramsPerLiter != null ? line.gramsPerLiter.toFixed(3) : '—'} g/L using {view.basisLabel}
+                        </li>
+                      ))}
+                    </ul>
+                  </>
                 );
               })()}
             </>
@@ -519,7 +633,8 @@ export function BlendRecipesTab({
                   />
                 </div>
                 <div className="form-group">
-                  <label>Target Brix</label>
+                  <label>{ESTIMATED_SUGAR_BRIX_LABEL}</label>
+                  <p className="field-hint">{ESTIMATED_SUGAR_BRIX_NOTE}</p>
                   <input
                     type="number"
                     step="0.1"
@@ -651,7 +766,8 @@ export function BlendRecipesTab({
                       </div>
                       {synced.volume_gal > 0 && (
                         <p className="measure-alt blend-recipe-stored-volume">
-                          Stored as <strong>{synced.volume_gal.toFixed(2)} gal</strong>
+                          Calculated volume <strong>{formatGallonDisplay(synced.volume_gal)} gal</strong>
+                          {!source.enteredQuantityKnown && ' · original entered quantity not recorded'}
                           {alternate ? ` · ${alternate.label}` : ''}
                         </p>
                       )}
@@ -812,8 +928,45 @@ export function BlendRecipesTab({
                               }}
                             />
                             <p className="field-hint">
-                              Optional. Counts toward calculated proof when the flavoring contains alcohol.
+                              Counts toward total absolute alcohol with every other alcohol-bearing ingredient.
                             </p>
+                          </div>
+                        )}
+                        {!isWater && ingredient.ingredient_type !== 'sugar' && (
+                          <div className="form-group">
+                            <label>Density (g/mL)</label>
+                            <input
+                              type="number"
+                              step="0.001"
+                              min="0"
+                              placeholder="Leave blank if unknown"
+                              value={ingredient.density_g_per_ml ?? ''}
+                              onChange={(e) => updateIngredient(index, {
+                                density_g_per_ml: e.target.value.trim() === '' ? null : parseFloat(e.target.value) || null,
+                                density_assumption: null,
+                              })}
+                            />
+                            {resolveIngredientDensity(ingredient).notice && (
+                              <p className="field-hint">{resolveIngredientDensity(ingredient).notice}</p>
+                            )}
+                            {ingredient.density_g_per_ml == null && (
+                              <label className="checkbox-label">
+                                <input
+                                  type="checkbox"
+                                  checked={ingredient.density_assumption != null}
+                                  onChange={(e) => updateIngredient(index, {
+                                    density_assumption: e.target.checked
+                                      ? (ingredient.ingredient_type === 'syrup'
+                                        ? 'cs1-syrup'
+                                        : ingredient.ingredient_type === 'color'
+                                          ? 'class-i-caramel'
+                                          : 'water')
+                                      : null,
+                                  })}
+                                />
+                                Use a documented density assumption
+                              </label>
+                            )}
                           </div>
                         )}
                       </article>
@@ -825,6 +978,18 @@ export function BlendRecipesTab({
 
             <section className="blend-recipe-section blend-recipe-section--proof">
               <h4 className="blend-recipe-section-title">Calculated proof</h4>
+              {proofingPreview && (
+                <ProofingWaterConfirm
+                  preview={proofingPreview}
+                  onConfirm={confirmProofingWater}
+                  onCancel={() => setProofingPreview(null)}
+                />
+              )}
+              {originalWater.length > 0 && (
+                <button type="button" className="btn btn-sm btn-secondary" onClick={restoreOriginalWater}>
+                  Restore original recipe water
+                </button>
+              )}
               <BlendAbvConfirmation
                 calculatedAbv={calculatedRecipe.abv}
                 calculatedVolumeGal={calculatedRecipe.volumeGal}
@@ -837,7 +1002,7 @@ export function BlendRecipesTab({
                     ? Math.round(calculatedRecipe.abv * 10) / 10
                     : null,
                 })}
-                onAdjustProofingWater={adjustProofingWater}
+                onAdjustProofingWater={requestProofingWater}
               />
             </section>
 

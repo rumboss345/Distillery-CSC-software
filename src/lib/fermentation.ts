@@ -1,4 +1,4 @@
-import { SUCROSE_APPARENT_SPECIFIC_VOLUME_ML_PER_G } from './material-densities';
+import { GRAMS_PER_POUND, LITERS_PER_US_GALLON, SUCROSE_APPARENT_SPECIFIC_VOLUME_ML_PER_G } from './material-densities';
 
 /** Moving a wash into fermenting requires the measured start Brix. */
 export function washMoveNeedsActualStartBrix(
@@ -59,8 +59,8 @@ export function formatAbvEstimate(abv: number | null): string {
   return `${abv.toFixed(1)}%`;
 }
 
-const LBS_PER_KG = 2.20462;
-const LITERS_PER_US_GAL = 3.78541;
+const LBS_PER_KG = 1000 / GRAMS_PER_POUND;
+const LITERS_PER_US_GAL = LITERS_PER_US_GALLON;
 /** Liters occupied by 1 kg dissolved sucrose (0.6219 ml/g). */
 const SUGAR_DISPLACEMENT_L_PER_KG = SUCROSE_APPARENT_SPECIFIC_VOLUME_ML_PER_G;
 /** Homedistiller / Essential Distilling SG factor: 1 + (kg sugar / L) × 0.386 */

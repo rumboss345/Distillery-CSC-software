@@ -51,8 +51,13 @@ describe('ingredientVolumeGal', () => {
     expect(gal).toBeLessThan(0.8);
   });
 
-  it('converts syrup weight using CS1 bulk density', () => {
-    const gal = ingredientVolumeGal({ amount: 16.3, unit: 'lbs', ingredient_type: 'syrup' });
+  it('converts syrup weight using CS1 bulk density when that assumption is selected', () => {
+    const gal = ingredientVolumeGal({
+      amount: 16.3,
+      unit: 'lbs',
+      ingredient_type: 'syrup',
+      density_assumption: 'cs1-syrup',
+    });
     expect(gal).toBeGreaterThan(1.4);
     expect(gal).toBeLessThan(1.5);
   });
@@ -67,14 +72,19 @@ describe('ingredientWeightLbs', () => {
     expect(ingredientWeightLbs({ amount: 1, unit: 'gal', ingredient_type: 'water' })).toBeCloseTo(1 / 0.120074, 6);
   });
 
-  it('weighs Class I color at specific gravity 1.30', () => {
-    const lbs = ingredientWeightLbs({ amount: 1, unit: 'gal', ingredient_type: 'color' });
+  it('weighs Class I color at specific gravity 1.30 when that assumption is selected', () => {
+    const lbs = ingredientWeightLbs({
+      amount: 1,
+      unit: 'gal',
+      ingredient_type: 'color',
+      density_assumption: 'class-i-caramel',
+    });
     expect(lbs).toBeCloseTo((3.785411784 * 1000 * 1.3) / 453.59237, 6);
   });
 
-  it('weighs alcoholic flavoring with Table 3 instead of water', () => {
+  it('weighs alcoholic flavoring with the continuous formulation factor', () => {
     const lbs = ingredientWeightLbs({ amount: 1, unit: 'gal', ingredient_type: 'flavoring', abv: 40 });
-    expect(lbs).toBe(spiritWeightLbsFromVolumeGal(1, 40));
+    expect(lbs).toBeCloseTo(spiritLbsPerGallon(40), 6);
     expect(lbs).toBeLessThan(ingredientWeightLbs({ amount: 1, unit: 'gal', ingredient_type: 'water' }));
   });
 });
@@ -86,10 +96,11 @@ describe('measureAlternate', () => {
     expect(alt!.label).toContain('gal');
   });
 
-  it('shows weight equivalent for flavoring by volume', () => {
+  it('does not treat flavoring volume as water when density is unknown', () => {
     const alt = measureAlternate({ amount: 1, unit: 'gal', ingredient_type: 'flavoring' });
     expect(alt).not.toBeNull();
-    expect(alt!.label).toContain('lbs');
+    expect(alt!.label).toContain('DENSITY NOT VERIFIED');
+    expect(ingredientWeightLbs({ amount: 1, unit: 'gal', ingredient_type: 'flavoring' })).toBe(0);
   });
 });
 
@@ -151,19 +162,21 @@ describe('spirit measurement', () => {
     expect(formatReviewWeight(0)).toBe('—');
   });
 
-  it('steps a review amount below 1 into the next smaller unit', () => {
-    const pointThreeFourLiters = 0.34 * 1000 / 3785.41;
-    expect(formatReviewVolume(pointThreeFourLiters)).toBe('11.5 fl oz · 340 ml');
-    expect(formatReviewVolume(0.5)).toBe('64 fl oz · 1.9 L');
+  it('keeps at least 3 gallon decimals below 1 gallon', () => {
+    expect(formatReviewVolume(0.0364)).toContain('0.0364 gal');
+    expect(formatReviewVolume(0.0364)).not.toContain('0.1 gal');
     expect(formatReviewWeight(0.34)).toBe('154 g');
     expect(formatReviewWeight(1.5)).toBe('1.50 lb · 680 g');
   });
 
-  it('formats blend recipe spirit pulls with weight and volume', () => {
+  it('shows the entered spirit charge and does not invent one for gallon-only rows', () => {
     expect(formatSpiritPullWeightLbs(83.57, 93)).toContain('lbs');
-    expect(formatBlendRecipeSpiritPull('93% rum', 83.57, 93)).toContain('93% rum');
-    expect(formatBlendRecipeSpiritPull('93% rum', 83.57, 93)).toContain('gal @ 93.0%');
-    expect(formatBlendRecipeSpiritPull('93% rum', 83.57, 93)).toContain('lbs');
+    const entered = formatBlendRecipeSpiritPull('93% rum', 36.28, 93, { amount: 249, unit: 'lbs' });
+    expect(entered).toContain('249.0 lbs');
+    expect(entered).toContain('93% rum');
+    const historical = formatBlendRecipeSpiritPull('93% rum', 83.57, 93);
+    expect(historical).toContain('original entered quantity not recorded');
+    expect(historical).not.toContain('lbs');
   });
 });
 
@@ -217,7 +230,7 @@ describe('formatBlendRecipeAdditive', () => {
       ingredient_type: 'flavoring',
     });
     expect(line).toContain('2760 ml');
-    expect(line).toContain('lbs');
+    expect(line).toContain('DENSITY NOT VERIFIED');
   });
 });
 
@@ -250,12 +263,13 @@ describe('convertIngredientAmount', () => {
 describe('convertSpiritAmount', () => {
   it('converts a spirit pull between gallons and pounds at its ABV', () => {
     const lbs = convertSpiritAmount(10, 'gal', 'lbs', 40);
-    expect(lbs).toBeCloseTo(spiritWeightLbsFromVolumeGal(10, 40), 2);
-    expect(convertSpiritAmount(lbs, 'lbs', 'gal', 40)).toBeCloseTo(10, 1);
+    expect(lbs).toBeCloseTo(10 * spiritLbsPerGallon(40), 6);
+    expect(convertSpiritAmount(lbs, 'lbs', 'gal', 40)).toBeCloseTo(10, 6);
+    expect(spiritWeightLbsFromVolumeGal(10, 40)).toBe(weightFromWineGallons(10, proofFromAbv(40)));
   });
 
   it('converts pounds to kilograms without needing a new density', () => {
-    expect(convertSpiritAmount(10, 'lbs', 'kg', 93)).toBeCloseTo(10 / 2.20462, 3);
+    expect(convertSpiritAmount(10, 'lbs', 'kg', 93)).toBeCloseTo((10 * 453.59237) / 1000, 6);
   });
 
   it('keeps the entered amount when ABV is missing and the mode changes', () => {

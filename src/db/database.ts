@@ -624,6 +624,7 @@ function runMigrations(): void {
   }
 
   migrateInventoryPackageSize();
+  migrateFormulationPrecisionColumns();
   seedPackagingBottles();
   migratePackagingBottleColumn();
   migrateBottlingTankSourceColumns();
@@ -994,6 +995,35 @@ function seedPackagingBottles(): void {
       [bottle.name, `${bottle.sizeMl} ml bottle`],
     );
   }
+}
+
+function addColumnIfMissing(table: string, column: string, definition: string): boolean {
+  if (!db) return false;
+  const hasColumn = queryOne<{ name: string }>(
+    `SELECT name FROM pragma_table_info('${table}') WHERE name = ?`,
+    [column],
+  );
+  if (hasColumn) return false;
+  db.run(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  return true;
+}
+
+/**
+ * Nullable formulation columns. Existing recipe rows are left as stored.
+ * entered_amount stays null when the original typed quantity was not recorded.
+ */
+function migrateFormulationPrecisionColumns(): void {
+  if (!db) return;
+  const added = [
+    addColumnIfMissing('blend_recipe_spirit_sources', 'entered_amount', 'REAL'),
+    addColumnIfMissing('blend_recipe_spirit_sources', 'entered_unit', 'TEXT'),
+    addColumnIfMissing('inventory_items', 'density_g_per_ml', 'REAL'),
+    addColumnIfMissing('inventory_items', 'density_reference', 'TEXT'),
+    addColumnIfMissing('inventory_items', 'abv', 'REAL'),
+    addColumnIfMissing('blend_recipe_ingredients', 'density_g_per_ml', 'REAL'),
+    addColumnIfMissing('blend_recipe_ingredients', 'density_assumption', 'TEXT'),
+  ];
+  if (added.some(Boolean)) persistDb();
 }
 
 function migrateInventoryPackageSize(): void {

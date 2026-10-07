@@ -1,19 +1,19 @@
 import { WATER_LBS_PER_US_GALLON } from './alcohol-dilution';
 import { abvExceedsLimit, MAX_ENTERED_ABV } from './abv-limits';
 import { toLbs } from './blending';
+import { DENSITY_NOT_VERIFIED, formatGallonDisplay } from './formulation-quantity';
 import {
   CLASS_I_CARAMEL_DENSITY_G_PER_ML,
+  GRAMS_PER_POUND,
+  gPerMlFromLbsPerGallon,
+  LITERS_PER_US_GALLON,
+  ML_PER_US_GALLON,
   SUCROSE_APPARENT_SPECIFIC_VOLUME_ML_PER_G,
+  SUCROSE_VOLUME_MODEL_NOTE,
   SYRUP_BULK_DENSITY_G_PER_ML,
 } from './material-densities';
 import { laaLitersFromVolumeAbv } from './reporting/alcohol-units';
-import {
-  LITERS_PER_US_GALLON,
-  proofFromAbv,
-  proofGallonsFromWeight,
-  weightFromWineGallons,
-  wineGallonsFromWeight,
-} from '../services/spirit-gauging';
+import { proofFromAbv, weightFromWineGallons } from '../services/spirit-gauging';
 import { correctAbvTo60F } from '../services/temperature-correction';
 
 export {
@@ -22,15 +22,17 @@ export {
 } from './material-densities';
 
 export const FORMULATION_CITATION =
-  'Unsweetened blends conserve proof gallons and weight with TTB Table No. 3 (27 CFR §30.63) at 60 °F. '
+  'Recipe formulation converts spirit mass and volume with a continuous Table 3 pounds-per-gallon factor. '
+  + 'It does not round proof gallons to 0.1. Legal gauging still uses TTB Table No. 3 and Table 6 separately. '
   + 'Proofing water uses 0.120074 wine gallons per pound (27 CFR §30.41). '
-  + 'Dissolved sucrose adds 0.6219 ml per gram (Bureau of Standards Bulletin 14 / CRC, via Flanagan). '
-  + 'Class I caramel color uses specific gravity 1.30 (spirit-grade Class I, not a YT75 lot specification). '
-  + 'CS1 syrup uses the plant sheet density 1.368 g/ml. Flavoring without an ABV is weighed as water. '
-  + 'This is not a full ethanol–water–sugar density table. Lab ABV is authoritative once sugar or flavor is present.';
+  + 'Dissolved sucrose adds 0.6219 ml per gram as a model approximation (Bureau of Standards Bulletin 14 / CRC, via Flanagan), not crystalline density. '
+  + 'Class I caramel (specific gravity 1.30) and CS1 syrup (1.368 g/ml) are used only when that documented assumption is selected or a density is stored. '
+  + 'Unknown flavor, glycerin, syrup, concentrate, and other ingredients are not treated as water. '
+  + 'Every alcohol-bearing ingredient contributes to total absolute alcohol. '
+  + 'Predicted sweetened volume is an estimate. Lab ABV and measured tank volume are authoritative once entered.';
 
-const ML_PER_GALLON = LITERS_PER_US_GALLON * 1000;
-const GRAMS_PER_LB = 453.592;
+const ML_PER_GALLON = ML_PER_US_GALLON;
+const GRAMS_PER_LB = GRAMS_PER_POUND;
 
 export type FormulationKind = 'spirit' | 'water' | 'sugar' | 'syrup' | 'flavoring' | 'color' | 'other';
 
@@ -43,6 +45,10 @@ export interface FormulationComponent {
   temperatureF?: number | null;
   /** Share of a syrup's mass that is sucrose, from 0 to 1. */
   sucroseMassFraction?: number | null;
+  /** Verified density. Unknown density is not replaced with water. */
+  densityGPerMl?: number | null;
+  /** Used only when the distiller explicitly selects a documented assumption. */
+  densityAssumption?: 'water' | 'cs1-syrup' | 'class-i-caramel' | null;
 }
 
 export interface FormulationAnalysis {
@@ -153,6 +159,31 @@ export function sucroseApparentVolumeGal(grams: number): number {
   return (grams * SUCROSE_APPARENT_SPECIFIC_VOLUME_ML_PER_G) / ML_PER_GALLON;
 }
 
+function explicitComponentDensity(component: FormulationComponent): { density: number | null; notice: string | null } {
+  if (component.densityGPerMl != null && component.densityGPerMl > 0) {
+    return { density: component.densityGPerMl, notice: null };
+  }
+  if (component.densityAssumption === 'water') {
+    return {
+      density: gPerMlFromLbsPerGallon(WATER_LBS_PER_US_GALLON),
+      notice: 'Documented assumption: water density.',
+    };
+  }
+  if (component.densityAssumption === 'cs1-syrup') {
+    return {
+      density: SYRUP_BULK_DENSITY_G_PER_ML,
+      notice: 'Documented assumption: CS1 syrup density 1.368 g/mL.',
+    };
+  }
+  if (component.densityAssumption === 'class-i-caramel') {
+    return {
+      density: CLASS_I_CARAMEL_DENSITY_G_PER_ML,
+      notice: 'Documented assumption: Class I caramel specific gravity 1.30.',
+    };
+  }
+  return { density: null, notice: null };
+}
+
 function abvAt60(abv: number, temperatureF: number | null | undefined): number {
   if (temperatureF == null || !Number.isFinite(temperatureF)) return abv;
   return correctAbvTo60F(abv, temperatureF);
@@ -165,12 +196,10 @@ interface HydroPart {
 }
 
 /**
- * Table 3 rounds proof gallons to 0.1 lb-column steps, so a direct lookup on a
- * lab-sized blend (a few pounds) can miss the target by several proof points.
- * Batches under this size use the pounds-per-gallon factor from a 1,000 gallon
- * Table 3 lookup, which is the same factor the recipe spirit lines already use.
+ * Formulation uses a continuous pounds-per-gallon factor from a 1,000 gallon
+ * Table 3 lookup. Legal gauging still decomposes weight into 0.1 proof gallons.
+ * That regulatory rounding is not used to convert a recipe charge.
  */
-const DIRECT_TABLE3_MIN_GALLONS = 20;
 const TABLE3_FACTOR_BASIS_GALLONS = 1000;
 const lbsPerGallonByProof = new Map<number, number>();
 
@@ -192,9 +221,8 @@ function lbsPerWineGallonExact(proof: number): number {
   return lbsPerWineGallon(lower) + (lbsPerWineGallon(upper) - lbsPerWineGallon(lower)) * fraction;
 }
 
-function weightLbAtProof(wineGallons: number, proof: number, direct = wineGallons >= DIRECT_TABLE3_MIN_GALLONS): number {
+function weightLbAtProof(wineGallons: number, proof: number): number {
   if (!(wineGallons > 0) || !(proof > 0)) return 0;
-  if (direct) return weightFromWineGallons(wineGallons, proof);
   return lbsPerWineGallonExact(proof) * wineGallons;
 }
 
@@ -202,9 +230,7 @@ function wineGallonsAtProof(weightLb: number, proof: number): number {
   if (!(weightLb > 0) || !(proof > 0)) return 0;
   const perGallon = lbsPerWineGallonExact(proof);
   if (!(perGallon > 0)) return 0;
-  const scaled = weightLb / perGallon;
-  if (scaled >= DIRECT_TABLE3_MIN_GALLONS) return wineGallonsFromWeight(weightLb, proof);
-  return scaled;
+  return weightLb / perGallon;
 }
 
 function spiritPart(
@@ -301,49 +327,41 @@ function prepareBlend(components: FormulationComponent[]): PreparedBlend | Formu
       continue;
     }
 
-    if (component.kind === 'syrup') {
-      let grams = massToGrams(component.amount, component.unit);
-      let volumeGal = volumeToGal(component.amount, component.unit);
-      if (grams == null && volumeGal == null) {
-        return { ok: false, message: `${name} needs a weight or a volume.` };
+    const resolved = explicitComponentDensity(component);
+    let grams = massToGrams(component.amount, component.unit);
+    let volumeGal = volumeToGal(component.amount, component.unit);
+    if (grams == null && volumeGal == null) {
+      return { ok: false, message: `${name} needs a volume or a weight.` };
+    }
+    if (resolved.density == null) {
+      warnings.push(`${name}: ${DENSITY_NOT_VERIFIED}`);
+      if (volumeGal != null) {
+        extraVolumeGal += volumeGal;
+        warnings.push(`${name} was entered by volume. Its weight is omitted until density is verified or a documented assumption is selected.`);
+      } else if (grams != null) {
+        extraWeightLb += grams / GRAMS_PER_LB;
+        warnings.push(`${name} was entered by weight. Its volume is omitted until density is verified or a documented assumption is selected.`);
       }
+    } else {
+      if (resolved.notice) warnings.push(`${name}: ${resolved.notice}`);
       if (grams == null && volumeGal != null) {
-        grams = volumeGal * ML_PER_GALLON * SYRUP_BULK_DENSITY_G_PER_ML;
+        grams = volumeGal * ML_PER_GALLON * resolved.density;
       }
       if (volumeGal == null && grams != null) {
-        volumeGal = grams / (SYRUP_BULK_DENSITY_G_PER_ML * ML_PER_GALLON);
+        volumeGal = grams / (resolved.density * ML_PER_GALLON);
       }
       extraVolumeGal += volumeGal ?? 0;
       extraWeightLb += (grams ?? 0) / GRAMS_PER_LB;
+    }
+    if (component.kind === 'syrup') {
       const fraction = component.sucroseMassFraction;
-      if (fraction != null && fraction > 0 && grams != null) {
+      if (fraction != null && fraction > 0 && grams != null && resolved.density != null) {
         sugarGrams += grams * Math.min(1, fraction);
-      } else {
+      } else if ((volumeGal ?? 0) > 0 || (grams ?? 0) > 0) {
         warnings.push(`${name} has no sucrose fraction, so it adds volume but not sugar g/L.`);
       }
-      obscured = true;
-      continue;
     }
-
-    const densityGPerMl = component.kind === 'color' ? CLASS_I_CARAMEL_DENSITY_G_PER_ML : null;
-    let volumeGal = volumeToGal(component.amount, component.unit);
-    let grams = massToGrams(component.amount, component.unit);
-    if (volumeGal == null && grams == null) {
-      return { ok: false, message: `${name} needs a volume or a weight.` };
-    }
-    if (volumeGal == null && grams != null) {
-      volumeGal = densityGPerMl != null
-        ? grams / (densityGPerMl * ML_PER_GALLON)
-        : (grams / GRAMS_PER_LB) / WATER_LBS_PER_US_GALLON;
-    }
-    if (grams == null && volumeGal != null) {
-      grams = densityGPerMl != null
-        ? volumeGal * ML_PER_GALLON * densityGPerMl
-        : volumeGal * WATER_LBS_PER_US_GALLON * GRAMS_PER_LB;
-    }
-    extraVolumeGal += volumeGal ?? 0;
-    extraWeightLb += (grams ?? 0) / GRAMS_PER_LB;
-    if ((volumeGal ?? 0) > 0) obscured = true;
+    if ((volumeGal ?? 0) > 0 || (grams ?? 0) > 0) obscured = true;
   }
 
   hydro.volumeGal = inputHydroGal;
@@ -358,32 +376,24 @@ function prepareBlend(components: FormulationComponent[]): PreparedBlend | Formu
   };
 }
 
+function alcoholGalAtProof(weightLb: number, proof: number): number {
+  const perGallon = lbsPerWineGallonExact(proof);
+  if (!(perGallon > 0)) return 0;
+  return (weightLb / perGallon) * (proof / 2) / 100;
+}
+
+/** Continuous alcohol balance. Regulatory 0.1 proof-gallon rounding is not used here. */
 function proofForWeightAndAlcohol(weightLb: number, pureAlcoholGal: number): number {
   if (weightLb <= 0 || pureAlcoholGal <= 0) return 0;
-  const targetPg = pureAlcoholGal * 2;
-  const approximateAbv = Math.min(
-    100,
-    (pureAlcoholGal / (weightLb / WATER_LBS_PER_US_GALLON)) * 100,
-  );
-  const hint = proofFromAbv(approximateAbv);
-  const smallBatch = weightLb < weightLbAtProof(DIRECT_TABLE3_MIN_GALLONS, hint);
-  let bestProof = hint;
-  let bestScore = Number.POSITIVE_INFINITY;
-  const steps = smallBatch ? 20000 : 2000;
-  for (let step = 1; step <= steps; step += 1) {
-    const proof = smallBatch ? step / 100 : step / 10;
-    const alcoholError = smallBatch
-      ? Math.abs((weightLb / lbsPerWineGallonExact(proof)) * (proof / 2) / 100 - pureAlcoholGal)
-      : Math.abs(proofGallonsFromWeight(weightLb, proof) - targetPg);
-    // Table 3 proof gallons tie at 0.1, so production batches keep a small preference for the alcohol-balance hint.
-    // Lab-sized blends use a continuous factor, and that same preference would drag 36.9% up to 37%.
-    const score = alcoholError + Math.abs(proof - hint) / (smallBatch ? 1e9 : 1000);
-    if (score < bestScore) {
-      bestScore = score;
-      bestProof = proof;
-    }
+  let low = 0.1;
+  let high = 200;
+  if (alcoholGalAtProof(weightLb, high) < pureAlcoholGal) return high;
+  for (let step = 0; step < 60; step += 1) {
+    const mid = (low + high) / 2;
+    if (alcoholGalAtProof(weightLb, mid) < pureAlcoholGal) low = mid;
+    else high = mid;
   }
-  return bestProof;
+  return (low + high) / 2;
 }
 
 function finishAnalysis(prepared: PreparedBlend): FormulationAnalysis {
@@ -417,7 +427,7 @@ function finishAnalysis(prepared: PreparedBlend): FormulationAnalysis {
     warnings.push('Sugar or other dissolved material is in this blend. Do not turn a density reading into proof. Use a lab ABV.');
   }
   if (prepared.sugarGrams > 0) {
-    warnings.push('Dissolved sugar volume uses 0.6219 ml/g. It is not an OIML ethanol–water–sucrose table.');
+    warnings.push(SUCROSE_VOLUME_MODEL_NOTE);
   }
 
   const model = prepared.sugarGrams > 0 || prepared.extraVolumeGal > 0
@@ -425,9 +435,9 @@ function finishAnalysis(prepared: PreparedBlend): FormulationAnalysis {
     : 'ttb-table-3';
 
   const summary = volumeGal > 0
-    ? `${round2(liters).toFixed(1)} L (${round2(volumeGal).toFixed(2)} gal) at ${round2(abv).toFixed(2)}% ABV`
+    ? `Predicted finished volume ${formatGallonDisplay(liters)} L (${formatGallonDisplay(volumeGal)} gal) at ${round2(abv).toFixed(2)}% predicted ABV`
       + (sugarGPerL != null ? `, ${round2(sugarGPerL).toFixed(1)} g/L sugar` : '')
-      + `. ${round2(pureAlcoholGal * LITERS_PER_US_GALLON).toFixed(2)} LAA liters.`
+      + `. ${round2(pureAlcoholGal * LITERS_PER_US_GALLON).toFixed(3)} LAA liters.`
     : 'Nothing to calculate yet.';
 
   return {
@@ -479,7 +489,7 @@ function predictedBlendWeight(blend: PreparedBlend, abv: number): number {
 
 export function gaugePouredBlend(
   components: FormulationComponent[],
-  targetAbv?: number | null,
+  _targetAbv?: number | null,
 ): PouredBlendGauge | null {
   const prepared = prepareBlend(components);
   if ('ok' in prepared && prepared.ok === false) return null;
@@ -490,20 +500,6 @@ export function gaugePouredBlend(
   const alcohol = blend.hydro.pureAlcoholGal;
   if (!(alcohol > 0) || !(weightLb > 0)) {
     return { volumeGal: pouredGal, abv: 0, weightLb, pouredGal, contractionGal: 0 };
-  }
-
-  if (targetAbv != null && targetAbv > 0) {
-    const predicted = predictedBlendWeight(blend, targetAbv);
-    if (Number.isFinite(predicted) && Math.abs(predicted - weightLb) <= 0.1) {
-      const volumeGal = alcohol / (targetAbv / 100);
-      return {
-        volumeGal,
-        abv: targetAbv,
-        weightLb,
-        pouredGal,
-        contractionGal: pouredGal - volumeGal,
-      };
-    }
   }
 
   let low = 0.2;
@@ -540,7 +536,7 @@ export function analyzeFormulation(
 
 function formatAmount(gallons: number): string {
   const liters = gallons * LITERS_PER_US_GALLON;
-  return `${round2(gallons).toFixed(2)} gal (${round2(liters).toFixed(1)} L)`;
+  return `${formatGallonDisplay(gallons)} gal (${formatGallonDisplay(liters)} L)`;
 }
 
 /** Solve spirit, water, and sugar additions for a target volume, ABV, and sugar g/L. */
@@ -613,8 +609,7 @@ export function designFormulation(input: DesignInput): FormulationDesign {
     }
     spiritAbv = abvAt60(input.additionSpiritAbv, input.additionSpiritTemperatureF);
     spiritGal = alcoholToAdd / (spiritAbv / 100);
-    const directTable = hydroGal >= DIRECT_TABLE3_MIN_GALLONS;
-    spiritWeight = weightLbAtProof(spiritGal, proofFromAbv(spiritAbv), directTable);
+    spiritWeight = weightLbAtProof(spiritGal, proofFromAbv(spiritAbv));
   }
 
   const hydroAbv = (current.hydro.pureAlcoholGal + Math.max(0, alcoholToAdd)) / hydroGal * 100;
@@ -625,9 +620,8 @@ export function designFormulation(input: DesignInput): FormulationDesign {
     };
   }
   const hydroProof = proofFromAbv(hydroAbv);
-  const directHydro = hydroGal >= DIRECT_TABLE3_MIN_GALLONS;
   const hydroWeight = hydroAbv > 0
-    ? weightLbAtProof(hydroGal, hydroProof, directHydro)
+    ? weightLbAtProof(hydroGal, hydroProof)
     : hydroGal * WATER_LBS_PER_US_GALLON;
   const waterWeight = hydroWeight - current.hydro.weightLb - spiritWeight;
   if (waterWeight < -0.05) {

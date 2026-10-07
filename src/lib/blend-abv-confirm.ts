@@ -1,4 +1,4 @@
-import { ingredientVolumeGal } from './blending';
+import { convertIngredientAmount, ingredientVolumeGal } from './blending';
 import { solveWaterForTargetAbv } from './blend-formulation';
 import { analyzeFormulation, type FormulationComponent } from './formulation-engine';
 import type { BlendIngredientInput, BlendIngredientType, BlendRecipeSpiritSourceInput } from '../types';
@@ -30,6 +30,19 @@ function recipeComponents(
 ): FormulationComponent[] {
   const components: FormulationComponent[] = [];
   for (const spirit of spirits) {
+    const entered = spirit.entered_amount != null && spirit.entered_amount > 0 && spirit.entered_unit;
+    if (entered) {
+      if (!(spirit.abv > 0)) continue;
+      components.push({
+        kind: 'spirit',
+        name: spirit.spirit_label.trim() || 'Spirit',
+        amount: spirit.entered_amount!,
+        unit: spirit.entered_unit!,
+        abv: spirit.abv,
+        temperatureF: 60,
+      });
+      continue;
+    }
     if (!(spirit.volume_gal > 0) || !(spirit.abv > 0)) continue;
     components.push({
       kind: 'spirit',
@@ -49,6 +62,8 @@ function recipeComponents(
       amount: ingredient.amount,
       unit: ingredient.unit,
       abv: ingredient.abv,
+      densityGPerMl: ingredient.density_g_per_ml,
+      densityAssumption: ingredient.density_assumption,
     });
   }
   const waterGal = waterGalOverride ?? ingredients
@@ -116,9 +131,75 @@ export function proofingWaterGalForTarget(
         amount: ingredient.amount,
         unit: ingredient.unit,
         abv: ingredient.abv,
+        densityGPerMl: ingredient.density_g_per_ml,
+        densityAssumption: ingredient.density_assumption,
       })),
     targetAbv,
   );
   if (!solved) return { error: 'Proofing water could not bring this blend to the target proof.' };
   return { waterGal: solved.waterGal };
+}
+
+export interface ProofingWaterPreview {
+  currentWaterGal: number;
+  proposedWaterGal: number;
+  differenceGal: number;
+  currentAbv: number | null;
+  proposedAbv: number | null;
+  currentAmount: number;
+  proposedAmount: number;
+  differenceAmount: number;
+  unit: string;
+}
+
+function waterCharge(ingredients: BlendIngredientInput[]): { gallons: number; amount: number; unit: string } {
+  const rows = ingredients.filter((ingredient) => ingredient.ingredient_type === 'water' && ingredient.amount > 0);
+  const unit = rows[0]?.unit && rows[0].unit !== 'each' ? rows[0].unit : 'gal';
+  const gallons = rows.reduce((sum, ingredient) => sum + ingredientVolumeGal(ingredient), 0);
+  const amount = rows.reduce((sum, ingredient) => {
+    if (ingredient.unit.toLowerCase() === unit.toLowerCase()) return sum + ingredient.amount;
+    return sum + convertIngredientAmount(ingredient, unit);
+  }, 0);
+  return { gallons, amount, unit };
+}
+
+/** Preview only. The recipe water charge changes after the distiller confirms. */
+export function previewProofingWaterAdjustment(
+  spirits: BlendRecipeSpiritSourceInput[],
+  ingredients: BlendIngredientInput[],
+  targetAbv: number,
+): ProofingWaterPreview | { error: string } {
+  const solved = proofingWaterGalForTarget(spirits, ingredients, targetAbv);
+  if ('error' in solved) return solved;
+  const current = waterCharge(ingredients);
+  const currentResult = computeRecipeTheoreticalAbv(spirits, ingredients);
+  const existingWater = ingredients.find((ingredient) => ingredient.ingredient_type === 'water');
+  const withProposed = [
+    ...ingredients.filter((ingredient) => ingredient.ingredient_type !== 'water'),
+    {
+      ingredient_type: 'water' as const,
+      name: existingWater?.name?.trim() || 'Proofing water',
+      amount: solved.waterGal,
+      unit: 'gal',
+      notes: existingWater?.notes ?? '',
+    },
+  ];
+  const proposedResult = computeRecipeTheoreticalAbv(spirits, withProposed);
+  const proposedAmount = current.unit === 'gal'
+    ? solved.waterGal
+    : convertIngredientAmount(
+      { amount: solved.waterGal, unit: 'gal', ingredient_type: 'water' },
+      current.unit,
+    );
+  return {
+    currentWaterGal: current.gallons,
+    proposedWaterGal: solved.waterGal,
+    differenceGal: solved.waterGal - current.gallons,
+    currentAbv: currentResult.abv,
+    proposedAbv: proposedResult.abv,
+    currentAmount: current.amount,
+    proposedAmount,
+    differenceAmount: proposedAmount - current.amount,
+    unit: current.unit,
+  };
 }

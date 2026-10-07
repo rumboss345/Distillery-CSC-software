@@ -14,6 +14,9 @@ CREATE TABLE IF NOT EXISTS inventory_items (
   reorder_level REAL NOT NULL DEFAULT 0,
   notes TEXT NOT NULL DEFAULT '',
   package_size_ml REAL,
+  density_g_per_ml REAL,
+  density_reference TEXT,
+  abv REAL,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -248,6 +251,8 @@ CREATE TABLE IF NOT EXISTS blend_recipe_spirit_sources (
   volume_gal REAL NOT NULL DEFAULT 0,
   abv REAL NOT NULL DEFAULT 0,
   barrel_id INTEGER REFERENCES barrels(id),
+  entered_amount REAL,
+  entered_unit TEXT,
   sort_order INTEGER NOT NULL DEFAULT 0
 );
 
@@ -259,6 +264,8 @@ CREATE TABLE IF NOT EXISTS blend_recipe_ingredients (
   amount REAL NOT NULL DEFAULT 0,
   unit TEXT NOT NULL DEFAULT 'gal',
   abv REAL,
+  density_g_per_ml REAL,
+  density_assumption TEXT,
   cost_per_unit REAL,
   lot_number TEXT NOT NULL DEFAULT '',
   inventory_item_id INTEGER REFERENCES inventory_items(id),

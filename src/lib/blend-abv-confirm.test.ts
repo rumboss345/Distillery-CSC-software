@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { designFormulation } from './formulation-engine';
 import {
   abvMatchesTarget,
   computeRecipeTheoreticalAbv,
+  previewProofingWaterAdjustment,
   proofGapDescription,
   proofingWaterGalForTarget,
 } from './blend-abv-confirm';
+import { roundScaledAmount } from './blend-recipe-scale';
+import { spiritVolumeGalFromAmount } from './blending';
+import { designFormulation } from './formulation-engine';
 
 describe('blend-abv-confirm', () => {
   it('detects when calculated ABV matches target within tolerance', () => {
@@ -43,6 +46,31 @@ describe('blend-abv-confirm', () => {
     ]);
     expect(abvMatchesTarget(result.abv!, 35)).toBe(true);
     expect(result.volumeGal!).toBeGreaterThan(0.2);
+  });
+
+  it('writes a confirmed water charge at formulation precision and still meets the target', () => {
+    const spirits = [{
+      spirit_label: 'Neutral',
+      volume_gal: spiritVolumeGalFromAmount(0.25, 'lbs', 93),
+      abv: 93,
+      entered_amount: 0.25,
+      entered_unit: 'lbs',
+    }];
+    const flavor = { ingredient_type: 'flavoring' as const, name: 'YT75', amount: 1.75, unit: 'l', notes: '' };
+    const preview = previewProofingWaterAdjustment(
+      spirits,
+      [{ ingredient_type: 'water', name: 'Proofing water', amount: 1, unit: 'lbs', notes: '' }, flavor],
+      2,
+    );
+    expect('proposedAmount' in preview).toBe(true);
+    if (!('proposedAmount' in preview)) return;
+    const amount = roundScaledAmount(preview.proposedAmount);
+    expect(String(amount).length).toBeLessThan(12);
+    const after = computeRecipeTheoreticalAbv(spirits, [
+      flavor,
+      { ingredient_type: 'water', name: 'Proofing water', amount, unit: preview.unit, notes: '' },
+    ]);
+    expect(abvMatchesTarget(after.abv ?? 0, 2)).toBe(true);
   });
 
   it('agrees with a blend the designer solved to a target', () => {

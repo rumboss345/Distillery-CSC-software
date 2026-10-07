@@ -24,8 +24,10 @@ export interface AdditiveInput {
   unit: string;
   /** ABV % when this additive contributes alcohol (e.g. vanilla extract). */
   abv?: number | null;
-  /** Optional dissolved solids contribution (°Bx per gallon equivalent). */
+  /** Optional dissolved solids contribution used only by the estimated sugar/Brix shortcut. */
   brixPerGal?: number;
+  densityGPerMl?: number | null;
+  densityAssumption?: 'water' | 'cs1-syrup' | 'class-i-caramel' | null;
   costPerUnit?: number;
   lotNumber?: string;
   inventoryItemId?: number | null;
@@ -93,7 +95,11 @@ function hasDissolvedSolids(additives: AdditiveInput[]): boolean {
   );
 }
 
-function additiveBrixContribution(additive: AdditiveInput, totalVolumeGal: number): number {
+/**
+ * Estimated sugar/Brix shortcut: (sugar pounds × 10) / finished gallons.
+ * This is not laboratory °Brix and must not be used for regulatory strength.
+ */
+function estimatedSugarBrixContribution(additive: AdditiveInput, totalVolumeGal: number): number {
   if (additive.amount <= 0 || totalVolumeGal <= 0) return 0;
   if (additive.brixPerGal != null) {
     return (additive.brixPerGal * ingredientVolumeGal({ ...additive, ingredient_type: additive.ingredientType })) / totalVolumeGal;
@@ -101,7 +107,6 @@ function additiveBrixContribution(additive: AdditiveInput, totalVolumeGal: numbe
   if (additive.ingredientType === 'sugar') {
     const lbs = toLbs(additive.amount, additive.unit);
     if (lbs <= 0) return 0;
-    // Approximate: 1 lb sucrose ~ 0.12 gal volume; ~10 °Bx per lb in 10 gal batch scale factor
     return (lbs * 10) / totalVolumeGal;
   }
   return 0;
@@ -131,6 +136,8 @@ function toFormulationComponents(
       amount: additive.amount,
       unit: additive.unit,
       abv: additive.abv ?? null,
+      densityGPerMl: additive.densityGPerMl,
+      densityAssumption: additive.densityAssumption,
     });
   }
   return components;
@@ -243,7 +250,7 @@ export function computeTheoreticalBlend(
     abv = gauged?.abv ?? 0;
     density = !sugarOrFlavor && abv > 0 ? round3(spiritDensityGPerMl(abv)) : null;
   }
-  const brixParts = additives.map((a) => additiveBrixContribution(a, volumeGal));
+  const brixParts = additives.map((a) => estimatedSugarBrixContribution(a, volumeGal));
   const brix = volumeGal > 0 && brixParts.some((b) => b > 0)
     ? round2(brixParts.reduce((s, b) => s + b, 0))
     : null;
@@ -382,9 +389,14 @@ export function spiritVolumeForSourceAbv(
   sourceAbv: number,
 ): number {
   if (!(recipeVolumeGal > 0)) return 0;
-  if (!(recipeAbv > 0) || !(sourceAbv > 0)) return round3(Math.max(0, recipeVolumeGal));
-  if (Math.abs(sourceAbv - recipeAbv) <= 0.05) return round3(recipeVolumeGal);
-  return round3(recipeVolumeGal * (recipeAbv / sourceAbv));
+  const keep = (value: number) => {
+    const places = value > 0 && value < 1 ? 6 : 3;
+    const factor = 10 ** places;
+    return Math.round(value * factor) / factor;
+  };
+  if (!(recipeAbv > 0) || !(sourceAbv > 0)) return keep(Math.max(0, recipeVolumeGal));
+  if (Math.abs(sourceAbv - recipeAbv) <= 0.05) return keep(recipeVolumeGal);
+  return keep(recipeVolumeGal * (recipeAbv / sourceAbv));
 }
 
 /**
@@ -623,7 +635,7 @@ export function computeBatchCorrection(
           sugarLbs,
           'lbs',
           'sugar',
-          `Add ${sugarLbs.toFixed(2)} lbs of sugar to raise sweetness from ${measuredBrix.toFixed(1)}° to about ${targetBrix.toFixed(1)}° Brix.`,
+          `Add ${sugarLbs.toFixed(2)} lbs of sugar to raise the estimated sugar/Brix from ${measuredBrix.toFixed(1)} toward ${targetBrix.toFixed(1)}. This is not a laboratory °Brix.`,
         ),
         projectedAbv: workingAbv,
         projectedBrix: workingBrix,

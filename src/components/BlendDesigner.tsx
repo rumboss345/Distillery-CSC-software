@@ -6,9 +6,10 @@ import {
   ingredientWeightLbs,
   isWeightUnit,
   spiritVolumeGalFromAmount,
-  spiritWeightLbsFromVolumeGal,
   toLbs,
 } from '../lib/blending';
+import { formatGallonDisplay, formatQuantityDisplay } from '../lib/formulation-quantity';
+import { formulationSpiritWeightLb } from '../lib/formulation-spirit';
 import {
   analyzeFormulation,
   designFormulation,
@@ -60,7 +61,7 @@ function volumeToGal(amount: number, unit: string): number {
   return amount;
 }
 
-const GRAMS_PER_LB = 453.592;
+const GRAMS_PER_LB = 453.59237;
 
 interface ResultLine {
   label: string;
@@ -72,13 +73,14 @@ interface ResultLine {
 function formatVolumeGal(gal: number): string {
   if (!(gal > 0)) return '—';
   const liters = gal * LITERS_PER_US_GALLON;
-  return `${gal.toFixed(2)} gal · ${liters.toFixed(1)} L`;
+  const literLabel = liters >= 1 ? `${liters.toFixed(1)} L` : `${formatQuantityDisplay(liters, 3)} L`;
+  return `${formatGallonDisplay(gal)} gal · ${literLabel}`;
 }
 
 function formatWeightLb(lb: number): string {
   if (!(lb > 0)) return '—';
-  const kg = lb / 2.2046226218;
-  return `${lb.toFixed(2)} lb · ${kg.toFixed(2)} kg`;
+  const kg = lb * 0.45359237;
+  return `${formatQuantityDisplay(lb, 3)} lb · ${formatQuantityDisplay(kg, 3)} kg`;
 }
 
 function sugarDissolvedGal(lb: number): number {
@@ -282,7 +284,7 @@ export function BlendDesigner({ onUseForBatch }: { onUseForBatch: (recipeId: num
       lines.push({ label, volume, weight, total });
     };
     const pushSpirit = (label: string, gal: number, abv: number) => {
-      push(label, formatVolumeGal(gal), formatWeightLb(spiritWeightLbsFromVolumeGal(gal, abv)));
+      push(label, formatVolumeGal(gal), formatWeightLb(formulationSpiritWeightLb(gal, abv)));
     };
     const pushAdditive = (label: string, kind: BlendIngredientType, amount: number, unit: string, abv?: number | null) => {
       if (abv != null && abv > 0) {

@@ -31,6 +31,7 @@ import {
 } from '../lib/barrel-blending';
 import { AbvTemperatureInput, correctedAbvFromInputs } from '../components/AbvTemperatureInput';
 import { BlendAbvConfirmation } from '../components/BlendAbvConfirmation';
+import { ProofingWaterConfirm } from '../components/ProofingWaterConfirm';
 import { BlendProductionWorksheet } from '../components/BlendProductionWorksheet';
 import { AssigneeCell, AssigneeSelect } from '../components/AssigneeSelect';
 import { DatePicker } from '../components/DatePicker';
@@ -54,6 +55,7 @@ import {
   formatReviewVolume,
   formatReviewWeight,
   inferMeasureMode,
+  isWeightUnit,
   ingredientVolumeGal,
   ingredientWeightLbs,
   measureAlternate,
@@ -61,12 +63,25 @@ import {
   spiritMeasureAlternate,
   spiritUnitsForMeasureMode,
   spiritVolumeGalFromAmount,
-  spiritWeightLbsFromVolumeGal,
+  toLbs,
   unitsForMeasureMode,
   type MeasureMode,
 } from '../lib/blending';
+import { previewProofingWaterAdjustment, type ProofingWaterPreview } from '../lib/blend-abv-confirm';
 import { parseBlendRecipeSnapshot } from '../lib/blend-recipe-version';
 import { decimalStringFromNumber } from '../lib/calc-engine/number-bridge';
+import {
+  ESTIMATED_SUGAR_BRIX_LABEL,
+  ESTIMATED_SUGAR_BRIX_NOTE,
+  formatAbvDisplay,
+  formatGallonDisplay,
+  MEASURED_VOLUME_AUTHORITY_NOTE,
+  PREDICTED_VOLUME_ESTIMATE_NOTE,
+  VOLUME_LABEL_MEASURED,
+  VOLUME_LABEL_PREDICTED,
+  VOLUME_LABEL_TARGET,
+} from '../lib/formulation-quantity';
+import { formulationSpiritWeightLb } from '../lib/formulation-spirit';
 import { postedSpiritPounds, postedWaterPounds } from '../lib/calc-engine';
 
 function table6SpiritPounds(volumeGal: number, abv: number): number {
@@ -151,7 +166,11 @@ function blendIngredientFromRecord(
   ingredient: Pick<
     BlendIngredientInput,
     'ingredient_type' | 'name' | 'amount' | 'unit' | 'cost_per_unit' | 'lot_number' | 'inventory_item_id' | 'notes'
-  > & { abv?: number | null },
+  > & {
+    abv?: number | null;
+    density_g_per_ml?: number | null;
+    density_assumption?: BlendIngredientInput['density_assumption'];
+  },
 ): BlendIngredientInput {
   return {
     ingredient_type: ingredient.ingredient_type,
@@ -159,6 +178,8 @@ function blendIngredientFromRecord(
     amount: ingredient.amount,
     unit: ingredient.unit,
     abv: ingredient.abv ?? null,
+    density_g_per_ml: ingredient.density_g_per_ml ?? null,
+    density_assumption: ingredient.density_assumption ?? null,
     cost_per_unit: ingredient.cost_per_unit,
     lot_number: ingredient.lot_number,
     inventory_item_id: ingredient.inventory_item_id,
@@ -265,6 +286,8 @@ function toAdditiveInputs(ingredients: BlendIngredientInput[]): AdditiveInput[] 
     amount: i.amount,
     unit: i.unit,
     abv: i.abv,
+    densityGPerMl: i.density_g_per_ml,
+    densityAssumption: i.density_assumption,
     costPerUnit: i.cost_per_unit ?? undefined,
     lotNumber: i.lot_number,
     inventoryItemId: i.inventory_item_id ?? undefined,
@@ -286,12 +309,13 @@ function ingredientsWithProofingWater(
   const index = ingredients.findIndex((ingredient) => ingredient.ingredient_type === 'water');
   const existing = index >= 0 ? ingredients[index] : undefined;
   const unit = existing?.unit && existing.unit !== 'each' ? existing.unit : 'gal';
-  const amount = unit === 'gal'
+  const rawAmount = unit === 'gal'
     ? solved.waterGal
     : convertIngredientAmount(
       { amount: solved.waterGal, unit: 'gal', ingredient_type: 'water' },
       unit,
     );
+  const amount = roundScaledAmount(rawAmount);
   if (!(amount > 0)) return ingredients.filter((ingredient) => ingredient.ingredient_type !== 'water');
   const line: BlendIngredientInput = {
     ingredient_type: 'water',
@@ -429,6 +453,8 @@ export function Blending() {
   const [targetYieldInput, setTargetYieldInput] = useState('');
   const [batchSizeUnit, setBatchSizeUnit] = useState<BatchSizeUnit>('gal');
   const [waterAdjustmentNote, setWaterAdjustmentNote] = useState<string | null>(null);
+  const [wizardProofingPreview, setWizardProofingPreview] = useState<ProofingWaterPreview | null>(null);
+  const [wizardOriginalWater, setWizardOriginalWater] = useState<BlendIngredientInput[] | null>(null);
   const [abvConfirmed, setAbvConfirmed] = useState(false);
   const [worksheetPdfExporting, setWorksheetPdfExporting] = useState(false);
   const [wizardSpiritSource, setWizardSpiritSource] = useState<'tank' | 'barrel'>('tank');
@@ -624,26 +650,31 @@ export function Blending() {
         prevRow.holding_tank_equipment_id > 0
         || (prevRow.barrel_id != null && prevRow.barrel_id > 0)
       );
+      const recipeAbv = row.recipe_abv || row.abv;
       const actualAbv = sourceSelected && prevRow.abv > 0 ? prevRow.abv : row.abv;
-      const volumeGal = spiritVolumeForSourceAbv(row.volume_gal, row.recipe_abv || row.abv, actualAbv);
-      const unit = sourceSelected ? (prevRow.unit || 'gal') : 'gal';
+      const volumeGal = spiritVolumeForSourceAbv(row.volume_gal, recipeAbv, actualAbv);
+      const sameCharge = Math.abs(actualAbv - recipeAbv) <= 0.05;
+      const unit = sameCharge && row.entered_unit
+        ? row.entered_unit
+        : (sourceSelected ? (prevRow.unit || row.unit || 'gal') : (row.unit || 'gal'));
+      const amount = sameCharge && row.entered_amount != null
+        ? row.entered_amount
+        : amountFromSpiritVolumeGal(volumeGal, unit, actualAbv);
       return spiritRowWithObservedAbv({
         ...row,
         barrel_id: prevRow?.barrel_id ?? row.barrel_id,
         abv: actualAbv,
         unit,
-        amount: amountFromSpiritVolumeGal(volumeGal, unit, actualAbv),
+        amount,
         volume_gal: volumeGal,
       });
     });
     setSpiritSources(nextSpirits);
-    setIngredients(ingredientsWithProofingWater(
-      scaleIngredients(template.ingredients, factor),
-      nextSpirits
-        .filter((source) => source.volume_gal > 0 && source.abv > 0)
-        .map((source) => ({ volumeGal: source.volume_gal, abv: source.abv })),
-      targetAbv,
-    ));
+    const scaledIngredients = scaleIngredients(template.ingredients, factor);
+    setIngredients(scaledIngredients);
+    setWizardOriginalWater(scaledIngredients.filter((ingredient) => ingredient.ingredient_type === 'water'));
+    setWizardProofingPreview(null);
+    void targetAbv;
   };
 
   const setBatchScale = (factor: number) => {
@@ -654,23 +685,6 @@ export function Blending() {
       setTargetYieldInput(formatBatchSizeAmount(baseYieldGal * factor, batchSizeUnit));
     }
   };
-
-  useEffect(() => {
-    if (wizardStep !== 5) return;
-    if (form.status === 'executed' || form.status === 'bottled') return;
-    if (form.target_abv == null || !(form.target_abv > 0)) return;
-    const spirits = spiritSources
-      .map(syncSpiritVolume)
-      .filter((source) => source.volume_gal > 0 && source.abv > 0)
-      .map((source) => ({ volumeGal: source.volume_gal, abv: source.abv }));
-    if (spirits.length === 0) return;
-    const next = ingredientsWithProofingWater(ingredients, spirits, form.target_abv);
-    const waterGal = (rows: BlendIngredientInput[]) => rows
-      .filter((ingredient) => ingredient.ingredient_type === 'water')
-      .reduce((sum, ingredient) => sum + ingredientVolumeGal(ingredient), 0);
-    if (Math.abs(waterGal(ingredients) - waterGal(next)) < 0.02) return;
-    setIngredients(next);
-  }, [wizardStep, form.target_abv, form.status, spiritSources, ingredients]);
 
   const applyBlendRecipe = (recipeId: number, factor = 1) => {
     const recipe = getBlendRecipe(recipeId);
@@ -685,6 +699,8 @@ export function Blending() {
           volume_gal: source.volume_gal,
           abv: source.abv,
           barrel_id: source.barrel_id ?? null,
+          entered_amount: source.entered_amount ?? null,
+          entered_unit: source.entered_unit ?? null,
         })),
         ingredients: snapshot.ingredients.map((ingredient) => blendIngredientFromRecord(ingredient)),
       }
@@ -694,6 +710,8 @@ export function Blending() {
           volume_gal: source.volume_gal,
           abv: source.abv,
           barrel_id: source.barrel_id ?? null,
+          entered_amount: source.entered_amount ?? null,
+          entered_unit: source.entered_unit ?? null,
         })),
         ingredients: recipe.ingredients.map((ingredient) => blendIngredientFromRecord(ingredient)),
       };
@@ -1026,7 +1044,7 @@ export function Blending() {
       if (mode === 'volume') {
         return { ...synced, unit: 'gal', amount: synced.volume_gal };
       }
-      const lbs = spiritWeightLbsFromVolumeGal(synced.volume_gal, synced.abv);
+      const lbs = amountFromSpiritVolumeGal(synced.volume_gal, 'lbs', synced.abv);
       return syncSpiritVolume({ ...synced, unit: 'lbs', amount: lbs });
     }));
   };
@@ -1093,37 +1111,60 @@ export function Blending() {
   };
   const removeIngredient = (index: number) => setIngredients((prev) => prev.filter((_, i) => i !== index));
 
-  const handleCalculateWater = () => {
+  const requestWizardProofingWater = () => {
     if (form.target_abv == null) return;
-    const spirits = toSpiritInputs(spiritSources);
+    const spirits = spiritSources
+      .map(syncSpiritVolume)
+      .filter((source) => source.volume_gal > 0 && source.abv > 0);
     if (spirits.length === 0) {
       alert(isBarrelBlendWizard
         ? 'Select aging barrels and enter pull volumes on step 2 before calculating water.'
         : 'Select holding tanks and enter pull volumes on step 2 before calculating water.');
       return;
     }
-    const solved = solveWaterForTargetAbv(
-      spirits,
-      toAdditiveInputs(ingredients.filter((i) => i.ingredient_type !== 'water')),
+    const preview = previewProofingWaterAdjustment(
+      spirits.map((source) => ({
+        spirit_label: 'Spirit',
+        volume_gal: source.volume_gal,
+        abv: source.abv,
+        entered_amount: source.amount,
+        entered_unit: source.unit,
+      })),
+      ingredients,
       form.target_abv,
     );
-    if (!solved) {
-      alert('Could not calculate water — check spirit volumes, ABV readings, and target proof.');
+    if ('error' in preview) {
+      alert(preview.error);
+      setWizardProofingPreview(null);
       return;
     }
-    setWaterAdjustmentNote(
-      `Add ${solved.waterGal.toFixed(2)} gal proofing water to reach ${form.target_abv}% ABV `
-      + `from ${spirits.reduce((sum, s) => sum + s.volumeGal, 0).toFixed(1)} gal spirit at blend strength.`,
-    );
-    const waterLine = emptyIngredient('water');
-    waterLine.amount = solved.waterGal;
-    waterLine.name = 'Proofing water';
-    const waterIdx = ingredients.findIndex((i) => i.ingredient_type === 'water');
-    if (waterIdx >= 0) {
-      setIngredients((prev) => prev.map((ing, i) => (i === waterIdx ? waterLine : ing)));
-    } else {
-      setIngredients((prev) => [waterLine, ...prev]);
+    if (wizardOriginalWater == null) {
+      setWizardOriginalWater(ingredients.filter((ingredient) => ingredient.ingredient_type === 'water'));
     }
+    setWizardProofingPreview(preview);
+  };
+
+  const confirmWizardProofingWater = () => {
+    if (!wizardProofingPreview || form.target_abv == null) return;
+    const spirits = spiritSources
+      .map(syncSpiritVolume)
+      .filter((source) => source.volume_gal > 0 && source.abv > 0)
+      .map((source) => ({ volumeGal: source.volume_gal, abv: source.abv }));
+    setIngredients((current) => ingredientsWithProofingWater(current, spirits, form.target_abv));
+    setWaterAdjustmentNote(
+      `Proofing water confirmed at ${formatGallonDisplay(wizardProofingPreview.proposedWaterGal)} gal. Predicted ABV ${wizardProofingPreview.proposedAbv != null ? formatAbvDisplay(wizardProofingPreview.proposedAbv) : ''}.`,
+    );
+    setWizardProofingPreview(null);
+  };
+
+  const restoreWizardWater = () => {
+    if (wizardOriginalWater == null) return;
+    setIngredients((current) => [
+      ...current.filter((ingredient) => ingredient.ingredient_type !== 'water'),
+      ...wizardOriginalWater.map((ingredient) => ({ ...ingredient })),
+    ]);
+    setWizardProofingPreview(null);
+    setWaterAdjustmentNote('Recipe water charge restored.');
   };
 
   const handleCalculateSugar = () => {
@@ -1206,15 +1247,6 @@ export function Blending() {
 
   const goNext = () => {
     if (!validateStep(wizardStep)) return;
-    if (wizardStep === 4 && form.target_abv != null && form.target_abv > 0) {
-      const spirits = spiritSources
-        .map(syncSpiritVolume)
-        .filter((source) => source.volume_gal > 0 && source.abv > 0)
-        .map((source) => ({ volumeGal: source.volume_gal, abv: source.abv }));
-      if (spirits.length > 0) {
-        setIngredients((current) => ingredientsWithProofingWater(current, spirits, form.target_abv));
-      }
-    }
     if (wizardStep === 5) {
       try {
         const id = persistFormula('draft');
@@ -1417,7 +1449,7 @@ export function Blending() {
           </label>
         ) : (
           <label>
-            Batch size (gallons)
+            {VOLUME_LABEL_MEASURED} (gallons)
             <input
               type="number"
               step="0.1"
@@ -1590,7 +1622,7 @@ export function Blending() {
                 </div>
                 <div className="wizard-lab-inputs">
                   <label>
-                    Batch size
+                    {VOLUME_LABEL_TARGET}
                     <span className="batch-size-entry">
                       <input
                         type="number"
@@ -1840,14 +1872,14 @@ export function Blending() {
                   {synced.volume_gal > 0 && (
                     <p className="measure-alt">
                       {isBarrelBlendWizard ? 'Barrel inventory will deduct' : 'Tank ledger will record'}{' '}
-                      <strong>{synced.volume_gal.toFixed(2)} gal</strong>
+                      <strong>{formatGallonDisplay(synced.volume_gal)} gal</strong>
                       {alternate ? ` (${alternate.label})` : ''}
                     </p>
                   )}
                   {pullAdjusted && (
                     <p className="field-hint" data-testid={`spirit-abv-compensation-${index}`}>
-                      Recipe calls for {recipeVolumeGal.toFixed(2)} gal at {recipeAbv.toFixed(1)}%.
-                      This source is {src.abv.toFixed(1)}%, so pull {synced.volume_gal.toFixed(2)} gal
+                      Recipe calls for {formatGallonDisplay(recipeVolumeGal)} gal at {recipeAbv.toFixed(2)}%.
+                      This source is {src.abv.toFixed(2)}%, so pull {formatGallonDisplay(synced.volume_gal)} gal
                       {form.target_abv != null
                         ? ` to keep the same batch size and ${form.target_abv}% ABV.`
                         : ' to keep the same batch size and the same strength.'}
@@ -1889,8 +1921,20 @@ export function Blending() {
               />
             </div>
             {form.target_abv != null && (
-              <button type="button" className="btn btn-secondary" onClick={handleCalculateWater}>
-                Calculate how much water to add
+              <button type="button" className="btn btn-secondary" data-testid="adjust-proofing-water-batch" onClick={requestWizardProofingWater}>
+                Adjust proofing water
+              </button>
+            )}
+            {wizardProofingPreview && (
+              <ProofingWaterConfirm
+                preview={wizardProofingPreview}
+                onConfirm={confirmWizardProofingWater}
+                onCancel={() => setWizardProofingPreview(null)}
+              />
+            )}
+            {wizardOriginalWater != null && (
+              <button type="button" className="btn btn-sm btn-secondary" onClick={restoreWizardWater}>
+                Restore original recipe water
               </button>
             )}
             {ingredients.some((i) => i.ingredient_type === 'water' && i.amount > 0) && (() => {
@@ -2001,7 +2045,8 @@ export function Blending() {
               <button type="button" className="btn btn-sm btn-secondary" onClick={() => addIngredient('color')}>+ Color</button>
             </div>
             <div className="form-group" style={{ marginTop: '1rem' }}>
-              <label>Sweetness target (Brix) — optional</label>
+              <label>{ESTIMATED_SUGAR_BRIX_LABEL} — optional</label>
+              <p className="field-hint">{ESTIMATED_SUGAR_BRIX_NOTE}</p>
               <div className="inline-field-row">
                 <input
                   type="number"
@@ -2061,7 +2106,9 @@ export function Blending() {
               : (tank?.name ?? 'Spirit');
             const weightLb = straightSpirit
               ? table6SpiritPounds(source.volume_gal, source.abv)
-              : spiritWeightLbsFromVolumeGal(source.volume_gal, source.abv);
+              : isWeightUnit(source.unit) && source.amount > 0
+                ? toLbs(source.amount, source.unit)
+                : formulationSpiritWeightLb(source.volume_gal, source.abv);
             return {
               label: `${sourceName} @ ${source.abv.toFixed(1)}%`,
               volumeGal: source.volume_gal,
@@ -2092,12 +2139,12 @@ export function Blending() {
           <div className="wizard-review-card">
             <h4>{form.product_name || 'Your product'}</h4>
             <p className="wizard-yield-line">
-              Expected yield:{' '}
+              {VOLUME_LABEL_PREDICTED}:{' '}
               <strong>{formatReviewVolume(formulation.theoretical.volumeGal)}</strong>
               {' · '}
               <strong>{formatReviewWeight(finishedWeightLb)}</strong>
               {' at '}
-              <strong>{formulation.theoretical.abv.toFixed(1)}% ABV</strong>
+              <strong>{formatAbvDisplay(formulation.theoretical.abv)} predicted ABV</strong>
               {form.target_abv != null && (
                 <span> (target {form.target_abv}%)</span>
               )}
@@ -2140,7 +2187,7 @@ export function Blending() {
             <p className="field-hint">
               {straightSpirit
                 ? 'Straight spirit uses TTB Table 6 at 60 °F (27 CFR §30.66). Water is 8.32823 lb per wine gallon. Finished volume is mass divided by that density.'
-                : 'Sugar, syrup, flavor, or color is in this blend, so it is not a Table 6 proof. Spirit weight stays on TTB Table 3. Water is 8.328 lb/gal (27 CFR §30.41). Dissolved sugar adds 0.6219 ml/g. Class I color uses specific gravity 1.30, which is class-typical and not a YT75 lot specification. Flavoring without an ABV is weighed as water. Lab ABV is authoritative once those materials are present.'}
+                : `${PREDICTED_VOLUME_ESTIMATE_NOTE} Sugar mass stays the weighed charge. Dissolved sugar uses 0.6219 mL/g as an apparent-volume approximation, not crystalline density. Water is 8.328 lb/gal (27 CFR §30.41). Class I color and CS1 syrup densities are used only when that documented assumption is selected. Unknown flavor density is not treated as water. ${MEASURED_VOLUME_AUTHORITY_NOTE}`}
             </p>
             <BlendAbvConfirmation
               calculatedAbv={formulation.theoretical.abv}
@@ -2169,7 +2216,7 @@ export function Blending() {
             />
             <div className="wizard-lab-inputs">
               <label>
-                Measured volume (gallons)
+                {VOLUME_LABEL_MEASURED} (gallons)
                 <input
                   type="number"
                   step="0.1"
@@ -2182,7 +2229,7 @@ export function Blending() {
                 />
               </label>
               <label>
-                Measured Brix — if applicable
+                Measured Brix — laboratory reading, if applicable
                 <input
                   type="number"
                   step="0.1"

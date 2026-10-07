@@ -1,3 +1,5 @@
+import { ML_PER_US_GALLON } from '../lib/material-densities';
+
 export type InventoryCategory = string;
 
 export type MashStatus =
@@ -125,6 +127,12 @@ export interface InventoryItem {
   notes: string;
   /** Bottle or package size in milliliters. Set for packaging items. */
   package_size_ml: number | null;
+  /** Optional bulk density. Unknown density is never treated as water. */
+  density_g_per_ml?: number | null;
+  /** Source or reference temperature note for density. Not a temperature model. */
+  density_reference?: string | null;
+  /** Alcohol by volume when this ingredient contributes absolute alcohol. */
+  abv?: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -503,6 +511,13 @@ export interface BlendIngredientInput {
   unit: string;
   /** ABV % when this additive contributes alcohol (e.g. vanilla extract). */
   abv?: number | null;
+  /** Verified density. Null means density has not been verified. */
+  density_g_per_ml?: number | null;
+  /**
+   * Explicit documented density assumption. Null means no assumption was selected.
+   * water = water density. cs1-syrup = 1.368 g/mL. class-i-caramel = SG 1.30.
+   */
+  density_assumption?: 'water' | 'cs1-syrup' | 'class-i-caramel' | null;
   cost_per_unit?: number | null;
   lot_number?: string;
   inventory_item_id?: number | null;
@@ -538,6 +553,10 @@ export interface BlendRecipeSpiritSourceInput {
   volume_gal: number;
   abv: number;
   barrel_id?: number | null;
+  /** Quantity the distiller typed. Null when the original entry was not stored. */
+  entered_amount?: number | null;
+  /** Unit of entered_amount. Null when the original entry was not stored. */
+  entered_unit?: string | null;
 }
 
 export interface BlendRecipeSpiritSource {
@@ -548,6 +567,9 @@ export interface BlendRecipeSpiritSource {
   abv: number;
   barrel_id?: number | null;
   sort_order: number;
+  /** Null on older rows that stored gallons only. Do not invent a weight for these. */
+  entered_amount?: number | null;
+  entered_unit?: string | null;
 }
 
 export interface BlendRecipeIngredient {
@@ -558,6 +580,8 @@ export interface BlendRecipeIngredient {
   amount: number;
   unit: string;
   abv: number | null;
+  density_g_per_ml?: number | null;
+  density_assumption?: 'water' | 'cs1-syrup' | 'class-i-caramel' | null;
   cost_per_unit: number | null;
   lot_number: string;
   inventory_item_id: number | null;
@@ -620,8 +644,8 @@ export interface EquipmentVolumeReport {
   detail: string;
 }
 
-/** US fluid ounces per gallon */
-export const ML_PER_GALLON = 3785.41;
+/** US fluid ounces per gallon. Same exact gallon as formulation conversion. */
+export const ML_PER_GALLON = ML_PER_US_GALLON;
 
 export function mlToGallons(ml: number): number {
   return ml / ML_PER_GALLON;
