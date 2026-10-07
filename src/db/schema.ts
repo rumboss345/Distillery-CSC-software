@@ -206,6 +206,8 @@ CREATE TABLE IF NOT EXISTS bottling_runs (
   source_volume_gal REAL,
   bottled_volume_gal REAL,
   volume_variance_gal REAL,
+  variance_reason TEXT,
+  variance_changed_by TEXT,
   source_run_id INTEGER REFERENCES distillation_runs(id),
   bottling_date TEXT NOT NULL,
   packaging_bottle TEXT NOT NULL DEFAULT '',
@@ -401,6 +403,7 @@ CREATE TABLE IF NOT EXISTS holding_tank_volume_variances (
   variance_gal REAL NOT NULL,
   recorded_at TEXT NOT NULL,
   notes TEXT NOT NULL DEFAULT '',
+  changed_by TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -495,6 +498,7 @@ CREATE TABLE IF NOT EXISTS discarded_fermentations (
   volume_gal REAL NOT NULL,
   discarded_date TEXT NOT NULL,
   notes TEXT NOT NULL DEFAULT '',
+  changed_by TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

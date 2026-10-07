@@ -35,7 +35,13 @@ import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-p
 import { formatDateDisplay } from '../lib/date-input';
 import { localIsoDate } from '../lib/planned-event-date';
 import { latestCompleted } from '../lib/recent-completed';
-import { formatTankVolumeVariance, tankVolumeMatchesRecord, tankVolumeVarianceGal } from '../lib/tank-volume-variance';
+import {
+  formatTankVolumeVariance,
+  tankReadingChanged,
+  tankVolumeMatchesRecord,
+  tankVolumeVarianceGal,
+  volumeChangeReasonError,
+} from '../lib/tank-volume-variance';
 import { DISCARD_DESTINATION, fermenterTransferError } from '../lib/fermenter-transfer';
 const destAcceptsTransferFrom = (sourceId: number, destId: number): boolean => {
   const sourceIsStillage = sourceId > 0 && transferSourceIsStillage(sourceId);
@@ -82,6 +88,7 @@ const emptyFermenterForm = () => ({
 export function TankTransfer() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
+  const changedBy = user?.name?.trim() || user?.email || 'Unknown';
   const [searchParams, setSearchParams] = useSearchParams();
   const calendarPlanHandled = useRef(false);
   const { key, refresh } = useRefreshKey();
@@ -136,6 +143,18 @@ export function TankTransfer() {
   const onHandVariance = onHandBook != null && onHandEnteredGal != null && Number.isFinite(onHandEnteredGal)
     ? tankVolumeVarianceGal(onHandBook.volume_gal, onHandEnteredGal)
     : null;
+  const onHandEnteredAbv = onHandForm.abv.trim() === '' ? null : parseFloat(onHandForm.abv);
+  const onHandReadingChanged = onHandBook != null
+    && onHandEnteredGal != null
+    && Number.isFinite(onHandEnteredGal)
+    && onHandEnteredAbv != null
+    && Number.isFinite(onHandEnteredAbv)
+    && tankReadingChanged(
+      onHandBook.volume_gal,
+      onHandEnteredGal,
+      onHandBook.abv,
+      onHandEnteredAbv,
+    );
   const sourceTanksForTransfer = tanksWithContents.filter((t) => t.volume_gal > 0);
   const transferSourceInTankLine = (t: { id: number; volume_gal: number; abv: number }) => {
     const currentLabel = getHoldingTankIntakeHistory(t.id, 1)[0]?.summary;
@@ -359,6 +378,13 @@ export function TankTransfer() {
       alert(error);
       return;
     }
+    if (discarded) {
+      const reasonError = volumeChangeReasonError(fermenterForm.notes);
+      if (reasonError) {
+        alert(reasonError);
+        return;
+      }
+    }
     try {
       saveFermenterWashTransfer({
         sourceEquipmentId: selectedFermenter.floor_equipment_id,
@@ -367,6 +393,7 @@ export function TankTransfer() {
         volumeGal: fermenterForm.volume_gal,
         transferDate: fermenterForm.transfer_date,
         notes: fermenterForm.notes,
+        changedBy,
       });
       setShowFermenterForm(false);
       refresh();
@@ -408,6 +435,16 @@ export function TankTransfer() {
         return;
       }
     }
+    const readingChanged = tank
+      ? tankReadingChanged(tank.volume_gal, volumeGal, tank.abv, abv)
+      : true;
+    if (readingChanged) {
+      const reasonError = volumeChangeReasonError(onHandForm.notes);
+      if (reasonError) {
+        alert(reasonError);
+        return;
+      }
+    }
     try {
       saveHoldingTankOnHand({
         tankEquipmentId: onHandTankId,
@@ -415,6 +452,7 @@ export function TankTransfer() {
         abv,
         recordedAt: onHandForm.recorded_at,
         notes: onHandForm.notes,
+        changedBy,
       });
       setOnHandTankId(null);
       refresh();
@@ -425,11 +463,16 @@ export function TankTransfer() {
 
   const handleClearOnHand = () => {
     if (!isAdmin || !onHandTankId) return;
+    const reasonError = volumeChangeReasonError(onHandForm.notes);
+    if (reasonError) {
+      alert(reasonError);
+      return;
+    }
     if (!confirm('Remove the on-hand reading? The tank goes back to only what production records add and remove. That change is saved as a variance.')) {
       return;
     }
     try {
-      clearHoldingTankOnHand(onHandTankId);
+      clearHoldingTankOnHand(onHandTankId, onHandForm.notes, changedBy);
       setOnHandTankId(null);
       refresh();
     } catch (err) {
@@ -525,7 +568,7 @@ export function TankTransfer() {
         <h4>Fermenter leftovers</h4>
         <RecentCompletedNote
           hiddenCount={recentLeftovers.hiddenCount}
-          to="/reports/fermentation"
+          to="/reports/volume-changes"
           label="leftovers"
         />
         {recentLeftovers.total === 0 ? (
@@ -539,7 +582,8 @@ export function TankTransfer() {
                   <th>Fermenter</th>
                   <th>Wash</th>
                   <th>Volume</th>
-                  <th>Notes</th>
+                  <th>Why</th>
+                  <th>Who</th>
                   <th></th>
                 </tr>
               </thead>
@@ -551,6 +595,7 @@ export function TankTransfer() {
                     <td>{row.batch_number || '—'}</td>
                     <td>{row.volume_gal.toFixed(1)} gal</td>
                     <td>{row.notes || '—'}</td>
+                    <td>{row.changed_by || '—'}</td>
                     <td>
                       <button type="button" className="btn btn-sm btn-ghost" onClick={() => handleDeleteDiscard(row.id)}>
                         Delete
@@ -660,8 +705,8 @@ export function TankTransfer() {
         </p>
         {recentVariances.hiddenCount > 0 && (
           <p className="field-hint" style={{ margin: '0.35rem 0 0.75rem' }}>
-            Showing the last {recentVariances.shown.length}. Differences of 0.25 gal or more also appear on{' '}
-            <Link to="/reports/exceptions">Exceptions</Link>.
+            Showing the last {recentVariances.shown.length}. Every set volume, leftover, and bottling variance is on{' '}
+            <Link to="/reports/volume-changes">Volume changes</Link>.
           </p>
         )}
         {recentVariances.total === 0 ? (
@@ -676,7 +721,8 @@ export function TankTransfer() {
                   <th>On record</th>
                   <th>Set to</th>
                   <th>Variance</th>
-                  <th>Notes</th>
+                  <th>Why</th>
+                  <th>Who</th>
                 </tr>
               </thead>
               <tbody>
@@ -688,6 +734,7 @@ export function TankTransfer() {
                     <td>{row.set_volume_gal.toFixed(1)} gal @ {row.set_abv.toFixed(1)}%</td>
                     <td>{formatTankVolumeVariance(row.variance_gal)}</td>
                     <td>{row.notes || '—'}</td>
+                    <td>{row.changed_by || '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -932,12 +979,19 @@ export function TankTransfer() {
               )}
             </div>
             <div className="form-group full-width">
-              <label>Notes</label>
+              <label htmlFor="fermenter-transfer-why">
+                {fermenterForm.dest_equipment_id === DISCARD_DESTINATION ? 'Why these leftovers cannot be used' : 'Notes'}
+              </label>
               <input
+                id="fermenter-transfer-why"
                 value={fermenterForm.notes}
                 onChange={(e) => setFermenterForm({ ...fermenterForm, notes: e.target.value })}
-                placeholder={fermenterForm.dest_equipment_id === DISCARD_DESTINATION ? 'Leftovers' : 'Optional'}
+                placeholder={fermenterForm.dest_equipment_id === DISCARD_DESTINATION ? 'Required' : 'Optional'}
+                required={fermenterForm.dest_equipment_id === DISCARD_DESTINATION}
               />
+              {fermenterForm.dest_equipment_id === DISCARD_DESTINATION && (
+                <p className="field-hint">Recorded by {changedBy}. This shows on Reports → Volume changes.</p>
+              )}
             </div>
           </div>
           <div className="form-actions">
@@ -1000,13 +1054,19 @@ export function TankTransfer() {
               />
             </div>
             <div className="form-group full-width">
-              <label htmlFor="on-hand-notes">Notes</label>
+              <label htmlFor="on-hand-notes">
+                {onHandReadingChanged ? 'Why was this changed?' : 'Notes'}
+              </label>
               <input
                 id="on-hand-notes"
                 value={onHandForm.notes}
                 onChange={(e) => setOnHandForm({ ...onHandForm, notes: e.target.value })}
-                placeholder="Transfer was short, or an earlier entry was wrong"
+                placeholder={onHandReadingChanged ? 'Required' : 'Optional unless the gallons or ABV change'}
+                required={onHandReadingChanged}
               />
+              <p className="field-hint">
+                Recorded by {changedBy}. A changed volume or ABV, and a cleared reading, show on Reports → Volume changes.
+              </p>
             </div>
           </div>
           <div className="form-actions">

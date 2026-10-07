@@ -347,6 +347,7 @@ export interface DiscardedFermentation {
   volume_gal: number;
   discarded_date: string;
   notes: string;
+  changed_by?: string | null;
   created_at: string;
 }
 
@@ -395,6 +396,8 @@ export interface BottlingRun {
   bottled_volume_gal: number | null;
   /** bottled_volume_gal − source_volume_gal when bottling from a tank. */
   volume_variance_gal: number | null;
+  variance_reason?: string | null;
+  variance_changed_by?: string | null;
   source_run_id: number | null;
   bottling_date: string;
   packaging_bottle: string;

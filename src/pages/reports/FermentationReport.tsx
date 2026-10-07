@@ -25,7 +25,7 @@ export function FermentationReport() {
     row.operator,
   ]);
 
-  const leftoverHeaders = ['Date', 'Wash batch', 'Recipe', 'Fermenter', 'Gallons', 'Notes'];
+  const leftoverHeaders = ['Date', 'Wash batch', 'Recipe', 'Fermenter', 'Gallons', 'Why', 'Who'];
   const leftoverCsv = leftovers.map((row) => [
     row.discarded_date,
     row.batch_number,
@@ -33,6 +33,7 @@ export function FermentationReport() {
     row.fermenter_name,
     row.volume_gal,
     row.notes,
+    row.who,
   ]);
 
   return (
@@ -94,7 +95,8 @@ export function FermentationReport() {
             <th>Recipe</th>
             <th>Fermenter</th>
             <th>Gallons</th>
-            <th>Notes</th>
+            <th>Why</th>
+            <th>Who</th>
           </tr>
         </thead>
         <tbody>
@@ -106,6 +108,7 @@ export function FermentationReport() {
               <td>{row.fermenter_name}</td>
               <td>{row.volume_gal.toFixed(1)} gal</td>
               <td>{row.notes}</td>
+              <td>{row.who}</td>
             </tr>
           ))}
         </tbody>

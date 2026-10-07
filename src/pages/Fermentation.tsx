@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { AssigneeCell } from '../components/AssigneeSelect';
 import { AdminCredentialConfirmModal } from '../components/AdminCredentialConfirmModal';
 import { FermenterLogPanel } from '../components/FermenterLogPanel';
@@ -22,6 +23,7 @@ import {
 import { formatDateDisplay } from '../lib/date-input';
 import { latestCompleted } from '../lib/recent-completed';
 import { actualStartBrixError, estimateAbvFromBrix, formatAbvEstimate, washMoveNeedsActualStartBrix } from '../lib/fermentation';
+import { volumeChangeReasonError } from '../lib/tank-volume-variance';
 import { FERMENTATION_PAGE_STATUSES, washRecordKind } from '../lib/wash-stage';
 import type { FermentationAssignmentStatus, MashBatch, MashFermenterAssignment, MashStatus } from '../types';
 
@@ -93,6 +95,8 @@ function logTargetFromRow(row: FermentationRow): LogTarget {
 }
 
 export function Fermentation() {
+  const { user } = useAuth();
+  const changedBy = user?.name?.trim() || user?.email || 'Unknown';
   const [searchParams, setSearchParams] = useSearchParams();
   const { key, refresh } = useRefreshKey();
   const batches = getMashBatches();
@@ -358,6 +362,13 @@ export function Fermentation() {
       alert(`Only ${volumeGal.toFixed(1)} gal is in this fermenter.`);
       return;
     }
+    if (leftover > 0.01) {
+      const reasonError = volumeChangeReasonError(leftoverNotes);
+      if (reasonError) {
+        alert(reasonError);
+        return;
+      }
+    }
     const askStartBrix = formMode === 'start' && washMoveNeedsActualStartBrix(editBatch.status, editBatch.actual_brix);
     if (askStartBrix) {
       const brixError = actualStartBrixError(actualStartBrix);
@@ -417,6 +428,7 @@ export function Fermentation() {
           fermenterName: sourceName,
           volumeGal: leftover,
           notes: leftoverNotes,
+          changedBy,
         });
       }
       closeForm();
@@ -608,7 +620,7 @@ export function Fermentation() {
           <p className="field-hint">Gallons that cannot be used. The rest of each fermentation stays.</p>
           <RecentCompletedNote
             hiddenCount={recentLeftovers.hiddenCount}
-            to="/reports/fermentation"
+            to="/reports/volume-changes"
             label="leftovers"
           />
           <div className="table-wrap">
@@ -619,7 +631,8 @@ export function Fermentation() {
                   <th>Wash batch</th>
                   <th>Fermenter</th>
                   <th>Gallons</th>
-                  <th>Notes</th>
+                  <th>Why</th>
+                  <th>Who</th>
                 </tr>
               </thead>
               <tbody>
@@ -629,7 +642,8 @@ export function Fermentation() {
                     <td>{row.batch_number || '—'}</td>
                     <td>{row.fermenter_name}</td>
                     <td>{row.volume_gal.toFixed(1)} gal</td>
-                    <td>{row.notes || 'Leftovers'}</td>
+                    <td>{row.notes || '—'}</td>
+                    <td>{row.changed_by || '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -833,12 +847,17 @@ export function Fermentation() {
                   </p>
                 </div>
                 <div className="form-group">
-                  <label>Leftover notes</label>
+                  <label htmlFor="leftover-why">Why these leftovers cannot be used</label>
                   <input
+                    id="leftover-why"
                     value={leftoverNotes}
                     onChange={(e) => setLeftoverNotes(e.target.value)}
-                    placeholder="Leftovers"
+                    placeholder={leftoverGal > 0.01 ? 'Required' : 'Required when leftovers are entered'}
+                    required={leftoverGal > 0.01}
                   />
+                  {leftoverGal > 0.01 && (
+                    <p className="field-hint">Recorded by {changedBy}. This shows on Reports → Volume changes.</p>
+                  )}
                 </div>
               </>
             )}

@@ -32,7 +32,7 @@ import {
 } from '../lib/equipment-maintenance';
 import { equipmentCleaningStatusLabel, equipmentNeedsCleaning, equipmentStatusWhenReturningToPlanned } from '../lib/equipment-cleaning';
 import { assertEnteredAbv } from '../lib/abv-limits';
-import { roundThousandths, tankVolumeVarianceGal } from '../lib/tank-volume-variance';
+import { roundThousandths, tankReadingChanged, tankVolumeVarianceGal, volumeChangeReasonError } from '../lib/tank-volume-variance';
 import { EQUIPMENT_TYPES, isSpiritLedgerEquipmentType, resolveEquipmentIcon } from '../lib/equipment';
 import { equipmentTypeDeleteError, equipmentTypeNameError, normalizeEquipmentTypeName } from '../lib/equipment-type';
 import { countActiveFermentations, fermenterShowsAssignedWash } from '../lib/mash-fermenter-fill';
@@ -1263,6 +1263,7 @@ export interface HoldingTankVolumeVariance {
   variance_gal: number;
   recorded_at: string;
   notes: string;
+  changed_by: string | null;
 }
 
 function recordHoldingTankVolumeVariance(input: {
@@ -1273,13 +1274,14 @@ function recordHoldingTankVolumeVariance(input: {
   setAbv: number;
   recordedAt: string;
   notes: string;
+  changedBy: string;
 }): void {
   const bookVolume = roundThousandths(input.bookVolumeGal);
   const setVolume = roundThousandths(input.setVolumeGal);
   insertRow(
     `INSERT INTO holding_tank_volume_variances
-      (tank_equipment_id, book_volume_gal, book_abv, set_volume_gal, set_abv, variance_gal, recorded_at, notes)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      (tank_equipment_id, book_volume_gal, book_abv, set_volume_gal, set_abv, variance_gal, recorded_at, notes, changed_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       input.tankEquipmentId,
       bookVolume,
@@ -1289,6 +1291,7 @@ function recordHoldingTankVolumeVariance(input: {
       tankVolumeVarianceGal(bookVolume, setVolume),
       input.recordedAt,
       input.notes,
+      input.changedBy,
     ],
   );
 }
@@ -1297,7 +1300,7 @@ export function getHoldingTankVolumeVariances(): HoldingTankVolumeVariance[] {
   return queryAll<HoldingTankVolumeVariance>(`
     SELECT v.id, v.tank_equipment_id, e.name as tank_name,
            v.book_volume_gal, v.book_abv, v.set_volume_gal, v.set_abv,
-           v.variance_gal, v.recorded_at, v.notes
+           v.variance_gal, v.recorded_at, v.notes, v.changed_by
     FROM holding_tank_volume_variances v
     JOIN floor_equipment e ON e.id = v.tank_equipment_id
     ORDER BY v.recorded_at DESC, v.id DESC
@@ -1320,6 +1323,7 @@ export function saveHoldingTankOnHand(input: {
   abv: number;
   recordedAt: string;
   notes?: string;
+  changedBy: string;
 }): void {
   assertSpiritTransferVessel(input.tankEquipmentId, 'destination');
   if (!Number.isFinite(input.volumeGal) || input.volumeGal < 0) {
@@ -1335,6 +1339,11 @@ export function saveHoldingTankOnHand(input: {
   const measuredVolume = Math.round(input.volumeGal * 1000) / 1000;
   const measuredAbv = Math.round(input.abv * 1000) / 1000;
   const production = computeHoldingTankContents(input.tankEquipmentId);
+  const notes = input.notes?.trim() ?? '';
+  if (tankReadingChanged(production.volume_gal, measuredVolume, production.abv, measuredAbv)) {
+    const reasonError = volumeChangeReasonError(notes);
+    if (reasonError) throw new Error(reasonError);
+  }
   recordHoldingTankVolumeVariance({
     tankEquipmentId: input.tankEquipmentId,
     bookVolumeGal: production.volume_gal,
@@ -1342,11 +1351,11 @@ export function saveHoldingTankOnHand(input: {
     setVolumeGal: measuredVolume,
     setAbv: measuredAbv,
     recordedAt: input.recordedAt,
-    notes: input.notes?.trim() ?? '',
+    notes,
+    changedBy: input.changedBy.trim() || 'Unknown',
   });
   const adjustmentVolume = Math.round((measuredVolume - production.production_volume_gal) * 1000) / 1000;
   const adjustmentAlcohol = Math.round((measuredVolume * measuredAbv / 100 - production.production_gpa) * 1000) / 1000;
-  const notes = input.notes?.trim() ?? '';
   const existing = queryOne<{ id: number }>(
     'SELECT id FROM holding_tank_opening_balances WHERE tank_equipment_id = ?',
     [input.tankEquipmentId],
@@ -1373,7 +1382,7 @@ export function saveHoldingTankOnHand(input: {
   syncHoldingTankStatuses();
 }
 
-export function clearHoldingTankOnHand(tankId: number): void {
+export function clearHoldingTankOnHand(tankId: number, reason: string, changedBy: string): void {
   const existing = queryOne<{ notes: string }>(
     'SELECT notes FROM holding_tank_opening_balances WHERE tank_equipment_id = ?',
     [tankId],
@@ -1383,6 +1392,9 @@ export function clearHoldingTankOnHand(tankId: number): void {
   const returnedVolume = Math.max(0, ledger.production_volume_gal);
   const returnedGpa = Math.max(0, ledger.production_gpa);
   const returnedAbv = returnedVolume > 0 ? (returnedGpa / returnedVolume) * 100 : 0;
+  const why = reason.trim();
+  const reasonError = volumeChangeReasonError(why);
+  if (reasonError) throw new Error(reasonError);
   const priorNotes = existing.notes.trim();
   recordHoldingTankVolumeVariance({
     tankEquipmentId: tankId,
@@ -1391,7 +1403,8 @@ export function clearHoldingTankOnHand(tankId: number): void {
     setVolumeGal: returnedVolume,
     setAbv: returnedAbv,
     recordedAt: localIsoDate(),
-    notes: priorNotes ? `On-hand reading removed. ${priorNotes}` : 'On-hand reading removed',
+    notes: priorNotes ? `On-hand reading removed. ${why} ${priorNotes}` : `On-hand reading removed. ${why}`,
+    changedBy: changedBy.trim() || 'Unknown',
   });
   runQuery('DELETE FROM holding_tank_opening_balances WHERE tank_equipment_id = ?', [tankId]);
   syncHoldingTankStatuses();
@@ -2116,6 +2129,7 @@ export function saveFermenterWashTransfer(input: {
   volumeGal: number;
   transferDate: string;
   notes: string;
+  changedBy: string;
 }): void {
   const sources = queryAll<{
     id: number;
@@ -2187,6 +2201,10 @@ export function saveFermenterWashTransfer(input: {
   if (!input.transferDate.trim()) {
     throw new Error('Enter the transfer date.');
   }
+  if (discarded) {
+    const reasonError = volumeChangeReasonError(input.notes);
+    if (reasonError) throw new Error(reasonError);
+  }
 
   const remaining = source.volume_gal - input.volumeGal;
   if (remaining <= 0.01) {
@@ -2201,8 +2219,8 @@ export function saveFermenterWashTransfer(input: {
   if (discarded) {
     insertRow(
       `INSERT INTO discarded_fermentations
-        (mash_batch_id, source_fermenter_equipment_id, batch_number, fermenter_name, volume_gal, discarded_date, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        (mash_batch_id, source_fermenter_equipment_id, batch_number, fermenter_name, volume_gal, discarded_date, notes, changed_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         source.mash_batch_id,
         input.sourceEquipmentId,
@@ -2210,7 +2228,8 @@ export function saveFermenterWashTransfer(input: {
         source.fermenter_name,
         input.volumeGal,
         input.transferDate,
-        input.notes.trim() || 'Leftovers',
+        input.notes.trim(),
+        input.changedBy.trim() || 'Unknown',
       ],
     );
     // Only these gallons are unusable. The fermentation is not discarded.
@@ -2671,14 +2690,17 @@ export function recordFermenterLeftover(input: {
   fermenterName: string;
   volumeGal: number;
   notes: string;
+  changedBy: string;
 }): void {
   const batch = getMashBatch(input.mashBatchId);
   if (!batch) throw new Error('Wash batch not found.');
   if (!(input.volumeGal > 0)) return;
+  const reasonError = volumeChangeReasonError(input.notes);
+  if (reasonError) throw new Error(reasonError);
   insertRow(
     `INSERT INTO discarded_fermentations
-      (mash_batch_id, source_fermenter_equipment_id, batch_number, fermenter_name, volume_gal, discarded_date, notes)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      (mash_batch_id, source_fermenter_equipment_id, batch_number, fermenter_name, volume_gal, discarded_date, notes, changed_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       input.mashBatchId,
       input.equipmentId,
@@ -2686,7 +2708,8 @@ export function recordFermenterLeftover(input: {
       input.fermenterName,
       input.volumeGal,
       localIsoDate(),
-      input.notes.trim() || 'Leftovers',
+      input.notes.trim(),
+      input.changedBy.trim() || 'Unknown',
     ],
   );
 }
@@ -3860,6 +3883,11 @@ export function saveBottlingRun(
       : '';
   const headerSizeMl = activeLines.length === 1 ? activeLines[0].bottle_size_ml : 0;
 
+  const varianceReason = run.variance_reason?.trim() ?? '';
+  if (fromTank && volumeVarianceGal != null && Math.abs(volumeVarianceGal) >= 0.01) {
+    const reasonError = volumeChangeReasonError(varianceReason);
+    if (reasonError) throw new Error(reasonError);
+  }
   const header = {
     ...run,
     packaging_bottle: packagingSummary,
@@ -3868,19 +3896,25 @@ export function saveBottlingRun(
     source_volume_gal: sourceVolumeGal,
     bottled_volume_gal: fromTank ? bottledVolumeGal : null,
     volume_variance_gal: fromTank ? volumeVarianceGal : null,
+    variance_reason: fromTank && volumeVarianceGal != null && Math.abs(volumeVarianceGal) >= 0.01
+      ? varianceReason
+      : null,
+    variance_changed_by: fromTank && volumeVarianceGal != null && Math.abs(volumeVarianceGal) >= 0.01
+      ? (run.variance_changed_by?.trim() || 'Unknown')
+      : null,
   };
 
   let runId = id;
   if (runId) {
     runQuery(
-      `UPDATE bottling_runs SET batch_number=?, source_barrel_id=?, source_holding_tank_equipment_id=?, source_volume_gal=?, bottled_volume_gal=?, volume_variance_gal=?, source_run_id=?, bottling_date=?, packaging_bottle=?, bottle_size_ml=?, bottle_count=?, final_abv=?, product_name=?, lot_number=?, notes=? WHERE id=?`,
-      [header.batch_number, sourceBarrelId, sourceTankId, header.source_volume_gal, header.bottled_volume_gal, header.volume_variance_gal, header.source_run_id, header.bottling_date, header.packaging_bottle, header.bottle_size_ml, header.bottle_count, header.final_abv, header.product_name, header.lot_number, header.notes, runId],
+      `UPDATE bottling_runs SET batch_number=?, source_barrel_id=?, source_holding_tank_equipment_id=?, source_volume_gal=?, bottled_volume_gal=?, volume_variance_gal=?, variance_reason=?, variance_changed_by=?, source_run_id=?, bottling_date=?, packaging_bottle=?, bottle_size_ml=?, bottle_count=?, final_abv=?, product_name=?, lot_number=?, notes=? WHERE id=?`,
+      [header.batch_number, sourceBarrelId, sourceTankId, header.source_volume_gal, header.bottled_volume_gal, header.volume_variance_gal, header.variance_reason, header.variance_changed_by, header.source_run_id, header.bottling_date, header.packaging_bottle, header.bottle_size_ml, header.bottle_count, header.final_abv, header.product_name, header.lot_number, header.notes, runId],
     );
     persistBottlingRunLines(runId, activeLines);
   } else {
     runId = insertRow(
-      `INSERT INTO bottling_runs (batch_number, source_barrel_id, source_holding_tank_equipment_id, source_volume_gal, bottled_volume_gal, volume_variance_gal, source_run_id, bottling_date, packaging_bottle, bottle_size_ml, bottle_count, final_abv, product_name, lot_number, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [header.batch_number, sourceBarrelId, sourceTankId, header.source_volume_gal, header.bottled_volume_gal, header.volume_variance_gal, header.source_run_id, header.bottling_date, header.packaging_bottle, header.bottle_size_ml, header.bottle_count, header.final_abv, header.product_name, header.lot_number, header.notes],
+      `INSERT INTO bottling_runs (batch_number, source_barrel_id, source_holding_tank_equipment_id, source_volume_gal, bottled_volume_gal, volume_variance_gal, variance_reason, variance_changed_by, source_run_id, bottling_date, packaging_bottle, bottle_size_ml, bottle_count, final_abv, product_name, lot_number, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [header.batch_number, sourceBarrelId, sourceTankId, header.source_volume_gal, header.bottled_volume_gal, header.volume_variance_gal, header.variance_reason, header.variance_changed_by, header.source_run_id, header.bottling_date, header.packaging_bottle, header.bottle_size_ml, header.bottle_count, header.final_abv, header.product_name, header.lot_number, header.notes],
     );
     persistBottlingRunLines(runId, activeLines);
   }

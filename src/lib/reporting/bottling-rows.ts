@@ -19,6 +19,8 @@ export interface BottlingReportRow {
   bottle_count: number;
   packaging_summary: string;
   volume_variance_gal: number | null;
+  variance_reason: string | null;
+  variance_changed_by: string | null;
 }
 
 function packagingSummary(lines: { packaging_bottle: string; bottle_count: number; bottle_size_ml: number }[]): string {
@@ -67,6 +69,8 @@ export function buildBottlingReportRows(range: ReportDateRange): BottlingReportR
       bottle_count: run.lines.reduce((s, l) => s + l.bottle_count, 0) || run.bottle_count,
       packaging_summary: packagingSummary(run.lines),
       volume_variance_gal: run.volume_variance_gal,
+      variance_reason: run.variance_reason?.trim() || null,
+      variance_changed_by: run.variance_changed_by?.trim() || null,
     });
   }
 

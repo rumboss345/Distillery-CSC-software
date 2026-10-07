@@ -1355,6 +1355,17 @@ function migrateAdvancedBlending(): void {
     db.run("ALTER TABLE equipment_types ADD COLUMN icon TEXT NOT NULL DEFAULT 'other'");
     persistDb();
   }
+
+  migrateVolumeChangeAuditColumns();
+}
+
+/** Who made a volume or ABV correction, and why. Existing rows stay blank. */
+function migrateVolumeChangeAuditColumns(): void {
+  if (!db) return;
+  addColumnIfMissing('discarded_fermentations', 'changed_by', 'TEXT');
+  addColumnIfMissing('holding_tank_volume_variances', 'changed_by', 'TEXT');
+  addColumnIfMissing('bottling_runs', 'variance_reason', 'TEXT');
+  addColumnIfMissing('bottling_runs', 'variance_changed_by', 'TEXT');
 }
 
 const DB_STORAGE_KEY = 'distillery-tracker-db-v5';
