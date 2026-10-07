@@ -18,6 +18,22 @@ export interface SpiritChargeProofInput {
   tankName?: string;
 }
 
+export interface FinishedVolumeChargeInput {
+  /** Finished gallons wanted in the still after proofing. */
+  finishedGal: number;
+  /** ABV of the spirit being pulled from the tank. */
+  spiritAbvPercent: number;
+  /** Proof needed in the still, as ABV %. */
+  targetAbvPercent: number;
+  stillCapacityGal: number | null;
+  sourceTankFreeGal: number | null;
+  /** Spirit on hand in the source tank. Null when no tank is selected. */
+  availableSpiritGal: number | null;
+  place: SpiritProofPlace;
+  stillName?: string;
+  tankName?: string;
+}
+
 export interface SpiritChargeProofPlan {
   ok: boolean;
   spiritGal: number;
@@ -197,6 +213,133 @@ export function planSpiritChargeProof(input: SpiritChargeProofInput): SpiritChar
     ...plan,
     ok: true,
     message: `Add ${plan.waterGal.toFixed(1)} gal of water ${where}. The still charge is ${plan.stillGal.toFixed(1)} gal at ${input.targetAbvPercent.toFixed(1)}% ABV.${capNote}`,
+  };
+}
+
+function spiritForFinishedVolume(
+  finishedGal: number,
+  spiritAbv: number,
+  targetAbv: number,
+): DilutionGallons | null {
+  let lo = 0;
+  let hi = finishedGal;
+  let match: DilutionGallons | null = null;
+  for (let i = 0; i < 56; i++) {
+    const mid = (lo + hi) / 2;
+    const diluted = diluteGallons(mid, spiritAbv, targetAbv);
+    if (!diluted) return null;
+    match = diluted;
+    if (diluted.stillGal < finishedGal) lo = mid;
+    else hi = mid;
+  }
+  if (!match) return null;
+  const stepped = Math.round(match.spiritGal * 10) / 10;
+  return diluteGallons(stepped, spiritAbv, targetAbv);
+}
+
+/**
+ * Spirit and water that fill a still to a chosen volume at the proof it needs.
+ * The spirit ABV is the alcohol being pulled. Water is Table 6 proofing at 60 °F.
+ */
+export function planSpiritChargeForFinishedVolume(input: FinishedVolumeChargeInput): SpiritChargeProofPlan {
+  const place = input.place;
+  const base = {
+    spiritGal: 0,
+    waterGal: 0,
+    stillGal: input.finishedGal,
+    spiritAbvPercent: input.spiritAbvPercent,
+    targetAbvPercent: input.targetAbvPercent,
+    place,
+    maxSpiritGal: null as number | null,
+  };
+  const stillName = input.stillName?.trim() || 'The still';
+  const tankName = input.tankName?.trim() || 'The source tank';
+
+  if (!(input.finishedGal > 0)) {
+    return { ...base, ok: false, message: 'Enter the final volume you want in the still.' };
+  }
+  if (!(input.spiritAbvPercent > 0)) {
+    return { ...base, ok: false, message: 'Enter the ABV of the spirit being pulled.' };
+  }
+  if (!(input.targetAbvPercent > 0) || input.targetAbvPercent >= input.spiritAbvPercent) {
+    return {
+      ...base,
+      ok: false,
+      message: `Proof needed in the still must be lower than the spirit being pulled (${input.spiritAbvPercent.toFixed(1)}% ABV). Water only brings the proof down.`,
+    };
+  }
+  if (input.stillCapacityGal && input.stillCapacityGal > 0 && input.finishedGal > input.stillCapacityGal + 0.05) {
+    return {
+      ...base,
+      ok: false,
+      message: `${stillName} holds ${input.stillCapacityGal.toFixed(1)} gal. Enter a final volume of ${input.stillCapacityGal.toFixed(1)} gal or less.`,
+    };
+  }
+
+  const solved = spiritForFinishedVolume(input.finishedGal, input.spiritAbvPercent, input.targetAbvPercent);
+  if (!solved) {
+    return { ...base, ok: false, message: 'Could not calculate the spirit and water for this still volume.' };
+  }
+
+  const upper = input.availableSpiritGal && input.availableSpiritGal > 0
+    ? input.availableSpiritGal
+    : solved.spiritGal;
+  const maxSpiritGal = largestSpiritThatFits({
+    spiritAbvPercent: input.spiritAbvPercent,
+    targetAbvPercent: input.targetAbvPercent,
+    stillCapacityGal: input.stillCapacityGal,
+    sourceTankFreeGal: input.sourceTankFreeGal,
+    place,
+    upperGal: Math.max(upper, solved.spiritGal),
+  });
+
+  const plan = {
+    ...base,
+    spiritGal: round1(solved.spiritGal),
+    waterGal: round1(solved.waterGal),
+    stillGal: round1(solved.stillGal),
+    maxSpiritGal,
+  };
+
+  if (input.availableSpiritGal != null && plan.spiritGal > input.availableSpiritGal + 0.05) {
+    const fit = input.availableSpiritGal > 0
+      ? diluteGallons(Math.floor(input.availableSpiritGal * 10) / 10, input.spiritAbvPercent, input.targetAbvPercent)
+      : null;
+    const fitNote = fit
+      ? ` Pulling all ${input.availableSpiritGal.toFixed(1)} gal proofs to about ${round1(fit.stillGal).toFixed(1)} gal in the still.`
+      : '';
+    return {
+      ...plan,
+      ok: false,
+      message: `${tankName} has ${input.availableSpiritGal.toFixed(1)} gal at ${input.spiritAbvPercent.toFixed(1)}% ABV. A ${input.finishedGal.toFixed(1)} gal still charge at ${input.targetAbvPercent.toFixed(1)}% needs ${plan.spiritGal.toFixed(1)} gal of spirit.${fitNote}`,
+    };
+  }
+
+  if (!fitsStill(plan.stillGal, input.stillCapacityGal)) {
+    return {
+      ...plan,
+      ok: false,
+      message: `${stillName} holds ${(input.stillCapacityGal ?? 0).toFixed(1)} gal. This proofed charge is ${plan.stillGal.toFixed(1)} gal.`,
+    };
+  }
+
+  if (!fitsTank(plan.waterGal, place, input.sourceTankFreeGal)) {
+    const free = input.sourceTankFreeGal ?? 0;
+    return {
+      ...plan,
+      ok: false,
+      message: `${tankName} only has ${free.toFixed(1)} gal free, and blending before the still needs ${plan.waterGal.toFixed(1)} gal of water. Blend the water in the still instead.`,
+    };
+  }
+
+  const where = place === 'before_still' ? 'before it goes in the still' : 'in the still';
+  const volumeNote = Math.abs(plan.stillGal - input.finishedGal) > 0.15
+    ? ` That is the closest 0.1 gal spirit pull to ${input.finishedGal.toFixed(1)} gal.`
+    : '';
+  return {
+    ...plan,
+    ok: true,
+    message: `Pull ${plan.spiritGal.toFixed(1)} gal of spirit at ${input.spiritAbvPercent.toFixed(1)}% ABV and add ${plan.waterGal.toFixed(1)} gal of water ${where}. The still charge is ${plan.stillGal.toFixed(1)} gal at ${input.targetAbvPercent.toFixed(1)}% ABV.${volumeNote}`,
   };
 }
 
