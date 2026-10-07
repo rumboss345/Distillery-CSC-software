@@ -69,6 +69,7 @@ import {
   stillRunOccupiesEquipment,
 } from '../lib/still-charge';
 import {
+  planSpiritChargeForFinishedVolume,
   planSpiritChargeProof,
   spiritChargeDetail,
   type SpiritProofPlace,
@@ -151,6 +152,8 @@ export function Distillation() {
   const [chargeTempF, setChargeTempF] = useState('60');
   const [proofTarget, setProofTarget] = useState('');
   const [proofPlace, setProofPlace] = useState<SpiritProofPlace>('in_still');
+  const [chargeSizeMode, setChargeSizeMode] = useState<'tails' | 'finished'>('tails');
+  const [finishedStillGal, setFinishedStillGal] = useState('');
   const [botanicals, setBotanicals] = useState<GinBotanicalInput[]>([emptyGinBotanical()]);
   const [ginRecipeId, setGinRecipeId] = useState<number | ''>('');
   const [ginRecipeName, setGinRecipeName] = useState('');
@@ -233,6 +236,8 @@ export function Distillation() {
   const clearChargeProof = () => {
     setProofTarget('');
     setProofPlace('in_still');
+    setChargeSizeMode('tails');
+    setFinishedStillGal('');
   };
 
   const handleRunTypeChange = (runType: DistillationRunType) => {
@@ -409,6 +414,8 @@ export function Distillation() {
     setChargeTempF('60');
     setProofTarget(proofed && run.charge_abv != null ? String(run.charge_abv) : '');
     setProofPlace(run.proof_place === 'before_still' ? 'before_still' : 'in_still');
+    setChargeSizeMode('tails');
+    setFinishedStillGal(proofed ? String(run.charge_volume_gal) : '');
     const savedBotanicals = (run.run_type ?? 'wash') === 'gin'
       ? getRunBotanicals(run.id)
       : [];
@@ -477,18 +484,34 @@ export function Distillation() {
     return Math.max(0, tank.capacity_gal - selectedLowWineAvailable.volume_gal);
   })();
 
+  const pulledSpiritAbv = runForm.charge_abv ?? selectedLowWineAvailable?.abv ?? 0;
   const spiritProofPlan = isTankSourcedRun(runForm.run_type) && proofTarget.trim()
-    ? planSpiritChargeProof({
-      spiritGal: runForm.charge_volume_gal,
-      spiritAbvPercent: runForm.charge_abv ?? selectedLowWineAvailable?.abv ?? 0,
-      targetAbvPercent: Number(proofTarget),
-      stillCapacityGal: selectedStill && selectedStill.capacity_gal > 0 ? selectedStill.capacity_gal : null,
-      sourceTankFreeGal,
-      place: proofPlace,
-      stillName: selectedStill?.name,
-      tankName: selectedSourceTank?.name ?? savedLowWineTankName,
-    })
+    ? (chargeSizeMode === 'finished'
+      ? planSpiritChargeForFinishedVolume({
+        finishedGal: Number(finishedStillGal),
+        spiritAbvPercent: pulledSpiritAbv,
+        targetAbvPercent: Number(proofTarget),
+        stillCapacityGal: selectedStill && selectedStill.capacity_gal > 0 ? selectedStill.capacity_gal : null,
+        sourceTankFreeGal,
+        availableSpiritGal: selectedLowWineAvailable?.volume_gal ?? null,
+        place: proofPlace,
+        stillName: selectedStill?.name,
+        tankName: selectedSourceTank?.name ?? savedLowWineTankName,
+      })
+      : planSpiritChargeProof({
+        spiritGal: runForm.charge_volume_gal,
+        spiritAbvPercent: pulledSpiritAbv,
+        targetAbvPercent: Number(proofTarget),
+        stillCapacityGal: selectedStill && selectedStill.capacity_gal > 0 ? selectedStill.capacity_gal : null,
+        sourceTankFreeGal,
+        place: proofPlace,
+        stillName: selectedStill?.name,
+        tankName: selectedSourceTank?.name ?? savedLowWineTankName,
+      }))
     : null;
+  const tailsToCharge = chargeSizeMode === 'finished' && spiritProofPlan?.ok
+    ? spiritProofPlan.spiritGal
+    : runForm.charge_volume_gal;
 
   const handleSaveRun = () => {
     if (!runForm.assigned_user_id) {
@@ -564,15 +587,21 @@ export function Distillation() {
         alert('Select the low wines holding tank to charge from.');
         return;
       }
-      if (runForm.charge_volume_gal <= 0) {
-        alert('Enter the charge volume drawn from the low wines tank.');
+      if (chargeSizeMode === 'finished' && !proofTarget.trim()) {
+        alert('Enter the proof needed in the still.');
+        return;
+      }
+      if (tailsToCharge <= 0) {
+        alert(chargeSizeMode === 'finished'
+          ? 'Enter the final volume in the still and the proof it needs.'
+          : 'Enter the charge volume drawn from the low wines tank.');
         return;
       }
       const available = getHoldingTankContents(
         runForm.source_holding_tank_equipment_id,
         editRunId,
       );
-      if (runForm.charge_volume_gal > available.volume_gal + 0.01) {
+      if (tailsToCharge > available.volume_gal + 0.01) {
         alert(`Only ${available.volume_gal.toFixed(1)} gal available in that tank.`);
         return;
       }
@@ -1215,7 +1244,11 @@ export function Distillation() {
                 onChange={(e) => setRunForm({ ...runForm, charge_volume_gal: parseFloat(e.target.value) || 0 })}
               />
               {isTankSourcedRun(runForm.run_type) ? (
-                <p className="field-hint">Gallons of tails drawn from the tank, before any proofing water.</p>
+                <p className="field-hint">
+                  {chargeSizeMode === 'finished'
+                    ? 'Spirit pulled from the tank. Final volume mode below replaces this pull when you save.'
+                    : 'Gallons of spirit drawn from the tank, before any proofing water.'}
+                </p>
               ) : null}
               {selectedStill && selectedStill.capacity_gal > 0 && (
                 <p className="field-hint">
@@ -1247,17 +1280,36 @@ export function Distillation() {
                 <div className="spirit-proof-panel">
                   <h4>Proof the charge</h4>
                   <p className="field-hint">
-                    If the tails are too high a proof, blend them with water before the still runs.
-                    80 proof is 40% ABV. The proofed charge has to fit in the still.
+                    Enter the proof needed in the still and either the spirit you will pull or the final volume you want.
+                    The spirit ABV is the alcohol being pulled. 80 proof is 40% ABV. The proofed charge has to fit in the still.
                   </p>
+                  <div className="measure-mode-buttons" style={{ marginBottom: '0.75rem' }}>
+                    <button
+                      type="button"
+                      className={`btn btn-sm ${chargeSizeMode === 'tails' ? 'btn-primary' : 'btn-secondary'}`}
+                      data-testid="spirit-charge-size-tails"
+                      onClick={() => setChargeSizeMode('tails')}
+                    >
+                      I know the spirit pull
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn btn-sm ${chargeSizeMode === 'finished' ? 'btn-primary' : 'btn-secondary'}`}
+                      data-testid="spirit-charge-size-finished"
+                      onClick={() => setChargeSizeMode('finished')}
+                    >
+                      Final volume in the still
+                    </button>
+                  </div>
                   <div className="form-grid">
                     <div className="form-group">
-                      <label>Target charge ABV (%)</label>
+                      <label>Proof needed in the still (ABV %)</label>
                       <input
                         type="number"
                         step="0.1"
                         min="0"
                         max={MAX_ENTERED_ABV}
+                        data-testid="spirit-proof-target"
                         value={proofTarget}
                         onChange={(e) => setProofTarget(limitAbvInput(e.target.value))}
                         placeholder="Leave blank to charge as-is"
@@ -1274,15 +1326,51 @@ export function Distillation() {
                       </select>
                     </div>
                   </div>
+                  {chargeSizeMode === 'finished' && (
+                    <div className="form-group">
+                      <label>Final volume in the still (gal)</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        data-testid="spirit-finished-volume"
+                        value={finishedStillGal}
+                        onChange={(e) => setFinishedStillGal(e.target.value)}
+                        placeholder={selectedStill && selectedStill.capacity_gal > 0 ? String(selectedStill.capacity_gal) : ''}
+                      />
+                      <p className="field-hint">
+                        Spirit and water are calculated from the alcohol being pulled
+                        {pulledSpiritAbv > 0 ? ` (${pulledSpiritAbv.toFixed(1)}% ABV)` : ''}
+                        {' '}and the proof needed in the still.
+                      </p>
+                    </div>
+                  )}
+                  {chargeSizeMode === 'finished' && !proofTarget.trim() && (
+                    <p className="field-hint">Enter the proof needed in the still.</p>
+                  )}
                   {spiritProofPlan?.message && (
                     <p
                       className="field-hint"
+                      data-testid="spirit-charge-plan"
                       style={spiritProofPlan.ok ? undefined : { color: 'var(--danger, #dc2626)' }}
                     >
                       {spiritProofPlan.message}
                     </p>
                   )}
-                  {spiritProofPlan && !spiritProofPlan.ok && spiritProofPlan.maxSpiritGal != null && (
+                  {chargeSizeMode === 'finished' && spiritProofPlan?.ok && (
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-secondary"
+                      data-testid="use-finished-spirit-pull"
+                      onClick={() => {
+                        setRunForm({ ...runForm, charge_volume_gal: spiritProofPlan.spiritGal });
+                        setChargeSizeMode('tails');
+                      }}
+                    >
+                      Use {spiritProofPlan.spiritGal.toFixed(1)} gal spirit pull
+                    </button>
+                  )}
+                  {chargeSizeMode === 'tails' && spiritProofPlan && !spiritProofPlan.ok && spiritProofPlan.maxSpiritGal != null && (
                     <button
                       type="button"
                       className="btn btn-sm btn-secondary"
