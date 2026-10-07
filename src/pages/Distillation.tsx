@@ -7,6 +7,7 @@ import { limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
 import { defaultAssignee } from '../lib/assignee';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
 import { formatDateDisplay, formatRecordedAt } from '../lib/date-input';
+import { formatDistillationLossGal, formatDistillationLossSummary } from '../lib/distillation-loss';
 import { latestCompleted } from '../lib/recent-completed';
 import {
   getDistillationRuns,
@@ -23,6 +24,9 @@ import {
   getFermenterWashSourceFermenters,
   getFermenterChargeCapacityGal,
   getLatestFermentationBrix,
+  estimatedWashChargeAbv,
+  getDistillationCollectionLoss,
+  recordDistillationCollectionLoss,
   getChargeableHoldingTanks,
   getStillageTanks,
   defaultTankForCutType,
@@ -170,6 +174,12 @@ export function Distillation() {
 
   void key;
 
+  useEffect(() => {
+    if (!selectedRunId) return;
+    recordDistillationCollectionLoss(selectedRunId);
+    refresh();
+  }, [selectedRunId, refresh]);
+
   const fermenterSourceOptions = useMemo(() => {
     if (runForm.run_type !== 'wash' && runForm.run_type !== 'heavy_rum') return [];
     const list = getFermenterWashSourceFermenters(editRunId);
@@ -268,6 +278,7 @@ export function Distillation() {
       source_fermenter_equipment_id: equipmentId,
       source_mash_batch_id: row?.mash_batch_id ?? null,
       charge_volume_gal: chargeGal,
+      charge_abv: row && equipmentId ? estimatedWashChargeAbv(row.mash_batch_id, equipmentId) : null,
     });
   };
 
@@ -357,6 +368,7 @@ export function Distillation() {
         source_fermenter_equipment_id: row ? fermenterId : null,
         source_mash_batch_id: row?.mash_batch_id ?? null,
         charge_volume_gal: chargeGal,
+        charge_abv: row ? estimatedWashChargeAbv(row.mash_batch_id, fermenterId) : null,
       });
       setChargeAbvObserved('');
       setChargeTempF('60');
@@ -887,6 +899,7 @@ export function Distillation() {
 
   const heartsTotal = cuts.filter((c) => c.cut_type === 'hearts').reduce((s, c) => s + c.volume_gal, 0);
   const gpa = cuts.filter((c) => c.cut_type === 'hearts').reduce((s, c) => s + c.volume_gal * c.abv / 100, 0);
+  const collectionLoss = selectedRunId ? getDistillationCollectionLoss(selectedRunId) : null;
 
   return (
     <div>
@@ -966,7 +979,10 @@ export function Distillation() {
                           <td><AssigneeCell name={r.assigned_user_name} /></td>
                           <td>
                             {r.charge_volume_gal} gal
-                            {isTankSourcedRun(runType) && r.charge_abv != null ? ` @ ${r.charge_abv.toFixed(1)}%` : ''}
+                            {r.charge_abv != null ? ` @ ${r.charge_abv.toFixed(1)}%${r.alcohol_charge_basis === 'estimated_brix' ? ' est.' : ''}` : ''}
+                            {r.alcohol_loss_gal != null && (
+                              <div className="field-hint">Loss {formatDistillationLossGal(r.alcohol_loss_gal)} alcohol</div>
+                            )}
                             {spiritChargeDetail(r) && (
                               <div className="field-hint">{spiritChargeDetail(r)}</div>
                             )}
@@ -1022,6 +1038,11 @@ export function Distillation() {
               <span className="text-muted">
                 Hearts: {heartsTotal.toFixed(1)} gal · GPA: {gpa.toFixed(2)} gal
               </span>
+            )}
+            {collectionLoss && (
+              <p className="field-hint" style={{ margin: 0 }} data-testid="distillation-alcohol-loss">
+                {formatDistillationLossSummary(collectionLoss)}
+              </p>
             )}
             {selectedStillageLabel && (
               <span className="text-muted">{selectedStillageLabel}</span>
@@ -1249,7 +1270,11 @@ export function Distillation() {
                     ? 'Spirit pulled from the tank. Final volume mode below replaces this pull when you save.'
                     : 'Gallons of spirit drawn from the tank, before any proofing water.'}
                 </p>
-              ) : null}
+              ) : (
+                <p className="field-hint">
+                  Collected alcohol is checked against the alcohol in this wash. The difference is recorded as loss.
+                </p>
+              )}
               {selectedStill && selectedStill.capacity_gal > 0 && (
                 <p className="field-hint">
                   {selectedStill.name} holds {selectedStill.capacity_gal} gal
@@ -1259,6 +1284,29 @@ export function Distillation() {
                 </p>
               )}
             </div>
+            {isFermenterSourcedRun(runForm.run_type) && (
+              <div className="form-group">
+                <label htmlFor="wash-charge-abv">Wash ABV (%)</label>
+                <input
+                  id="wash-charge-abv"
+                  type="number"
+                  step="0.1"
+                  min={0}
+                  max={MAX_ENTERED_ABV}
+                  value={runForm.charge_abv ?? ''}
+                  onChange={(e) => {
+                    const limited = limitAbvInput(e.target.value);
+                    setRunForm({
+                      ...runForm,
+                      charge_abv: limited.trim() === '' ? null : parseFloat(limited) || 0,
+                    });
+                  }}
+                />
+                <p className="field-hint">
+                  Alcohol in the wash being distilled. Filled from start and current Brix when those are logged. Change it if you measured the wash.
+                </p>
+              </div>
+            )}
             {isTankSourcedRun(runForm.run_type) && (
               <div className="form-group full-width">
                 <AbvTemperatureInput

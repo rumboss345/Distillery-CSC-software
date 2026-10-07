@@ -228,6 +228,13 @@ export interface DistillationRun {
   run_date: string;
   charge_volume_gal: number;
   charge_abv: number | null;
+  /** Gallons of pure alcohol charged. Null until a run is saved with a known charge ABV. */
+  alcohol_charged_gal?: number | null;
+  /** Gallons of pure alcohol in the cuts. */
+  alcohol_collected_gal?: number | null;
+  /** Charged alcohol minus collected alcohol. */
+  alcohol_loss_gal?: number | null;
+  alcohol_charge_basis?: 'charge' | 'proofed_spirit' | 'estimated_brix' | null;
   /** Gallons of tails drawn when this charge was proofed. Null when charged as-is. */
   proof_spirit_gal?: number | null;
   /** ABV of the tails before proofing water. */

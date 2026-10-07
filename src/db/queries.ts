@@ -14,6 +14,7 @@ import {
   type StoredCutType,
   type VesselInflow,
 } from '../lib/collection-vessel-cuts';
+import { distillationAlcoholBalance, washChargeAbvFromBrix, type AlcoholChargeBasis, type DistillationAlcoholBalance } from '../lib/distillation-loss';
 import { isFermenterSourcedRun, isSpiritStyleRun, isTankSourcedRun } from '../lib/distillation-run-types';
 import { activeGinBotanicals, normalizeBotanicalWeightUnit } from '../lib/gin-botanicals';
 import {
@@ -3093,6 +3094,25 @@ export function addFermentationLog(log: Omit<FermentationLog, 'id'>): void {
   syncMashFinalBrixFromLogs(log.mash_batch_id);
 }
 
+/** ABV of a wash from its start Brix and the latest Brix on that fermenter. */
+export function estimatedWashChargeAbv(
+  mashBatchId: number,
+  fermenterEquipmentId?: number | null,
+): number | null {
+  const mash = queryOne<{
+    actual_brix: number | null;
+    target_brix: number | null;
+    actual_final_brix: number | null;
+  }>(
+    'SELECT actual_brix, target_brix, actual_final_brix FROM mash_batches WHERE id = ?',
+    [mashBatchId],
+  );
+  if (!mash) return null;
+  const start = mash.actual_brix ?? mash.target_brix;
+  const current = getLatestFermentationBrix(mashBatchId, fermenterEquipmentId) ?? mash.actual_final_brix;
+  return washChargeAbvFromBrix(start, current);
+}
+
 export function getLatestFermentationBrix(mashBatchId: number, floorEquipmentId?: number | null): number | null {
   const row = floorEquipmentId
     ? queryOne<{ brix: number }>(
@@ -3204,6 +3224,69 @@ function releaseDistillationEquipmentForReturnToPlan(run: DistillationRun, runId
   }
 }
 
+export function getDistillationCollectionLoss(runId: number): DistillationAlcoholBalance | null {
+  const run = queryOne<DistillationRun>('SELECT * FROM distillation_runs WHERE id = ?', [runId]);
+  if (!run) return null;
+  const cuts = queryAll<{ volume_gal: number; abv: number }>(
+    'SELECT volume_gal, abv FROM distillation_cuts WHERE distillation_run_id = ?',
+    [runId],
+  );
+  const enteredAbv = run.charge_abv;
+  const estimated = enteredAbv == null
+    && isFermenterSourcedRun(run.run_type)
+    && run.source_mash_batch_id != null;
+  const chargeAbv = enteredAbv ?? (
+    estimated && run.source_mash_batch_id != null
+      ? estimatedWashChargeAbv(run.source_mash_batch_id, run.source_fermenter_equipment_id)
+      : null
+  );
+  return distillationAlcoholBalance({
+    chargeVolumeGal: run.charge_volume_gal,
+    chargeAbv,
+    proofSpiritGal: run.proof_spirit_gal,
+    proofSpiritAbv: run.proof_spirit_abv,
+    proofWaterGal: run.proof_water_gal,
+    estimatedFromBrix: estimated && chargeAbv != null,
+    cuts,
+  });
+}
+
+/** Store the alcohol charged, the alcohol collected, and the loss on the run. */
+export function recordDistillationCollectionLoss(runId: number): void {
+  const cutCount = queryOne<{ n: number }>(
+    'SELECT COUNT(*) as n FROM distillation_cuts WHERE distillation_run_id = ?',
+    [runId],
+  );
+  if (!cutCount?.n) {
+    runQuery(
+      `UPDATE distillation_runs
+       SET alcohol_charged_gal = NULL, alcohol_collected_gal = NULL, alcohol_loss_gal = NULL, alcohol_charge_basis = NULL
+       WHERE id = ?`,
+      [runId],
+    );
+    return;
+  }
+  const balance = getDistillationCollectionLoss(runId);
+  if (!balance) return;
+  const basis: AlcoholChargeBasis | null = balance.basis === 'unknown' ? null : balance.basis;
+  runQuery(
+    `UPDATE distillation_runs
+     SET alcohol_charged_gal = ?, alcohol_collected_gal = ?, alcohol_loss_gal = ?, alcohol_charge_basis = ?
+     WHERE id = ?`,
+    [balance.chargedGal, balance.collectedGal, balance.lossGal, basis, runId],
+  );
+}
+
+function fermenterChargeAbvForSave(run: {
+  charge_abv: number | null;
+  source_mash_batch_id: number | null;
+  source_fermenter_equipment_id: number | null;
+}): number | null {
+  if (run.charge_abv != null && Number.isFinite(run.charge_abv)) return run.charge_abv;
+  if (!run.source_mash_batch_id) return null;
+  return estimatedWashChargeAbv(run.source_mash_batch_id, run.source_fermenter_equipment_id);
+}
+
 export function saveDistillationRun(
   run: Omit<DistillationRun, 'id' | 'created_at'>,
   id?: number,
@@ -3212,6 +3295,7 @@ export function saveDistillationRun(
   assertEnteredAbv(run.charge_abv, 'Charge ABV');
   assertEnteredAbv(run.proof_spirit_abv, 'Tails ABV');
   const runType = (run.run_type ?? 'wash') as DistillationRunType;
+  const chargeAbvToStore = isTankSourcedRun(runType) ? run.charge_abv : fermenterChargeAbvForSave(run);
   const planOnly = plannedRecordSkipsEquipmentStatus(run.status);
   const previousRun = id
     ? queryOne<DistillationRun>('SELECT * FROM distillation_runs WHERE id = ?', [id])
@@ -3276,7 +3360,7 @@ export function saveDistillationRun(
         run.still_name,
         runDate,
         run.charge_volume_gal,
-        isTankSourcedRun(runType) ? run.charge_abv : null,
+        chargeAbvToStore,
         isTankSourcedRun(runType) ? run.proof_spirit_gal ?? null : null,
         isTankSourcedRun(runType) ? run.proof_spirit_abv ?? null : null,
         isTankSourcedRun(runType) ? run.proof_water_gal ?? 0 : 0,
@@ -3304,7 +3388,7 @@ export function saveDistillationRun(
         run.still_name,
         runDate,
         run.charge_volume_gal,
-        isTankSourcedRun(runType) ? run.charge_abv : null,
+        chargeAbvToStore,
         isTankSourcedRun(runType) ? run.proof_spirit_gal ?? null : null,
         isTankSourcedRun(runType) ? run.proof_spirit_abv ?? null : null,
         isTankSourcedRun(runType) ? run.proof_water_gal ?? 0 : 0,
@@ -3350,6 +3434,7 @@ export function saveDistillationRun(
   if (runType === 'gin' && botanicals) {
     persistRunBotanicals(runId, botanicals);
   }
+  recordDistillationCollectionLoss(runId);
   syncHoldingTankStatuses();
   syncFermenterAndStillStatuses();
   return runId;
@@ -3545,6 +3630,7 @@ export function saveDistillationCut(cut: Omit<DistillationCut, 'id'>, id?: numbe
     );
   }
   syncHoldingTankStatuses();
+  recordDistillationCollectionLoss(cut.distillation_run_id);
 }
 
 export function deleteDistillationCut(id: number): void {
@@ -3562,6 +3648,7 @@ export function deleteDistillationCut(id: number): void {
     }
   }
   runQuery('DELETE FROM distillation_cuts WHERE id = ?', [id]);
+  if (cut) recordDistillationCollectionLoss(cut.distillation_run_id);
   syncHoldingTankStatuses();
 }
 

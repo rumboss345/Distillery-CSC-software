@@ -1357,6 +1357,7 @@ function migrateAdvancedBlending(): void {
   }
 
   migrateVolumeChangeAuditColumns();
+  migrateDistillationAlcoholLossColumns();
 }
 
 /** Who made a volume or ABV correction, and why. Existing rows stay blank. */
@@ -1366,6 +1367,15 @@ function migrateVolumeChangeAuditColumns(): void {
   addColumnIfMissing('holding_tank_volume_variances', 'changed_by', 'TEXT');
   addColumnIfMissing('bottling_runs', 'variance_reason', 'TEXT');
   addColumnIfMissing('bottling_runs', 'variance_changed_by', 'TEXT');
+}
+
+/** Alcohol charged, alcohol collected, and the loss. Existing runs stay blank until the next save. */
+function migrateDistillationAlcoholLossColumns(): void {
+  if (!db) return;
+  addColumnIfMissing('distillation_runs', 'alcohol_charged_gal', 'REAL');
+  addColumnIfMissing('distillation_runs', 'alcohol_collected_gal', 'REAL');
+  addColumnIfMissing('distillation_runs', 'alcohol_loss_gal', 'REAL');
+  addColumnIfMissing('distillation_runs', 'alcohol_charge_basis', 'TEXT');
 }
 
 const DB_STORAGE_KEY = 'distillery-tracker-db-v5';
