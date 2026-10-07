@@ -15,7 +15,7 @@ export function VolumeChangesReport() {
   return (
     <ReportTableShell
       title="Volume changes"
-      description="Fermenter leftovers, set tank volumes and ABV, bottling variances, and blend volume or ABV differences. Each newer change records why it was made and who made it."
+      description="Fermenter leftovers, set tank volumes and ABV, bottling variances, blend differences, and distillation alcohol loss. A distillation loss is the alcohol charged minus the alcohol collected. Other corrections record why they were made and who made them."
       periodLabel={range.label}
       csvFilename={`volume-changes-${range.from ?? 'all'}`}
       csvHeaders={csvHeaders}

@@ -1,8 +1,10 @@
 import { queryAll } from '../../db/database';
 import { getBlendProducts, getBottlingRuns, getHoldingTankVolumeVariances } from '../../db/queries';
 import { compareStoredDatesDesc } from '../date-input';
+import { formatDistillationLossGal } from '../distillation-loss';
 import { formatTankVolumeVariance, tankReadingChanged } from '../tank-volume-variance';
 import { buildBlendReportRows } from './blend-rows';
+import { buildDistillationReportRows } from './distillation-rows';
 import { eventInReportRange, type ReportDateRange } from './period';
 
 export interface VolumeChangeRow {
@@ -109,6 +111,24 @@ export function buildVolumeChangeRows(range: ReportDateRange): VolumeChangeRow[]
       change: parts.join('; '),
       why: shown(blendNotes.get(blend.blend_id)),
       who: shown(blend.operator === '—' ? '' : blend.operator),
+    });
+  }
+
+  for (const run of buildDistillationReportRows(range)) {
+    if (run.alcohol_loss_gal == null || Math.abs(run.alcohol_loss_gal) < 0.01) continue;
+    const why = run.alcohol_charge_basis === 'estimated_brix'
+      ? 'Collected alcohol compared with the wash alcohol estimated from Brix'
+      : run.alcohol_charge_basis === 'proofed_spirit'
+        ? 'Collected alcohol compared with the spirit charged'
+        : 'Collected alcohol compared with the alcohol charged';
+    rows.push({
+      key: `distillation:${run.run_id}`,
+      occurred_at: run.run_date,
+      kind: 'Distillation loss',
+      place: run.batch_number,
+      change: `Loss ${formatDistillationLossGal(run.alcohol_loss_gal)} alcohol (${(run.alcohol_charged_gal ?? 0).toFixed(2)} gal charged, ${(run.alcohol_collected_gal ?? 0).toFixed(2)} gal collected)`,
+      why,
+      who: shown(run.operator === '—' ? '' : run.operator),
     });
   }
 

@@ -1,4 +1,5 @@
 import { formatDateDisplay } from '../../lib/date-input';
+import { formatDistillationLossGal } from '../../lib/distillation-loss';
 import { buildDistillationReportRows } from '../../lib/reporting/distillation-rows';
 import { useReportContext } from './report-context';
 import { ReportTableShell } from './ReportTableShell';
@@ -9,18 +10,21 @@ export function DistillationReport() {
 
   const csvHeaders = [
     'Run ID', 'Batch', 'Date', 'Still', 'Type', 'Status', 'Source', 'Charge gal', 'Charge ABV',
-    'Heads gal', 'Hearts gal', 'Tails gal', 'Other gal', 'Total cuts gal', 'Hearts LAA gal', 'Operator', 'Notes',
+    'Heads gal', 'Hearts gal', 'Tails gal', 'Other gal', 'Total cuts gal', 'Hearts LAA gal',
+    'Alcohol charged gal', 'Alcohol collected gal', 'Alcohol loss gal', 'Operator', 'Notes',
   ];
   const csvRows = rows.map((r) => [
     r.run_id, r.batch_number, r.run_date, r.still_name, r.run_type, r.status, r.source_label,
     r.charge_volume_gal, r.charge_abv ?? '', r.heads_gal, r.hearts_gal, r.tails_gal, r.other_gal,
-    r.total_cut_gal, r.hearts_laa_gal, r.operator, r.notes,
+    r.total_cut_gal, r.hearts_laa_gal,
+    r.alcohol_charged_gal ?? '', r.alcohol_collected_gal ?? '', r.alcohol_loss_gal ?? '',
+    r.operator, r.notes,
   ]);
 
   return (
     <ReportTableShell
       title="Distillation runs"
-      description="One row per distillation run with cut totals and hearts LAA. The Distillation page keeps the latest 10 completed runs."
+      description="One row per distillation run with cut totals, hearts LAA, and alcohol loss. Loss is the alcohol charged minus the alcohol collected. The Distillation page keeps the latest 10 completed runs."
       periodLabel={range.label}
       csvFilename={`distillation-${range.from ?? 'all'}`}
       csvHeaders={csvHeaders}
@@ -42,6 +46,9 @@ export function DistillationReport() {
             <th>Hearts</th>
             <th>Tails</th>
             <th>Hearts LAA</th>
+            <th>Alcohol in</th>
+            <th>Collected</th>
+            <th>Loss</th>
             <th>Operator</th>
           </tr>
         </thead>
@@ -62,6 +69,9 @@ export function DistillationReport() {
               <td>{r.hearts_gal.toFixed(1)}</td>
               <td>{r.tails_gal.toFixed(1)}</td>
               <td>{r.hearts_laa_gal.toFixed(2)}</td>
+              <td>{r.alcohol_charged_gal != null ? `${r.alcohol_charged_gal.toFixed(2)} gal` : '—'}</td>
+              <td>{r.alcohol_collected_gal != null ? `${r.alcohol_collected_gal.toFixed(2)} gal` : '—'}</td>
+              <td>{r.alcohol_loss_gal != null ? formatDistillationLossGal(r.alcohol_loss_gal) : '—'}</td>
               <td>{r.operator}</td>
             </tr>
           ))}
