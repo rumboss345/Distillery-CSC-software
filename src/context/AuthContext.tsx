@@ -19,6 +19,7 @@ import {
   type ProcessStageKey,
   userHasPermission,
 } from '../lib/permissions';
+import { ensureSharedDatabase } from '../db/database';
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -48,7 +49,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       setStoredToken(null);
       setUser(null);
+      return;
     }
+    await ensureSharedDatabase();
   }, []);
 
   useEffect(() => {
@@ -58,6 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     const { token, user: loggedInUser } = await apiLogin(email, password);
     setStoredToken(token);
+    await ensureSharedDatabase();
     setUser(loggedInUser);
   }, []);
 

@@ -1,5 +1,13 @@
 import initSqlJs, { Database, SqlValue } from 'sql.js/dist/sql-wasm.js';
 import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
+import { getStoredToken } from '../lib/auth-api';
+import {
+  deleteSharedRecord,
+  fetchSharedRecord,
+  fetchSharedRevision,
+  putSharedRecord,
+  SharedRecordConflict,
+} from '../lib/shared-distillery-db';
 import { buildBlendRecipeSnapshot } from '../lib/blend-recipe-version';
 import { buildCscFloorEquipmentRows, CSC_FLOOR_PLAN_SIZE } from '../lib/csc-floor-equipment';
 import { PACKAGING_BOTTLES } from '../lib/packaging-bottles';
@@ -1366,7 +1374,47 @@ const LEGACY_DB_KEYS = [
 ];
 
 let db: Database | null = null;
+let sqlModule: Awaited<ReturnType<typeof initSqlJs>> | null = null;
+let initPromise: Promise<Database> | null = null;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
+let pushTimer: ReturnType<typeof setTimeout> | null = null;
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+let serverRevision = 0;
+let suspendPush = false;
+let pushing = false;
+let localDirty = false;
+let sharedNotice: string | null = null;
+let seedEmptyServer = false;
+const noticeListeners = new Set<() => void>();
+const refreshListeners = new Set<() => void>();
+
+export function subscribeSharedNotice(listener: () => void): () => void {
+  noticeListeners.add(listener);
+  return () => noticeListeners.delete(listener);
+}
+
+export function getSharedNotice(): string | null {
+  return sharedNotice;
+}
+
+export function subscribeSharedRefresh(listener: () => void): () => void {
+  refreshListeners.add(listener);
+  return () => refreshListeners.delete(listener);
+}
+
+function setSharedNotice(message: string | null): void {
+  if (sharedNotice === message) return;
+  sharedNotice = message;
+  noticeListeners.forEach((listener) => listener());
+}
+
+export function dismissSharedNotice(): void {
+  setSharedNotice(null);
+}
+
+function notifySharedRefresh(): void {
+  refreshListeners.forEach((listener) => listener());
+}
 
 function rowToObject<T>(
   columns: string[],
@@ -1411,9 +1459,139 @@ function toBase64(data: Uint8Array): string {
   return btoa(binary);
 }
 
-function persistDb(): void {
+function bytesFromBase64(stored: string): Uint8Array {
+  return Uint8Array.from(atob(stored), (c) => c.charCodeAt(0));
+}
+
+function cacheLocalDatabase(): void {
   if (!db) return;
   localStorage.setItem(DB_STORAGE_KEY, toBase64(new Uint8Array(db.export())));
+}
+
+function persistDb(): void {
+  cacheLocalDatabase();
+  if (suspendPush || !getStoredToken()) return;
+  localDirty = true;
+  if (pushTimer) clearTimeout(pushTimer);
+  pushTimer = setTimeout(() => {
+    pushTimer = null;
+    void pushSharedDatabase();
+  }, 400);
+}
+
+function applyDatabaseBytes(stored: string, revision: number, notify: boolean): void {
+  if (!sqlModule) throw new Error('Database not initialized');
+  suspendPush = true;
+  try {
+    if (db) db.close();
+    db = new sqlModule.Database(bytesFromBase64(stored));
+    serverRevision = revision;
+    runMigrations();
+    cacheLocalDatabase();
+    localDirty = false;
+  } finally {
+    suspendPush = false;
+  }
+  if (notify) {
+    setSharedNotice('Updated from the shared distillery record.');
+    notifySharedRefresh();
+  }
+}
+
+async function pushSharedDatabase(): Promise<void> {
+  if (!db || !getStoredToken() || suspendPush || pushing) return;
+  const payload = toBase64(new Uint8Array(db.export()));
+  const baseRevision = serverRevision;
+  pushing = true;
+  try {
+    serverRevision = await putSharedRecord(baseRevision, payload);
+    localDirty = false;
+    if (sharedNotice?.startsWith('The shared record could not be saved')) setSharedNotice(null);
+  } catch (error) {
+    if (error instanceof SharedRecordConflict && error.record.database) {
+      applyDatabaseBytes(error.record.database, error.record.revision, true);
+      setSharedNotice('Someone else saved a change. This screen now shows the shared distillery record.');
+      return;
+    }
+    setSharedNotice('The shared record could not be saved. This browser will try again.');
+  } finally {
+    pushing = false;
+  }
+}
+
+async function pullOrSeedSharedDatabase(options?: { notify?: boolean }): Promise<void> {
+  if (!getStoredToken() || !db) return;
+  const notify = options?.notify ?? false;
+  const remote = await fetchSharedRecord();
+  if (remote.database) {
+    seedEmptyServer = false;
+    if (remote.revision !== serverRevision || serverRevision === 0) {
+      applyDatabaseBytes(remote.database, remote.revision, notify);
+    }
+    return;
+  }
+  const seedingFresh = seedEmptyServer;
+  if (remote.clearedAt && !seedingFresh) {
+    setSharedNotice('The shared distillery record was cleared. Waiting for the new record.');
+    return;
+  }
+  seedEmptyServer = false;
+  localDirty = true;
+  await pushSharedDatabase();
+  if (serverRevision === 1) {
+    setSharedNotice(
+      seedingFresh
+        ? 'The shared distillery record was reset for everyone.'
+        : 'This browser’s records are now the shared distillery record.',
+    );
+  }
+}
+
+function startSharedPolling(): void {
+  if (pollTimer) return;
+  pollTimer = setInterval(() => {
+    void pollSharedDatabase();
+  }, 4000);
+}
+
+async function pollSharedDatabase(): Promise<void> {
+  if (!getStoredToken() || !db || pushing || saveTimer || pushTimer) return;
+  if (typeof document !== 'undefined' && document.querySelector('.modal')) return;
+  try {
+    if (localDirty) {
+      await pushSharedDatabase();
+      return;
+    }
+    const remote = await fetchSharedRevision();
+    if (remote.revision === 0 && remote.clearedAt) {
+      if (!seedEmptyServer) {
+        setSharedNotice('The shared distillery record was cleared. Waiting for the new record.');
+      }
+      return;
+    }
+    if (remote.revision === 0 && serverRevision > 0) {
+      serverRevision = 0;
+      localDirty = true;
+      await pushSharedDatabase();
+      return;
+    }
+    if (remote.revision === serverRevision) return;
+    const full = await fetchSharedRecord();
+    if (full.database) applyDatabaseBytes(full.database, full.revision, true);
+    else await pullOrSeedSharedDatabase({ notify: true });
+  } catch {
+    // Keep the local copy until the server is reachable again.
+  }
+}
+
+function createFreshDatabase(): void {
+  if (!sqlModule) throw new Error('Database not initialized');
+  db = new sqlModule.Database();
+  db.run(SCHEMA);
+  db.run(SEED_DATA);
+  seedCscFloorEquipment({ assignSequentialIds: true, demoStatusForFirstTwo: true });
+  clearAllBlendRecipesOnce();
+  cacheLocalDatabase();
 }
 
 function scheduleSave(): void {
@@ -1421,29 +1599,54 @@ function scheduleSave(): void {
   saveTimer = setTimeout(persistDb, 300);
 }
 
-export async function initDatabase(): Promise<Database> {
-  if (db) return db;
-
-  const SQL = await initSqlJs({ locateFile: () => wasmUrl });
-
-  let stored = localStorage.getItem(DB_STORAGE_KEY);
-  if (!stored) {
-    stored = localStorage.getItem('distillery-tracker-db-v4');
+async function loadDatabase(): Promise<Database> {
+  sqlModule = await initSqlJs({ locateFile: () => wasmUrl });
+  suspendPush = true;
+  try {
+    const stored = localStorage.getItem(DB_STORAGE_KEY) ?? localStorage.getItem('distillery-tracker-db-v4');
+    if (stored) {
+      db = new sqlModule.Database(bytesFromBase64(stored));
+      runMigrations();
+      cacheLocalDatabase();
+    } else {
+      createFreshDatabase();
+    }
+  } finally {
+    suspendPush = false;
   }
-  if (stored) {
-    const binary = Uint8Array.from(atob(stored), (c) => c.charCodeAt(0));
-    db = new SQL.Database(binary);
-    runMigrations();
-  } else {
-    db = new SQL.Database();
-    db.run(SCHEMA);
-    db.run(SEED_DATA);
-    seedCscFloorEquipment({ assignSequentialIds: true, demoStatusForFirstTwo: true });
-    clearAllBlendRecipesOnce();
-    persistDb();
+  startSharedPolling();
+  if (getStoredToken()) {
+    try {
+      await pullOrSeedSharedDatabase();
+    } catch (error) {
+      setSharedNotice(error instanceof Error ? error.message : 'The shared distillery record is not reachable.');
+    }
   }
-
+  if (!db) throw new Error('Database not initialized');
   return db;
+}
+
+export function initDatabase(): Promise<Database> {
+  if (db && sqlModule) return Promise.resolve(db);
+  if (!initPromise) initPromise = loadDatabase();
+  return initPromise;
+}
+
+export async function ensureSharedDatabase(): Promise<void> {
+  await initDatabase();
+  if (!getStoredToken()) return;
+  try {
+    await pullOrSeedSharedDatabase({ notify: true });
+  } catch (error) {
+    setSharedNotice(error instanceof Error ? error.message : 'The shared distillery record is not reachable.');
+  }
+}
+
+export async function resetSharedDatabase(): Promise<void> {
+  await deleteSharedRecord();
+  seedEmptyServer = true;
+  resetDatabase();
+  await initDatabase();
 }
 
 export function getDb(): Database {
@@ -1474,6 +1677,14 @@ export function resetDatabase(): void {
   if (db) {
     db.close();
     db = null;
+  }
+  initPromise = null;
+  sqlModule = null;
+  serverRevision = 0;
+  localDirty = false;
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
   }
 }
 

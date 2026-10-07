@@ -49,6 +49,12 @@ import {
 } from './db.js';
 import { sanitizePermissions, sanitizeProcessStages } from './permissions.js';
 import { sendAdminApprovalEmail } from './email.js';
+import {
+  clearDistilleryRecord,
+  isSqliteDatabase,
+  readDistilleryRecord,
+  writeDistilleryRecord,
+} from './distillery-store.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const isProduction = process.env.NODE_ENV === 'production';
@@ -132,10 +138,56 @@ declare global {
 
 const app = express();
 app.use(cors({ origin: true, credentials: true }));
-app.use(express.json());
+app.use(express.json({ limit: '30mb' }));
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true });
+});
+
+app.get('/api/distillery-db/revision', authMiddleware, (_req, res) => {
+  const record = readDistilleryRecord();
+  res.json({ revision: record.revision, updatedAt: record.updatedAt, clearedAt: record.clearedAt });
+});
+
+app.get('/api/distillery-db', authMiddleware, (_req, res) => {
+  const record = readDistilleryRecord();
+  res.json({
+    revision: record.revision,
+    updatedAt: record.updatedAt,
+    clearedAt: record.clearedAt,
+    database: record.database ? record.database.toString('base64') : null,
+  });
+});
+
+app.put('/api/distillery-db', authMiddleware, (req, res) => {
+  const baseRevision = Number(req.body?.baseRevision);
+  const encoded = typeof req.body?.database === 'string' ? req.body.database : '';
+  if (!Number.isInteger(baseRevision) || baseRevision < 0 || !encoded) {
+    res.status(400).json({ error: 'A database and the revision it was based on are required.' });
+    return;
+  }
+  const database = Buffer.from(encoded, 'base64');
+  if (!isSqliteDatabase(database) || database.length > 20 * 1024 * 1024) {
+    res.status(400).json({ error: 'The shared record must be a SQLite database under 20 MB.' });
+    return;
+  }
+  const saved = writeDistilleryRecord(baseRevision, database);
+  if (!saved.ok) {
+    res.status(409).json({
+      error: 'The shared distillery record changed.',
+      revision: saved.revision,
+      updatedAt: saved.updatedAt,
+      clearedAt: saved.clearedAt,
+      database: saved.database ? saved.database.toString('base64') : null,
+    });
+    return;
+  }
+  res.json({ revision: saved.revision, updatedAt: saved.updatedAt });
+});
+
+app.delete('/api/distillery-db', authMiddleware, adminMiddleware, (_req, res) => {
+  const cleared = clearDistilleryRecord();
+  res.json({ revision: 0, clearedAt: cleared.clearedAt });
 });
 
 app.post('/api/auth/register', async (req, res) => {

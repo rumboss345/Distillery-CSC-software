@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useRefreshKey } from '../db/queries';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { DatePicker } from '../components/DatePicker';
@@ -53,6 +54,7 @@ function dateKey(date: Date): string {
 
 export function Calendar() {
   const { hasPermission } = useAuth();
+  const { key: sharedKey } = useRefreshKey();
   const [viewMode, setViewMode] = useState<CalendarViewMode>('month');
   const [anchorDate, setAnchorDate] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState<string>(() => dateKey(new Date()));
@@ -63,7 +65,7 @@ export function Calendar() {
     Set<CalendarStatusCategory>
   >(() => new Set(ALL_CALENDAR_STATUS_CATEGORIES));
 
-  const allEvents = useMemo(() => buildCalendarEvents(), []);
+  const allEvents = useMemo(() => buildCalendarEvents(), [sharedKey]);
   const filteredEvents = useMemo(
     () => filterCalendarEvents(allEvents, enabledKinds, enabledStatusCategories),
     [allEvents, enabledKinds, enabledStatusCategories],
