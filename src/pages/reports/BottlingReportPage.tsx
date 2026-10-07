@@ -9,12 +9,12 @@ export function BottlingReportPage() {
 
   const csvHeaders = [
     'Batch', 'Product', 'Date', 'Lot', 'Source type', 'Tank draw gal', 'Bottled gal', 'ABV',
-    'Bottled LAA gal', 'Bottles', 'Packaging', 'Variance gal',
+    'Bottled LAA gal', 'Bottles', 'Packaging', 'Variance gal', 'Why', 'Who',
   ];
   const csvRows = rows.map((r) => [
     r.batch_number, r.product_name, r.bottling_date, r.lot_number, r.source_type,
     r.tank_draw_gal ?? '', r.bottled_gal, r.final_abv, r.bottled_laa_gal, r.bottle_count,
-    r.packaging_summary, r.volume_variance_gal ?? '',
+    r.packaging_summary, r.volume_variance_gal ?? '', r.variance_reason ?? '', r.variance_changed_by ?? '',
   ]);
 
   return (
@@ -40,6 +40,8 @@ export function BottlingReportPage() {
             <th>Bottles</th>
             <th>Tank draw</th>
             <th>Variance</th>
+            <th>Why</th>
+            <th>Who</th>
           </tr>
         </thead>
         <tbody>
@@ -58,6 +60,8 @@ export function BottlingReportPage() {
                   ? `${r.volume_variance_gal > 0 ? '+' : ''}${r.volume_variance_gal.toFixed(2)}`
                   : '—'}
               </td>
+              <td>{r.variance_reason || '—'}</td>
+              <td>{r.variance_changed_by || '—'}</td>
             </tr>
           ))}
         </tbody>

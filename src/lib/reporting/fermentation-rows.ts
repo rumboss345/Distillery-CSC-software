@@ -72,6 +72,7 @@ export interface FermentationLeftoverRow {
   volume_gal: number;
   discarded_date: string;
   notes: string;
+  who: string;
 }
 
 export function buildFermentationLeftoverRows(range: ReportDateRange): FermentationLeftoverRow[] {
@@ -83,9 +84,10 @@ export function buildFermentationLeftoverRows(range: ReportDateRange): Fermentat
     volume_gal: number;
     discarded_date: string;
     notes: string;
+    changed_by: string | null;
   }>(`
     SELECT d.id, d.batch_number, m.recipe_name, d.fermenter_name, d.volume_gal,
-           d.discarded_date, d.notes
+           d.discarded_date, d.notes, d.changed_by
     FROM discarded_fermentations d
     LEFT JOIN mash_batches m ON m.id = d.mash_batch_id
     ORDER BY d.discarded_date DESC, d.id DESC
@@ -100,6 +102,7 @@ export function buildFermentationLeftoverRows(range: ReportDateRange): Fermentat
       fermenter_name: row.fermenter_name || '—',
       volume_gal: row.volume_gal,
       discarded_date: row.discarded_date,
-      notes: row.notes?.trim() || 'Leftovers',
+      notes: row.notes?.trim() || '—',
+      who: row.changed_by?.trim() || '—',
     }));
 }

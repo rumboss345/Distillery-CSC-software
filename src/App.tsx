@@ -21,6 +21,7 @@ import { DistillationReport } from './pages/reports/DistillationReport';
 import { TankInventoryReport } from './pages/reports/TankInventoryReport';
 import { BlendingReport } from './pages/reports/BlendingReport';
 import { BottlingReportPage } from './pages/reports/BottlingReportPage';
+import { VolumeChangesReport } from './pages/reports/VolumeChangesReport';
 import { MaintenanceReport } from './pages/reports/MaintenanceReport';
 import { MovementsReport } from './pages/reports/MovementsReport';
 import { ExceptionsReport } from './pages/reports/ExceptionsReport';
@@ -85,6 +86,7 @@ function AppContent() {
               <Route path="tanks" element={<TankInventoryReport />} />
               <Route path="blending" element={<BlendingReport />} />
               <Route path="bottling" element={<BottlingReportPage />} />
+              <Route path="volume-changes" element={<VolumeChangesReport />} />
               <Route path="maintenance" element={<MaintenanceReport />} />
               <Route path="movements" element={<MovementsReport />} />
               <Route path="exceptions" element={<ExceptionsReport />} />

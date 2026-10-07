@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { RecentCompletedNote } from '../components/RecentCompletedNote';
 import {
   getBottlingRuns,
@@ -28,6 +29,7 @@ import {
   totalVolumeGal,
 } from '../lib/bottling-lines';
 import { packagingBottleOptions, type PackagingBottleOption } from '../lib/packaging-bottles';
+import { volumeChangeReasonError } from '../lib/tank-volume-variance';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
 import type { BottlingRunLineInput, BottlingRunView } from '../types';
 
@@ -77,6 +79,8 @@ function linesFromRun(run: BottlingRunView): BottlingRunLineInput[] {
 }
 
 export function Bottling() {
+  const { user } = useAuth();
+  const changedBy = user?.name?.trim() || user?.email || 'Unknown';
   const [searchParams, setSearchParams] = useSearchParams();
   const calendarPlanHandled = useRef(false);
   const { key, refresh } = useRefreshKey();
@@ -94,6 +98,7 @@ export function Bottling() {
   const [form, setForm] = useState<RunHeaderForm>(emptyRun());
   const [lines, setLines] = useState<BottlingRunLineInput[]>([emptyLine()]);
   const [sourceType, setSourceType] = useState<BottlingSourceType>('none');
+  const [varianceReason, setVarianceReason] = useState('');
 
   void key;
 
@@ -166,6 +171,7 @@ export function Bottling() {
     });
     setLines([emptyLine()]);
     setSourceType('none');
+    setVarianceReason('');
     setShowForm(true);
   };
 
@@ -187,6 +193,7 @@ export function Bottling() {
       });
       setLines([emptyLine()]);
       setSourceType('tank');
+      setVarianceReason('');
       setShowForm(true);
     } else if (plan) {
       openNew(plan.date ?? undefined);
@@ -217,6 +224,7 @@ export function Bottling() {
     });
     setLines(linesFromRun(run));
     setSourceType(sourceTypeFromRun(run));
+    setVarianceReason(run.variance_reason ?? '');
     setShowForm(true);
   };
 
@@ -288,6 +296,16 @@ export function Bottling() {
       alert('Select the holding tank to bottle from.');
       return;
     }
+    const varianceNeedsReason = sourceType === 'tank'
+      && bottlingVarianceGal != null
+      && Math.abs(bottlingVarianceGal) >= 0.01;
+    if (varianceNeedsReason) {
+      const reasonError = volumeChangeReasonError(varianceReason);
+      if (reasonError) {
+        alert(reasonError);
+        return;
+      }
+    }
     if (
       sourceType === 'tank'
       && selectedTankAvailable
@@ -310,6 +328,8 @@ export function Bottling() {
         ...form,
         source_barrel_id: sourceType === 'barrel' ? form.source_barrel_id : null,
         source_holding_tank_equipment_id: sourceType === 'tank' ? form.source_holding_tank_equipment_id : null,
+        variance_reason: varianceNeedsReason ? varianceReason.trim() : null,
+        variance_changed_by: varianceNeedsReason ? changedBy : null,
       }, activeLines, editId);
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Could not save bottling run.');
@@ -424,6 +444,8 @@ export function Bottling() {
                 <th>Volume</th>
                 <th>Tank draw</th>
                 <th>Variance</th>
+                <th>Why</th>
+                <th>Who</th>
                 <th>ABV</th>
                 <th>Source</th>
                 <th></th>
@@ -445,6 +467,8 @@ export function Bottling() {
                       : '—'}
                   </td>
                   <td>{formatVariance(r.volume_variance_gal)}</td>
+                  <td>{r.variance_reason?.trim() || '—'}</td>
+                  <td>{r.variance_changed_by?.trim() || '—'}</td>
                   <td>{r.final_abv}%</td>
                   <td>{sourceLabel(r)}</td>
                   <td className="td-actions">
@@ -542,7 +566,7 @@ export function Bottling() {
                       <> Bottled total: {plannedDrawGal.toFixed(2)} gal.</>
                     )}
                     {bottlingVarianceGal != null && Math.abs(bottlingVarianceGal) >= 0.01 && (
-                      <> Variance vs tank: {formatVariance(bottlingVarianceGal)} (shown on Reports).</>
+                      <> Variance vs tank: {formatVariance(bottlingVarianceGal)}. This is listed on Reports → Volume changes.</>
                     )}
                   </p>
                 )}
@@ -657,6 +681,19 @@ export function Bottling() {
                 }}
               />
             </div>
+            {sourceType === 'tank' && bottlingVarianceGal != null && Math.abs(bottlingVarianceGal) >= 0.01 && (
+              <div className="form-group full-width">
+                <label htmlFor="bottling-variance-why">Why the bottled volume differs from the tank</label>
+                <input
+                  id="bottling-variance-why"
+                  value={varianceReason}
+                  onChange={(e) => setVarianceReason(e.target.value)}
+                  placeholder="Required"
+                  required
+                />
+                <p className="field-hint">Recorded by {changedBy}. This shows on Reports → Volume changes.</p>
+              </div>
+            )}
             <div className="form-group full-width">
               <label>Notes</label>
               <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />

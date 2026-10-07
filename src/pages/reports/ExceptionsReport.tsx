@@ -15,7 +15,7 @@ export function ExceptionsReport() {
   return (
     <ReportTableShell
       title="Exceptions"
-      description="Operational flags: bottling variance, blend volume drift, tank volume corrections, missing hearts, and tank overfill."
+      description="Operational flags: bottling variance, blend volume drift, tank volume and ABV corrections, fermenter leftovers, missing hearts, and tank overfill. Volume changes also lists every correction with why and who."
       periodLabel={range.label}
       csvFilename={`exceptions-${range.from ?? 'all'}`}
       csvHeaders={csvHeaders}
