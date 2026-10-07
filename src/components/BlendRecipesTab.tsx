@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BlendAbvConfirmation } from './BlendAbvConfirmation';
 import { limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
+import { roundScaledAmount } from '../lib/blend-recipe-scale';
 import { parseBlendRecipeSnapshot } from '../lib/blend-recipe-version';
 import { computeRecipeTheoreticalAbv, previewProofingWaterAdjustment, type ProofingWaterPreview } from '../lib/blend-abv-confirm';
 import {
@@ -273,12 +274,13 @@ export function BlendRecipesTab({
     setIngredients((prev) => {
       const existing = prev.find((row) => row.ingredient_type === 'water');
       const unit = existing?.unit && existing.unit !== 'each' ? existing.unit : 'gal';
-      const amount = unit === 'gal'
+      const rawAmount = unit === 'gal'
         ? gallons
         : convertIngredientAmount(
           { amount: gallons, unit: 'gal', ingredient_type: 'water' },
           unit,
         );
+      const amount = roundScaledAmount(rawAmount);
       const others = prev.filter((row) => row.ingredient_type !== 'water');
       if (gallons <= 0) return others;
       return [

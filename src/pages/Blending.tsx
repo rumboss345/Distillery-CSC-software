@@ -309,12 +309,13 @@ function ingredientsWithProofingWater(
   const index = ingredients.findIndex((ingredient) => ingredient.ingredient_type === 'water');
   const existing = index >= 0 ? ingredients[index] : undefined;
   const unit = existing?.unit && existing.unit !== 'each' ? existing.unit : 'gal';
-  const amount = unit === 'gal'
+  const rawAmount = unit === 'gal'
     ? solved.waterGal
     : convertIngredientAmount(
       { amount: solved.waterGal, unit: 'gal', ingredient_type: 'water' },
       unit,
     );
+  const amount = roundScaledAmount(rawAmount);
   if (!(amount > 0)) return ingredients.filter((ingredient) => ingredient.ingredient_type !== 'water');
   const line: BlendIngredientInput = {
     ingredient_type: 'water',

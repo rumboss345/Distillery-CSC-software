@@ -419,13 +419,13 @@ export function spiritMeasureAlternate(amount: number, unit: string, abv: number
 
   if (isVolumeUnit(unit)) {
     const gal = toGallonsFromVolumeUnit(amount, unit);
-    const lbs = spiritWeightLbsFromVolumeGal(gal, abv);
-    if (lbs <= 0) return null;
-    if (lbs < 1) {
-      const oz = lbs * 16;
-      return { amount: Math.round(oz * 10) / 10, unit: 'oz', label: `≈ ${oz.toFixed(1)} oz on a scale` };
-    }
-    return { amount: Math.round(lbs * 100) / 100, unit: 'lbs', label: `≈ ${lbs.toFixed(2)} lbs on a scale` };
+    const lbs = gal * spiritLbsPerGallon(abv);
+    if (!(lbs > 0)) return null;
+    return {
+      amount: lbs,
+      unit: 'lbs',
+      label: `≈ ${formatQuantityDisplay(lbs, 3)} lbs on a scale`,
+    };
   }
 
   return null;
@@ -436,12 +436,9 @@ export function formatSpiritCorrectionWithAlternate(
   abv: number,
   baseInstruction: string,
 ): string {
-  const lbs = spiritWeightLbsFromVolumeGal(amountGal, abv);
-  if (lbs <= 0) return baseInstruction;
-  const weightNote = lbs >= 1
-    ? `≈ ${lbs.toFixed(2)} lbs on a scale`
-    : `≈ ${(lbs * 16).toFixed(1)} oz on a scale`;
-  return `${baseInstruction} (${weightNote})`;
+  const lbs = amountGal * spiritLbsPerGallon(abv);
+  if (!(lbs > 0)) return baseInstruction;
+  return `${baseInstruction} (≈ ${formatQuantityDisplay(lbs, 3)} lbs on a scale)`;
 }
 
 export function defaultUnitForMode(type: BlendIngredientType, mode: MeasureMode): string {

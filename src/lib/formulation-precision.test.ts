@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { reconcileMeasurements } from './blend-formulation';
 import { scaleIngredients, scaleSpiritSources } from './blend-recipe-scale';
-import { spiritVolumeGalFromAmount } from './blending';
+import { spiritMeasureAlternate, spiritVolumeGalFromAmount } from './blending';
 import { analyzeFormulation, designFormulation } from './formulation-engine';
 import {
   DENSITY_NOT_VERIFIED,
@@ -32,6 +32,9 @@ describe('formulation spirit precision', () => {
     expect(shown.gallons.startsWith('0.1')).toBe(false);
     expect(shown.gallons).not.toBe('0.1');
     expect(spiritDisplaysDescribeSameCharge(0.25, 0.1, NEUTRAL_ABV)).toBe(false);
+    const scale = spiritMeasureAlternate(gallons, 'gal', NEUTRAL_ABV);
+    expect(scale?.label).toContain('0.250 lbs');
+    expect(scale?.label).not.toMatch(/0\.1/);
   });
 });
 
