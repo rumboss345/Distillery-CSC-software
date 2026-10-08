@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   getBlendRecipes,
   getGinRecipes,
   getRecipes,
   getInventoryByCategory,
+  saveBlendRecipe,
+  saveGinRecipe,
   saveRecipe,
   deleteRecipe,
   useRefreshKey,
@@ -14,6 +16,7 @@ import { BlendDesigner } from '../components/BlendDesigner';
 import { BlendRecipesTab } from '../components/BlendRecipesTab';
 import { GinRecipesTab } from '../components/GinRecipesTab';
 import { useAuth } from '../context/AuthContext';
+import { importRecipeCsv } from '../lib/recipe-import';
 import { buildRecipeExport } from '../lib/recipe-export';
 import { downloadCsv, rowsToCsv } from '../lib/reporting/csv';
 import {
@@ -59,6 +62,8 @@ export function Recipes() {
   const [form, setForm] = useState(emptyRecipe());
   const [nutrients, setNutrients] = useState<RecipeNutrientInput[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [importNote, setImportNote] = useState('');
+  const importFileRef = useRef<HTMLInputElement>(null);
 
   void key;
 
@@ -133,6 +138,67 @@ export function Recipes() {
     downloadCsv('recipes', rowsToCsv(sheet.headers, sheet.rows));
   };
 
+  const importRecipes = async (file: File) => {
+    const imported = importRecipeCsv(await file.text());
+    const errors = [...imported.errors];
+    let added = 0;
+    let updated = 0;
+
+    if (canWash) {
+      const existing = new Map(getRecipes().map((recipe) => [recipe.name.trim().toLowerCase(), recipe.id]));
+      for (const recipe of imported.wash) {
+        const id = existing.get(recipe.name.trim().toLowerCase());
+        const savedId = saveRecipe(recipe, id, recipe.nutrients);
+        existing.set(recipe.name.trim().toLowerCase(), savedId);
+        if (id) updated += 1;
+        else added += 1;
+      }
+    } else if (imported.wash.length > 0) {
+      errors.push('Wash recipes were skipped. This account cannot edit them.');
+    }
+
+    if (canGin) {
+      const existing = new Map(getGinRecipes().map((recipe) => [recipe.name.trim().toLowerCase(), recipe.id]));
+      for (const recipe of imported.gin) {
+        const id = existing.get(recipe.name.trim().toLowerCase());
+        try {
+          const savedId = saveGinRecipe({ name: recipe.name, notes: recipe.notes }, id, recipe.botanicals);
+          existing.set(recipe.name.trim().toLowerCase(), savedId);
+          if (id) updated += 1;
+          else added += 1;
+        } catch (error) {
+          errors.push(error instanceof Error ? error.message : `Could not save ${recipe.name}.`);
+        }
+      }
+    } else if (imported.gin.length > 0) {
+      errors.push('Gin recipes were skipped. This account cannot edit them.');
+    }
+
+    if (canBlend) {
+      const existing = new Map(getBlendRecipes().map((recipe) => [recipe.name.trim().toLowerCase(), recipe.id]));
+      for (const recipe of imported.blend) {
+        const id = existing.get(recipe.name.trim().toLowerCase());
+        try {
+          const savedId = saveBlendRecipe(recipe, recipe.spirit_sources, recipe.ingredients, id);
+          existing.set(recipe.name.trim().toLowerCase(), savedId);
+          if (id) updated += 1;
+          else added += 1;
+        } catch (error) {
+          errors.push(error instanceof Error ? error.message : `Could not save ${recipe.name}.`);
+        }
+      }
+    } else if (imported.blend.length > 0) {
+      errors.push('Blend recipes were skipped. This account cannot edit them.');
+    }
+
+    const summary: string[] = [];
+    if (added > 0) summary.push(`Added ${added} ${added === 1 ? 'recipe' : 'recipes'}.`);
+    if (updated > 0) summary.push(`Updated ${updated} existing ${updated === 1 ? 'recipe' : 'recipes'}.`);
+    if (added === 0 && updated === 0 && errors.length === 0) summary.push('The file has no recipes.');
+    setImportNote([...summary, ...errors].join(' '));
+    if (added > 0 || updated > 0) refresh();
+  };
+
   const handleDelete = (id: number) => {
     if (confirm('Delete this recipe?')) {
       deleteRecipe(id);
@@ -160,8 +226,31 @@ export function Recipes() {
           >
             Export recipes
           </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => importFileRef.current?.click()}
+            data-testid="import-recipes"
+          >
+            Import recipes
+          </button>
+          <input
+            ref={importFileRef}
+            type="file"
+            accept=".csv,text/csv"
+            hidden
+            data-testid="import-recipes-file"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = '';
+              if (file) void importRecipes(file);
+            }}
+          />
         </div>
       </div>
+      {importNote && (
+        <p className="field-hint" role="status" data-testid="import-recipes-result">{importNote}</p>
+      )}
 
       {canBlend && (
         <div className="page-actions recipe-blend-actions">

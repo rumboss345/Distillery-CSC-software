@@ -129,14 +129,14 @@ describe('buildRecipeExport', () => {
     expect(sheet.rows).toHaveLength(3);
     expect(sheet.headers.slice(0, 3)).toEqual(['Kind', 'Name', 'Product']);
     expect(sheet.headers).toEqual(expect.arrayContaining([
-      'Blackstrap',
-      'Water',
-      'DADY',
-      'DAP',
-      'Juniper berries',
-      'High wines',
-      'Proofing water',
-      'Vanilla',
+      'Blackstrap (wash sugar)',
+      'Water (wash water)',
+      'DADY (wash yeast)',
+      'DAP (nutrient)',
+      'Juniper berries (botanical)',
+      'High wines (spirit)',
+      'Proofing water (water)',
+      'Vanilla (flavoring)',
     ]));
     expect(sheet.headers).not.toContain('Nutrients');
     expect(sheet.headers).not.toContain('Additives');
@@ -145,28 +145,28 @@ describe('buildRecipeExport', () => {
 
     const washRow = sheet.rows[0];
     expect(washRow[0]).toBe('Wash');
-    expect(washRow[sheet.headers.indexOf('Blackstrap')]).toBe('400 lbs');
-    expect(washRow[sheet.headers.indexOf('Water')]).toBe('150 gal');
-    expect(washRow[sheet.headers.indexOf('DADY')]).toBe('1.5 lbs');
-    expect(washRow[sheet.headers.indexOf('DAP')]).toBe('250 g');
-    expect(washRow[sheet.headers.indexOf('Vanilla')]).toBe('');
+    expect(washRow[sheet.headers.indexOf('Blackstrap (wash sugar)')]).toBe('400 lbs');
+    expect(washRow[sheet.headers.indexOf('Water (wash water)')]).toBe('150 gal');
+    expect(washRow[sheet.headers.indexOf('DADY (wash yeast)')]).toBe('1.5 lbs');
+    expect(washRow[sheet.headers.indexOf('DAP (nutrient)')]).toBe('250 g');
+    expect(washRow[sheet.headers.indexOf('Vanilla (flavoring)')]).toBe('');
 
     const ginRow = sheet.rows[1];
     expect(ginRow[0]).toBe('Gin');
-    expect(ginRow[sheet.headers.indexOf('Juniper berries')]).toBe('500 g');
+    expect(ginRow[sheet.headers.indexOf('Juniper berries (botanical)')]).toBe('500 g');
 
     const blendRow = sheet.rows[2];
     expect(blendRow[0]).toBe('Blend');
     expect(blendRow[sheet.headers.indexOf('Source')]).toBe('Tank');
     expect(blendRow[sheet.headers.indexOf('Version')]).toBe(2);
-    expect(blendRow[sheet.headers.indexOf('High wines')]).toBe('50 gal @ 80.00%');
-    expect(blendRow[sheet.headers.indexOf('Proofing water')]).toBe('20 gal');
-    expect(blendRow[sheet.headers.indexOf('Vanilla')]).toBe('1256 ml');
+    expect(blendRow[sheet.headers.indexOf('High wines (spirit)')]).toBe('50 gal @ 80.00%');
+    expect(blendRow[sheet.headers.indexOf('Proofing water (water)')]).toBe('20 gal');
+    expect(blendRow[sheet.headers.indexOf('Vanilla (flavoring)')]).toBe('1256 ml');
 
     const csv = rowsToCsv(sheet.headers, sheet.rows);
     const headerLine = csv.split('\n')[0];
-    expect(headerLine).toContain('Blackstrap');
-    expect(headerLine).toContain('Vanilla');
+    expect(headerLine).toContain('Blackstrap (wash sugar)');
+    expect(headerLine).toContain('Vanilla (flavoring)');
     expect(headerLine).not.toContain('Additives');
     expect(csv).toContain('1256 ml');
     expect(csv).toContain('Molasses Wash');
@@ -189,10 +189,10 @@ describe('buildRecipeExport', () => {
       }],
     });
     const sheet = buildRecipeExport({ wash: [wash(), second] });
-    const dapColumns = sheet.headers.filter((header) => header === 'DAP' || header.startsWith('DAP '));
-    expect(dapColumns).toEqual(['DAP']);
-    expect(sheet.rows[0][sheet.headers.indexOf('DAP')]).toBe('250 g');
-    expect(sheet.rows[1][sheet.headers.indexOf('DAP')]).toBe('1256 ml');
+    const dapColumns = sheet.headers.filter((header) => header === 'DAP (nutrient)' || header.startsWith('DAP (nutrient) '));
+    expect(dapColumns).toEqual(['DAP (nutrient)']);
+    expect(sheet.rows[0][sheet.headers.indexOf('DAP (nutrient)')]).toBe('250 g');
+    expect(sheet.rows[1][sheet.headers.indexOf('DAP (nutrient)')]).toBe('1256 ml');
   });
 
   it('gives a repeated ingredient on the same recipe its own column', () => {
@@ -208,10 +208,10 @@ describe('buildRecipeExport', () => {
       },
     ];
     const sheet = buildRecipeExport({ blend: [recipe] });
-    expect(sheet.headers).toContain('Vanilla');
-    expect(sheet.headers).toContain('Vanilla 2');
-    expect(sheet.rows[0][sheet.headers.indexOf('Vanilla')]).toBe('1256 ml');
-    expect(sheet.rows[0][sheet.headers.indexOf('Vanilla 2')]).toBe('10 ml');
+    expect(sheet.headers).toContain('Vanilla (flavoring)');
+    expect(sheet.headers).toContain('Vanilla (flavoring) 2');
+    expect(sheet.rows[0][sheet.headers.indexOf('Vanilla (flavoring)')]).toBe('1256 ml');
+    expect(sheet.rows[0][sheet.headers.indexOf('Vanilla (flavoring) 2')]).toBe('10 ml');
   });
 
   it('returns no rows when nothing is saved', () => {
