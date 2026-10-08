@@ -10,6 +10,29 @@ import type {
   RecipeView,
 } from '../types';
 
+/** Role written on an ingredient column so the same file can be imported. */
+export const RECIPE_INGREDIENT_ROLES = [
+  'wash sugar',
+  'wash water',
+  'wash yeast',
+  'nutrient',
+  'botanical',
+  'spirit',
+  'water',
+  'sugar',
+  'syrup',
+  'flavoring',
+  'color',
+  'other',
+] as const;
+
+export type RecipeIngredientRole = (typeof RECIPE_INGREDIENT_ROLES)[number];
+
+export function recipeIngredientHeader(name: string, role: RecipeIngredientRole): string {
+  const cleaned = name.trim() || 'Ingredient';
+  return `${cleaned} (${role})`;
+}
+
 /** Recipe fields that stay one column per recipe. Ingredients are added after these. */
 export const RECIPE_EXPORT_BASE_HEADERS = [
   'Kind',
@@ -122,6 +145,20 @@ function additiveAmount(ingredient: BlendRecipeIngredient): string {
   return withAbv(formatRecipeExportAmount(ingredient.amount, ingredient.unit), ingredient.abv);
 }
 
+function additiveRole(type: string): RecipeIngredientRole {
+  if (
+    type === 'water'
+    || type === 'sugar'
+    || type === 'syrup'
+    || type === 'flavoring'
+    || type === 'color'
+    || type === 'other'
+  ) {
+    return type;
+  }
+  return 'other';
+}
+
 function columnName(base: string, taken: Set<string>): string {
   const cleaned = base.trim() || 'Ingredient';
   if (!taken.has(cleaned)) return cleaned;
@@ -170,13 +207,28 @@ function addWashIngredients(
 ) {
   const rowUsed = new Set<string>();
   if (recipe.grain_lbs > 0) {
-    collectIngredient(columns, reserved, rowUsed, text(recipe.grain_type) || 'Sugar', formatRecipeExportAmount(recipe.grain_lbs, 'lbs'), into);
+    collectIngredient(
+      columns, reserved, rowUsed,
+      recipeIngredientHeader(text(recipe.grain_type) || 'Sugar', 'wash sugar'),
+      formatRecipeExportAmount(recipe.grain_lbs, 'lbs'),
+      into,
+    );
   }
   if (recipe.water_gal > 0) {
-    collectIngredient(columns, reserved, rowUsed, 'Water', formatGallons(recipe.water_gal), into);
+    collectIngredient(
+      columns, reserved, rowUsed,
+      recipeIngredientHeader('Water', 'wash water'),
+      formatGallons(recipe.water_gal),
+      into,
+    );
   }
   if (recipe.yeast_lbs > 0) {
-    collectIngredient(columns, reserved, rowUsed, text(recipe.yeast_strain) || 'Yeast', formatRecipeExportAmount(recipe.yeast_lbs, 'lbs'), into);
+    collectIngredient(
+      columns, reserved, rowUsed,
+      recipeIngredientHeader(text(recipe.yeast_strain) || 'Yeast', 'wash yeast'),
+      formatRecipeExportAmount(recipe.yeast_lbs, 'lbs'),
+      into,
+    );
   }
   for (const nutrient of recipe.nutrients ?? []) addNutrient(nutrient, columns, reserved, rowUsed, into);
 }
@@ -193,7 +245,7 @@ function addNutrient(
     columns,
     reserved,
     rowUsed,
-    nutrient.name,
+    recipeIngredientHeader(nutrient.name, 'nutrient'),
     formatRecipeExportAmount(nutrient.amount, nutrient.unit),
     into,
   );
@@ -211,7 +263,7 @@ function addBotanical(
     columns,
     reserved,
     rowUsed,
-    botanical.name,
+    recipeIngredientHeader(botanical.name, 'botanical'),
     formatRecipeExportAmount(botanical.weight, botanical.weight_unit),
     into,
   );
@@ -262,7 +314,7 @@ export function buildRecipeExport(input: RecipeExportInput): RecipeExportSheet {
         columns,
         reserved,
         rowUsed,
-        text(source.spirit_label) || 'Spirit',
+        recipeIngredientHeader(text(source.spirit_label) || 'Spirit', 'spirit'),
         spiritAmount(source),
         ingredients,
       );
@@ -270,7 +322,8 @@ export function buildRecipeExport(input: RecipeExportInput): RecipeExportSheet {
     for (const ingredient of recipe.ingredients ?? []) {
       if (!(ingredient.amount > 0)) continue;
       const name = text(ingredient.name) || text(ingredient.ingredient_type) || 'Ingredient';
-      collectIngredient(columns, reserved, rowUsed, name, additiveAmount(ingredient), ingredients);
+      const role = additiveRole(ingredient.ingredient_type);
+      collectIngredient(columns, reserved, rowUsed, recipeIngredientHeader(name, role), additiveAmount(ingredient), ingredients);
     }
     built.push({
       fixed: fixedValues({

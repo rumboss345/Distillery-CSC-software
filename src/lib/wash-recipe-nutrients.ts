@@ -47,9 +47,13 @@ const UNIT_ALIASES: Record<string, NutrientUnit> = {
   litres: 'l',
 };
 
-export function normalizeNutrientUnit(unit: string | null | undefined): NutrientUnit {
+export function knownNutrientUnit(unit: string | null | undefined): NutrientUnit | null {
   const raw = (unit ?? '').trim().toLowerCase();
-  return UNIT_ALIASES[raw] ?? 'lbs';
+  return UNIT_ALIASES[raw] ?? null;
+}
+
+export function normalizeNutrientUnit(unit: string | null | undefined): NutrientUnit {
+  return knownNutrientUnit(unit) ?? 'lbs';
 }
 
 export function nutrientUnitLabel(unit: string | null | undefined): string {
