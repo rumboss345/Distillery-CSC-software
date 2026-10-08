@@ -92,6 +92,8 @@ export function Bottling() {
   const barrels = getBarrels().filter((b) => b.status === 'aging' || b.status === 'empty');
   const holdingTanks = getHoldingTanks();
   const collectionVessels = getCollectionVessels();
+  const namedHoldingTanks = getHoldingTanks({ includeUnavailable: true });
+  const namedCollectionVessels = getCollectionVessels({ includeUnavailable: true });
   const packagingInventory = getInventoryByCategory('packaging');
   const bottleOptions = useMemo(
     () => packagingBottleOptions(packagingInventory),
@@ -112,7 +114,7 @@ export function Bottling() {
     if (chargeableTanks.some((t) => t.id === form.source_holding_tank_equipment_id)) {
       return chargeableTanks;
     }
-    const saved = holdingTanks.find((t) => t.id === form.source_holding_tank_equipment_id);
+    const saved = namedHoldingTanks.find((t) => t.id === form.source_holding_tank_equipment_id);
     if (!saved) return chargeableTanks;
     return [
       ...chargeableTanks,
@@ -122,7 +124,7 @@ export function Bottling() {
         available_abv: form.final_abv,
       },
     ];
-  }, [chargeableTanks, form.source_holding_tank_equipment_id, form.source_volume_gal, form.final_abv, holdingTanks]);
+  }, [chargeableTanks, form.source_holding_tank_equipment_id, form.source_volume_gal, form.final_abv, namedHoldingTanks]);
 
   const selectedTankAvailable = form.source_holding_tank_equipment_id
     ? getHoldingTankContents(form.source_holding_tank_equipment_id, undefined, undefined, editId)
@@ -147,8 +149,8 @@ export function Bottling() {
     const savedId = form.return_holding_tank_equipment_id;
     const savedMissing = savedId != null && savedId !== sourceId && !usable.some((tank) => tank.id === savedId);
     const saved = savedMissing
-      ? getHoldingTanks({ includeUnavailable: true }).find((tank) => tank.id === savedId)
-        ?? getCollectionVessels({ includeUnavailable: true }).find((tank) => tank.id === savedId)
+      ? namedHoldingTanks.find((tank) => tank.id === savedId)
+        ?? namedCollectionVessels.find((tank) => tank.id === savedId)
       : undefined;
     return [...usable, ...(saved ? [saved] : [])].map((tank) => {
       const contents = getHoldingTankContents(tank.id, undefined, undefined, editId);
@@ -438,8 +440,8 @@ export function Bottling() {
 
   const tankName = (id: number | null | undefined) => {
     if (!id) return null;
-    return holdingTanks.find((tank) => tank.id === id)?.name
-      ?? collectionVessels.find((tank) => tank.id === id)?.name
+    return namedHoldingTanks.find((tank) => tank.id === id)?.name
+      ?? namedCollectionVessels.find((tank) => tank.id === id)?.name
       ?? null;
   };
 
@@ -452,9 +454,9 @@ export function Bottling() {
 
   const sourceLabel = (run: BottlingRunView) => {
     if (run.source_holding_tank_equipment_id) {
-      const tank = holdingTanks.find((t) => t.id === run.source_holding_tank_equipment_id);
+      const name = tankName(run.source_holding_tank_equipment_id);
       const draw = run.source_volume_gal != null ? ` emptied ${run.source_volume_gal.toFixed(1)} gal` : '';
-      return tank ? `${tank.name}${draw}` : 'Holding tank';
+      return name ? `${name}${draw}` : 'Holding tank';
     }
     const barrel = barrels.find((b) => b.id === run.source_barrel_id);
     return barrel?.barrel_number ?? '—';
