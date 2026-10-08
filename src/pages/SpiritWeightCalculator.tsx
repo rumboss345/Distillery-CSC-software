@@ -113,6 +113,7 @@ function DilutionResultView({
   preferVolume,
   preferWeight,
   fixedAfter,
+  knownWater,
   temperatureCorrected,
 }: {
   result: ProofingCalculated;
@@ -120,6 +121,7 @@ function DilutionResultView({
   preferVolume: VolumeUnit;
   preferWeight: WeightUnit;
   fixedAfter: boolean;
+  knownWater: boolean;
   temperatureCorrected: boolean;
 }) {
   const spirit = dilutionFigure(result, 'starting', measure, preferVolume, preferWeight);
@@ -136,7 +138,9 @@ function DilutionResultView({
   ));
 
   let lead = `Add ${water.headline} of water to ${spirit.headline} of ${result.startingAbv}% spirit. The blend gauges ${finished.headline} at ${result.finalAbv}% ABV.`;
-  if (noWater) {
+  if (knownWater) {
+    lead = `Blend ${spirit.headline} of ${result.startingAbv}% spirit with ${water.headline} of water. You get ${finished.headline} at ${result.finalAbv}% ABV.`;
+  } else if (noWater) {
     lead = 'No water is needed. This spirit is already at the target strength.';
   } else if (fixedAfter) {
     lead = `Use ${spirit.headline} of ${result.startingAbv}% spirit and add ${water.headline} of water. That fills ${finished.headline} at ${result.finalAbv}% ABV.`;
@@ -146,23 +150,23 @@ function DilutionResultView({
     {
       testId: 'dilution-spirit',
       step: '1',
-      title: fixedAfter ? 'Spirit to use' : 'Spirit you have',
+      title: knownWater ? 'Spirit blended' : fixedAfter ? 'Spirit to use' : 'Spirit you have',
       headline: spirit.headline,
       alt: spirit.alt,
     },
     {
       testId: 'dilution-water',
       step: '2',
-      title: 'Water to add',
+      title: knownWater ? 'Water blended' : 'Water to add',
       headline: water.headline,
       alt: water.alt,
     },
     {
       testId: 'dilution-finished',
       step: '3',
-      title: 'Finished blend',
-      headline: finished.headline,
-      alt: `${finished.alt} · ${result.finalAbv}% ABV`,
+      title: knownWater ? 'Finished volume and ABV' : 'Finished blend',
+      headline: knownWater ? `${finished.headline} at ${result.finalAbv}% ABV` : finished.headline,
+      alt: knownWater ? finished.alt : `${finished.alt} · ${result.finalAbv}% ABV`,
     },
   ];
 
@@ -173,7 +177,7 @@ function DilutionResultView({
           This result cannot be used. Nothing was changed.
         </p>
       )}
-      <h3>{noWater ? 'Already at strength' : 'What to add'}</h3>
+      <h3>{knownWater ? 'Finished volume and ABV' : noWater ? 'Already at strength' : 'What to add'}</h3>
       {temperatureCorrected && (
         <p className="field-hint" style={{ marginTop: 0 }}>
           The strength was adjusted from the sample temperature to 60 °F. Volumes below are at 60 °F.
@@ -221,7 +225,11 @@ function DilutionResultView({
         <ul data-testid="dilution-validation">
           {result.checks.map((check) => (
             <li key={check.name} className={check.passed ? undefined : 'dilution-check-fail'}>
-              {check.passed ? DILUTION_CHECK_COPY[check.name] : `${DILUTION_CHECK_COPY[check.name]} ${check.detail}`}
+              {check.passed
+                ? (knownWater && check.name === 'target-proof'
+                  ? 'No target strength was set. This ABV is the strength of the blend.'
+                  : DILUTION_CHECK_COPY[check.name])
+                : `${DILUTION_CHECK_COPY[check.name]} ${check.detail}`}
             </li>
           ))}
         </ul>
@@ -287,11 +295,13 @@ function ResultPanel({
 }
 
 function AlcoholDilutionCalculator() {
+  const [question, setQuestion] = useState<'water' | 'blend'>('water');
   const [volumeBasis, setVolumeBasis] = useState<DilutionVolumeBasis>('before');
   const [amountMeasure, setAmountMeasure] = useState<DilutionAmountMeasure>('volume');
   const [volumeUnit, setVolumeUnit] = useState<VolumeUnit>('l');
   const [weightUnit, setWeightUnit] = useState<WeightUnit>('lb');
   const [amountValue, setAmountValue] = useState('3.71');
+  const [waterAmount, setWaterAmount] = useState('1');
   const [actualAbv, setActualAbv] = useState('58');
   const [sampleTempF, setSampleTempF] = useState('60');
   const [targetAbv, setTargetAbv] = useState('43');
@@ -306,11 +316,13 @@ function AlcoholDilutionCalculator() {
 
   const dilutionResult = useMemo(() => {
     const amountText = amountValue.trim();
+    const waterText = waterAmount.trim();
     const targetText = targetAbv.trim();
-    if (!/^[+]?(?:\d+\.?\d*|\.\d+)$/.test(amountText)) return null;
-    if (!/^[+]?(?:\d+\.?\d*|\.\d+)$/.test(targetText)) return null;
+    const numeric = /^[+]?(?:\d+\.?\d*|\.\d+)$/;
+    if (!numeric.test(amountText)) return null;
+    if (question === 'blend' ? !numeric.test(waterText) : !numeric.test(targetText)) return null;
     if (correctedActualAbv == null || correctedActualAbv <= 0) return null;
-    const startingAbv = temperatureIs60 && /^[+]?(?:\d+\.?\d*|\.\d+)$/.test(actualAbv.trim())
+    const startingAbv = temperatureIs60 && numeric.test(actualAbv.trim())
       ? actualAbv.trim()
       : decimalStringFromNumber(correctedActualAbv);
     const observed = {
@@ -318,8 +330,21 @@ function AlcoholDilutionCalculator() {
       observedAbv: actualAbv.trim() || undefined,
       observedTemperatureF: sampleTempF.trim() || '60',
     };
+    const spiritUnit = amountMeasure === 'volume'
+      ? (volumeUnit === 'l' ? 'L' as const : 'gal' as const)
+      : weightUnit;
     let request: ProofingRequest;
-    if (volumeBasis === 'before' && amountMeasure === 'volume') {
+    if (question === 'blend') {
+      request = {
+        kind: 'spirit-plus-water',
+        spiritQuantity: amountText,
+        spiritUnit,
+        startingAbv,
+        waterQuantity: waterText,
+        waterUnit: spiritUnit,
+        ...observed,
+      };
+    } else if (volumeBasis === 'before' && amountMeasure === 'volume') {
       request = {
         kind: 'spirit-to-target',
         spiritQuantity: amountText,
@@ -363,10 +388,12 @@ function AlcoholDilutionCalculator() {
     amountValue,
     correctedActualAbv,
     sampleTempF,
+    question,
     targetAbv,
     temperatureIs60,
     volumeBasis,
     volumeUnit,
+    waterAmount,
     weightUnit,
   ]);
 
@@ -375,8 +402,30 @@ function AlcoholDilutionCalculator() {
       <div className="card">
         <h3>Alcohol dilution</h3>
         <p className="field-hint" style={{ marginTop: 0 }}>
-          Find how much water to add. Volumes below are at 60 °F. This is a preview and does not change a tank.
+          {question === 'blend'
+            ? 'Enter the spirit and the water you will blend. The result is the finished volume and ABV. Volumes below are at 60 °F. This is a preview and does not change a tank.'
+            : 'Find how much water to add. Volumes below are at 60 °F. This is a preview and does not change a tank.'}
         </p>
+
+        <p className="measure-mode-label">What do you want to find?</p>
+        <div className="measure-mode-buttons" style={{ marginBottom: '1rem' }}>
+          <button
+            type="button"
+            className={`btn btn-sm ${question === 'water' ? 'btn-primary' : 'btn-secondary'}`}
+            data-testid="dilution-question-water"
+            onClick={() => setQuestion('water')}
+          >
+            Water to add
+          </button>
+          <button
+            type="button"
+            className={`btn btn-sm ${question === 'blend' ? 'btn-primary' : 'btn-secondary'}`}
+            data-testid="dilution-question-blend"
+            onClick={() => setQuestion('blend')}
+          >
+            Finished volume and ABV
+          </button>
+        </div>
 
         <div className="form-group full-width">
           <AbvTemperatureInput
@@ -388,20 +437,22 @@ function AlcoholDilutionCalculator() {
           />
         </div>
 
-        <div className="form-grid">
-          <div className="form-group">
-            <label>Alcohol content (target) after dilution — ABV %</label>
-            <input
-              type="number"
-              step="0.1"
-              min="0"
-              max={MAX_ENTERED_ABV}
-              value={targetAbv}
-              data-testid="dilution-target-abv"
-              onChange={(e) => setTargetAbv(limitAbvInput(e.target.value))}
-            />
+        {question === 'water' && (
+          <div className="form-grid">
+            <div className="form-group">
+              <label>Alcohol content (target) after dilution — ABV %</label>
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                max={MAX_ENTERED_ABV}
+                value={targetAbv}
+                data-testid="dilution-target-abv"
+                onChange={(e) => setTargetAbv(limitAbvInput(e.target.value))}
+              />
+            </div>
           </div>
-        </div>
+        )}
 
         <p className="measure-mode-label" style={{ marginTop: '1rem' }}>Measure fixed amount by</p>
         <div className="measure-mode-buttons" style={{ marginBottom: '0.75rem' }}>
@@ -421,33 +472,41 @@ function AlcoholDilutionCalculator() {
           </button>
         </div>
 
-        <p className="measure-mode-label">Which amount is fixed?</p>
-        <div className="measure-mode-buttons" style={{ marginBottom: '1rem' }}>
-          <button
-            type="button"
-            className={`btn btn-sm ${volumeBasis === 'before' ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => setVolumeBasis('before')}
-          >
-            Before dilution
-          </button>
-          <button
-            type="button"
-            className={`btn btn-sm ${volumeBasis === 'after' ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => setVolumeBasis('after')}
-          >
-            After dilution
-          </button>
-        </div>
+        {question === 'water' && (
+          <>
+            <p className="measure-mode-label">Which amount is fixed?</p>
+            <div className="measure-mode-buttons" style={{ marginBottom: '1rem' }}>
+              <button
+                type="button"
+                className={`btn btn-sm ${volumeBasis === 'before' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setVolumeBasis('before')}
+              >
+                Before dilution
+              </button>
+              <button
+                type="button"
+                className={`btn btn-sm ${volumeBasis === 'after' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setVolumeBasis('after')}
+              >
+                After dilution
+              </button>
+            </div>
+          </>
+        )}
 
         <div className="form-group">
           <label>
-            {volumeBasis === 'before'
+            {question === 'blend'
               ? amountMeasure === 'weight'
-                ? 'Weight (actual) of spirit before dilution'
-                : 'Volume (actual) before dilution'
-              : amountMeasure === 'weight'
-                ? 'Weight (target) of blend after dilution'
-                : 'Volume (target) after dilution'}
+                ? 'Weight of spirit'
+                : 'Volume of spirit'
+              : volumeBasis === 'before'
+                ? amountMeasure === 'weight'
+                  ? 'Weight (actual) of spirit before dilution'
+                  : 'Volume (actual) before dilution'
+                : amountMeasure === 'weight'
+                  ? 'Weight (target) of blend after dilution'
+                  : 'Volume (target) after dilution'}
           </label>
           <div className="amount-unit-row">
             <input
@@ -476,7 +535,7 @@ function AlcoholDilutionCalculator() {
               </select>
             )}
           </div>
-          {amountMeasure === 'weight' && (
+          {amountMeasure === 'weight' && question === 'water' && (
             <p className="field-hint">
               Weight uses the Table 6 density at 60 °F for{' '}
               {volumeBasis === 'before'
@@ -487,7 +546,31 @@ function AlcoholDilutionCalculator() {
           )}
         </div>
 
-        {correctedActualAbv != null && targetAbvNum > 0 && targetAbvNum >= correctedActualAbv && (
+        {question === 'blend' && (
+          <div className="form-group">
+            <label>{amountMeasure === 'weight' ? 'Weight of water' : 'Volume of water'}</label>
+            <div className="amount-unit-row">
+              <input
+                type="number"
+                step={amountMeasure === 'weight' ? '0.1' : '0.01'}
+                min="0"
+                value={waterAmount}
+                data-testid="dilution-water-amount"
+                onChange={(e) => setWaterAmount(e.target.value)}
+              />
+              <span className="field-hint" style={{ margin: 0 }}>
+                {amountMeasure === 'volume' ? (volumeUnit === 'l' ? 'L' : 'US gal') : weightUnit}
+              </span>
+            </div>
+            <p className="field-hint">
+              {amountMeasure === 'volume'
+                ? 'Same unit as the spirit. Mixing shrinks the volume, so the finished amount is less than the spirit plus the water.'
+                : 'Same unit as the spirit. The finished weight is the spirit plus the water. The gauged volume is smaller than the volumes poured.'}
+            </p>
+          </div>
+        )}
+
+        {question === 'water' && correctedActualAbv != null && targetAbvNum > 0 && targetAbvNum >= correctedActualAbv && (
           <p className="field-hint" style={{ color: 'var(--danger, #dc2626)' }}>
             Target ABV must be lower than starting ABV when diluting with water.
           </p>
@@ -500,7 +583,8 @@ function AlcoholDilutionCalculator() {
           measure={amountMeasure}
           preferVolume={amountMeasure === 'volume' ? volumeUnit : 'l'}
           preferWeight={amountMeasure === 'weight' ? weightUnit : 'lb'}
-          fixedAfter={volumeBasis === 'after'}
+          fixedAfter={question === 'water' && volumeBasis === 'after'}
+          knownWater={question === 'blend'}
           temperatureCorrected={!temperatureIs60}
         />
       ) : (
@@ -508,7 +592,9 @@ function AlcoholDilutionCalculator() {
           <p className="field-hint">
             {dilutionResult && !dilutionResult.ok
               ? dilutionResult.warnings.join(' ')
-              : 'Enter starting ABV, target ABV, and a fixed volume or weight to calculate water to add.'}
+              : question === 'blend'
+                ? 'Enter the spirit ABV, the spirit amount, and the water amount to see the finished volume and ABV.'
+                : 'Enter starting ABV, target ABV, and a fixed volume or weight to calculate water to add.'}
           </p>
         </div>
       )}
