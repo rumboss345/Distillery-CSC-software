@@ -61,7 +61,7 @@ describe('volume change groups', () => {
     expect(groups[1].rows.map((entry) => entry.key)).toEqual(['set-new', 'set-old']);
     expect(groups[0].totalLabel).toBe('3.00 gal');
     expect(groups[1].totalLabel).toBe(formatTankVolumeVariance(0.85));
-    expect(groups[2].totalLabel).toBe('2.50 gal');
+    expect(groups[2].totalLabel).toBe('2.50 gal sent');
     expect(groups[3].totalLabel).toBe(formatTankVolumeVariance(-1.5));
   });
 

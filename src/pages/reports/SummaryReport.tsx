@@ -10,7 +10,7 @@ import {
 } from '../../db/queries';
 import { StatusBadge } from '../../components/StatusBadge';
 import { equipmentTypeLabel } from '../../lib/equipment';
-import { totalVolumeGal } from '../../lib/bottling-lines';
+import { bottlingSentToTankGal, reportedBottlingVarianceGal, totalVolumeGal } from '../../lib/bottling-lines';
 import { queryAll } from '../../db/database';
 import { eventInReportRange } from '../../lib/reporting/period';
 import { buildVolumeChangeRows, totalVolumeVarianceGal } from '../../lib/reporting/volume-changes';
@@ -194,7 +194,7 @@ export function SummaryReport() {
       <div className="section">
         <h3 className="section-title">Bottling</h3>
         <p className="report-section-desc">
-          Tank bottling empties the source tank on save. Variance is bottled volume minus tank draw.
+          Tank bottling empties the source tank on save. Gallons sent to a tank are not a loss. Variance is bottled gallons plus gallons sent to tanks, minus the tank draw.
         </p>
         {filteredBottlings.length === 0 ? (
           <div className="empty-state">
@@ -209,6 +209,7 @@ export function SummaryReport() {
                   <th>Product</th>
                   <th>Date</th>
                   <th>Bottled (gal)</th>
+                  <th>To tank (gal)</th>
                   <th>Tank draw (gal)</th>
                   <th>Variance</th>
                 </tr>
@@ -216,13 +217,15 @@ export function SummaryReport() {
               <tbody>
                 {filteredBottlings.map((run) => {
                   const bottled = run.bottled_volume_gal ?? totalVolumeGal(run.lines);
-                  const variance = run.volume_variance_gal;
+                  const sentGal = bottlingSentToTankGal(run);
+                  const variance = reportedBottlingVarianceGal(run);
                   return (
                     <tr key={run.id}>
                       <td><strong>{run.batch_number}</strong></td>
                       <td>{run.product_name}</td>
                       <td>{formatDateDisplay(run.bottling_date)}</td>
                       <td>{bottled.toFixed(2)}</td>
+                      <td>{sentGal >= 0.01 ? sentGal.toFixed(2) : '—'}</td>
                       <td>
                         {run.source_holding_tank_equipment_id && run.source_volume_gal != null
                           ? run.source_volume_gal.toFixed(2)

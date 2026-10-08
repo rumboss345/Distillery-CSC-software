@@ -71,6 +71,41 @@ export function bottlingVolumeVarianceGal(sourceGal: number, bottledGal: number,
   return bottledGal + returned - sourceGal;
 }
 
+/** Gallons from a bottling run that were sent to a tank instead of bottled. */
+export function bottlingSentToTankGal(run: {
+  returns?: { volume_gal: number }[] | null;
+  return_volume_gal?: number | null;
+}): number {
+  const lines = run.returns ?? [];
+  if (lines.length > 0) {
+    return lines.reduce((sum, line) => sum + (line.volume_gal > 0 ? line.volume_gal : 0), 0);
+  }
+  const header = run.return_volume_gal ?? 0;
+  return header > 0 ? header : 0;
+}
+
+/**
+ * Variance after gallons sent to a tank. Those gallons are still on hand, so they are not a loss.
+ * When the source draw and bottled gallons are known, the figure is recomputed so an older
+ * stored variance that ignored the tank return is not reported as a loss.
+ */
+export function reportedBottlingVarianceGal(run: {
+  source_volume_gal?: number | null;
+  bottled_volume_gal?: number | null;
+  volume_variance_gal?: number | null;
+  returns?: { volume_gal: number }[] | null;
+  return_volume_gal?: number | null;
+}): number | null {
+  if (run.source_volume_gal != null && run.bottled_volume_gal != null) {
+    return bottlingVolumeVarianceGal(
+      run.source_volume_gal,
+      run.bottled_volume_gal,
+      bottlingSentToTankGal(run),
+    );
+  }
+  return run.volume_variance_gal ?? null;
+}
+
 export interface BottlingReturnCheck {
   tankId: number | null;
   gallons: number;
