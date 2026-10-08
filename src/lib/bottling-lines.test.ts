@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   additionalPackagingNeeded,
   bottlingReturnError,
+  bottlingReturnsError,
+  bottlingReturnsTotalGal,
   bottlingVolumeVarianceGal,
   formatLinesSummary,
   isRumBottlingProduct,
@@ -57,6 +59,49 @@ describe('bottling-lines', () => {
     expect(bottlingVolumeVarianceGal(25, 10, 0)).toBeCloseTo(-15, 5);
     expect(bottlingVolumeVarianceGal(25, 30, 0)).toBeCloseTo(5, 5);
     expect(bottlingVolumeVarianceGal(25, 10, -1)).toBeCloseTo(-15, 5);
+  });
+
+  it('splits leftover gallons across more than one tank', () => {
+    expect(bottlingReturnsTotalGal([
+      { gallons: 8 },
+      { gallons: 7 },
+    ])).toBeCloseTo(15, 5);
+    expect(bottlingVolumeVarianceGal(25, 10, bottlingReturnsTotalGal([
+      { gallons: 8 },
+      { gallons: 7 },
+    ]))).toBeCloseTo(0, 5);
+    expect(bottlingReturnsError({
+      returns: [
+        { tankId: 2, gallons: 8, name: 'Milk can 1', destVolumeGal: 0, destCapacityGal: 50 },
+        { tankId: 3, gallons: 7, name: 'Milk can 2', destVolumeGal: 0, destCapacityGal: 50 },
+      ],
+      unbottledGal: 15,
+      sourceTankId: 1,
+    })).toBeNull();
+    expect(bottlingReturnsError({
+      returns: [
+        { tankId: 2, gallons: 10, name: 'Milk can 1' },
+        { tankId: 3, gallons: 6, name: 'Milk can 2' },
+      ],
+      unbottledGal: 15,
+      sourceTankId: 1,
+    })).toMatch(/Only 15\.00 gal/);
+    expect(bottlingReturnsError({
+      returns: [
+        { tankId: 2, gallons: 8, name: 'Milk can 1' },
+        { tankId: 2, gallons: 7, name: 'Milk can 1' },
+      ],
+      unbottledGal: 15,
+      sourceTankId: 1,
+    })).toMatch(/already selected/);
+    expect(bottlingReturnsError({
+      returns: [
+        { tankId: 2, gallons: 8, name: 'Milk can 1' },
+        { tankId: null, gallons: 2 },
+      ],
+      unbottledGal: 15,
+      sourceTankId: 1,
+    })).toMatch(/Choose the tank/);
   });
 
   it('rejects a return that does not fit the leftover or the destination', () => {

@@ -92,19 +92,28 @@ export function buildVolumeChangeRows(range: ReportDateRange): VolumeChangeRow[]
         who: shown(run.variance_changed_by),
       });
     }
-    const returned = run.return_volume_gal ?? 0;
-    if (returned >= 0.01 && run.return_holding_tank_equipment_id) {
-      const tankName = tankNames.get(run.return_holding_tank_equipment_id) ?? 'tank';
+    const returnedLines = (run.returns && run.returns.length > 0)
+      ? run.returns
+      : (run.return_holding_tank_equipment_id && (run.return_volume_gal ?? 0) >= 0.01
+        ? [{
+          holding_tank_equipment_id: run.return_holding_tank_equipment_id,
+          volume_gal: run.return_volume_gal ?? 0,
+          sort_order: 0,
+        }]
+        : []);
+    returnedLines.forEach((line, index) => {
+      if (line.volume_gal < 0.01 || !line.holding_tank_equipment_id) return;
+      const tankName = tankNames.get(line.holding_tank_equipment_id) ?? 'tank';
       rows.push({
-        key: `bottling-return:${run.id}`,
+        key: `bottling-return:${run.id}:${line.holding_tank_equipment_id}:${line.sort_order ?? index}`,
         occurred_at: run.bottling_date,
         kind: 'Bottling to tank',
         place: `${run.batch_number} · ${tankName}`,
-        change: `${returned.toFixed(2)} gal at ${run.final_abv.toFixed(1)}% ABV (${run.product_name})`,
+        change: `${line.volume_gal.toFixed(2)} gal at ${run.final_abv.toFixed(1)}% ABV (${run.product_name})`,
         why: 'Product that was not bottled was sent to this tank.',
         who: shown(run.variance_changed_by),
       });
-    }
+    });
   }
 
   const blendNotes = new Map(getBlendProducts().map((product) => [product.id, product.notes]));

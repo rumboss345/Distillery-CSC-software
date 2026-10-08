@@ -435,8 +435,23 @@ export interface BottlingRunLineInput {
   bottle_count: number;
 }
 
+/** Gallons from a bottling run that were not bottled and were sent to a tank. */
+export interface BottlingRunReturn {
+  id: number;
+  bottling_run_id: number;
+  holding_tank_equipment_id: number;
+  volume_gal: number;
+  sort_order: number;
+}
+
+export interface BottlingRunReturnInput {
+  holding_tank_equipment_id: number | null;
+  volume_gal: number | null;
+}
+
 export interface BottlingRunView extends BottlingRun {
   lines: BottlingRunLine[];
+  returns?: BottlingRunReturn[];
 }
 
 export type BlendStatus = 'draft' | 'trial' | 'approved' | 'executed' | 'bottled';

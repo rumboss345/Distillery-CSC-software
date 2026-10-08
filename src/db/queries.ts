@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { BARREL_STOCK_CATEGORY, BARREL_STOCK_ITEM_NAME } from '../lib/barrel-inventory';
 import {
-  bottlingReturnError,
+  bottlingReturnsError,
   bottlingVolumeVarianceGal,
   packagingBottleCountsBySku,
   packagingInventoryAdjustments,
@@ -87,6 +87,8 @@ import type {
   BottlingRun,
   BottlingRunLine,
   BottlingRunLineInput,
+  BottlingRunReturn,
+  BottlingRunReturnInput,
   BottlingRunView,
   CutType,
   DistillationCut,
@@ -1154,12 +1156,13 @@ function computeHoldingTankContents(
 
   const bottlingReturns = queryOne<{ volume_gal: number; gpa: number }>(`
     SELECT
-      COALESCE(SUM(return_volume_gal), 0) as volume_gal,
-      COALESCE(SUM(return_volume_gal * COALESCE(final_abv, 0) / 100.0), 0) as gpa
-    FROM bottling_runs
-    WHERE return_holding_tank_equipment_id = ?
-      AND COALESCE(return_volume_gal, 0) > 0
-      AND (? IS NULL OR id != ?)
+      COALESCE(SUM(r.volume_gal), 0) as volume_gal,
+      COALESCE(SUM(r.volume_gal * COALESCE(b.final_abv, 0) / 100.0), 0) as gpa
+    FROM bottling_run_returns r
+    JOIN bottling_runs b ON b.id = r.bottling_run_id
+    WHERE r.holding_tank_equipment_id = ?
+      AND COALESCE(r.volume_gal, 0) > 0
+      AND (? IS NULL OR b.id != ?)
   `, [tankId, excludeBottlingRunId ?? null, excludeBottlingRunId ?? -1]);
 
   const barrelFillOuts = queryOne<{ volume_gal: number; gpa: number }>(`
@@ -3903,14 +3906,36 @@ function attachBottlingRunLines(runs: BottlingRun[]): BottlingRunView[] {
     bucket.push(line);
     linesByRun.set(line.bottling_run_id, bucket);
   }
+  const allReturns = queryAll<BottlingRunReturn>(
+    'SELECT * FROM bottling_run_returns ORDER BY sort_order, id',
+  );
+  const returnsByRun = new Map<number, BottlingRunReturn[]>();
+  for (const line of allReturns) {
+    const bucket = returnsByRun.get(line.bottling_run_id) ?? [];
+    bucket.push(line);
+    returnsByRun.set(line.bottling_run_id, bucket);
+  }
   return runs.map((run) => {
     const stored = linesByRun.get(run.id);
+    const storedReturns = returnsByRun.get(run.id) ?? [];
+    const returns = storedReturns.length > 0
+      ? storedReturns
+      : (run.return_holding_tank_equipment_id && (run.return_volume_gal ?? 0) > 0
+        ? [{
+          id: 0,
+          bottling_run_id: run.id,
+          holding_tank_equipment_id: run.return_holding_tank_equipment_id,
+          volume_gal: run.return_volume_gal ?? 0,
+          sort_order: 0,
+        }]
+        : []);
     if (stored && stored.length > 0) {
-      return { ...run, lines: stored };
+      return { ...run, lines: stored, returns };
     }
     if (run.bottle_count > 0) {
       return {
         ...run,
+        returns,
         lines: [{
           id: 0,
           bottling_run_id: run.id,
@@ -3921,7 +3946,22 @@ function attachBottlingRunLines(runs: BottlingRun[]): BottlingRunView[] {
         }],
       };
     }
-    return { ...run, lines: [] };
+    return { ...run, lines: [], returns };
+  });
+}
+
+function persistBottlingRunReturns(
+  runId: number,
+  returns: { tankId: number; gallons: number }[],
+): void {
+  runQuery('DELETE FROM bottling_run_returns WHERE bottling_run_id = ?', [runId]);
+  returns.forEach((line, index) => {
+    if (line.gallons <= 0 || !line.tankId) return;
+    insertRow(
+      `INSERT INTO bottling_run_returns (bottling_run_id, holding_tank_equipment_id, volume_gal, sort_order)
+       VALUES (?, ?, ?, ?)`,
+      [runId, line.tankId, line.gallons, index],
+    );
   });
 }
 
@@ -3952,7 +3992,7 @@ export function getBottlingRunLines(bottlingRunId: number): BottlingRunLine[] {
 }
 
 export function saveBottlingRun(
-  run: Omit<BottlingRun, 'id' | 'created_at'>,
+  run: Omit<BottlingRun, 'id' | 'created_at'> & { returns?: BottlingRunReturnInput[] },
   lines: BottlingRunLineInput[],
   id?: number,
 ): void {
@@ -3983,43 +4023,70 @@ export function saveBottlingRun(
       : '';
   const headerSizeMl = activeLines.length === 1 ? activeLines[0].bottle_size_ml : 0;
 
-  const returnGal = fromTank && (run.return_volume_gal ?? 0) > 0.001 ? run.return_volume_gal! : 0;
-  const returnTankId = fromTank && returnGal > 0 ? run.return_holding_tank_equipment_id ?? null : null;
-  let storedReturnTankId: number | null = null;
-  let storedReturnGal: number | null = null;
+  const requestedReturns: BottlingRunReturnInput[] = fromTank
+    ? (run.returns ?? (
+      (run.return_holding_tank_equipment_id != null || (run.return_volume_gal ?? 0) > 0.001)
+        ? [{
+          holding_tank_equipment_id: run.return_holding_tank_equipment_id ?? null,
+          volume_gal: run.return_volume_gal ?? null,
+        }]
+        : []
+    ))
+    : [];
+  const checkedReturns: {
+    tankId: number | null;
+    gallons: number;
+    name?: string;
+    destVolumeGal?: number;
+    destCapacityGal?: number;
+  }[] = [];
   if (fromTank && sourceTankId && bottledVolumeGal != null && bottledVolumeGal > 0) {
     const unbottled = Math.max(0, (sourceVolumeGal ?? 0) - bottledVolumeGal);
-    let destName: string | undefined;
-    let destVolume = 0;
-    let destCapacity = 0;
-    if (returnTankId) {
-      const dest = queryOne<FloorEquipment>('SELECT * FROM floor_equipment WHERE id = ?', [returnTankId]);
-      if (!dest || !isSpiritLedgerEquipmentType(dest.equipment_type) || dest.equipment_type === 'stillage_tank') {
-        throw new Error('Choose a holding tank or collection vessel for the product that is not bottled.');
+    for (const line of requestedReturns) {
+      const gallons = line.volume_gal ?? 0;
+      const tankId = line.holding_tank_equipment_id;
+      const sending = Number.isFinite(gallons) && gallons > 0.001;
+      if (!sending && tankId == null) continue;
+      let destName: string | undefined;
+      let destVolume = 0;
+      let destCapacity = 0;
+      if (tankId) {
+        const dest = queryOne<FloorEquipment>('SELECT * FROM floor_equipment WHERE id = ?', [tankId]);
+        if (!dest || !isSpiritLedgerEquipmentType(dest.equipment_type) || dest.equipment_type === 'stillage_tank') {
+          throw new Error('Choose a holding tank or collection vessel for the product that is not bottled.');
+        }
+        assertEquipmentUsableForProduction(tankId, 'Destination tank');
+        destName = dest.name;
+        destCapacity = dest.capacity_gal;
+        destVolume = getHoldingTankContents(tankId, undefined, undefined, id).volume_gal;
       }
-      assertEquipmentUsableForProduction(returnTankId, 'Destination tank');
-      destName = dest.name;
-      destCapacity = dest.capacity_gal;
-      destVolume = getHoldingTankContents(returnTankId, undefined, undefined, id).volume_gal;
+      checkedReturns.push({
+        tankId,
+        gallons,
+        name: destName,
+        destVolumeGal: destVolume,
+        destCapacityGal: destCapacity,
+      });
     }
-    const returnError = bottlingReturnError({
-      returnGal,
+    const returnError = bottlingReturnsError({
+      returns: checkedReturns,
       unbottledGal: unbottled,
-      destTankId: returnTankId,
       sourceTankId,
-      destName,
-      destVolumeGal: destVolume,
-      destCapacityGal: destCapacity,
     });
     if (returnError) throw new Error(returnError);
+    const returnGal = checkedReturns.reduce((sum, line) => sum + (line.gallons > 0 ? line.gallons : 0), 0);
     volumeVarianceGal = bottlingVolumeVarianceGal(sourceVolumeGal ?? 0, bottledVolumeGal, returnGal);
-    storedReturnTankId = returnTankId;
-    storedReturnGal = returnTankId ? returnGal : null;
   }
+  const storedReturns = checkedReturns.filter(
+    (line): line is { tankId: number; gallons: number; name?: string; destVolumeGal?: number; destCapacityGal?: number } =>
+      line.tankId != null && line.gallons > 0.001,
+  );
+  const storedReturnTankId = storedReturns.length === 1 ? storedReturns[0].tankId : null;
+  const storedReturnGal = storedReturns.length === 1 ? storedReturns[0].gallons : null;
   const varianceReason = run.variance_reason?.trim() ?? '';
   const recordsWho = fromTank && (
     (volumeVarianceGal != null && Math.abs(volumeVarianceGal) >= 0.01)
-    || (storedReturnGal ?? 0) > 0.001
+    || storedReturns.some((line) => line.gallons > 0.001)
   );
   if (fromTank && volumeVarianceGal != null && Math.abs(volumeVarianceGal) >= 0.01) {
     const reasonError = volumeChangeReasonError(varianceReason);
@@ -4050,12 +4117,14 @@ export function saveBottlingRun(
       [header.batch_number, sourceBarrelId, sourceTankId, header.source_volume_gal, header.bottled_volume_gal, header.volume_variance_gal, header.variance_reason, header.variance_changed_by, header.return_holding_tank_equipment_id, header.return_volume_gal, header.source_run_id, header.bottling_date, header.packaging_bottle, header.bottle_size_ml, header.bottle_count, header.final_abv, header.product_name, header.lot_number, header.notes, runId],
     );
     persistBottlingRunLines(runId, activeLines);
+    persistBottlingRunReturns(runId, storedReturns);
   } else {
     runId = insertRow(
       `INSERT INTO bottling_runs (batch_number, source_barrel_id, source_holding_tank_equipment_id, source_volume_gal, bottled_volume_gal, volume_variance_gal, variance_reason, variance_changed_by, return_holding_tank_equipment_id, return_volume_gal, source_run_id, bottling_date, packaging_bottle, bottle_size_ml, bottle_count, final_abv, product_name, lot_number, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [header.batch_number, sourceBarrelId, sourceTankId, header.source_volume_gal, header.bottled_volume_gal, header.volume_variance_gal, header.variance_reason, header.variance_changed_by, header.return_holding_tank_equipment_id, header.return_volume_gal, header.source_run_id, header.bottling_date, header.packaging_bottle, header.bottle_size_ml, header.bottle_count, header.final_abv, header.product_name, header.lot_number, header.notes],
     );
     persistBottlingRunLines(runId, activeLines);
+    persistBottlingRunReturns(runId, storedReturns);
   }
   syncBottlingPackagingInventory(previousLines, activeLines);
   syncHoldingTankStatuses();
@@ -4064,6 +4133,7 @@ export function saveBottlingRun(
 export function deleteBottlingRun(id: number): void {
   const previousLines = bottlingLinesToInventoryInput(getBottlingRunLines(id));
   syncBottlingPackagingInventory(previousLines, []);
+  runQuery('DELETE FROM bottling_run_returns WHERE bottling_run_id = ?', [id]);
   runQuery('DELETE FROM bottling_runs WHERE id = ?', [id]);
   syncHoldingTankStatuses();
 }
