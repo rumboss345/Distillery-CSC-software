@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   additionalPackagingNeeded,
+  bottlingReturnError,
+  bottlingVolumeVarianceGal,
   formatLinesSummary,
   isRumBottlingProduct,
   lineVolumeGal,
@@ -47,6 +49,65 @@ describe('bottling-lines', () => {
       '750mL 7F': 20,
       '375mL Oslo': -48,
     });
+  });
+
+  it('counts bottled gallons and gallons sent to a tank against the source', () => {
+    expect(bottlingVolumeVarianceGal(25, 10, 15)).toBeCloseTo(0, 5);
+    expect(bottlingVolumeVarianceGal(25, 10, 5)).toBeCloseTo(-10, 5);
+    expect(bottlingVolumeVarianceGal(25, 10, 0)).toBeCloseTo(-15, 5);
+    expect(bottlingVolumeVarianceGal(25, 30, 0)).toBeCloseTo(5, 5);
+    expect(bottlingVolumeVarianceGal(25, 10, -1)).toBeCloseTo(-15, 5);
+  });
+
+  it('rejects a return that does not fit the leftover or the destination', () => {
+    expect(bottlingReturnError({
+      returnGal: 0,
+      unbottledGal: 15,
+      destTankId: null,
+      sourceTankId: 1,
+    })).toBeNull();
+    expect(bottlingReturnError({
+      returnGal: 0,
+      unbottledGal: 15,
+      destTankId: 2,
+      sourceTankId: 1,
+    })).toMatch(/how many gallons/);
+    expect(bottlingReturnError({
+      returnGal: 15,
+      unbottledGal: 15,
+      destTankId: null,
+      sourceTankId: 1,
+    })).toMatch(/Choose the tank/);
+    expect(bottlingReturnError({
+      returnGal: 15,
+      unbottledGal: 15,
+      destTankId: 1,
+      sourceTankId: 1,
+    })).toMatch(/different tank/);
+    expect(bottlingReturnError({
+      returnGal: 16,
+      unbottledGal: 15,
+      destTankId: 2,
+      sourceTankId: 1,
+    })).toMatch(/Only 15\.00 gal/);
+    expect(bottlingReturnError({
+      returnGal: 10,
+      unbottledGal: 15,
+      destTankId: 2,
+      sourceTankId: 1,
+      destName: 'Latina 2',
+      destVolumeGal: 95,
+      destCapacityGal: 100,
+    })).toMatch(/5\.0 gal of room/);
+    expect(bottlingReturnError({
+      returnGal: 5,
+      unbottledGal: 15,
+      destTankId: 2,
+      sourceTankId: 1,
+      destName: 'Latina 2',
+      destVolumeGal: 90,
+      destCapacityGal: 100,
+    })).toBeNull();
   });
 
   it('formats line summary', () => {

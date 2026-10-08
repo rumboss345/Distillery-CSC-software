@@ -1358,6 +1358,14 @@ function migrateAdvancedBlending(): void {
 
   migrateVolumeChangeAuditColumns();
   migrateDistillationAlcoholLossColumns();
+  migrateBottlingReturnTankColumns();
+}
+
+/** Product left after bottling can be sent to another tank. Existing runs stay blank. */
+function migrateBottlingReturnTankColumns(): void {
+  if (!db) return;
+  addColumnIfMissing('bottling_runs', 'return_holding_tank_equipment_id', 'INTEGER');
+  addColumnIfMissing('bottling_runs', 'return_volume_gal', 'REAL');
 }
 
 /** Who made a volume or ABV correction, and why. Existing rows stay blank. */

@@ -401,10 +401,13 @@ export interface BottlingRun {
   source_volume_gal: number | null;
   /** Sum of bottled line volumes (gal). */
   bottled_volume_gal: number | null;
-  /** bottled_volume_gal − source_volume_gal when bottling from a tank. */
+  /** bottled gallons + gallons sent to another tank − source gallons. */
   volume_variance_gal: number | null;
   variance_reason?: string | null;
   variance_changed_by?: string | null;
+  /** Tank that receives product from this run that was not bottled. */
+  return_holding_tank_equipment_id?: number | null;
+  return_volume_gal?: number | null;
   source_run_id: number | null;
   bottling_date: string;
   packaging_bottle: string;

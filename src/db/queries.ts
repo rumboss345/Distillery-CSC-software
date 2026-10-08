@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { BARREL_STOCK_CATEGORY, BARREL_STOCK_ITEM_NAME } from '../lib/barrel-inventory';
 import {
+  bottlingReturnError,
+  bottlingVolumeVarianceGal,
   packagingBottleCountsBySku,
   packagingInventoryAdjustments,
 } from '../lib/bottling-lines';
@@ -1150,6 +1152,16 @@ function computeHoldingTankContents(
       AND (? IS NULL OR id != ?)
   `, [tankId, excludeBottlingRunId ?? null, excludeBottlingRunId ?? -1]);
 
+  const bottlingReturns = queryOne<{ volume_gal: number; gpa: number }>(`
+    SELECT
+      COALESCE(SUM(return_volume_gal), 0) as volume_gal,
+      COALESCE(SUM(return_volume_gal * COALESCE(final_abv, 0) / 100.0), 0) as gpa
+    FROM bottling_runs
+    WHERE return_holding_tank_equipment_id = ?
+      AND COALESCE(return_volume_gal, 0) > 0
+      AND (? IS NULL OR id != ?)
+  `, [tankId, excludeBottlingRunId ?? null, excludeBottlingRunId ?? -1]);
+
   const barrelFillOuts = queryOne<{ volume_gal: number; gpa: number }>(`
     SELECT
       COALESCE(SUM(volume_gal), 0) as volume_gal,
@@ -1200,10 +1212,11 @@ function computeHoldingTankContents(
   `, [tankId]);
 
   const volumeIn = (ins?.volume_gal ?? 0) + (transferIns?.volume_gal ?? 0) + (blendIns?.volume_gal ?? 0)
-    + (stillageIns?.volume_gal ?? 0);
+    + (stillageIns?.volume_gal ?? 0) + (bottlingReturns?.volume_gal ?? 0);
   const volumeOut = (runOuts?.volume_gal ?? 0) + (blendOuts?.volume_gal ?? 0)
     + (bottlingOuts?.volume_gal ?? 0) + (barrelFillOuts?.volume_gal ?? 0) + (transferOuts?.volume_gal ?? 0);
-  const gpaIn = (ins?.gpa ?? 0) + (transferIns?.gpa ?? 0) + (blendIns?.gpa ?? 0);
+  const gpaIn = (ins?.gpa ?? 0) + (transferIns?.gpa ?? 0) + (blendIns?.gpa ?? 0)
+    + (bottlingReturns?.gpa ?? 0);
   const gpaOut = (runOuts?.gpa ?? 0) + (blendOuts?.gpa ?? 0)
     + (bottlingOuts?.gpa ?? 0) + (barrelFillOuts?.gpa ?? 0) + (transferOuts?.gpa ?? 0);
   const productionVolume = volumeIn - volumeOut;
@@ -3970,7 +3983,44 @@ export function saveBottlingRun(
       : '';
   const headerSizeMl = activeLines.length === 1 ? activeLines[0].bottle_size_ml : 0;
 
+  const returnGal = fromTank && (run.return_volume_gal ?? 0) > 0.001 ? run.return_volume_gal! : 0;
+  const returnTankId = fromTank && returnGal > 0 ? run.return_holding_tank_equipment_id ?? null : null;
+  let storedReturnTankId: number | null = null;
+  let storedReturnGal: number | null = null;
+  if (fromTank && sourceTankId && bottledVolumeGal != null && bottledVolumeGal > 0) {
+    const unbottled = Math.max(0, (sourceVolumeGal ?? 0) - bottledVolumeGal);
+    let destName: string | undefined;
+    let destVolume = 0;
+    let destCapacity = 0;
+    if (returnTankId) {
+      const dest = queryOne<FloorEquipment>('SELECT * FROM floor_equipment WHERE id = ?', [returnTankId]);
+      if (!dest || !isSpiritLedgerEquipmentType(dest.equipment_type) || dest.equipment_type === 'stillage_tank') {
+        throw new Error('Choose a holding tank or collection vessel for the product that is not bottled.');
+      }
+      assertEquipmentUsableForProduction(returnTankId, 'Destination tank');
+      destName = dest.name;
+      destCapacity = dest.capacity_gal;
+      destVolume = getHoldingTankContents(returnTankId, undefined, undefined, id).volume_gal;
+    }
+    const returnError = bottlingReturnError({
+      returnGal,
+      unbottledGal: unbottled,
+      destTankId: returnTankId,
+      sourceTankId,
+      destName,
+      destVolumeGal: destVolume,
+      destCapacityGal: destCapacity,
+    });
+    if (returnError) throw new Error(returnError);
+    volumeVarianceGal = bottlingVolumeVarianceGal(sourceVolumeGal ?? 0, bottledVolumeGal, returnGal);
+    storedReturnTankId = returnTankId;
+    storedReturnGal = returnTankId ? returnGal : null;
+  }
   const varianceReason = run.variance_reason?.trim() ?? '';
+  const recordsWho = fromTank && (
+    (volumeVarianceGal != null && Math.abs(volumeVarianceGal) >= 0.01)
+    || (storedReturnGal ?? 0) > 0.001
+  );
   if (fromTank && volumeVarianceGal != null && Math.abs(volumeVarianceGal) >= 0.01) {
     const reasonError = volumeChangeReasonError(varianceReason);
     if (reasonError) throw new Error(reasonError);
@@ -3986,22 +4036,24 @@ export function saveBottlingRun(
     variance_reason: fromTank && volumeVarianceGal != null && Math.abs(volumeVarianceGal) >= 0.01
       ? varianceReason
       : null,
-    variance_changed_by: fromTank && volumeVarianceGal != null && Math.abs(volumeVarianceGal) >= 0.01
+    variance_changed_by: recordsWho
       ? (run.variance_changed_by?.trim() || 'Unknown')
       : null,
+    return_holding_tank_equipment_id: storedReturnTankId,
+    return_volume_gal: storedReturnGal,
   };
 
   let runId = id;
   if (runId) {
     runQuery(
-      `UPDATE bottling_runs SET batch_number=?, source_barrel_id=?, source_holding_tank_equipment_id=?, source_volume_gal=?, bottled_volume_gal=?, volume_variance_gal=?, variance_reason=?, variance_changed_by=?, source_run_id=?, bottling_date=?, packaging_bottle=?, bottle_size_ml=?, bottle_count=?, final_abv=?, product_name=?, lot_number=?, notes=? WHERE id=?`,
-      [header.batch_number, sourceBarrelId, sourceTankId, header.source_volume_gal, header.bottled_volume_gal, header.volume_variance_gal, header.variance_reason, header.variance_changed_by, header.source_run_id, header.bottling_date, header.packaging_bottle, header.bottle_size_ml, header.bottle_count, header.final_abv, header.product_name, header.lot_number, header.notes, runId],
+      `UPDATE bottling_runs SET batch_number=?, source_barrel_id=?, source_holding_tank_equipment_id=?, source_volume_gal=?, bottled_volume_gal=?, volume_variance_gal=?, variance_reason=?, variance_changed_by=?, return_holding_tank_equipment_id=?, return_volume_gal=?, source_run_id=?, bottling_date=?, packaging_bottle=?, bottle_size_ml=?, bottle_count=?, final_abv=?, product_name=?, lot_number=?, notes=? WHERE id=?`,
+      [header.batch_number, sourceBarrelId, sourceTankId, header.source_volume_gal, header.bottled_volume_gal, header.volume_variance_gal, header.variance_reason, header.variance_changed_by, header.return_holding_tank_equipment_id, header.return_volume_gal, header.source_run_id, header.bottling_date, header.packaging_bottle, header.bottle_size_ml, header.bottle_count, header.final_abv, header.product_name, header.lot_number, header.notes, runId],
     );
     persistBottlingRunLines(runId, activeLines);
   } else {
     runId = insertRow(
-      `INSERT INTO bottling_runs (batch_number, source_barrel_id, source_holding_tank_equipment_id, source_volume_gal, bottled_volume_gal, volume_variance_gal, variance_reason, variance_changed_by, source_run_id, bottling_date, packaging_bottle, bottle_size_ml, bottle_count, final_abv, product_name, lot_number, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [header.batch_number, sourceBarrelId, sourceTankId, header.source_volume_gal, header.bottled_volume_gal, header.volume_variance_gal, header.variance_reason, header.variance_changed_by, header.source_run_id, header.bottling_date, header.packaging_bottle, header.bottle_size_ml, header.bottle_count, header.final_abv, header.product_name, header.lot_number, header.notes],
+      `INSERT INTO bottling_runs (batch_number, source_barrel_id, source_holding_tank_equipment_id, source_volume_gal, bottled_volume_gal, volume_variance_gal, variance_reason, variance_changed_by, return_holding_tank_equipment_id, return_volume_gal, source_run_id, bottling_date, packaging_bottle, bottle_size_ml, bottle_count, final_abv, product_name, lot_number, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [header.batch_number, sourceBarrelId, sourceTankId, header.source_volume_gal, header.bottled_volume_gal, header.volume_variance_gal, header.variance_reason, header.variance_changed_by, header.return_holding_tank_equipment_id, header.return_volume_gal, header.source_run_id, header.bottling_date, header.packaging_bottle, header.bottle_size_ml, header.bottle_count, header.final_abv, header.product_name, header.lot_number, header.notes],
     );
     persistBottlingRunLines(runId, activeLines);
   }

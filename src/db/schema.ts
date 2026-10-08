@@ -212,6 +212,8 @@ CREATE TABLE IF NOT EXISTS bottling_runs (
   volume_variance_gal REAL,
   variance_reason TEXT,
   variance_changed_by TEXT,
+  return_holding_tank_equipment_id INTEGER REFERENCES floor_equipment(id),
+  return_volume_gal REAL,
   source_run_id INTEGER REFERENCES distillation_runs(id),
   bottling_date TEXT NOT NULL,
   packaging_bottle TEXT NOT NULL DEFAULT '',
