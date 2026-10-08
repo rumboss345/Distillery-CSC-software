@@ -5,6 +5,7 @@ import {
   bottlingReturnsError,
   bottlingReturnsTotalGal,
   bottlingVolumeVarianceGal,
+  reportedBottlingVarianceGal,
   formatLinesSummary,
   isRumBottlingProduct,
   lineVolumeGal,
@@ -51,6 +52,26 @@ describe('bottling-lines', () => {
       '750mL 7F': 20,
       '375mL Oslo': -48,
     });
+  });
+
+  it('does not treat gallons sent to a tank as a loss', () => {
+    expect(reportedBottlingVarianceGal({
+      source_volume_gal: 25,
+      bottled_volume_gal: 10,
+      volume_variance_gal: -15,
+      returns: [{ volume_gal: 15 }],
+    })).toBeCloseTo(0, 5);
+    expect(reportedBottlingVarianceGal({
+      source_volume_gal: 25,
+      bottled_volume_gal: 10,
+      volume_variance_gal: -15,
+      return_volume_gal: 5,
+    })).toBeCloseTo(-10, 5);
+    expect(reportedBottlingVarianceGal({
+      source_volume_gal: 25,
+      bottled_volume_gal: 10,
+      volume_variance_gal: -15,
+    })).toBeCloseTo(-15, 5);
   });
 
   it('counts bottled gallons and gallons sent to a tank against the source', () => {

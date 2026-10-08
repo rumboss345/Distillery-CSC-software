@@ -20,7 +20,7 @@ export function BottlingReportPage() {
   return (
     <ReportTableShell
       title="Packaging & bottling"
-      description="Bottling runs with tank draw, bottled volume, LAA, and variance. The Bottling page keeps the latest 10 runs."
+      description="Bottling runs with tank draw, bottled volume, LAA, and variance. Gallons sent to a tank are not a loss. The Bottling page keeps the latest 10 runs."
       periodLabel={range.label}
       csvFilename={`bottling-${range.from ?? 'all'}`}
       csvHeaders={csvHeaders}

@@ -1,6 +1,7 @@
 import { queryAll } from '../../db/database';
 import { getBlendProducts, getBottlingRuns, getHoldingTankVolumeVariances } from '../../db/queries';
 import { compareStoredDatesDesc } from '../date-input';
+import { reportedBottlingVarianceGal } from '../bottling-lines';
 import { formatDistillationLossGal } from '../distillation-loss';
 import { formatTankVolumeVariance, tankReadingChanged } from '../tank-volume-variance';
 import { buildBlendReportRows } from './blend-rows';
@@ -121,7 +122,7 @@ export function buildVolumeChangeRows(range: ReportDateRange): VolumeChangeRow[]
   );
   for (const run of getBottlingRuns()) {
     if (!eventInReportRange(run.bottling_date, range)) continue;
-    const variance = run.volume_variance_gal;
+    const variance = reportedBottlingVarianceGal(run);
     if (variance != null && Math.abs(variance) >= 0.01) {
       rows.push({
         key: `bottling:${run.id}`,
@@ -223,8 +224,11 @@ function sumGallons(rows: VolumeChangeRow[]): number | null {
 }
 
 function formatKindTotal(kind: string, gallons: number): string {
-  if (kind === VOLUME_CHANGE_KINDS.leftovers || kind === VOLUME_CHANGE_KINDS.bottlingToTank) {
+  if (kind === VOLUME_CHANGE_KINDS.leftovers) {
     return `${gallons.toFixed(2)} gal`;
+  }
+  if (kind === VOLUME_CHANGE_KINDS.bottlingToTank) {
+    return `${gallons.toFixed(2)} gal sent`;
   }
   return formatTankVolumeVariance(gallons);
 }

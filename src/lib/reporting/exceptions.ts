@@ -1,7 +1,7 @@
 import { queryAll } from '../../db/database';
 import { getBottlingRuns, getEquipmentVolumeReport, getHoldingTankVolumeVariances } from '../../db/queries';
 import { formatTankVolumeVariance } from '../tank-volume-variance';
-import { totalVolumeGal } from '../bottling-lines';
+import { reportedBottlingVarianceGal, totalVolumeGal } from '../bottling-lines';
 import { buildBlendReportRows } from './blend-rows';
 import { compareStoredDatesDesc } from '../date-input';
 import { localIsoDate } from '../planned-event-date';
@@ -27,7 +27,7 @@ export function buildProductionExceptions(range: ReportDateRange): ProductionExc
 
   for (const run of getBottlingRuns()) {
     if (!eventInReportRange(run.bottling_date, range)) continue;
-    const variance = run.volume_variance_gal;
+    const variance = reportedBottlingVarianceGal(run);
     if (variance != null && Math.abs(variance) >= VARIANCE_GAL_THRESHOLD) {
       const why = run.variance_reason?.trim();
       const who = run.variance_changed_by?.trim();
@@ -37,7 +37,7 @@ export function buildProductionExceptions(range: ReportDateRange): ProductionExc
         category: 'Bottling variance',
         occurred_at: run.bottling_date,
         reference: run.batch_number,
-        message: `Tank draw vs bottled differs by ${variance > 0 ? '+' : ''}${variance.toFixed(2)} gal (${run.product_name})${why ? `. ${why}` : ''}${who ? ` Changed by ${who}.` : '.'}`,
+        message: `Bottling variance is ${variance > 0 ? '+' : ''}${variance.toFixed(2)} gal after gallons sent to a tank (${run.product_name})${why ? `. ${why}` : ''}${who ? ` Changed by ${who}.` : '.'}`,
       });
     }
   }

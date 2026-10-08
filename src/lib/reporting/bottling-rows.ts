@@ -1,6 +1,6 @@
 import { getBottlingRuns } from '../../db/queries';
 import { compareStoredDatesDesc } from '../date-input';
-import { totalVolumeGal } from '../bottling-lines';
+import { reportedBottlingVarianceGal, totalVolumeGal } from '../bottling-lines';
 import { laaGalFromVolumeAbv, roundVolume } from './alcohol-units';
 import { eventInReportRange, type ReportDateRange } from './period';
 
@@ -68,7 +68,7 @@ export function buildBottlingReportRows(range: ReportDateRange): BottlingReportR
       bottled_laa_gal: laaGalFromVolumeAbv(bottled, run.final_abv),
       bottle_count: run.lines.reduce((s, l) => s + l.bottle_count, 0) || run.bottle_count,
       packaging_summary: packagingSummary(run.lines),
-      volume_variance_gal: run.volume_variance_gal,
+      volume_variance_gal: reportedBottlingVarianceGal(run),
       variance_reason: run.variance_reason?.trim() || null,
       variance_changed_by: run.variance_changed_by?.trim() || null,
     });
