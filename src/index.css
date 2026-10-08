@@ -849,6 +849,23 @@ tr:hover td {
   background: var(--bg-hover);
 }
 
+tr.volume-change-kind td {
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-elevated));
+  border-bottom: 1px solid var(--border);
+}
+
+tr.volume-change-kind:hover td {
+  background: color-mix(in srgb, var(--accent) 16%, var(--bg-elevated));
+}
+
+.volume-change-kind-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  font-weight: 700;
+}
+
 .td-actions {
   display: flex;
   gap: 0.35rem;

@@ -7,6 +7,32 @@ import { buildBlendReportRows } from './blend-rows';
 import { buildDistillationReportRows } from './distillation-rows';
 import { eventInReportRange, type ReportDateRange } from './period';
 
+export const VOLUME_CHANGE_KINDS = {
+  leftovers: 'Fermenter leftovers',
+  setVolume: 'Set volume',
+  bottlingVariance: 'Bottling variance',
+  bottlingToTank: 'Bottling to tank',
+  blend: 'Blend volume',
+  distillation: 'Distillation loss',
+} as const;
+
+const KIND_ORDER: readonly string[] = [
+  VOLUME_CHANGE_KINDS.leftovers,
+  VOLUME_CHANGE_KINDS.setVolume,
+  VOLUME_CHANGE_KINDS.bottlingVariance,
+  VOLUME_CHANGE_KINDS.bottlingToTank,
+  VOLUME_CHANGE_KINDS.blend,
+  VOLUME_CHANGE_KINDS.distillation,
+];
+
+/** Kinds whose signed gallons add into the summary Volume variances box. */
+const VARIANCE_TOTAL_KINDS = new Set<string>([
+  VOLUME_CHANGE_KINDS.setVolume,
+  VOLUME_CHANGE_KINDS.bottlingVariance,
+  VOLUME_CHANGE_KINDS.blend,
+  VOLUME_CHANGE_KINDS.distillation,
+]);
+
 export interface VolumeChangeRow {
   key: string;
   occurred_at: string;
@@ -15,6 +41,19 @@ export interface VolumeChangeRow {
   change: string;
   why: string;
   who: string;
+  /**
+   * Gallons for this row. Set volume, bottling variance, and blend volume are
+   * signed (positive means more than the record). Distillation loss is signed
+   * the same way: a shortfall is negative. Leftovers and bottling-to-tank
+   * amounts are positive gallons moved, and they stay out of the summary total.
+   */
+  gallons: number | null;
+}
+
+export interface VolumeChangeGroup {
+  kind: string;
+  rows: VolumeChangeRow[];
+  totalLabel: string;
 }
 
 function shown(value: string | null | undefined): string {
@@ -42,11 +81,12 @@ export function buildVolumeChangeRows(range: ReportDateRange): VolumeChangeRow[]
     rows.push({
       key: `leftover:${row.id}`,
       occurred_at: row.discarded_date,
-      kind: 'Fermenter leftovers',
+      kind: VOLUME_CHANGE_KINDS.leftovers,
       place: row.fermenter_name || 'Fermenter',
       change: `${row.volume_gal.toFixed(1)} gal from ${row.batch_number || 'wash'}`,
       why: shown(row.notes),
       who: shown(row.changed_by),
+      gallons: row.volume_gal,
     });
   }
 
@@ -67,11 +107,12 @@ export function buildVolumeChangeRows(range: ReportDateRange): VolumeChangeRow[]
     rows.push({
       key: `set:${variance.id}`,
       occurred_at: variance.recorded_at,
-      kind: 'Set volume',
+      kind: VOLUME_CHANGE_KINDS.setVolume,
       place: variance.tank_name,
       change: `${variance.book_volume_gal.toFixed(2)} gal to ${variance.set_volume_gal.toFixed(2)} gal (${formatTankVolumeVariance(variance.variance_gal)})${abvNote}`,
       why: shown(variance.notes),
       who: shown(variance.changed_by),
+      gallons: variance.variance_gal,
     });
   }
 
@@ -85,11 +126,12 @@ export function buildVolumeChangeRows(range: ReportDateRange): VolumeChangeRow[]
       rows.push({
         key: `bottling:${run.id}`,
         occurred_at: run.bottling_date,
-        kind: 'Bottling variance',
+        kind: VOLUME_CHANGE_KINDS.bottlingVariance,
         place: run.batch_number,
         change: `${variance > 0 ? '+' : ''}${variance.toFixed(2)} gal vs the tank (${run.product_name})`,
         why: shown(run.variance_reason),
         who: shown(run.variance_changed_by),
+        gallons: variance,
       });
     }
     const returnedLines = (run.returns && run.returns.length > 0)
@@ -107,11 +149,12 @@ export function buildVolumeChangeRows(range: ReportDateRange): VolumeChangeRow[]
       rows.push({
         key: `bottling-return:${run.id}:${line.holding_tank_equipment_id}:${line.sort_order ?? index}`,
         occurred_at: run.bottling_date,
-        kind: 'Bottling to tank',
+        kind: VOLUME_CHANGE_KINDS.bottlingToTank,
         place: `${run.batch_number} · ${tankName}`,
         change: `${line.volume_gal.toFixed(2)} gal at ${run.final_abv.toFixed(1)}% ABV (${run.product_name})`,
         why: 'Product that was not bottled was sent to this tank.',
         who: shown(run.variance_changed_by),
+        gallons: line.volume_gal,
       });
     });
   }
@@ -120,6 +163,9 @@ export function buildVolumeChangeRows(range: ReportDateRange): VolumeChangeRow[]
   for (const blend of buildBlendReportRows(range)) {
     const abvDelta = blend.theoretical_abv != null ? blend.final_abv - blend.theoretical_abv : null;
     const volumeMoved = blend.volume_variance_pct != null && Math.abs(blend.volume_variance_pct) >= 0.1;
+    const gallonDelta = blend.theoretical_volume_gal != null
+      ? Math.round((blend.final_volume_gal - blend.theoretical_volume_gal) * 1000) / 1000
+      : null;
     const abvMoved = abvDelta != null && Math.abs(abvDelta) >= 0.1;
     if (!volumeMoved && !abvMoved) continue;
     const parts: string[] = [];
@@ -132,11 +178,12 @@ export function buildVolumeChangeRows(range: ReportDateRange): VolumeChangeRow[]
     rows.push({
       key: `blend:${blend.blend_id}`,
       occurred_at: blend.executed_at ?? blend.blend_date,
-      kind: 'Blend volume',
+      kind: VOLUME_CHANGE_KINDS.blend,
       place: blend.output_tank === '—' ? blend.batch_number : `${blend.batch_number} · ${blend.output_tank}`,
       change: parts.join('; '),
       why: shown(blendNotes.get(blend.blend_id)),
       who: shown(blend.operator === '—' ? '' : blend.operator),
+      gallons: volumeMoved ? gallonDelta : null,
     });
   }
 
@@ -150,14 +197,67 @@ export function buildVolumeChangeRows(range: ReportDateRange): VolumeChangeRow[]
     rows.push({
       key: `distillation:${run.run_id}`,
       occurred_at: run.run_date,
-      kind: 'Distillation loss',
+      kind: VOLUME_CHANGE_KINDS.distillation,
       place: run.batch_number,
       change: `Loss ${formatDistillationLossGal(run.alcohol_loss_gal)} alcohol (${(run.alcohol_charged_gal ?? 0).toFixed(2)} gal charged, ${(run.alcohol_collected_gal ?? 0).toFixed(2)} gal collected)`,
       why,
       who: shown(run.operator === '—' ? '' : run.operator),
+      gallons: -run.alcohol_loss_gal,
     });
   }
 
   rows.sort((a, b) => compareStoredDatesDesc(a.occurred_at, b.occurred_at));
   return rows;
+}
+
+function sumGallons(rows: VolumeChangeRow[]): number | null {
+  let seen = false;
+  let total = 0;
+  for (const row of rows) {
+    if (row.gallons == null) continue;
+    seen = true;
+    total += row.gallons;
+  }
+  if (!seen) return null;
+  return Math.round(total * 1000) / 1000;
+}
+
+function formatKindTotal(kind: string, gallons: number): string {
+  if (kind === VOLUME_CHANGE_KINDS.leftovers || kind === VOLUME_CHANGE_KINDS.bottlingToTank) {
+    return `${gallons.toFixed(2)} gal`;
+  }
+  return formatTankVolumeVariance(gallons);
+}
+
+/** Net gallons for the summary box: set volume, bottling variance, blend volume, and distillation loss. */
+export function totalVolumeVarianceGal(rows: VolumeChangeRow[]): number {
+  let total = 0;
+  for (const row of rows) {
+    if (row.gallons == null || !VARIANCE_TOTAL_KINDS.has(row.kind)) continue;
+    total += row.gallons;
+  }
+  return Math.round(total * 1000) / 1000;
+}
+
+export function groupVolumeChanges(rows: VolumeChangeRow[]): VolumeChangeGroup[] {
+  const byKind = new Map<string, VolumeChangeRow[]>();
+  for (const row of rows) {
+    const list = byKind.get(row.kind) ?? [];
+    list.push(row);
+    byKind.set(row.kind, list);
+  }
+
+  const known = KIND_ORDER.filter((kind) => byKind.has(kind));
+  const extra = [...byKind.keys()].filter((kind) => !KIND_ORDER.includes(kind)).sort();
+
+  return [...known, ...extra].map((kind) => {
+    const groupRows = [...(byKind.get(kind) ?? [])].sort(
+      (a, b) => compareStoredDatesDesc(a.occurred_at, b.occurred_at),
+    );
+    const gallons = sumGallons(groupRows);
+    const totalLabel = gallons == null
+      ? `${groupRows.length} change${groupRows.length === 1 ? '' : 's'}`
+      : formatKindTotal(kind, gallons);
+    return { kind, rows: groupRows, totalLabel };
+  });
 }

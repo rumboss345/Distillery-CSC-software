@@ -13,6 +13,8 @@ import { equipmentTypeLabel } from '../../lib/equipment';
 import { totalVolumeGal } from '../../lib/bottling-lines';
 import { queryAll } from '../../db/database';
 import { eventInReportRange } from '../../lib/reporting/period';
+import { buildVolumeChangeRows, totalVolumeVarianceGal } from '../../lib/reporting/volume-changes';
+import { formatTankVolumeVariance } from '../../lib/tank-volume-variance';
 import { useReportContext } from './report-context';
 
 export function SummaryReport() {
@@ -49,6 +51,7 @@ export function SummaryReport() {
   const filteredBottlings = bottlings.filter((b) => eventInReportRange(b.bottling_date, range));
 
   const completedMashes = filteredMashes.filter((m) => m.status === 'complete').length;
+  const volumeVarianceGal = totalVolumeVarianceGal(buildVolumeChangeRows(range));
   const completedRuns = filteredRuns.filter((r) => r.status === 'complete').length;
   const avgYield = yields.length > 0
     ? yields.reduce((s, y) => s + y.yieldPercent, 0) / yields.length
@@ -73,6 +76,10 @@ export function SummaryReport() {
         <div className="stat-card">
           <div className="label">Completed Washes</div>
           <div className="value">{completedMashes}</div>
+        </div>
+        <div className="stat-card" data-testid="summary-volume-variance">
+          <div className="label">Volume variances</div>
+          <div className="value">{formatTankVolumeVariance(volumeVarianceGal)}</div>
         </div>
         <div className="stat-card">
           <div className="label">Completed Runs</div>
