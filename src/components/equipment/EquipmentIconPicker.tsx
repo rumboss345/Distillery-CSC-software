@@ -1,10 +1,9 @@
-import { EQUIPMENT_ICONS } from '../../lib/equipment';
-import type { EquipmentType } from '../../types';
+import { EQUIPMENT_ICONS, type EquipmentIcon } from '../../lib/equipment';
 import { EquipmentVisual } from './EquipmentVisual';
 import type { EquipmentVisualData } from './equipment-visual.types';
 
-function previewData(icon: EquipmentType, label: string): EquipmentVisualData {
-  const tank = icon === 'holding_tank' || icon === 'stillage_tank' || icon === 'collection_vessel';
+function previewData(icon: EquipmentIcon, label: string): EquipmentVisualData {
+  const tank = icon === 'holding_tank' || icon === 'jug' || icon === 'stillage_tank' || icon === 'collection_vessel';
   const fermenter = icon === 'fermenter';
   const wash = icon === 'mash_tun';
   const still = icon === 'pot_still' || icon === 'column_still';
@@ -42,7 +41,7 @@ export function EquipmentIconPicker({
   onChange,
 }: {
   value: string;
-  onChange: (icon: EquipmentType) => void;
+  onChange: (icon: EquipmentIcon) => void;
 }) {
   return (
     <div className="equipment-icon-picker" role="radiogroup" aria-label="Equipment icon">

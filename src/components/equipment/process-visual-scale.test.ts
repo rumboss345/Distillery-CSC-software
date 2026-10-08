@@ -4,6 +4,7 @@ import { processEquipmentVisualScale } from './process-visual-scale';
 describe('processEquipmentVisualScale', () => {
   it('applies process canvas scale per equipment type', () => {
     expect(processEquipmentVisualScale('holding_tank')).toBe(0.9);
+    expect(processEquipmentVisualScale('jug')).toBe(0.9);
     expect(processEquipmentVisualScale('collection_vessel')).toBe(0.9);
     expect(processEquipmentVisualScale('fermenter')).toBe(1.1);
     expect(processEquipmentVisualScale('pot_still')).toBe(1);

@@ -31,9 +31,10 @@ import {
   isBuiltInEquipmentType,
   isLiquidVesselEquipmentType,
   resolveEquipmentIcon,
+  type EquipmentIcon,
 } from '../lib/equipment';
 import { equipmentTypeDeleteError } from '../lib/equipment-type';
-import type { EquipmentStatus, EquipmentType, FloorEquipment } from '../types';
+import type { EquipmentStatus, FloorEquipment } from '../types';
 
 const emptyEquipment = (planId: number, type = 'fermenter'): Omit<FloorEquipment, 'id' | 'created_at'> => {
   const defaults = equipmentTypeDefaults(type);
@@ -79,7 +80,7 @@ export function FloorPlanPage() {
   const [viewMode, setViewMode] = useState<'process' | 'classic'>('process');
   const [showTypeForm, setShowTypeForm] = useState(false);
   const [typeName, setTypeName] = useState('');
-  const [typeIcon, setTypeIcon] = useState<EquipmentType>('other');
+  const [typeIcon, setTypeIcon] = useState<EquipmentIcon>('other');
   const [typeError, setTypeError] = useState('');
   const equipmentTypes = getEquipmentTypeOptions();
   const customEquipmentTypes = getCustomEquipmentTypes();
@@ -154,8 +155,23 @@ export function FloorPlanPage() {
     });
   };
 
-  const handleIconPick = (icon: EquipmentType) => {
-    if (isBuiltInEquipmentType(form.equipment_type)) {
+  const handleIconPick = (icon: EquipmentIcon) => {
+    if (icon === 'jug') {
+      const alreadyTank = form.equipment_type === 'holding_tank';
+      const defaults = equipmentTypeDefaults('holding_tank');
+      setForm({
+        ...form,
+        equipment_type: 'holding_tank',
+        icon: 'jug',
+        ...(alreadyTank ? {} : {
+          width_ft: defaults.width_ft,
+          depth_ft: defaults.depth_ft,
+          capacity_gal: defaults.capacity_gal,
+        }),
+      });
+      return;
+    }
+    if (isBuiltInEquipmentType(form.equipment_type) && isBuiltInEquipmentType(icon)) {
       handleTypeChange(icon);
       return;
     }
@@ -525,7 +541,7 @@ export function FloorPlanPage() {
               <label>Icon</label>
               <EquipmentIconPicker value={resolveEquipmentIcon(form.icon, form.equipment_type)} onChange={handleIconPick} />
               <p className="form-hint">
-                Tanks, fermenters, wash tanks, and stills show how full they are and the liquid inside.
+                Tanks, jugs, fermenters, wash tanks, and stills show how full they are and the liquid inside. A jug keeps holding-tank gallons and ABV.
               </p>
             </div>
             <div className="form-group">
@@ -617,7 +633,7 @@ export function FloorPlanPage() {
           {typeError && <div className="auth-error">{typeError}</div>}
           <p className="form-hint">
             The new type is available when you add equipment and gets its own section on the process view.
-            Pick the picture it should use. Tank icons still show how full they are.
+            Pick the picture it should use. Tank and jug pictures show how full they are. A jug acts as a holding tank.
           </p>
           <h4 className="equipment-type-list-title">Added types</h4>
           {customEquipmentTypes.length === 0 ? (

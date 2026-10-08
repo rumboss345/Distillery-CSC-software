@@ -51,6 +51,7 @@ describe('buildEquipmentVisualData fermenter est. ABV', () => {
   it('uses a saved icon and otherwise matches the equipment type', () => {
     expect(buildEquipmentVisualData(fermenterView()).icon).toBe('fermenter');
     expect(buildEquipmentVisualData(fermenterView({ icon: 'pump' })).icon).toBe('pump');
+    expect(buildEquipmentVisualData(fermenterView({ equipment_type: 'holding_tank', icon: 'jug' })).icon).toBe('jug');
     expect(buildEquipmentVisualData(fermenterView({ equipment_type: 'Gin basket', icon: 'pot_still' })).icon).toBe('pot_still');
   });
 });

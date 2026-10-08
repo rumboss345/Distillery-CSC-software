@@ -167,6 +167,7 @@ export function FloorCanvas({
                 {icon === 'mash_tun' && <div className="eq-shape eq-mash-tun" />}
                 {icon === 'pump' && <div className="eq-shape eq-pump" />}
                 {icon === 'hose' && <div className="eq-shape eq-hose" />}
+                {icon === 'jug' && <div className="eq-shape eq-jug" />}
                 {(icon === 'holding_tank' || icon === 'stillage_tank' || icon === 'collection_vessel' || icon === 'boiler' || icon === 'other') && (
                   <div className="eq-shape eq-tank" />
                 )}
