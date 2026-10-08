@@ -14,7 +14,7 @@ import { BlendDesigner } from '../components/BlendDesigner';
 import { BlendRecipesTab } from '../components/BlendRecipesTab';
 import { GinRecipesTab } from '../components/GinRecipesTab';
 import { useAuth } from '../context/AuthContext';
-import { RECIPE_EXPORT_HEADERS, buildRecipeExportRows } from '../lib/recipe-export';
+import { buildRecipeExport } from '../lib/recipe-export';
 import { downloadCsv, rowsToCsv } from '../lib/reporting/csv';
 import {
   emptyRecipeNutrient,
@@ -121,16 +121,16 @@ export function Recipes() {
   };
 
   const exportRecipes = () => {
-    const rows = buildRecipeExportRows({
+    const sheet = buildRecipeExport({
       wash: canWash ? recipes : [],
       gin: canGin ? getGinRecipes() : [],
       blend: canBlend ? getBlendRecipes() : [],
     });
-    if (rows.length === 0) {
+    if (sheet.rows.length === 0) {
       alert('No recipes to export.');
       return;
     }
-    downloadCsv('recipes', rowsToCsv([...RECIPE_EXPORT_HEADERS], rows));
+    downloadCsv('recipes', rowsToCsv(sheet.headers, sheet.rows));
   };
 
   const handleDelete = (id: number) => {
