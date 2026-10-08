@@ -65,6 +65,47 @@ export function totalBottleCount(lines: BottlingLineAmount[]): number {
   return lines.reduce((sum, line) => sum + (line.bottle_count > 0 ? line.bottle_count : 0), 0);
 }
 
+/** Bottled gallons plus gallons sent to another tank, minus the gallons drawn from the source. */
+export function bottlingVolumeVarianceGal(sourceGal: number, bottledGal: number, returnGal: number): number {
+  const returned = Number.isFinite(returnGal) && returnGal > 0 ? returnGal : 0;
+  return bottledGal + returned - sourceGal;
+}
+
+export function bottlingReturnError(input: {
+  returnGal: number;
+  unbottledGal: number;
+  destTankId: number | null;
+  sourceTankId: number | null;
+  destName?: string;
+  destVolumeGal?: number;
+  destCapacityGal?: number;
+}): string | null {
+  const gallons = input.returnGal;
+  const sending = Number.isFinite(gallons) && gallons > 0.001;
+  if (!sending) {
+    if (input.destTankId) return 'Enter how many gallons go to the tank.';
+    return null;
+  }
+  if (!input.destTankId) return 'Choose the tank that receives the product that is not bottled.';
+  if (input.destTankId === input.sourceTankId) {
+    return 'Choose a different tank than the one you are bottling from.';
+  }
+  const left = Math.max(0, input.unbottledGal);
+  if (gallons > left + 0.01) {
+    return `Only ${left.toFixed(2)} gal is left after bottling.`;
+  }
+  const capacity = input.destCapacityGal ?? 0;
+  if (capacity > 0) {
+    const destVolume = input.destVolumeGal ?? 0;
+    if (destVolume + gallons > capacity + 0.01) {
+      const room = Math.max(0, capacity - destVolume);
+      const name = input.destName?.trim() || 'That tank';
+      return `${name} only has ${room.toFixed(1)} gal of room left.`;
+    }
+  }
+  return null;
+}
+
 export function maxBottlesFromGallons(remainingGal: number, sizeMl: number): number {
   if (remainingGal <= 0 || sizeMl <= 0) return 0;
   const galPerBottle = mlToGallons(sizeMl);

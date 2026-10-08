@@ -75,19 +75,36 @@ export function buildVolumeChangeRows(range: ReportDateRange): VolumeChangeRow[]
     });
   }
 
+  const tankNames = new Map(
+    queryAll<{ id: number; name: string }>('SELECT id, name FROM floor_equipment').map((tank) => [tank.id, tank.name]),
+  );
   for (const run of getBottlingRuns()) {
     if (!eventInReportRange(run.bottling_date, range)) continue;
     const variance = run.volume_variance_gal;
-    if (variance == null || Math.abs(variance) < 0.01) continue;
-    rows.push({
-      key: `bottling:${run.id}`,
-      occurred_at: run.bottling_date,
-      kind: 'Bottling variance',
-      place: run.batch_number,
-      change: `${variance > 0 ? '+' : ''}${variance.toFixed(2)} gal vs the tank (${run.product_name})`,
-      why: shown(run.variance_reason),
-      who: shown(run.variance_changed_by),
-    });
+    if (variance != null && Math.abs(variance) >= 0.01) {
+      rows.push({
+        key: `bottling:${run.id}`,
+        occurred_at: run.bottling_date,
+        kind: 'Bottling variance',
+        place: run.batch_number,
+        change: `${variance > 0 ? '+' : ''}${variance.toFixed(2)} gal vs the tank (${run.product_name})`,
+        why: shown(run.variance_reason),
+        who: shown(run.variance_changed_by),
+      });
+    }
+    const returned = run.return_volume_gal ?? 0;
+    if (returned >= 0.01 && run.return_holding_tank_equipment_id) {
+      const tankName = tankNames.get(run.return_holding_tank_equipment_id) ?? 'tank';
+      rows.push({
+        key: `bottling-return:${run.id}`,
+        occurred_at: run.bottling_date,
+        kind: 'Bottling to tank',
+        place: `${run.batch_number} · ${tankName}`,
+        change: `${returned.toFixed(2)} gal at ${run.final_abv.toFixed(1)}% ABV (${run.product_name})`,
+        why: 'Product that was not bottled was sent to this tank.',
+        who: shown(run.variance_changed_by),
+      });
+    }
   }
 
   const blendNotes = new Map(getBlendProducts().map((product) => [product.id, product.notes]));
