@@ -237,6 +237,17 @@ CREATE TABLE IF NOT EXISTS bottling_run_lines (
 
 CREATE INDEX IF NOT EXISTS idx_bottling_run_lines_run ON bottling_run_lines(bottling_run_id);
 
+CREATE TABLE IF NOT EXISTS bottling_run_returns (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  bottling_run_id INTEGER NOT NULL REFERENCES bottling_runs(id) ON DELETE CASCADE,
+  holding_tank_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
+  volume_gal REAL NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_bottling_run_returns_run ON bottling_run_returns(bottling_run_id);
+CREATE INDEX IF NOT EXISTS idx_bottling_run_returns_tank ON bottling_run_returns(holding_tank_equipment_id);
+
 CREATE TABLE IF NOT EXISTS blend_recipes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL UNIQUE COLLATE NOCASE,

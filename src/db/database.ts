@@ -1359,6 +1359,7 @@ function migrateAdvancedBlending(): void {
   migrateVolumeChangeAuditColumns();
   migrateDistillationAlcoholLossColumns();
   migrateBottlingReturnTankColumns();
+  migrateBottlingRunReturns();
 }
 
 /** Product left after bottling can be sent to another tank. Existing runs stay blank. */
@@ -1366,6 +1367,30 @@ function migrateBottlingReturnTankColumns(): void {
   if (!db) return;
   addColumnIfMissing('bottling_runs', 'return_holding_tank_equipment_id', 'INTEGER');
   addColumnIfMissing('bottling_runs', 'return_volume_gal', 'REAL');
+}
+
+/** One bottling run can send leftover spirit to more than one tank. */
+function migrateBottlingRunReturns(): void {
+  if (!db) return;
+  db.run(`
+    CREATE TABLE IF NOT EXISTS bottling_run_returns (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      bottling_run_id INTEGER NOT NULL REFERENCES bottling_runs(id) ON DELETE CASCADE,
+      holding_tank_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
+      volume_gal REAL NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+  db.run('CREATE INDEX IF NOT EXISTS idx_bottling_run_returns_run ON bottling_run_returns(bottling_run_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_bottling_run_returns_tank ON bottling_run_returns(holding_tank_equipment_id)');
+  db.run(`
+    INSERT INTO bottling_run_returns (bottling_run_id, holding_tank_equipment_id, volume_gal, sort_order)
+    SELECT id, return_holding_tank_equipment_id, return_volume_gal, 0
+    FROM bottling_runs
+    WHERE return_holding_tank_equipment_id IS NOT NULL
+      AND COALESCE(return_volume_gal, 0) > 0
+      AND id NOT IN (SELECT bottling_run_id FROM bottling_run_returns)
+  `);
 }
 
 /** Who made a volume or ABV correction, and why. Existing rows stay blank. */

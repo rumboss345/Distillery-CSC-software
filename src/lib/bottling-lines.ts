@@ -71,6 +71,62 @@ export function bottlingVolumeVarianceGal(sourceGal: number, bottledGal: number,
   return bottledGal + returned - sourceGal;
 }
 
+export interface BottlingReturnCheck {
+  tankId: number | null;
+  gallons: number;
+  name?: string;
+  destVolumeGal?: number;
+  destCapacityGal?: number;
+}
+
+export function bottlingReturnsTotalGal(returns: { gallons: number }[]): number {
+  return returns.reduce((sum, line) => {
+    const gallons = line.gallons;
+    return sum + (Number.isFinite(gallons) && gallons > 0 ? gallons : 0);
+  }, 0);
+}
+
+/** Reject a split of unbottled gallons across one or more destination tanks. */
+export function bottlingReturnsError(input: {
+  returns: BottlingReturnCheck[];
+  unbottledGal: number;
+  sourceTankId: number | null;
+}): string | null {
+  const active = input.returns.filter((line) => {
+    const sending = Number.isFinite(line.gallons) && line.gallons > 0.001;
+    return sending || line.tankId != null;
+  });
+  const seen = new Set<number>();
+  let total = 0;
+  for (const line of active) {
+    const sending = Number.isFinite(line.gallons) && line.gallons > 0.001;
+    const name = line.name?.trim() || 'That tank';
+    if (!sending) {
+      return line.name?.trim()
+        ? `Enter how many gallons go to ${line.name.trim()}.`
+        : 'Enter how many gallons go to the tank.';
+    }
+    if (!line.tankId) return 'Choose the tank that receives the product that is not bottled.';
+    if (line.tankId === input.sourceTankId) {
+      return 'Choose a different tank than the one you are bottling from.';
+    }
+    if (seen.has(line.tankId)) return `${name} is already selected. Pick each tank once.`;
+    seen.add(line.tankId);
+    total += line.gallons;
+    const capacity = line.destCapacityGal ?? 0;
+    if (capacity > 0) {
+      const destVolume = line.destVolumeGal ?? 0;
+      if (destVolume + line.gallons > capacity + 0.01) {
+        const room = Math.max(0, capacity - destVolume);
+        return `${name} only has ${room.toFixed(1)} gal of room left.`;
+      }
+    }
+  }
+  const left = Math.max(0, input.unbottledGal);
+  if (total > left + 0.01) return `Only ${left.toFixed(2)} gal is left after bottling.`;
+  return null;
+}
+
 export function bottlingReturnError(input: {
   returnGal: number;
   unbottledGal: number;
