@@ -1,5 +1,6 @@
 import type { EquipmentVisualProps } from './equipment-visual.types';
 import { TankVisual } from './TankVisual';
+import { JugVisual } from './JugVisual';
 import { tankVisualDataFromVisualData } from './tank-visual-data';
 import { FermenterVisual } from './FermenterVisual';
 import { StillVisual } from './StillVisual';
@@ -20,6 +21,19 @@ export function EquipmentVisual(props: EquipmentVisualProps) {
   const kind = view.data.icon || view.data.equipmentType;
 
   switch (kind) {
+    case 'jug':
+      return (
+        <JugVisual
+          tank={tankVisualDataFromVisualData(view.data)}
+          selected={view.selected}
+          size={view.size}
+          scaleMultiplier={view.scaleMultiplier}
+          labelStyle={view.labelStyle}
+          onClick={view.onClick}
+          className={view.className}
+          preview={view.preview}
+        />
+      );
     case 'holding_tank':
     case 'stillage_tank':
     case 'collection_vessel':
