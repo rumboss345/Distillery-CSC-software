@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { format } from 'date-fns';
-import { getProductionSummary, getMashBatches, getDistillationRuns, getBarrels, getInventoryItems, resetAllData } from '../db/queries';
+import { getProductionSummary, getMashBatches, getDistillationRuns, getBarrels, getInventoryItems } from '../db/queries';
 import { StatusBadge } from '../components/StatusBadge';
 import { useAuth } from '../context/AuthContext';
 import { formatDateDisplay } from '../lib/date-input';
@@ -15,16 +15,6 @@ export function Dashboard() {
   const recentRuns = getDistillationRuns().slice(0, 3);
   const agingBarrels = getBarrels().filter((b) => b.status === 'aging').slice(0, 3);
   const lowStock = getInventoryItems().filter((i) => i.quantity <= i.reorder_level);
-
-  const handleClearAllData = () => {
-    if (!confirm('Clear ALL distillery data? This removes washes, runs, blends, barrels, bottling, inventory, and floor plan records.')) {
-      return;
-    }
-    if (!confirm('This cannot be undone. Clear everything and reset to sample data?')) {
-      return;
-    }
-    void resetAllData();
-  };
 
   return (
     <div>
@@ -201,15 +191,6 @@ export function Dashboard() {
         </div>
       )}
 
-      <div className="section data-management-section">
-        <h3 className="section-title">Data Management</h3>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1rem' }}>
-          Reset the app to fresh sample data. All entered production records in this browser will be deleted.
-        </p>
-        <button type="button" className="btn btn-secondary" onClick={handleClearAllData}>
-          Clear all data
-        </button>
-      </div>
     </div>
   );
 }
