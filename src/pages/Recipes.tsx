@@ -212,104 +212,103 @@ export function Recipes() {
       <div className="page-header">
         <h2>Recipes</h2>
         <p>Saved wash, gin, and blend formulas you can run again</p>
-        <div className="page-actions">
-          {tab === 'wash' && canWash && !showDesigner && (
-            <button type="button" className="btn btn-primary" onClick={openNew}>
-              + Add Wash Recipe
+      </div>
+
+      <div className="recipe-page-bar">
+        {[canWash, canGin, canBlend].filter(Boolean).length > 1 && (
+          <div className="recipe-tabs" role="tablist" aria-label="Recipe type">
+            {canWash && (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={!showDesigner && tab === 'wash'}
+                className={`recipe-tab${!showDesigner && tab === 'wash' ? ' active' : ''}`}
+                onClick={() => selectTab('wash')}
+              >
+                Wash &amp; Fermentation
+              </button>
+            )}
+            {canGin && (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={!showDesigner && tab === 'gin'}
+                className={`recipe-tab${!showDesigner && tab === 'gin' ? ' active' : ''}`}
+                onClick={() => selectTab('gin')}
+              >
+                Gin
+              </button>
+            )}
+            {canBlend && (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={!showDesigner && tab === 'blend'}
+                className={`recipe-tab${!showDesigner && tab === 'blend' ? ' active' : ''}`}
+                onClick={() => selectTab('blend')}
+              >
+                Blending
+              </button>
+            )}
+          </div>
+        )}
+
+        <div className="recipe-action-row">
+          <div className="recipe-action-cluster">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={exportRecipes}
+              data-testid="export-recipes"
+            >
+              Export recipes
             </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => importFileRef.current?.click()}
+              data-testid="import-recipes"
+            >
+              Import recipes
+            </button>
+            <input
+              ref={importFileRef}
+              type="file"
+              accept=".csv,text/csv"
+              hidden
+              data-testid="import-recipes-file"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = '';
+                if (file) void importRecipes(file);
+              }}
+            />
+          </div>
+          {canBlend && (
+            <div className="recipe-action-cluster">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={openBlendRecipe}
+                data-testid="add-blend-recipe"
+              >
+                + Add blend recipe
+              </button>
+              <button
+                type="button"
+                className={`btn ${showDesigner ? 'btn-primary' : 'btn-secondary'}`}
+                aria-pressed={showDesigner}
+                onClick={() => setShowDesigner((open) => !open)}
+                data-testid="blend-designer"
+              >
+                Blend designer
+              </button>
+            </div>
           )}
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={exportRecipes}
-            data-testid="export-recipes"
-          >
-            Export recipes
-          </button>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => importFileRef.current?.click()}
-            data-testid="import-recipes"
-          >
-            Import recipes
-          </button>
-          <input
-            ref={importFileRef}
-            type="file"
-            accept=".csv,text/csv"
-            hidden
-            data-testid="import-recipes-file"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              event.target.value = '';
-              if (file) void importRecipes(file);
-            }}
-          />
         </div>
       </div>
       {importNote && (
         <p className="field-hint" role="status" data-testid="import-recipes-result">{importNote}</p>
-      )}
-
-      {canBlend && (
-        <div className="page-actions recipe-blend-actions">
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={openBlendRecipe}
-            data-testid="add-blend-recipe"
-          >
-            + Add blend recipe
-          </button>
-          <button
-            type="button"
-            className={`btn ${showDesigner ? 'btn-primary' : 'btn-secondary'}`}
-            aria-pressed={showDesigner}
-            onClick={() => setShowDesigner((open) => !open)}
-            data-testid="blend-designer"
-          >
-            Blend designer
-          </button>
-        </div>
-      )}
-
-      {[canWash, canGin, canBlend].filter(Boolean).length > 1 && (
-        <div className="recipe-tabs" role="tablist" aria-label="Recipe type">
-          {canWash && (
-            <button
-              type="button"
-              role="tab"
-              aria-selected={!showDesigner && tab === 'wash'}
-              className={`recipe-tab${!showDesigner && tab === 'wash' ? ' active' : ''}`}
-              onClick={() => selectTab('wash')}
-            >
-              Wash &amp; Fermentation
-            </button>
-          )}
-          {canGin && (
-            <button
-              type="button"
-              role="tab"
-              aria-selected={!showDesigner && tab === 'gin'}
-              className={`recipe-tab${!showDesigner && tab === 'gin' ? ' active' : ''}`}
-              onClick={() => selectTab('gin')}
-            >
-              Gin
-            </button>
-          )}
-          {canBlend && (
-            <button
-              type="button"
-              role="tab"
-              aria-selected={!showDesigner && tab === 'blend'}
-              className={`recipe-tab${!showDesigner && tab === 'blend' ? ' active' : ''}`}
-              onClick={() => selectTab('blend')}
-            >
-              Blending
-            </button>
-          )}
-        </div>
       )}
 
       {showDesigner && canBlend ? (
@@ -318,6 +317,11 @@ export function Recipes() {
         />
       ) : tab === 'wash' && canWash && (
         <>
+          <div className="page-actions recipe-section-action">
+            <button type="button" className="btn btn-primary" onClick={openNew}>
+              + Add Wash Recipe
+            </button>
+          </div>
           {recipes.length === 0 ? (
             <div className="empty-state card">
               <p>No wash recipes yet. Create a formula to reuse when starting new wash batches.</p>
