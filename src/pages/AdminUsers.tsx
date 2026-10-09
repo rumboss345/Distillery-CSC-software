@@ -10,6 +10,7 @@ import {
   updateAdminUser,
   type AuthUser,
 } from '../lib/auth-api';
+import { resetAllData } from '../db/queries';
 import { useAuth } from '../context/AuthContext';
 import { formatRecordedAt } from '../lib/date-input';
 import {
@@ -202,6 +203,16 @@ export function AdminUsers() {
     return u.processAssignments.map((k) => PROCESS_STAGE_LABELS[k]).join(', ');
   }
 
+  function handleClearAllData() {
+    if (!confirm('Clear ALL distillery data? This removes washes, runs, blends, barrels, bottling, inventory, and floor plan records.')) {
+      return;
+    }
+    if (!confirm('This cannot be undone. Clear everything and reset to sample data?')) {
+      return;
+    }
+    void resetAllData();
+  }
+
   function formatPermissions(u: AuthUser) {
     if (u.role === 'admin') return 'Full access';
     if (u.permissions.length === 0) return 'No access';
@@ -367,6 +378,16 @@ export function AdminUsers() {
             </tbody>
           </table>
         )}
+      </div>
+
+      <div className="card admin-section" data-testid="admin-data-management">
+        <h2 className="admin-section-title">Data Management</h2>
+        <p className="admin-hint">
+          Reset the app to fresh sample data. All entered production records in this browser will be deleted.
+        </p>
+        <button type="button" className="btn btn-secondary" onClick={handleClearAllData}>
+          Clear all data
+        </button>
       </div>
 
       {editUser && (
