@@ -57,6 +57,7 @@ export function Recipes() {
   const [tab, setTab] = useState<RecipeTab>(defaultTab);
   const [showDesigner, setShowDesigner] = useState(false);
   const [openBlendForm, setOpenBlendForm] = useState(false);
+  const [openGinForm, setOpenGinForm] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<number | undefined>();
   const [form, setForm] = useState(emptyRecipe());
@@ -254,7 +255,31 @@ export function Recipes() {
         )}
 
         <div className="recipe-action-row">
-          {canBlend && (
+          {!showDesigner && tab === 'wash' && canWash && (
+            <div className="recipe-action-cluster">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={openNew}
+                data-testid="add-wash-recipe"
+              >
+                + Add Wash Recipe
+              </button>
+            </div>
+          )}
+          {!showDesigner && tab === 'gin' && canGin && (
+            <div className="recipe-action-cluster">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => setOpenGinForm(true)}
+                data-testid="add-gin-recipe"
+              >
+                + Add Gin Recipe
+              </button>
+            </div>
+          )}
+          {(showDesigner || tab === 'blend') && canBlend && (
             <div className="recipe-action-cluster">
               <button
                 type="button"
@@ -317,11 +342,6 @@ export function Recipes() {
         />
       ) : tab === 'wash' && canWash && (
         <>
-          <div className="page-actions recipe-section-action">
-            <button type="button" className="btn btn-primary" onClick={openNew}>
-              + Add Wash Recipe
-            </button>
-          </div>
           {recipes.length === 0 ? (
             <div className="empty-state card">
               <p>No wash recipes yet. Create a formula to reuse when starting new wash batches.</p>
@@ -406,7 +426,9 @@ export function Recipes() {
         </>
       )}
 
-      {!showDesigner && tab === 'gin' && canGin && <GinRecipesTab />}
+      {!showDesigner && tab === 'gin' && canGin && (
+        <GinRecipesTab openForm={openGinForm} onFormOpened={() => setOpenGinForm(false)} />
+      )}
 
       {!showDesigner && tab === 'blend' && canBlend && (
         <BlendRecipesTab openForm={openBlendForm} onFormOpened={() => setOpenBlendForm(false)} />
