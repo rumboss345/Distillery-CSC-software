@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { format } from 'date-fns';
 import { getProductionSummary, getMashBatches, getDistillationRuns, getBarrels, getInventoryItems, resetAllData } from '../db/queries';
 import { StatusBadge } from '../components/StatusBadge';
 import { useAuth } from '../context/AuthContext';
@@ -9,7 +10,7 @@ export function Dashboard() {
   const { user } = useAuth();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
-  const summary = getProductionSummary();
+  const summary = getProductionSummary(undefined, format(new Date(), 'yyyy-MM'));
   const recentMashes = getMashBatches().slice(0, 3);
   const recentRuns = getDistillationRuns().slice(0, 3);
   const agingBarrels = getBarrels().filter((b) => b.status === 'aging').slice(0, 3);
@@ -62,7 +63,7 @@ export function Dashboard() {
         <div className="stat-card">
           <div className="label">Total Hearts</div>
           <div className="value">{summary.totalHeartsGal.toFixed(1)} gal</div>
-          <div className="sub">Collected across all runs</div>
+          <div className="sub">Collected this month</div>
         </div>
         <div className="stat-card">
           <div className="label">Bottled This Month</div>

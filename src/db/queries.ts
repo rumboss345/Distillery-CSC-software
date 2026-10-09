@@ -4998,7 +4998,7 @@ export function deleteBlendProduct(id: number): void {
 
 // ── Reports & Dashboard ────────────────────────────────────
 
-export function getProductionSummary(reportMonth?: string): ProductionSummary {
+export function getProductionSummary(reportMonth?: string, heartsMonth = reportMonth): ProductionSummary {
   const activeMashes = queryOne<{ count: number }>(
     "SELECT COUNT(*) as count FROM mash_batches WHERE status IN ('mashing', 'fermenting')",
   )?.count ?? 0;
@@ -5027,13 +5027,13 @@ export function getProductionSummary(reportMonth?: string): ProductionSummary {
     "SELECT COUNT(*) as count FROM barrels WHERE status = 'aging'",
   )?.count ?? 0;
 
-  const totalHeartsGal = reportMonth
+  const totalHeartsGal = heartsMonth
     ? queryOne<{ total: number }>(
       `SELECT COALESCE(SUM(c.volume_gal), 0) as total
        FROM distillation_cuts c
        JOIN distillation_runs r ON r.id = c.distillation_run_id
        WHERE c.cut_type = 'hearts' AND strftime('%Y-%m', r.run_date) = ?`,
-      [reportMonth],
+      [heartsMonth],
     )?.total ?? 0
     : queryOne<{ total: number }>(
       "SELECT COALESCE(SUM(volume_gal), 0) as total FROM distillation_cuts WHERE cut_type = 'hearts'",
