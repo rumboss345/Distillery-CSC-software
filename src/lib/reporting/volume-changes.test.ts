@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { formatTankVolumeVariance } from '../tank-volume-variance';
 import {
   VOLUME_CHANGE_KINDS,
+  formatVolumeVarianceAbv,
   groupVolumeChanges,
+  totalVolumeVarianceAbv,
   totalVolumeVarianceGal,
   type VolumeChangeRow,
 } from './volume-changes';
@@ -15,6 +17,7 @@ function row(partial: Partial<VolumeChangeRow> & Pick<VolumeChangeRow, 'key' | '
     why: 'why',
     who: 'who',
     gallons: null,
+    abvPoints: null,
     ...partial,
   };
 }
@@ -83,5 +86,20 @@ describe('volume change groups', () => {
     ];
     expect(totalVolumeVarianceGal(rows)).toBe(-0.45);
     expect(formatTankVolumeVariance(totalVolumeVarianceGal(rows))).toBe('-0.45 gal');
+  });
+
+  it('adds set-volume and blend ABV into the summary and leaves tank returns out', () => {
+    const rows = [
+      row({ key: 'set', kind: VOLUME_CHANGE_KINDS.setVolume, gallons: 0.2, abvPoints: 1.5 }),
+      row({ key: 'blend', kind: VOLUME_CHANGE_KINDS.blend, gallons: null, abvPoints: -0.4 }),
+      row({ key: 'sent', kind: VOLUME_CHANGE_KINDS.bottlingToTank, gallons: 4, abvPoints: 8 }),
+      row({ key: 'left', kind: VOLUME_CHANGE_KINDS.leftovers, gallons: 1, abvPoints: 3 }),
+    ];
+    expect(totalVolumeVarianceAbv(rows)).toBeCloseTo(1.1, 5);
+    expect(formatVolumeVarianceAbv(totalVolumeVarianceAbv(rows))).toBe('+1.1% ABV');
+    expect(formatVolumeVarianceAbv(0)).toBe('0.0% ABV');
+    expect(formatVolumeVarianceAbv(-0.25)).toBe('-0.3% ABV');
+    const setGroup = groupVolumeChanges(rows).find((group) => group.kind === VOLUME_CHANGE_KINDS.setVolume);
+    expect(setGroup?.totalLabel).toBe('+0.20 gal, +1.5% ABV');
   });
 });
