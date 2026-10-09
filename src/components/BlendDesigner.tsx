@@ -184,18 +184,29 @@ export function BlendDesigner({ onUseForBatch }: { onUseForBatch: (recipeId: num
   };
 
   const bill = (): { spirits: BlendRecipeSpiritSourceInput[]; ingredients: BlendIngredientInput[] } | null => {
+    const inLiters = targetUnit === 'L';
+    const storedVolume = (gallons: number) => (
+      inLiters
+        ? { amount: gallons * LITERS_PER_US_GALLON, unit: 'l' }
+        : { amount: gallons, unit: 'gal' }
+    );
     const fixedSpirits = spiritComponents();
     const fixedOthers = otherComponents();
     const spiritLines: BlendRecipeSpiritSourceInput[] = fixedSpirits.map((component) => ({
       spirit_label: component.name,
       volume_gal: spiritVolumeGalFromAmount(component.amount, component.unit, component.abv ?? 0),
       abv: component.abv ?? 0,
+      entered_amount: component.amount,
+      entered_unit: component.unit === 'L' ? 'l' : component.unit,
     }));
     if (design?.ok && design.spiritGal > 0) {
+      const stored = storedVolume(design.spiritGal);
       spiritLines.push({
         spirit_label: 'Spirit',
         volume_gal: design.spiritGal,
         abv: design.spiritAbv,
+        entered_amount: stored.amount,
+        entered_unit: stored.unit,
       });
     }
     const ingredients: BlendIngredientInput[] = [];
@@ -204,11 +215,12 @@ export function BlendDesigner({ onUseForBatch }: { onUseForBatch: (recipeId: num
       ? water
       : ingredientVolumeGal({ amount: water, unit: waterUnit, ingredient_type: 'water' });
     if (waterGallons > 0) {
+      const stored = storedVolume(waterGallons);
       ingredients.push({
         ingredient_type: 'water',
         name: 'Proofing water',
-        amount: Math.round(waterGallons * 1000) / 1000,
-        unit: 'gal',
+        amount: Math.round(stored.amount * 1000) / 1000,
+        unit: stored.unit,
         notes: '',
       });
     }

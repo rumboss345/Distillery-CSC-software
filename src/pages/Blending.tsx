@@ -108,9 +108,11 @@ import {
 } from '../lib/blend-formulation';
 import {
   adjacentSugarBagLbs,
+  batchSizeUnitForRecipe,
   formatBatchSizeAmount,
   gallonsFromBatchSizeAmount,
   roundScaledAmount,
+  scaledRecipeWaterGallons,
   scaleFactorFromTargetYield,
   scaleIngredients,
   scaleSpiritSources,
@@ -452,6 +454,7 @@ export function Blending() {
   const [recipeTemplate, setRecipeTemplate] = useState<RecipeTemplate | null>(null);
   const [targetYieldInput, setTargetYieldInput] = useState('');
   const [batchSizeUnit, setBatchSizeUnit] = useState<BatchSizeUnit>('gal');
+  const yieldEdited = useRef(false);
   const [waterAdjustmentNote, setWaterAdjustmentNote] = useState<string | null>(null);
   const [wizardProofingPreview, setWizardProofingPreview] = useState<ProofingWaterPreview | null>(null);
   const [wizardOriginalWater, setWizardOriginalWater] = useState<BlendIngredientInput[] | null>(null);
@@ -489,8 +492,19 @@ export function Blending() {
     if (wizardStep < 2 || wizardStep > 4) return;
 
     const factor = form.scale_factor || 1;
-    const recipeWaterBase = recipeTemplate.ingredients.find((i) => i.ingredient_type === 'water')?.amount ?? 0;
-    const scaledRecipeWater = roundScaledAmount(recipeWaterBase * factor);
+    const templateWater = recipeTemplate.ingredients.find(
+      (ingredient) => ingredient.ingredient_type === 'water' && ingredient.amount > 0,
+    );
+    const waterUnit = templateWater?.unit && templateWater.unit !== 'each' ? templateWater.unit : 'gal';
+    const scaledRecipeWater = scaledRecipeWaterGallons(recipeTemplate.ingredients, factor);
+    const waterAmountInRecipeUnit = (gallons: number) => (
+      waterUnit.toLowerCase() === 'gal'
+        ? gallons
+        : roundScaledAmount(convertIngredientAmount(
+          { amount: gallons, unit: 'gal', ingredient_type: 'water' },
+          waterUnit,
+        ))
+    );
     let recipeSpiritGal = 0;
     let actualSpiritGal = 0;
     recipeTemplate.spirit_sources.forEach((recipe, index) => {
@@ -508,8 +522,9 @@ export function Blending() {
       setIngredients((prev) => {
         const waterIdx = prev.findIndex((ing) => ing.ingredient_type === 'water');
         if (waterIdx < 0 || !prev[waterIdx].notes?.startsWith('ABV compensation')) return prev;
+        const restored = waterAmountInRecipeUnit(scaledRecipeWater);
         return prev.map((ing, i) => (
-          i === waterIdx ? { ...ing, amount: scaledRecipeWater, notes: '' } : ing
+          i === waterIdx ? { ...ing, amount: restored, unit: waterUnit, notes: '' } : ing
         ));
       });
       return;
@@ -528,17 +543,23 @@ export function Blending() {
       + shortfallNote,
     );
 
+    const nextWaterAmount = waterAmountInRecipeUnit(water.waterGal);
     setIngredients((prev) => {
       const waterIdx = prev.findIndex((i) => i.ingredient_type === 'water');
       const prevWater = waterIdx >= 0 ? prev[waterIdx].amount : 0;
-      if (Math.abs(prevWater - water.waterGal) < 0.01 && waterIdx >= 0) return prev;
+      const prevUnit = waterIdx >= 0 ? prev[waterIdx].unit : waterUnit;
+      if (
+        waterIdx >= 0
+        && prevUnit.toLowerCase() === waterUnit.toLowerCase()
+        && Math.abs(prevWater - nextWaterAmount) < 0.01
+      ) return prev;
 
       const waterLine: BlendIngredientInput = {
         ...(waterIdx >= 0 ? prev[waterIdx] : emptyIngredient('water')),
         ingredient_type: 'water',
         name: 'Proofing water',
-        amount: water.waterGal,
-        unit: 'gal',
+        amount: nextWaterAmount,
+        unit: waterUnit,
         notes: `ABV compensation — ${deltaNotes}`,
       };
       if (waterIdx >= 0) {
@@ -679,6 +700,7 @@ export function Blending() {
 
   const setBatchScale = (factor: number) => {
     if (!recipeTemplate || factor <= 0) return;
+    yieldEdited.current = false;
     setForm((prev) => ({ ...prev, scale_factor: factor }));
     applyScaledRecipeAmounts(recipeTemplate, factor, spiritSources, form.target_abv);
     if (baseYieldGal > 0) {
@@ -718,6 +740,8 @@ export function Blending() {
     setEditId(undefined);
     setSelectedRecipeId(recipeId);
     setRecipeTemplate(template);
+    const sizeUnit = batchSizeUnitForRecipe(template.spirit_sources, template.ingredients);
+    setBatchSizeUnit(sizeUnit);
     setForm({
       ...emptyProduct(),
       ...defaultAssignee(user),
@@ -754,7 +778,7 @@ export function Blending() {
       }));
     if (baseSpirits.length > 0) {
       const base = computeBlendFormulation(baseSpirits, template.ingredients);
-      setTargetYieldInput(formatBatchSizeAmount(base.theoretical.volumeGal * factor, batchSizeUnit));
+      setTargetYieldInput(formatBatchSizeAmount(base.theoretical.volumeGal * factor, sizeUnit));
     } else {
       setTargetYieldInput('');
     }
@@ -903,13 +927,15 @@ export function Blending() {
       const recipe = getBlendRecipe(blend.blend_recipe_id);
       if (recipe || pinned) {
         setSelectedRecipeId(recipe?.id ?? blend.blend_recipe_id);
-        setRecipeTemplate(pinned
+        const continuedTemplate: RecipeTemplate = pinned
           ? {
             spirit_sources: pinned.spirit_sources.map((source) => ({
               spirit_label: source.spirit_label,
               volume_gal: source.volume_gal,
               abv: source.abv,
               barrel_id: source.barrel_id ?? null,
+              entered_amount: source.entered_amount ?? null,
+              entered_unit: source.entered_unit ?? null,
             })),
             ingredients: pinned.ingredients.map((ingredient) => blendIngredientFromRecord(ingredient)),
           }
@@ -918,9 +944,14 @@ export function Blending() {
               spirit_label: source.spirit_label,
               volume_gal: source.volume_gal,
               abv: source.abv,
+              entered_amount: source.entered_amount ?? null,
+              entered_unit: source.entered_unit ?? null,
             })),
             ingredients: (recipe?.ingredients ?? []).map((ingredient) => blendIngredientFromRecord(ingredient)),
-          });
+          };
+        setRecipeTemplate(continuedTemplate);
+        const sizeUnit = batchSizeUnitForRecipe(continuedTemplate.spirit_sources, continuedTemplate.ingredients);
+        setBatchSizeUnit(sizeUnit);
         const yieldSources = pinned?.spirit_sources ?? recipe?.spirit_sources ?? [];
         const yieldIngredients = pinned?.ingredients ?? recipe?.ingredients ?? [];
         const baseSpirits = yieldSources
@@ -937,7 +968,7 @@ export function Blending() {
           );
           setTargetYieldInput(formatBatchSizeAmount(
             base.theoretical.volumeGal * (blend.scale_factor ?? 1),
-            batchSizeUnit,
+            sizeUnit,
           ));
         }
       }
@@ -1606,7 +1637,7 @@ export function Blending() {
               <div className="blend-size-panel">
                 <p className="blend-size-title">Size this batch</p>
                 <p className="field-hint">
-                  The saved recipe is one batch size. Enter any yield in gallons or liters and the spirit, water, sugar, and flavor scale with it.
+                  The saved recipe is one batch size. A recipe entered in liters opens here in liters, so the finished batch stays in liters when you scale it. Gallons stay in gallons.
                 </p>
                 <div className="measure-mode-buttons">
                   {[0.5, 1, 1.5, 2].map((factor) => (
@@ -1630,8 +1661,13 @@ export function Blending() {
                         step="0.1"
                         min="0"
                         value={targetYieldInput}
-                        onChange={(e) => setTargetYieldInput(e.target.value)}
+                        onChange={(e) => {
+                          yieldEdited.current = true;
+                          setTargetYieldInput(e.target.value);
+                        }}
                         onBlur={() => {
+                          if (!yieldEdited.current) return;
+                          yieldEdited.current = false;
                           const target = parseFloat(targetYieldInput);
                           const gallons = gallonsFromBatchSizeAmount(target, batchSizeUnit);
                           if (baseYieldGal > 0 && gallons > 0) {
@@ -1645,6 +1681,7 @@ export function Blending() {
                         value={batchSizeUnit}
                         onChange={(e) => {
                           const unit: BatchSizeUnit = e.target.value === 'l' ? 'l' : 'gal';
+                          yieldEdited.current = false;
                           setBatchSizeUnit(unit);
                           if (baseYieldGal > 0) {
                             setTargetYieldInput(formatBatchSizeAmount(

@@ -1,5 +1,5 @@
 import type { BlendIngredientInput, BlendRecipeSpiritSourceInput } from '../types';
-import { gallonsToUnit, ingredientWeightLbs, spiritVolumeGalFromAmount, toGallonsFromVolumeUnit } from './blending';
+import { gallonsToUnit, ingredientVolumeGal, ingredientWeightLbs, spiritVolumeGalFromAmount, toGallonsFromVolumeUnit } from './blending';
 import { formatGallonDisplay } from './formulation-quantity';
 
 /** Batch yield can be entered in wine gallons or liters. Scale math stays in gallons. */
@@ -92,6 +92,49 @@ export function formatBatchSizeAmount(gallons: number, unit: BatchSizeUnit): str
 export function gallonsFromBatchSizeAmount(amount: number, unit: BatchSizeUnit): number {
   if (!(amount > 0)) return 0;
   return unit === 'l' ? toGallonsFromVolumeUnit(amount, 'l') : amount;
+}
+
+function primaryVolumeUnit(unit: string | null | undefined): 'l' | 'gal' | null {
+  if (!unit) return null;
+  const value = unit.trim().toLowerCase();
+  if (value === 'l' || value === 'ml' || value === 'liter' || value === 'liters' || value === 'litre' || value === 'litres') {
+    return 'l';
+  }
+  if (value === 'gal' || value === 'gallon' || value === 'gallons') return 'gal';
+  return null;
+}
+
+/**
+ * Batch-size entry unit for a saved recipe.
+ * Spirit pulls and proofing water decide it. A milliliter flavor shot does not.
+ * Liter charges open the batch size in liters so 200 L is not read as 200 gallons.
+ */
+export function batchSizeUnitForRecipe(
+  spirits: Pick<BlendRecipeSpiritSourceInput, 'entered_unit'>[],
+  ingredients: Pick<BlendIngredientInput, 'ingredient_type' | 'unit' | 'amount'>[],
+): BatchSizeUnit {
+  const units = [
+    ...spirits.map((spirit) => primaryVolumeUnit(spirit.entered_unit)),
+    ...ingredients
+      .filter((ingredient) => ingredient.ingredient_type === 'water' && ingredient.amount > 0)
+      .map((ingredient) => primaryVolumeUnit(ingredient.unit)),
+  ].filter((unit): unit is 'l' | 'gal' => unit != null);
+  if (units.length === 0) return 'gal';
+  const liters = units.filter((unit) => unit === 'l').length;
+  return liters >= units.length / 2 ? 'l' : 'gal';
+}
+
+/** Proofing-water gallons at a scale factor. The recipe amount may be liters, milliliters, or pounds. */
+export function scaledRecipeWaterGallons(
+  ingredients: Pick<BlendIngredientInput, 'ingredient_type' | 'amount' | 'unit'>[],
+  factor: number,
+): number {
+  const safeFactor = Math.max(0, factor);
+  const gallons = ingredients.reduce((sum, ingredient) => {
+    if (ingredient.ingredient_type !== 'water' || !(ingredient.amount > 0)) return sum;
+    return sum + ingredientVolumeGal(ingredient);
+  }, 0);
+  return roundScaledAmount(gallons * safeFactor);
 }
 
 export function totalSugarLbs(
