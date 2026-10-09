@@ -2474,6 +2474,10 @@ tr.volume-change-kind:hover td {
   gap: 0.5rem;
 }
 
+.recipe-action-cluster--end {
+  margin-left: auto;
+}
+
 .recipe-section-action {
   margin-top: 0;
   margin-bottom: 1rem;
@@ -2487,12 +2491,40 @@ tr.volume-change-kind:hover td {
 }
 
 .recipe-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.55rem 1.1rem;
+  min-height: 2.5rem;
+  border: 1px solid #6f665d;
+  border-radius: var(--radius-sm);
+  background: var(--bg-hover);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.recipe-io-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 0.55rem 1rem;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius);
   background: var(--bg-card);
   color: var(--text-muted);
+  font-family: var(--font);
+  font-size: 1rem;
+  font-weight: 400;
+  line-height: 1.5;
   cursor: pointer;
+}
+
+.recipe-io-btn:hover {
+  color: var(--text);
+  border-color: var(--border);
 }
 
 .recipe-tab.active {
@@ -3638,7 +3670,8 @@ tr.volume-change-kind:hover td {
 
   .page-actions .btn,
   .form-actions .btn,
-  .recipe-action-cluster .btn {
+  .recipe-action-cluster .btn,
+  .recipe-action-cluster .recipe-io-btn {
     flex: 1 1 auto;
   }
 

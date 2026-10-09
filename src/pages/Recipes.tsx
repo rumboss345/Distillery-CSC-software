@@ -254,36 +254,6 @@ export function Recipes() {
         )}
 
         <div className="recipe-action-row">
-          <div className="recipe-action-cluster">
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={exportRecipes}
-              data-testid="export-recipes"
-            >
-              Export recipes
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => importFileRef.current?.click()}
-              data-testid="import-recipes"
-            >
-              Import recipes
-            </button>
-            <input
-              ref={importFileRef}
-              type="file"
-              accept=".csv,text/csv"
-              hidden
-              data-testid="import-recipes-file"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                event.target.value = '';
-                if (file) void importRecipes(file);
-              }}
-            />
-          </div>
           {canBlend && (
             <div className="recipe-action-cluster">
               <button
@@ -305,6 +275,36 @@ export function Recipes() {
               </button>
             </div>
           )}
+          <div className="recipe-action-cluster recipe-action-cluster--end">
+            <button
+              type="button"
+              className="recipe-io-btn"
+              onClick={exportRecipes}
+              data-testid="export-recipes"
+            >
+              Export recipes
+            </button>
+            <button
+              type="button"
+              className="recipe-io-btn"
+              onClick={() => importFileRef.current?.click()}
+              data-testid="import-recipes"
+            >
+              Import recipes
+            </button>
+            <input
+              ref={importFileRef}
+              type="file"
+              accept=".csv,text/csv"
+              hidden
+              data-testid="import-recipes-file"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = '';
+                if (file) void importRecipes(file);
+              }}
+            />
+          </div>
         </div>
       </div>
       {importNote && (
