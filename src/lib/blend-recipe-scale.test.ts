@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   adjacentSugarBagLbs,
+  batchSizeUnitForRecipe,
   formatBatchSizeAmount,
   gallonsFromBatchSizeAmount,
   nearestSugarBagCount,
+  scaledRecipeWaterGallons,
   scaleFactorForWholeSugarBags,
   scaleFactorFromTargetYield,
   scaleIngredients,
@@ -11,6 +13,8 @@ import {
   sugarLbsAreWholeBags,
   totalSugarLbs,
 } from './blend-recipe-scale';
+import { spiritVolumeGalFromAmount } from './blending';
+import { LITERS_PER_US_GALLON } from './material-densities';
 
 describe('blend-recipe-scale', () => {
   it('scales spirit and ingredient amounts', () => {
@@ -37,6 +41,37 @@ describe('blend-recipe-scale', () => {
     expect(formatBatchSizeAmount(0.3, 'l')).toBe('1.136');
     expect(scaleFactorFromTargetYield(0.3, gallonsFromBatchSizeAmount(1.136, 'l'))).toBe(1);
     expect(scaleFactorFromTargetYield(0.3, gallonsFromBatchSizeAmount(1, 'l'))).toBeCloseTo((1 / 3.785411784) / 0.3, 5);
+  });
+
+  it('opens a liter recipe in liters and scales that liter yield', () => {
+    const spirits = [{
+      entered_unit: 'l',
+      volume_gal: spiritVolumeGalFromAmount(20, 'l', 80),
+      abv: 80,
+      entered_amount: 20,
+    }];
+    const ingredients = [{ ingredient_type: 'water' as const, amount: 30, unit: 'l' }];
+    expect(batchSizeUnitForRecipe(spirits, ingredients)).toBe('l');
+    expect(batchSizeUnitForRecipe(
+      [{ entered_unit: 'gal' }],
+      [{ ingredient_type: 'water', amount: 10, unit: 'gal' }, { ingredient_type: 'flavoring', amount: 5, unit: 'ml' }],
+    )).toBe('gal');
+
+    const baseGal = spirits[0].volume_gal + spiritVolumeGalFromAmount(30, 'l', 0);
+    const doubled = scaleFactorFromTargetYield(baseGal, gallonsFromBatchSizeAmount(baseGal * LITERS_PER_US_GALLON * 2, 'l'));
+    expect(doubled).toBe(2);
+    const scaled = scaleSpiritSources([{
+      spirit_label: 'High proof',
+      volume_gal: spirits[0].volume_gal,
+      abv: 80,
+      entered_amount: 20,
+      entered_unit: 'l',
+    }], doubled);
+    expect(scaled[0].entered_amount).toBe(40);
+    expect(scaled[0].entered_unit).toBe('l');
+    expect(scaled[0].volume_gal).toBeCloseTo(spirits[0].volume_gal * 2, 5);
+    expect(scaledRecipeWaterGallons(ingredients, doubled)).toBeCloseTo(60 / LITERS_PER_US_GALLON, 2);
+    expect(scaledRecipeWaterGallons(ingredients, doubled)).toBeLessThan(16);
   });
 });
 
