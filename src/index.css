@@ -2449,15 +2449,41 @@ tr.volume-change-kind:hover td {
   padding-left: 1.2rem;
 }
 
-.recipe-blend-actions {
-  margin-top: -1rem;
+.recipe-page-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin-bottom: 1.25rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+}
+
+.recipe-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.recipe-action-cluster {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.recipe-section-action {
+  margin-top: 0;
   margin-bottom: 1rem;
 }
 
 .recipe-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
-  margin-bottom: 1.25rem;
+  margin-bottom: 0;
 }
 
 .recipe-tab {
@@ -3611,8 +3637,13 @@ tr.volume-change-kind:hover td {
   }
 
   .page-actions .btn,
-  .form-actions .btn {
+  .form-actions .btn,
+  .recipe-action-cluster .btn {
     flex: 1 1 auto;
+  }
+
+  .recipe-action-cluster {
+    width: 100%;
   }
 
   .form-actions {
