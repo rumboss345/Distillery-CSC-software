@@ -49,6 +49,8 @@ export interface VolumeChangeRow {
    * amounts are positive gallons moved, and they stay out of the summary total.
    */
   gallons: number | null;
+  /** Signed ABV percentage points. Set volume and blend differences count on the summary. */
+  abvPoints: number | null;
 }
 
 export interface VolumeChangeGroup {
@@ -88,6 +90,7 @@ export function buildVolumeChangeRows(range: ReportDateRange): VolumeChangeRow[]
       why: shown(row.notes),
       who: shown(row.changed_by),
       gallons: row.volume_gal,
+      abvPoints: null,
     });
   }
 
@@ -114,6 +117,7 @@ export function buildVolumeChangeRows(range: ReportDateRange): VolumeChangeRow[]
       why: shown(variance.notes),
       who: shown(variance.changed_by),
       gallons: variance.variance_gal,
+      abvPoints: abvMoved ? variance.set_abv - variance.book_abv : null,
     });
   }
 
@@ -133,6 +137,7 @@ export function buildVolumeChangeRows(range: ReportDateRange): VolumeChangeRow[]
         why: shown(run.variance_reason),
         who: shown(run.variance_changed_by),
         gallons: variance,
+        abvPoints: null,
       });
     }
     const returnedLines = (run.returns && run.returns.length > 0)
@@ -156,6 +161,7 @@ export function buildVolumeChangeRows(range: ReportDateRange): VolumeChangeRow[]
         why: 'Product that was not bottled was sent to this tank.',
         who: shown(run.variance_changed_by),
         gallons: line.volume_gal,
+        abvPoints: null,
       });
     });
   }
@@ -185,6 +191,7 @@ export function buildVolumeChangeRows(range: ReportDateRange): VolumeChangeRow[]
       why: shown(blendNotes.get(blend.blend_id)),
       who: shown(blend.operator === '—' ? '' : blend.operator),
       gallons: volumeMoved ? gallonDelta : null,
+      abvPoints: abvMoved && abvDelta != null ? abvDelta : null,
     });
   }
 
@@ -204,6 +211,7 @@ export function buildVolumeChangeRows(range: ReportDateRange): VolumeChangeRow[]
       why,
       who: shown(run.operator === '—' ? '' : run.operator),
       gallons: -run.alcohol_loss_gal,
+      abvPoints: null,
     });
   }
 
@@ -233,6 +241,18 @@ function formatKindTotal(kind: string, gallons: number): string {
   return formatTankVolumeVariance(gallons);
 }
 
+function sumAbvPoints(rows: VolumeChangeRow[]): number | null {
+  let seen = false;
+  let total = 0;
+  for (const row of rows) {
+    if (row.abvPoints == null) continue;
+    seen = true;
+    total += row.abvPoints;
+  }
+  if (!seen) return null;
+  return Math.round(total * 1000) / 1000;
+}
+
 /** Net gallons for the summary box: set volume, bottling variance, blend volume, and distillation loss. */
 export function totalVolumeVarianceGal(rows: VolumeChangeRow[]): number {
   let total = 0;
@@ -241,6 +261,23 @@ export function totalVolumeVarianceGal(rows: VolumeChangeRow[]): number {
     total += row.gallons;
   }
   return Math.round(total * 1000) / 1000;
+}
+
+/** Net ABV percentage points from set volume and blend rows. Bottling to a tank is not included. */
+export function totalVolumeVarianceAbv(rows: VolumeChangeRow[]): number {
+  let total = 0;
+  for (const row of rows) {
+    if (row.abvPoints == null || !VARIANCE_TOTAL_KINDS.has(row.kind)) continue;
+    total += row.abvPoints;
+  }
+  return Math.round(total * 1000) / 1000;
+}
+
+export function formatVolumeVarianceAbv(points: number): string {
+  const rounded = Number(points.toFixed(1));
+  if (rounded === 0) return '0.0% ABV';
+  const sign = rounded > 0 ? '+' : '';
+  return `${sign}${rounded.toFixed(1)}% ABV`;
 }
 
 export function groupVolumeChanges(rows: VolumeChangeRow[]): VolumeChangeGroup[] {
@@ -259,9 +296,13 @@ export function groupVolumeChanges(rows: VolumeChangeRow[]): VolumeChangeGroup[]
       (a, b) => compareStoredDatesDesc(a.occurred_at, b.occurred_at),
     );
     const gallons = sumGallons(groupRows);
-    const totalLabel = gallons == null
-      ? `${groupRows.length} change${groupRows.length === 1 ? '' : 's'}`
-      : formatKindTotal(kind, gallons);
+    const abv = sumAbvPoints(groupRows);
+    const parts: string[] = [];
+    if (gallons != null) parts.push(formatKindTotal(kind, gallons));
+    if (abv != null) parts.push(formatVolumeVarianceAbv(abv));
+    const totalLabel = parts.length > 0
+      ? parts.join(', ')
+      : `${groupRows.length} change${groupRows.length === 1 ? '' : 's'}`;
     return { kind, rows: groupRows, totalLabel };
   });
 }
