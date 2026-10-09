@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getProductionSummary, getMashBatches, getDistillationRuns, getBarrels, getInventoryItems, resetAllData } from '../db/queries';
+import { getProductionSummary, getMashBatches, getDistillationRuns, getBarrels, getInventoryItems, resetAllData, useRefreshKey } from '../db/queries';
 import { StatusBadge } from '../components/StatusBadge';
 import { useAuth } from '../context/AuthContext';
 import { formatDateDisplay } from '../lib/date-input';
@@ -7,6 +7,7 @@ import { PROCESS_STAGE_LABELS } from '../lib/permissions';
 
 export function Dashboard() {
   const { user } = useAuth();
+  const { key: sharedKey } = useRefreshKey();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   const summary = getProductionSummary();
@@ -16,17 +17,19 @@ export function Dashboard() {
   const lowStock = getInventoryItems().filter((i) => i.quantity <= i.reorder_level);
 
   const handleClearAllData = () => {
-    if (!confirm('Clear ALL distillery data? This removes washes, runs, blends, barrels, bottling, inventory, and floor plan records.')) {
+    if (!confirm('Clear the shared distillery record for everyone? This removes washes, runs, blends, barrels, bottling, inventory, and floor plan records.')) {
       return;
     }
-    if (!confirm('This cannot be undone. Clear everything and reset to sample data?')) {
+    if (!confirm('This cannot be undone. Clear the shared record and reset it to sample data?')) {
       return;
     }
-    void resetAllData();
+    void resetAllData().catch((error: unknown) => {
+      window.alert(error instanceof Error ? error.message : 'Could not clear the shared distillery record.');
+    });
   };
 
   return (
-    <div>
+    <div data-shared-refresh={sharedKey}>
       <div className="page-header">
         <h2>Production Dashboard</h2>
         <p>Overview of your distillery operations</p>
@@ -200,15 +203,17 @@ export function Dashboard() {
         </div>
       )}
 
-      <div className="section data-management-section">
-        <h3 className="section-title">Data Management</h3>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1rem' }}>
-          Reset the app to fresh sample data. All entered production records in this browser will be deleted.
-        </p>
-        <button type="button" className="btn btn-secondary" onClick={handleClearAllData}>
-          Clear all data
-        </button>
-      </div>
+      {user?.role === 'admin' && (
+        <div className="section data-management-section">
+          <h3 className="section-title">Data Management</h3>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1rem' }}>
+            Reset the shared distillery record to fresh sample data. Everyone signed in will see that reset.
+          </p>
+          <button type="button" className="btn btn-secondary" onClick={handleClearAllData}>
+            Clear all data
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { dismissSharedNotice, getSharedNotice, subscribeSharedNotice } from '../db/database';
 import type { PermissionKey } from '../lib/permissions';
 
 type NavItem = { to: string; label: string; icon: string; permission: PermissionKey };
@@ -71,6 +72,7 @@ export function Layout() {
   const { user, logout, hasPermission } = useAuth();
   const location = useLocation();
   const [navOpen, setNavOpen] = useState(false);
+  const sharedNotice = useSyncExternalStore(subscribeSharedNotice, getSharedNotice, () => null);
 
   const visibleGroups = navGroups
     .map((group) => ({
@@ -171,6 +173,14 @@ export function Layout() {
         </div>
       </aside>
       <main className="main-content">
+        {sharedNotice && (
+          <div className="shared-record-notice" role="status">
+            <span>{sharedNotice}</span>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={dismissSharedNotice}>
+              Dismiss
+            </button>
+          </div>
+        )}
         <Outlet />
       </main>
     </div>

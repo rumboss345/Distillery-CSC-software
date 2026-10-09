@@ -66,7 +66,7 @@ import type {
   EquipmentMaintenanceLogView,
   EquipmentMaintenanceStatus,
 } from '../types';
-import { initDatabase, clearAllData } from './database';
+import { initDatabase, resetSharedDatabase, subscribeSharedRefresh } from './database';
 import type {
   Barrel,
   BarrelFill,
@@ -354,11 +354,12 @@ export function useDatabaseReady() {
 export function useRefreshKey() {
   const [key, setKey] = useState(0);
   const refresh = useCallback(() => setKey((k) => k + 1), []);
+  useEffect(() => subscribeSharedRefresh(refresh), [refresh]);
   return { key, refresh };
 }
 
 export async function resetAllData(): Promise<void> {
-  await clearAllData();
+  await resetSharedDatabase();
   window.location.reload();
 }
 
