@@ -250,7 +250,7 @@ export function AdminUsers() {
                   <td>{u.name ?? '—'}</td>
                   <td>{formatRecordedAt(u.created_at)}</td>
                   <td className="table-actions">
-                    <button type="button" className="btn btn-primary btn-sm" onClick={() => handleApprove(u.id)}>
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => handleApprove(u.id)}>
                       Approve
                     </button>
                     <button type="button" className="btn btn-danger btn-sm" onClick={() => handleReject(u.id)}>

@@ -411,9 +411,9 @@ export function BlendRecipesTab({
                 <th>Recipe</th>
                 <th>Version</th>
                 <th>Product</th>
-                <th>Target Proof</th>
-                <th>Spirit pulls</th>
-                <th>Additives</th>
+                <th className="num">Target Proof</th>
+                <th className="num">Spirit pulls</th>
+                <th className="num">Additives</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -428,9 +428,9 @@ export function BlendRecipesTab({
                   <td><strong>{recipe.name}</strong></td>
                   <td>{recipe.current_version_number != null ? `V${recipe.current_version_number}` : '—'}</td>
                   <td>{recipe.product_name || '—'}</td>
-                  <td>{recipe.target_abv != null ? `${recipe.target_abv}%` : '—'}</td>
-                  <td>{recipe.spirit_sources.length}</td>
-                  <td>{recipe.ingredients.length}</td>
+                  <td className="num">{recipe.target_abv != null ? `${recipe.target_abv}%` : '—'}</td>
+                  <td className="num">{recipe.spirit_sources.length}</td>
+                  <td className="num">{recipe.ingredients.length}</td>
                   <td className="table-actions" onClick={(e) => e.stopPropagation()}>
                     <button type="button" className="btn btn-secondary btn-sm" onClick={() => openEdit(recipe)}>
                       Edit

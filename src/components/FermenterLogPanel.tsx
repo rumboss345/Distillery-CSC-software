@@ -129,20 +129,20 @@ export function FermenterLogPanel({
         <div className="table-wrap" style={{ marginTop: '1rem' }}>
           <table>
             <thead>
-              <tr><th>Date</th><th>Temp (°F)</th><th>Brix</th><th>Est. ABV</th><th>pH</th><th>Notes</th></tr>
+              <tr><th>Date</th><th className="num">Temp (°F)</th><th className="num">Brix</th><th className="num">Est. ABV</th><th className="num">pH</th><th>Notes</th></tr>
             </thead>
             <tbody>
               {logs.map((l) => (
                 <tr key={l.id}>
                   <td style={{ whiteSpace: 'nowrap' }}>{formatRecordedAt(l.logged_at)}</td>
-                  <td>{l.temperature_f ?? '—'}°F</td>
-                  <td>{l.brix ?? '—'}°</td>
-                  <td>
+                  <td className="num">{l.temperature_f ?? '—'}°F</td>
+                  <td className="num">{l.brix ?? '—'}°</td>
+                  <td className="num">
                     {startBrix != null && l.brix != null
                       ? formatAbvEstimate(estimateAbvFromBrix(startBrix, l.brix))
                       : '—'}
                   </td>
-                  <td>{l.ph ?? '—'}</td>
+                  <td className="num">{l.ph ?? '—'}</td>
                   <td>{l.notes}</td>
                 </tr>
               ))}

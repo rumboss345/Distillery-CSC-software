@@ -517,9 +517,9 @@ export function TankTransfer() {
                 <tr>
                   <th>Fermenter</th>
                   <th>Wash</th>
-                  <th>Volume</th>
-                  <th>Brix</th>
-                  <th>Capacity</th>
+                  <th className="num">Volume</th>
+                  <th className="num">Brix</th>
+                  <th className="num">Capacity</th>
                   <th>Status</th>
                   <th></th>
                 </tr>
@@ -534,9 +534,9 @@ export function TankTransfer() {
                   >
                     <td><strong>{fermenter.equipment_name}</strong></td>
                     <td>{fermenter.batch_number} · {fermenter.recipe_name}</td>
-                    <td>{fermenter.volume_gal.toFixed(1)} gal</td>
-                    <td>{fermenter.latest_brix != null ? `${fermenter.latest_brix.toFixed(1)}°` : '—'}</td>
-                    <td>{fermenter.capacity_gal > 0 ? `${fermenter.capacity_gal} gal` : '—'}</td>
+                    <td className="num">{fermenter.volume_gal.toFixed(1)} gal</td>
+                    <td className="num">{fermenter.latest_brix != null ? `${fermenter.latest_brix.toFixed(1)}°` : '—'}</td>
+                    <td className="num">{fermenter.capacity_gal > 0 ? `${fermenter.capacity_gal} gal` : '—'}</td>
                     <td>
                       <StatusBadge
                         status={fermenter.status === 'cleaning' || fermenter.status === 'offline'
@@ -581,7 +581,7 @@ export function TankTransfer() {
                   <th>Date</th>
                   <th>Fermenter</th>
                   <th>Wash</th>
-                  <th>Volume</th>
+                  <th className="num">Volume</th>
                   <th>Why</th>
                   <th>Who</th>
                   <th></th>
@@ -593,7 +593,7 @@ export function TankTransfer() {
                     <td>{formatDateDisplay(row.discarded_date)}</td>
                     <td>{row.fermenter_name}</td>
                     <td>{row.batch_number || '—'}</td>
-                    <td>{row.volume_gal.toFixed(1)} gal</td>
+                    <td className="num">{row.volume_gal.toFixed(1)} gal</td>
                     <td>{row.notes || '—'}</td>
                     <td>{row.changed_by || '—'}</td>
                     <td>
@@ -624,9 +624,9 @@ export function TankTransfer() {
               <thead>
                 <tr>
                   <th>Tank</th>
-                  <th>Volume</th>
-                  <th>ABV</th>
-                  <th>Capacity</th>
+                  <th className="num">Volume</th>
+                  <th className="num">ABV</th>
+                  <th className="num">Capacity</th>
                   <th>Contents</th>
                   <th>Status</th>
                   <th></th>
@@ -644,7 +644,7 @@ export function TankTransfer() {
                       title={canTransfer ? `Transfer from ${tank.name}` : undefined}
                     >
                       <td><strong>{tank.name}</strong></td>
-                      <td>
+                      <td className="num">
                         {canTransfer ? `${tank.volume_gal.toFixed(1)} gal` : '—'}
                         {latestVariance && !tankVolumeMatchesRecord(latestVariance.variance_gal) && (
                           <div className="field-hint" style={{ margin: 0 }}>
@@ -652,8 +652,8 @@ export function TankTransfer() {
                           </div>
                         )}
                       </td>
-                      <td>{canTransfer ? `${tank.abv.toFixed(1)}%` : '—'}</td>
-                      <td>{tank.capacity_gal > 0 ? `${tank.capacity_gal} gal` : '—'}</td>
+                      <td className="num">{canTransfer ? `${tank.abv.toFixed(1)}%` : '—'}</td>
+                      <td className="num">{tank.capacity_gal > 0 ? `${tank.capacity_gal} gal` : '—'}</td>
                       <td>{tankContentsSummary(tank.id, tank.volume_gal)}</td>
                       <td>
                         <StatusBadge
@@ -718,9 +718,9 @@ export function TankTransfer() {
                 <tr>
                   <th>Date</th>
                   <th>Tank</th>
-                  <th>On record</th>
-                  <th>Set to</th>
-                  <th>Variance</th>
+                  <th className="num">On record</th>
+                  <th className="num">Set to</th>
+                  <th className="num">Variance</th>
                   <th>Why</th>
                   <th>Who</th>
                 </tr>
@@ -730,9 +730,9 @@ export function TankTransfer() {
                   <tr key={row.id}>
                     <td>{formatDateDisplay(row.recorded_at)}</td>
                     <td>{row.tank_name}</td>
-                    <td>{row.book_volume_gal.toFixed(1)} gal @ {row.book_abv.toFixed(1)}%</td>
-                    <td>{row.set_volume_gal.toFixed(1)} gal @ {row.set_abv.toFixed(1)}%</td>
-                    <td>{formatTankVolumeVariance(row.variance_gal)}</td>
+                    <td className="num">{row.book_volume_gal.toFixed(1)} gal @ {row.book_abv.toFixed(1)}%</td>
+                    <td className="num">{row.set_volume_gal.toFixed(1)} gal @ {row.set_abv.toFixed(1)}%</td>
+                    <td className="num">{formatTankVolumeVariance(row.variance_gal)}</td>
                     <td>{row.notes || '—'}</td>
                     <td>{row.changed_by || '—'}</td>
                   </tr>
@@ -760,8 +760,8 @@ export function TankTransfer() {
                   <th>Date</th>
                   <th>From</th>
                   <th>To</th>
-                  <th>Volume</th>
-                  <th>ABV</th>
+                  <th className="num">Volume</th>
+                  <th className="num">ABV</th>
                   <th>Notes</th>
                   <th></th>
                 </tr>
@@ -772,8 +772,8 @@ export function TankTransfer() {
                     <td>{formatDateDisplay(t.transfer_date)}</td>
                     <td>{t.source_tank_name}</td>
                     <td>{t.dest_tank_name ?? 'Discarded'}</td>
-                    <td>{t.volume_gal.toFixed(1)} gal</td>
-                    <td>{t.abv.toFixed(1)}%</td>
+                    <td className="num">{t.volume_gal.toFixed(1)} gal</td>
+                    <td className="num">{t.abv.toFixed(1)}%</td>
                     <td>{t.notes || '—'}</td>
                     <td><button type="button" className="btn btn-sm btn-ghost" onClick={() => handleDeleteTransfer(t.id)}>Delete</button></td>
                   </tr>

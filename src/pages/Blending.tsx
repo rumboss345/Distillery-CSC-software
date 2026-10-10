@@ -2191,22 +2191,22 @@ export function Blending() {
                 <thead>
                   <tr>
                     <th>Ingredient</th>
-                    <th>Volume</th>
-                    <th>Weight</th>
+                    <th className="num">Volume</th>
+                    <th className="num">Weight</th>
                   </tr>
                 </thead>
                 <tbody>
                   {reviewLines.map((line, index) => (
                     <tr key={`${line.label}-${index}`}>
                       <td>{line.label}</td>
-                      <td>{formatReviewVolume(line.volumeGal)}</td>
-                      <td>{formatReviewWeight(line.weightLb)}</td>
+                      <td className="num">{formatReviewVolume(line.volumeGal)}</td>
+                      <td className="num">{formatReviewWeight(line.weightLb)}</td>
                     </tr>
                   ))}
                   <tr className="formulation-total">
                     <td>Finished blend</td>
-                    <td>{formatReviewVolume(formulation.theoretical.volumeGal)}</td>
-                    <td>{formatReviewWeight(finishedWeightLb)}</td>
+                    <td className="num">{formatReviewVolume(formulation.theoretical.volumeGal)}</td>
+                    <td className="num">{formatReviewWeight(finishedWeightLb)}</td>
                   </tr>
                 </tbody>
               </table>
@@ -2468,7 +2468,7 @@ export function Blending() {
         <div className="empty-state">
           <p>No batches yet. Start a tank batch from a saved recipe, or use barrel blending to pull from aging barrels.</p>
           <div className="page-actions" style={{ marginTop: '1rem', justifyContent: 'center' }}>
-            <button type="button" className="btn btn-primary" onClick={openNew}>New tank batch</button>
+            <button type="button" className="btn btn-secondary" onClick={openNew}>New tank batch</button>
             <button type="button" className="btn btn-secondary" onClick={openBarrelBlending}>Barrel blending</button>
           </div>
         </div>
@@ -2482,8 +2482,8 @@ export function Blending() {
                 <th>Batch</th>
                 <th>Product</th>
                 <th>Recipe</th>
-                <th>Size</th>
-                <th>Target proof</th>
+                <th className="num">Size</th>
+                <th className="num">Target proof</th>
                 <th>Assigned to</th>
                 <th>Progress</th>
                 <th>Status</th>
@@ -2499,13 +2499,13 @@ export function Blending() {
                     {b.blend_recipe_name ?? '—'}
                     {b.blend_recipe_version_number != null ? ` V${b.blend_recipe_version_number}` : ''}
                   </td>
-                  <td>{b.scale_factor !== 1 ? `${b.scale_factor}×` : '1×'}</td>
-                  <td>{b.target_abv != null ? `${b.target_abv}%` : '—'}</td>
+                  <td className="num">{b.scale_factor !== 1 ? `${b.scale_factor}×` : '1×'}</td>
+                  <td className="num">{b.target_abv != null ? `${b.target_abv}%` : '—'}</td>
                   <td><AssigneeCell name={b.assigned_user_name} /></td>
                   <td>{stepLabel(b.status, b.target_abv)}</td>
                   <td><StatusBadge status={b.status === 'blended' ? 'executed' : b.status} /></td>
                   <td className="td-actions">
-                    <button className="btn btn-sm btn-primary" onClick={() => openContinue(b)}>
+                    <button className="btn btn-sm btn-secondary" onClick={() => openContinue(b)}>
                       {b.status === 'executed' || b.status === 'bottled' || b.status === 'blended' ? 'View' : 'Continue'}
                     </button>
                     {b.status === 'executed' && (

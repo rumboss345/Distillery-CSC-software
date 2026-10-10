@@ -32,7 +32,7 @@ export function VolumeChangesReport() {
           <tr>
             <th>Date</th>
             <th>Place</th>
-            <th>Change</th>
+            <th className="num">Change</th>
             <th>Why</th>
             <th>Who</th>
           </tr>
@@ -52,7 +52,7 @@ export function VolumeChangesReport() {
                 <tr key={row.key}>
                   <td>{formatCalendarDay(row.occurred_at)}</td>
                   <td><strong>{row.place}</strong></td>
-                  <td>{row.change}</td>
+                  <td className="num">{row.change}</td>
                   <td>{row.why}</td>
                   <td>{row.who}</td>
                 </tr>

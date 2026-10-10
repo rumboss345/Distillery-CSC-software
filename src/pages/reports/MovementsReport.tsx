@@ -34,8 +34,8 @@ export function MovementsReport() {
             <th>From</th>
             <th>To</th>
             <th>Product</th>
-            <th>Volume</th>
-            <th>LAA</th>
+            <th className="num">Volume</th>
+            <th className="num">LAA</th>
             <th>Batch</th>
           </tr>
         </thead>
@@ -47,8 +47,8 @@ export function MovementsReport() {
               <td>{r.source_label}</td>
               <td>{r.dest_label}</td>
               <td>{r.product_liquid}</td>
-              <td>{r.volume_gal.toFixed(2)} gal @ {r.abv.toFixed(1)}%</td>
-              <td>{r.laa_gal.toFixed(2)}</td>
+              <td className="num">{r.volume_gal.toFixed(2)} gal @ {r.abv.toFixed(1)}%</td>
+              <td className="num">{r.laa_gal.toFixed(2)}</td>
               <td>{r.batch_ref || '—'}</td>
             </tr>
           ))}

@@ -128,9 +128,9 @@ export function SummaryReport() {
                   <th>Equipment</th>
                   <th>Type</th>
                   <th>Status</th>
-                  <th>Capacity</th>
-                  <th>Current Volume</th>
-                  <th>ABV</th>
+                  <th className="num">Capacity</th>
+                  <th className="num">Current Volume</th>
+                  <th className="num">ABV</th>
                   <th>Contents</th>
                 </tr>
               </thead>
@@ -140,15 +140,15 @@ export function SummaryReport() {
                     <td><strong>{eq.name}</strong></td>
                     <td>{equipmentTypeLabel(eq.equipment_type)}</td>
                     <td><StatusBadge status={eq.status} /></td>
-                    <td>{eq.capacity_gal > 0 ? `${eq.capacity_gal} gal` : '—'}</td>
-                    <td>
+                    <td className="num">{eq.capacity_gal > 0 ? `${eq.capacity_gal} gal` : '—'}</td>
+                    <td className="num">
                       {eq.volume_gal > 0 ? (
                         <strong>{eq.volume_gal.toFixed(1)} gal</strong>
                       ) : (
                         <span style={{ color: 'var(--text-muted)' }}>Empty</span>
                       )}
                     </td>
-                    <td>{eq.abv != null ? `${eq.abv.toFixed(1)}%` : '—'}</td>
+                    <td className="num">{eq.abv != null ? `${eq.abv.toFixed(1)}%` : '—'}</td>
                     <td>{eq.detail || '—'}</td>
                   </tr>
                 ))}
@@ -173,24 +173,24 @@ export function SummaryReport() {
               <thead>
                 <tr>
                   <th>Wash Batch</th>
-                  <th>Sugar (lbs)</th>
-                  <th>Wash (gal)</th>
-                  <th>Hearts (gal)</th>
-                  <th>Hearts ABV</th>
-                  <th>GPA</th>
-                  <th>Yield %</th>
+                  <th className="num">Sugar (lbs)</th>
+                  <th className="num">Wash (gal)</th>
+                  <th className="num">Hearts (gal)</th>
+                  <th className="num">Hearts ABV</th>
+                  <th className="num">GPA</th>
+                  <th className="num">Yield %</th>
                 </tr>
               </thead>
               <tbody>
                 {yields.map((y) => (
                   <tr key={y.mashBatchNumber}>
                     <td><strong>{y.mashBatchNumber}</strong></td>
-                    <td>{y.grainLbs}</td>
-                    <td>{y.washVolumeGal}</td>
-                    <td>{y.heartsVolumeGal.toFixed(1)}</td>
-                    <td>{y.heartsAbv.toFixed(1)}%</td>
-                    <td>{y.gpa.toFixed(2)} gal</td>
-                    <td><strong>{y.yieldPercent.toFixed(1)}%</strong></td>
+                    <td className="num">{y.grainLbs}</td>
+                    <td className="num">{y.washVolumeGal}</td>
+                    <td className="num">{y.heartsVolumeGal.toFixed(1)}</td>
+                    <td className="num">{y.heartsAbv.toFixed(1)}%</td>
+                    <td className="num">{y.gpa.toFixed(2)} gal</td>
+                    <td className="num"><strong>{y.yieldPercent.toFixed(1)}%</strong></td>
                   </tr>
                 ))}
               </tbody>
@@ -216,10 +216,10 @@ export function SummaryReport() {
                   <th>Batch</th>
                   <th>Product</th>
                   <th>Date</th>
-                  <th>Bottled (gal)</th>
-                  <th>To tank (gal)</th>
-                  <th>Tank draw (gal)</th>
-                  <th>Variance</th>
+                  <th className="num">Bottled (gal)</th>
+                  <th className="num">To tank (gal)</th>
+                  <th className="num">Tank draw (gal)</th>
+                  <th className="num">Variance</th>
                 </tr>
               </thead>
               <tbody>
@@ -232,14 +232,14 @@ export function SummaryReport() {
                       <td><strong>{run.batch_number}</strong></td>
                       <td>{run.product_name}</td>
                       <td>{formatDateDisplay(run.bottling_date)}</td>
-                      <td>{bottled.toFixed(2)}</td>
-                      <td>{sentGal >= 0.01 ? sentGal.toFixed(2) : '—'}</td>
-                      <td>
+                      <td className="num">{bottled.toFixed(2)}</td>
+                      <td className="num">{sentGal >= 0.01 ? sentGal.toFixed(2) : '—'}</td>
+                      <td className="num">
                         {run.source_holding_tank_equipment_id && run.source_volume_gal != null
                           ? run.source_volume_gal.toFixed(2)
                           : '—'}
                       </td>
-                      <td>
+                      <td className="num">
                         {variance != null && Math.abs(variance) >= 0.01
                           ? `${variance > 0 ? '+' : ''}${variance.toFixed(2)}`
                           : '—'}

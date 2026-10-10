@@ -925,7 +925,7 @@ export function Distillation() {
       {runs.length === 0 ? (
         <div className="empty-state">
           <p>No distillation runs recorded yet.</p>
-          <button type="button" className="btn btn-primary" onClick={() => openNewRun('wash')} style={{ marginTop: '1rem' }}>
+          <button type="button" className="btn btn-secondary" onClick={() => openNewRun('wash')} style={{ marginTop: '1rem' }}>
             Create first run
           </button>
         </div>
@@ -955,7 +955,7 @@ export function Distillation() {
                       <th>Still</th>
                       <th>Date</th>
                       <th>Assigned to</th>
-                      <th>Charge</th>
+                      <th className="num">Charge</th>
                       <th></th>
                     </tr>
                   </thead>
@@ -977,7 +977,7 @@ export function Distillation() {
                           <td>{r.still_name}</td>
                           <td>{formatDateDisplay(r.run_date)}</td>
                           <td><AssigneeCell name={r.assigned_user_name} /></td>
-                          <td>
+                          <td className="num">
                             {r.charge_volume_gal} gal
                             {r.charge_abv != null ? ` @ ${r.charge_abv.toFixed(1)}%${r.alcohol_charge_basis === 'estimated_brix' ? ' est.' : ''}` : ''}
                             {r.alcohol_loss_gal != null && (
@@ -1063,7 +1063,7 @@ export function Distillation() {
               <table>
                 <thead>
                   <tr>
-                    <th>Cut</th><th>Tank</th><th>Start</th><th>End</th><th>Volume</th><th>ABV</th><th>GPA</th><th>Notes</th>
+                    <th>Cut</th><th>Tank</th><th>Start</th><th>End</th><th className="num">Volume</th><th className="num">ABV</th><th className="num">GPA</th><th>Notes</th>
                     {!selectedRunIsComplete && <th></th>}
                   </tr>
                 </thead>
@@ -1074,9 +1074,9 @@ export function Distillation() {
                       <td>{c.holding_tank_name ?? (c.cut_type === 'heads' ? 'Discarded' : '—')}</td>
                       <td style={{ whiteSpace: 'nowrap' }}>{formatRecordedAt(c.start_time)}</td>
                       <td style={{ whiteSpace: 'nowrap' }}>{c.end_time ? formatRecordedAt(c.end_time) : '—'}</td>
-                      <td>{c.volume_gal} gal</td>
-                      <td>{c.abv}%</td>
-                      <td>{(c.volume_gal * c.abv / 100).toFixed(2)} gal</td>
+                      <td className="num">{c.volume_gal} gal</td>
+                      <td className="num">{c.abv}%</td>
+                      <td className="num">{(c.volume_gal * c.abv / 100).toFixed(2)} gal</td>
                       <td>{c.notes}</td>
                       {!selectedRunIsComplete && (
                         <td className="td-actions">
@@ -1598,9 +1598,9 @@ export function Distillation() {
               <thead>
                 <tr>
                   <th>Tank</th>
-                  <th>Volume</th>
-                  <th>ABV</th>
-                  <th>Capacity</th>
+                  <th className="num">Volume</th>
+                  <th className="num">ABV</th>
+                  <th className="num">Capacity</th>
                   <th>Status</th>
                 </tr>
               </thead>
@@ -1608,9 +1608,9 @@ export function Distillation() {
                 {tanksWithContents.map((t) => (
                   <tr key={t.id}>
                     <td><strong>{t.name}</strong></td>
-                    <td>{t.volume_gal > 0 ? `${t.volume_gal.toFixed(1)} gal` : '—'}</td>
-                    <td>{t.volume_gal > 0 ? `${t.abv.toFixed(1)}%` : '—'}</td>
-                    <td>{t.capacity_gal > 0 ? `${t.capacity_gal} gal` : '—'}</td>
+                    <td className="num">{t.volume_gal > 0 ? `${t.volume_gal.toFixed(1)} gal` : '—'}</td>
+                    <td className="num">{t.volume_gal > 0 ? `${t.abv.toFixed(1)}%` : '—'}</td>
+                    <td className="num">{t.capacity_gal > 0 ? `${t.capacity_gal} gal` : '—'}</td>
                     <td><StatusBadge status={t.volume_gal > 0 ? 'in_use' : 'empty'} /></td>
                   </tr>
                 ))}

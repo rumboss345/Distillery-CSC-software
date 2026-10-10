@@ -34,12 +34,12 @@ export function BottlingReportPage() {
             <th>Batch</th>
             <th>Product</th>
             <th>Date</th>
-            <th>Bottled</th>
-            <th>ABV</th>
-            <th>LAA</th>
-            <th>Bottles</th>
-            <th>Tank draw</th>
-            <th>Variance</th>
+            <th className="num">Bottled</th>
+            <th className="num">ABV</th>
+            <th className="num">LAA</th>
+            <th className="num">Bottles</th>
+            <th className="num">Tank draw</th>
+            <th className="num">Variance</th>
             <th>Why</th>
             <th>Who</th>
           </tr>
@@ -50,12 +50,12 @@ export function BottlingReportPage() {
               <td><strong>{r.batch_number}</strong></td>
               <td>{r.product_name}</td>
               <td>{formatDateDisplay(r.bottling_date)}</td>
-              <td>{r.bottled_gal.toFixed(2)} gal</td>
-              <td>{r.final_abv.toFixed(1)}%</td>
-              <td>{r.bottled_laa_gal.toFixed(2)}</td>
-              <td>{r.bottle_count}</td>
-              <td>{r.tank_draw_gal != null ? r.tank_draw_gal.toFixed(2) : '—'}</td>
-              <td>
+              <td className="num">{r.bottled_gal.toFixed(2)} gal</td>
+              <td className="num">{r.final_abv.toFixed(1)}%</td>
+              <td className="num">{r.bottled_laa_gal.toFixed(2)}</td>
+              <td className="num">{r.bottle_count}</td>
+              <td className="num">{r.tank_draw_gal != null ? r.tank_draw_gal.toFixed(2) : '—'}</td>
+              <td className="num">
                 {r.volume_variance_gal != null && Math.abs(r.volume_variance_gal) >= 0.01
                   ? `${r.volume_variance_gal > 0 ? '+' : ''}${r.volume_variance_gal.toFixed(2)}`
                   : '—'}

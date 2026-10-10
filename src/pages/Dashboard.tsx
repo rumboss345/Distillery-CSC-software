@@ -80,7 +80,7 @@ export function Dashboard() {
                 <tr>
                   <th>Batch</th>
                   <th>Recipe</th>
-                  <th>Sugar (lbs)</th>
+                  <th className="num">Sugar (lbs)</th>
                   <th>Started</th>
                   <th>Status</th>
                 </tr>
@@ -90,7 +90,7 @@ export function Dashboard() {
                   <tr key={m.id}>
                     <td><strong>{m.batch_number}</strong></td>
                     <td>{m.recipe_name}</td>
-                    <td>{m.grain_lbs} lbs · {m.grain_type}</td>
+                    <td className="num">{m.grain_lbs} lbs · {m.grain_type}</td>
                     <td>{formatDateDisplay(m.start_date)}</td>
                     <td><StatusBadge status={m.status} /></td>
                   </tr>
@@ -113,7 +113,7 @@ export function Dashboard() {
                   <th>Run</th>
                   <th>Still</th>
                   <th>Date</th>
-                  <th>Charge</th>
+                  <th className="num">Charge</th>
                   <th>Status</th>
                 </tr>
               </thead>
@@ -123,7 +123,7 @@ export function Dashboard() {
                     <td><strong>{r.batch_number}</strong></td>
                     <td>{r.still_name}</td>
                     <td>{formatDateDisplay(r.run_date)}</td>
-                    <td>{r.charge_volume_gal} gal</td>
+                    <td className="num">{r.charge_volume_gal} gal</td>
                     <td><StatusBadge status={r.status} /></td>
                   </tr>
                 ))}
@@ -143,7 +143,7 @@ export function Dashboard() {
                   <th>Barrel</th>
                   <th>Spirit</th>
                   <th>Fill Date</th>
-                  <th>Volume</th>
+                  <th className="num">Volume</th>
                   <th>Location</th>
                 </tr>
               </thead>
@@ -153,7 +153,7 @@ export function Dashboard() {
                     <td><strong>{b.barrel_number}</strong></td>
                     <td>{b.spirit_type} @ {b.initial_abv}%</td>
                     <td>{formatDateDisplay(b.fill_date)}</td>
-                    <td>{b.current_volume_gal} gal</td>
+                    <td className="num">{b.current_volume_gal} gal</td>
                     <td>{b.warehouse_location}</td>
                   </tr>
                 ))}
@@ -172,8 +172,8 @@ export function Dashboard() {
                 <tr>
                   <th>Item</th>
                   <th>Category</th>
-                  <th>On Hand</th>
-                  <th>Reorder Level</th>
+                  <th className="num">On Hand</th>
+                  <th className="num">Reorder Level</th>
                 </tr>
               </thead>
               <tbody>
@@ -181,8 +181,8 @@ export function Dashboard() {
                   <tr key={i.id}>
                     <td><strong>{i.name}</strong></td>
                     <td>{i.category}</td>
-                    <td className="low-stock">{i.quantity} {i.unit}</td>
-                    <td>{i.reorder_level} {i.unit}</td>
+                    <td className="low-stock num">{i.quantity} {i.unit}</td>
+                    <td className="num">{i.reorder_level} {i.unit}</td>
                   </tr>
                 ))}
               </tbody>

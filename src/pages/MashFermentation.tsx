@@ -259,7 +259,7 @@ export function MashFermentation() {
               ? 'No wash batches recorded yet.'
               : 'No wash records yet. Discarded fermentations stay on the Fermentation page.'}
           </p>
-          <button className="btn btn-primary" onClick={() => openNew()} style={{ marginTop: '1rem' }}>
+          <button className="btn btn-secondary" onClick={() => openNew()} style={{ marginTop: '1rem' }}>
             Create your first batch
           </button>
         </div>
@@ -291,8 +291,8 @@ export function MashFermentation() {
                     <tr>
                       <th>Batch #</th>
                       <th>Recipe</th>
-                      <th>Sugar (lbs)</th>
-                      <th>Batch Size</th>
+                      <th className="num">Sugar (lbs)</th>
+                      <th className="num">Batch Size</th>
                       <th>Started</th>
                       <th>Assigned to</th>
                       <th></th>
@@ -303,8 +303,8 @@ export function MashFermentation() {
                       <tr key={b.id}>
                         <td><strong>{b.batch_number}</strong></td>
                         <td>{b.recipe_name}</td>
-                        <td>{b.grain_lbs} lbs</td>
-                        <td>{b.water_gal} gal</td>
+                        <td className="num">{b.grain_lbs} lbs</td>
+                        <td className="num">{b.water_gal} gal</td>
                         <td>{formatDateDisplay(b.start_date)}</td>
                         <td><AssigneeCell name={b.assigned_user_name} /></td>
                         <td className="td-actions">

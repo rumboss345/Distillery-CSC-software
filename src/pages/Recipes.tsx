@@ -283,7 +283,7 @@ export function Recipes() {
             <div className="recipe-action-cluster">
               <button
                 type="button"
-                className="btn btn-primary"
+                className={`btn ${showDesigner ? 'btn-secondary' : 'btn-primary'}`}
                 onClick={openBlendRecipe}
                 data-testid="add-blend-recipe"
               >
@@ -291,7 +291,7 @@ export function Recipes() {
               </button>
               <button
                 type="button"
-                className={`btn ${showDesigner ? 'btn-primary' : 'btn-secondary'}`}
+                className={`btn btn-secondary${showDesigner ? ' is-on' : ''}`}
                 aria-pressed={showDesigner}
                 onClick={() => setShowDesigner((open) => !open)}
                 data-testid="blend-designer"
@@ -354,10 +354,10 @@ export function Recipes() {
                     <th>Recipe</th>
                     <th>Spirit Type</th>
                     <th>Sugar</th>
-                    <th>Sugar (lbs)</th>
-                    <th>Batch Size (gal)</th>
+                    <th className="num">Sugar (lbs)</th>
+                    <th className="num">Batch Size (gal)</th>
                     <th>Yeast</th>
-                    <th>Target Brix</th>
+                    <th className="num">Target Brix</th>
                     <th>Nutrients</th>
                     <th>Actions</th>
                   </tr>
@@ -373,10 +373,10 @@ export function Recipes() {
                       <td><strong>{r.name}</strong></td>
                       <td>{r.spirit_type || '—'}</td>
                       <td>{r.grain_type || '—'}</td>
-                      <td>{r.grain_lbs || '—'}</td>
-                      <td>{r.water_gal || '—'}</td>
+                      <td className="num">{r.grain_lbs || '—'}</td>
+                      <td className="num">{r.water_gal || '—'}</td>
                       <td>{r.yeast_strain || '—'}</td>
-                      <td>{r.target_brix ?? '—'}</td>
+                      <td className="num">{r.target_brix ?? '—'}</td>
                       <td>{r.nutrients.length ? formatRecipeNutrientsSummary(r.nutrients) : '—'}</td>
                       <td className="table-actions" onClick={(e) => e.stopPropagation()}>
                         <button type="button" className="btn btn-secondary btn-sm" onClick={() => openEdit(r)}>
