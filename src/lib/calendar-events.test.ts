@@ -37,6 +37,8 @@ const baseMash = (overrides: Partial<MashBatch> = {}): MashBatch => ({
   yeast_strain: 'Y1',
   yeast_lbs: 1,
   start_date: '2026-03-01',
+  fermentation_start_date: null,
+  expected_completion_date: null,
   target_brix: null,
   actual_brix: null,
   target_final_brix: null,
@@ -118,6 +120,31 @@ describe('buildWashCalendarEvent', () => {
     const event = buildWashCalendarEvent(baseMash({ status: 'fermenting' }), logs, '2026-03-10');
     expect(event?.endDate).toBe('2026-03-10');
     expect(eventOccursOnDate(event!, '2026-03-07')).toBe(true);
+  });
+
+  it('shows a fermentation from the day it starts through the expected completion date', () => {
+    const event = buildWashCalendarEvent(baseMash({
+      status: 'fermenting',
+      fermentation_start_date: '2026-03-03',
+      expected_completion_date: '2026-03-12',
+    }), [], '2026-03-05');
+    expect(event?.startDate).toBe('2026-03-03');
+    expect(event?.endDate).toBe('2026-03-12');
+    expect(eventOccursOnDate(event!, '2026-03-10')).toBe(true);
+    expect(eventOccursOnDate(event!, '2026-03-02')).toBe(false);
+    expect(event?.detail).toMatch(/Expected done/);
+  });
+
+  it('keeps an overdue fermentation on the calendar through today', () => {
+    const event = buildWashCalendarEvent(baseMash({
+      status: 'fermenting',
+      fermentation_start_date: '2026-03-01',
+      expected_completion_date: '2026-03-04',
+    }), [], '2026-03-10');
+    expect(event?.startDate).toBe('2026-03-01');
+    expect(event?.endDate).toBe('2026-03-10');
+    expect(eventOccursOnDate(event!, '2026-03-04')).toBe(true);
+    expect(eventOccursOnDate(event!, '2026-03-10')).toBe(true);
   });
 
   it('does not extend an in-progress fermentation that starts today or later', () => {

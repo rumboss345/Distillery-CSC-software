@@ -40,6 +40,7 @@ import { EQUIPMENT_TYPES, isSpiritLedgerEquipmentType, resolveEquipmentIcon } fr
 import { equipmentTypeDeleteError, equipmentTypeNameError, normalizeEquipmentTypeName } from '../lib/equipment-type';
 import { countActiveFermentations, fermenterShowsAssignedWash } from '../lib/mash-fermenter-fill';
 import { compareStoredDatesDesc } from '../lib/date-input';
+import { expectedCompletionDateError } from '../lib/fermentation';
 import { eventDateWhenLeavingPlanned, localIsoDate } from '../lib/planned-event-date';
 import { DISCARD_DESTINATION, fermenterTransferError } from '../lib/fermenter-transfer';
 import {
@@ -653,14 +654,14 @@ export function getMashBatch(id: number): MashBatch | undefined {
 export function saveMashBatch(batch: Omit<MashBatch, 'id' | 'created_at'>, id?: number): number {
   if (id) {
     runQuery(
-      `UPDATE mash_batches SET batch_number=?, recipe_name=?, grain_type=?, grain_lbs=?, water_gal=?, yeast_strain=?, yeast_lbs=?, start_date=?, target_brix=?, actual_brix=?, target_final_brix=?, status=?, assigned_user_id=?, assigned_user_name=?, notes=? WHERE id=?`,
-      [batch.batch_number, batch.recipe_name, batch.grain_type, batch.grain_lbs, batch.water_gal, batch.yeast_strain, batch.yeast_lbs, batch.start_date, batch.target_brix, batch.actual_brix, batch.target_final_brix, batch.status, batch.assigned_user_id, batch.assigned_user_name ?? '', batch.notes, id],
+      `UPDATE mash_batches SET batch_number=?, recipe_name=?, grain_type=?, grain_lbs=?, water_gal=?, yeast_strain=?, yeast_lbs=?, start_date=?, fermentation_start_date=?, expected_completion_date=?, target_brix=?, actual_brix=?, target_final_brix=?, status=?, assigned_user_id=?, assigned_user_name=?, notes=? WHERE id=?`,
+      [batch.batch_number, batch.recipe_name, batch.grain_type, batch.grain_lbs, batch.water_gal, batch.yeast_strain, batch.yeast_lbs, batch.start_date, batch.fermentation_start_date || null, batch.expected_completion_date || null, batch.target_brix, batch.actual_brix, batch.target_final_brix, batch.status, batch.assigned_user_id, batch.assigned_user_name ?? '', batch.notes, id],
     );
     return id;
   }
   return insertRow(
-    `INSERT INTO mash_batches (batch_number, recipe_name, grain_type, grain_lbs, water_gal, yeast_strain, yeast_lbs, start_date, target_brix, actual_brix, target_final_brix, actual_final_brix, status, assigned_user_id, assigned_user_name, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [batch.batch_number, batch.recipe_name, batch.grain_type, batch.grain_lbs, batch.water_gal, batch.yeast_strain, batch.yeast_lbs, batch.start_date, batch.target_brix, batch.actual_brix, batch.target_final_brix, batch.actual_final_brix, batch.status, batch.assigned_user_id, batch.assigned_user_name ?? '', batch.notes],
+    `INSERT INTO mash_batches (batch_number, recipe_name, grain_type, grain_lbs, water_gal, yeast_strain, yeast_lbs, start_date, fermentation_start_date, expected_completion_date, target_brix, actual_brix, target_final_brix, actual_final_brix, status, assigned_user_id, assigned_user_name, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [batch.batch_number, batch.recipe_name, batch.grain_type, batch.grain_lbs, batch.water_gal, batch.yeast_strain, batch.yeast_lbs, batch.start_date, batch.fermentation_start_date || null, batch.expected_completion_date || null, batch.target_brix, batch.actual_brix, batch.target_final_brix, batch.actual_final_brix, batch.status, batch.assigned_user_id, batch.assigned_user_name ?? '', batch.notes],
   );
 }
 
@@ -2626,7 +2627,7 @@ export function saveFermentationSet(
   mashBatchId: number,
   assignments: FermenterAssignmentInput[],
   moveLogs?: { fromEquipmentId: number; toEquipmentId: number },
-  options?: { keepStatusWhenEmpty?: boolean; actualStartBrix?: number },
+  options?: { keepStatusWhenEmpty?: boolean; actualStartBrix?: number; expectedCompletionDate?: string },
 ): void {
   const batch = getMashBatch(mashBatchId);
   if (!batch) throw new Error('Wash batch not found.');
@@ -2679,10 +2680,23 @@ export function saveFermentationSet(
   }));
   const { id: _id, created_at: _created, ...batchFields } = batch;
   const actualStartBrix = options?.actualStartBrix;
+  const fermenting = nextStatus === 'fermenting';
+  const fermentationStart = batch.fermentation_start_date
+    || (fermenting
+      ? (batch.status === 'fermenting' ? batch.start_date : localIsoDate())
+      : '');
+  const submittedCompletion = options?.expectedCompletionDate?.trim() ?? '';
+  const expectedCompletion = submittedCompletion || batch.expected_completion_date || '';
+  if (fermenting) {
+    const dateError = expectedCompletionDateError(expectedCompletion, fermentationStart);
+    if (dateError) throw new Error(dateError);
+  }
   saveMashBatchWithFermenters(
     {
       ...batchFields,
       status: nextStatus,
+      fermentation_start_date: fermenting ? fermentationStart : batch.fermentation_start_date,
+      expected_completion_date: expectedCompletion || null,
       ...(actualStartBrix != null && Number.isFinite(actualStartBrix) ? { actual_brix: actualStartBrix } : {}),
     },
     assignments,

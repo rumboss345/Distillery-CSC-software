@@ -1,3 +1,4 @@
+import { isIsoDate } from './date-input';
 import { GRAMS_PER_POUND, LITERS_PER_US_GALLON, SUCROSE_APPARENT_SPECIFIC_VOLUME_ML_PER_G } from './material-densities';
 
 /** Moving a wash into fermenting requires the measured start Brix. */
@@ -7,6 +8,16 @@ export function washMoveNeedsActualStartBrix(
 ): boolean {
   if (status === 'planned' || status === 'mashing') return true;
   return actualBrix == null;
+}
+
+/** Expected completion must be a real date on or after the fermentation starts. */
+export function expectedCompletionDateError(value: string | null | undefined, startDate: string): string | null {
+  const date = value?.trim() ?? '';
+  if (!isIsoDate(date)) return 'Enter the expected completion date.';
+  if (startDate && date < startDate) {
+    return 'Expected completion must be on or after the day fermentation starts.';
+  }
+  return null;
 }
 
 export function actualStartBrixError(value: number | null | undefined): string | null {

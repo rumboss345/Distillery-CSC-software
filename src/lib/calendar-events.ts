@@ -101,8 +101,8 @@ export const ALL_CALENDAR_STATUS_CATEGORIES: CalendarStatusCategory[] = [
  * - BottlingRun / BlendProduct: single blend_date / bottling_date only.
  */
 export const CALENDAR_DATA_LIMITATIONS = [
-  'Wash batches have no planned end date. Finished cooks span fermentation log dates when those logs exist.',
-  'Washes, runs, blends, and barrels that are still in progress stay on the calendar from their start through today.',
+  'A fermentation with an expected completion date stays on the calendar from the day it starts through that date. If it is still running after that date, it stays through today.',
+  'Washes that are still being made, runs, blends, and barrels that are in progress stay on the calendar from their start through today.',
   'Empty or dumped barrels have no separate end date. Aging barrels stay on the calendar until they leave the warehouse.',
   'Distillation, bottling, blending, and transfers are single-day events based on their recorded dates.',
 ] as const;
@@ -279,13 +279,21 @@ export function buildWashCalendarEvent(
   const startDate = toDateOnly(batch.start_date);
   if (!startDate) return null;
 
-  const inProgress = batch.status === 'mashing' || batch.status === 'fermenting';
+  const fermenting = batch.status === 'fermenting';
+  const fermentStart = fermenting
+    ? (toDateOnly(batch.fermentation_start_date ?? '') || startDate)
+    : startDate;
+  const expected = toDateOnly(batch.expected_completion_date ?? '');
   const endFromLogs = deriveFermentationEndDate(batch, logs);
-  const endDate = inProgress
-    ? spanThroughToday(startDate, today)
-    : endFromLogs && endFromLogs > startDate
-      ? endFromLogs
-      : undefined;
+  let endDate: string | undefined;
+  if (fermenting && expected && expected > fermentStart) {
+    endDate = expected < today && today > fermentStart ? today : expected;
+  } else if (batch.status === 'mashing' || fermenting) {
+    endDate = spanThroughToday(fermentStart, today);
+  } else if (endFromLogs && endFromLogs > startDate) {
+    endDate = endFromLogs;
+  }
+  const expectedLabel = expected ? `Expected done ${formatDateDisplay(expected)}` : '';
   const batchLogs = fermentationLogsForBatch(logs, batch.id);
   const washOnFermentation = washRecordPath(batch.status, {
     hasLogs: batchLogs.length > 0,
@@ -295,7 +303,7 @@ export function buildWashCalendarEvent(
   return {
     id: `wash-${batch.id}`,
     recordId: batch.id,
-    startDate,
+    startDate: fermentStart,
     endDate,
     allDay: true,
     kind: 'wash',
@@ -303,7 +311,7 @@ export function buildWashCalendarEvent(
     status: batch.status,
     statusCategory: mapWashStatus(batch.status),
     assignee: batch.assigned_user_name || undefined,
-    detail: batch.recipe_name || batch.grain_type || undefined,
+    detail: [batch.recipe_name || batch.grain_type, expectedLabel].filter(Boolean).join(' · ') || undefined,
     washOnFermentation,
   };
 }

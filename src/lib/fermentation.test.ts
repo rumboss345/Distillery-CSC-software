@@ -3,6 +3,7 @@ import {
   FERMENTATION_READY_MAX_BRIX,
   FERMENTER_LIQUID_GREEN_BELOW_BRIX,
   actualStartBrixError,
+  expectedCompletionDateError,
   estimateAbvFromBrix,
   fermenterLiquidBrixPhase,
   isBrixReadyForDistillation,
@@ -24,6 +25,15 @@ describe('actual start Brix when a wash moves to fermenting', () => {
     expect(actualStartBrixError(null)).toMatch(/actual start Brix/);
     expect(actualStartBrixError(0)).toMatch(/actual start Brix/);
     expect(actualStartBrixError(16.4)).toBeNull();
+  });
+});
+
+describe('expected fermentation completion', () => {
+  it('requires a date on or after the fermentation starts', () => {
+    expect(expectedCompletionDateError('', '2026-03-01')).toMatch(/expected completion/i);
+    expect(expectedCompletionDateError('2026-02-28', '2026-03-01')).toMatch(/on or after/i);
+    expect(expectedCompletionDateError('2026-03-01', '2026-03-01')).toBeNull();
+    expect(expectedCompletionDateError('2026-03-08', '2026-03-01')).toBeNull();
   });
 });
 

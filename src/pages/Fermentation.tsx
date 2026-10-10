@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { AssigneeCell } from '../components/AssigneeSelect';
+import { DatePicker } from '../components/DatePicker';
 import { AdminCredentialConfirmModal } from '../components/AdminCredentialConfirmModal';
 import { FermenterLogPanel } from '../components/FermenterLogPanel';
 import { Modal } from '../components/Modal';
@@ -22,7 +23,8 @@ import {
 } from '../db/queries';
 import { formatDateDisplay } from '../lib/date-input';
 import { latestCompleted } from '../lib/recent-completed';
-import { actualStartBrixError, estimateAbvFromBrix, formatAbvEstimate, washMoveNeedsActualStartBrix } from '../lib/fermentation';
+import { actualStartBrixError, estimateAbvFromBrix, expectedCompletionDateError, formatAbvEstimate, washMoveNeedsActualStartBrix } from '../lib/fermentation';
+import { localIsoDate } from '../lib/planned-event-date';
 import { volumeChangeReasonError } from '../lib/tank-volume-variance';
 import { FERMENTATION_PAGE_STATUSES, washRecordKind } from '../lib/wash-stage';
 import type { FermentationAssignmentStatus, MashBatch, MashFermenterAssignment, MashStatus } from '../types';
@@ -120,6 +122,7 @@ export function Fermentation() {
   const [leftoverGal, setLeftoverGal] = useState(0);
   const [leftoverNotes, setLeftoverNotes] = useState('');
   const [actualStartBrix, setActualStartBrix] = useState<number | null>(null);
+  const [expectedCompletion, setExpectedCompletion] = useState('');
   const [logTarget, setLogTarget] = useState<LogTarget | null>(null);
   const [adminDelete, setAdminDelete] = useState<FermentationRow | null>(null);
   const [adminEdit, setAdminEdit] = useState<FermentationRow | null>(null);
@@ -179,6 +182,7 @@ export function Fermentation() {
     setLeftoverGal(0);
     setLeftoverNotes('');
     setActualStartBrix(queryBatch.actual_brix);
+    setExpectedCompletion(queryBatch.expected_completion_date ?? '');
     completeEditUnlockedRef.current = null;
     setShowForm(true);
   }
@@ -310,6 +314,7 @@ export function Fermentation() {
     setLeftoverGal(0);
     setLeftoverNotes('');
     setActualStartBrix(batch.actual_brix);
+    setExpectedCompletion(batch.expected_completion_date ?? '');
     completeEditUnlockedRef.current = null;
     setShowForm(true);
   };
@@ -329,6 +334,7 @@ export function Fermentation() {
     setLeftoverGal(0);
     setLeftoverNotes('');
     setActualStartBrix(null);
+    setExpectedCompletion(row.batch.expected_completion_date ?? '');
     setShowForm(true);
   };
 
@@ -377,6 +383,15 @@ export function Fermentation() {
         return;
       }
     }
+    const fermentationStart = editBatch.fermentation_start_date
+      || (formMode === 'start' ? localIsoDate() : editBatch.start_date);
+    if (status === 'fermenting') {
+      const dateError = expectedCompletionDateError(expectedCompletion, fermentationStart);
+      if (dateError) {
+        alert(dateError);
+        return;
+      }
+    }
     const usable = Math.round((volumeGal - Math.max(0, leftover)) * 10) / 10;
     const totalGal = (usable > 0.01 ? usable : 0) + (startingTwo ? volume2Gal : 0);
     const room = editBatch.water_gal - otherGallons;
@@ -415,6 +430,7 @@ export function Fermentation() {
         {
           ...(leftover > 0.01 && nextAssignments.length === 0 ? { keepStatusWhenEmpty: true } : {}),
           ...(askStartBrix && actualStartBrix != null ? { actualStartBrix } : {}),
+          expectedCompletionDate: expectedCompletion,
         },
       );
       if (leftover > 0.01) {
@@ -571,6 +587,7 @@ export function Fermentation() {
                       <th className="num">Start → Current Brix</th>
                       <th className="num">Est. ABV</th>
                       <th>Started</th>
+                      <th>Expected done</th>
                       <th>Assigned to</th>
                       <th></th>
                     </tr>
@@ -595,7 +612,8 @@ export function Fermentation() {
                           <td className="num">{row.equipmentId != null ? `${row.volumeGal.toFixed(1)} gal` : '—'}</td>
                           <td className="num">{row.startBrix ?? '—'} → {row.currentBrix ?? '—'}</td>
                           <td className="num">{formatAbvEstimate(estAbv)}</td>
-                          <td>{formatDateDisplay(row.batch.start_date)}</td>
+                          <td>{formatDateDisplay(row.batch.fermentation_start_date || row.batch.start_date)}</td>
+                          <td>{row.batch.expected_completion_date ? formatDateDisplay(row.batch.expected_completion_date) : '—'}</td>
                           <td><AssigneeCell name={row.batch.assigned_user_name} /></td>
                           <td className="td-actions">
                             <button className="btn btn-sm btn-secondary" onClick={() => openLogs(row)}>
@@ -779,6 +797,17 @@ export function Fermentation() {
                 </p>
               </div>
             )}
+            <div className="form-group">
+              <label>Expected completion</label>
+              <DatePicker
+                value={expectedCompletion}
+                onChange={setExpectedCompletion}
+              />
+              <p className="field-hint">
+                The fermentation stays on the calendar from the day it starts through this date.
+                If it is still fermenting after that day, it stays on the calendar until it is finished.
+              </p>
+            </div>
             <div className="form-group">
               <label>Status</label>
               <select
