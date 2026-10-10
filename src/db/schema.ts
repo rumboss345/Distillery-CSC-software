@@ -69,6 +69,8 @@ CREATE TABLE IF NOT EXISTS mash_batches (
   yeast_strain TEXT NOT NULL DEFAULT '',
   yeast_lbs REAL NOT NULL DEFAULT 0,
   start_date TEXT NOT NULL,
+  fermentation_start_date TEXT,
+  expected_completion_date TEXT,
   target_brix REAL,
   actual_brix REAL,
   target_final_brix REAL,

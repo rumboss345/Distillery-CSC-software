@@ -637,6 +637,7 @@ function runMigrations(): void {
   migrateFloorPlanPages();
   migrateAdvancedBlending();
   migrateAssignedEmployee();
+  migrateFermentationSchedule();
   migrateRecipeNutrients();
   migrateMashBatchNutrients();
   migrateBlendRecipeVersions();
@@ -825,6 +826,12 @@ function migrateRecipeNutrients(): void {
       );
     }
   }
+}
+
+function migrateFermentationSchedule(): void {
+  if (!db) return;
+  addColumnIfMissing('mash_batches', 'fermentation_start_date', 'TEXT');
+  addColumnIfMissing('mash_batches', 'expected_completion_date', 'TEXT');
 }
 
 function migrateAssignedEmployee(): void {

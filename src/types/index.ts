@@ -190,6 +190,10 @@ export interface MashBatch {
   yeast_strain: string;
   yeast_lbs: number;
   start_date: string;
+  /** Day the wash was moved into a fermenter. Empty until fermentation starts. */
+  fermentation_start_date: string | null;
+  /** Day the operator expects this fermentation to finish. */
+  expected_completion_date: string | null;
   target_brix: number | null;
   actual_brix: number | null;
   target_final_brix: number | null;

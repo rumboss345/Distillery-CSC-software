@@ -68,6 +68,8 @@ const emptyBatch = (): Omit<MashBatch, 'id' | 'created_at'> => ({
   yeast_strain: '',
   yeast_lbs: 0,
   start_date: localIsoDate(),
+  fermentation_start_date: null,
+  expected_completion_date: null,
   target_brix: null,
   actual_brix: null,
   target_final_brix: null,
