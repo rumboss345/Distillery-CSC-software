@@ -21,9 +21,11 @@ import {
   filterEventsByKind,
   filterEventsByStatusCategory,
   groupEventsByDate,
+  layoutCalendarWeek,
   isMultiDayEvent,
   matchesStatusCategoryFilter,
   sortCalendarEvents,
+  type CalendarEvent,
   type CalendarProductionData,
 } from './calendar-events';
 
@@ -394,6 +396,52 @@ describe('eventOccursOnDate', () => {
     };
     expect(eventOccursOnDate(event, '2026-03-02')).toBe(true);
     expect(eventOccursOnDate(event, '2026-03-04')).toBe(false);
+  });
+});
+
+describe('layoutCalendarWeek', () => {
+  const days = ['2026-03-01', '2026-03-02', '2026-03-03', '2026-03-04', '2026-03-05', '2026-03-06', '2026-03-07'];
+  const event = (id: string, startDate: string, endDate?: string): CalendarEvent => ({
+    id,
+    startDate,
+    endDate,
+    kind: 'wash',
+    title: id,
+    status: 'fermenting',
+    statusCategory: 'in_progress',
+  });
+
+  it('draws a multi-day event as one bar across its days', () => {
+    const [span] = layoutCalendarWeek(days, [event('wash', '2026-03-02', '2026-03-05')]);
+    expect(span).toMatchObject({
+      startCol: 1,
+      endCol: 4,
+      lane: 0,
+      continuesBefore: false,
+      continuesAfter: false,
+    });
+  });
+
+  it('clips a bar at the week edges when the process continues', () => {
+    const [span] = layoutCalendarWeek(days, [event('wash', '2026-02-20', '2026-03-20')]);
+    expect(span).toMatchObject({
+      startCol: 0,
+      endCol: 6,
+      continuesBefore: true,
+      continuesAfter: true,
+    });
+  });
+
+  it('stacks overlapping processes and shares a lane when they do not overlap', () => {
+    const spans = layoutCalendarWeek(days, [
+      event('long', '2026-03-01', '2026-03-04'),
+      event('overlap', '2026-03-03', '2026-03-06'),
+      event('later', '2026-03-05', '2026-03-07'),
+    ]);
+    const byId = Object.fromEntries(spans.map((span) => [span.event.id, span.lane]));
+    expect(byId.long).toBe(0);
+    expect(byId.overlap).toBe(1);
+    expect(byId.later).toBe(0);
   });
 });
 
