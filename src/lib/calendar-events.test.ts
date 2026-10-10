@@ -185,7 +185,7 @@ describe('deriveFermentationEndDate', () => {
 });
 
 describe('buildCalendarEventsFromData', () => {
-  it('builds single-day distillation, bottling, blend, and transfer events', () => {
+  it('builds distillation, bottling, and blend events and leaves out barrels and transfers', () => {
     const events = buildCalendarEventsFromData(emptyData({
       runs: [{
         id: 1,
@@ -297,18 +297,15 @@ describe('buildCalendarEventsFromData', () => {
       } satisfies Barrel],
     }), '2026-07-01');
 
-    expect(events).toHaveLength(5);
-    const barrel = events.find((event) => event.kind === 'barrel');
-    expect(barrel?.endDate).toBe('2026-07-01');
-    expect(calendarEventPath(barrel!)).toBe('/barrels?record=1');
-    for (const event of events.filter((item) => item.kind !== 'barrel')) {
+    expect(events).toHaveLength(3);
+    expect(events.some((event) => event.kind === 'barrel' || event.kind === 'transfer')).toBe(false);
+    for (const event of events) {
       expect(event.endDate).toBeUndefined();
       expect(event.allDay).toBe(true);
     }
     expect(calendarEventPath(events.find((event) => event.kind === 'distillation')!)).toBe('/distillation?record=1');
     expect(calendarEventPath(events.find((event) => event.kind === 'blend')!)).toBe('/blending?record=1');
     expect(calendarEventPath(events.find((event) => event.kind === 'bottling')!)).toBe('/bottling?record=1');
-    expect(calendarEventPath(events.find((event) => event.kind === 'transfer')!)).toBe('/tank-transfer?record=1');
   });
 
   it('skips records with missing dates', () => {

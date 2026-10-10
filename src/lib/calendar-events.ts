@@ -8,10 +8,8 @@ import { localIsoDate } from './planned-event-date';
 import {
   getMashBatches,
   getDistillationRuns,
-  getBarrels,
   getBottlingRuns,
   getBlendProducts,
-  getHoldingTankTransfers,
   getAllFermentationLogs,
 } from '../db/queries';
 import { formatLinesSummary } from './bottling-lines';
@@ -77,10 +75,8 @@ export const ALL_CALENDAR_KINDS: CalendarActivityKind[] = [
   'wash',
   'fermentation',
   'distillation',
-  'barrel',
   'bottling',
   'blend',
-  'transfer',
 ];
 
 export const ALL_CALENDAR_STATUS_CATEGORIES: CalendarStatusCategory[] = [
@@ -105,9 +101,9 @@ export const ALL_CALENDAR_STATUS_CATEGORIES: CalendarStatusCategory[] = [
  */
 export const CALENDAR_DATA_LIMITATIONS = [
   'A fermentation with an expected completion date stays on the calendar from the day it starts through that date. If it is still running after that date, it stays through today.',
-  'Washes that are still being made, runs, blends, and barrels that are in progress stay on the calendar from their start through today.',
-  'Empty or dumped barrels have no separate end date. Aging barrels stay on the calendar until they leave the warehouse.',
-  'Distillation, bottling, blending, and transfers are single-day events based on their recorded dates.',
+  'Washes that are still being made, runs, and blends that are in progress stay on the calendar from their start through today.',
+  'Barrel aging and tank transfers are not shown on the calendar.',
+  'Distillation, bottling, and blending are dated from their recorded dates.',
 ] as const;
 
 export type CalendarProgress = 'upcoming' | 'in_progress' | 'done';
@@ -206,19 +202,6 @@ export function mapRunStatus(status: DistillationRun['status']): CalendarStatusC
       return 'in_progress';
     case 'complete':
       return 'complete';
-    default:
-      return 'other';
-  }
-}
-
-export function mapBarrelStatus(status: Barrel['status']): CalendarStatusCategory {
-  switch (status) {
-    case 'aging':
-      return 'in_progress';
-    case 'empty':
-      return 'complete';
-    case 'dumped':
-      return 'cancelled';
     default:
       return 'other';
   }
@@ -374,23 +357,6 @@ export function buildCalendarEventsFromData(
     });
   }
 
-  for (const barrel of data.barrels) {
-    const startDate = toDateOnly(barrel.fill_date);
-    if (!startDate) continue;
-    events.push({
-      id: `barrel-fill-${barrel.id}`,
-      recordId: barrel.id,
-      startDate,
-      endDate: barrel.status === 'aging' ? spanThroughToday(startDate, today) : undefined,
-      allDay: true,
-      kind: 'barrel',
-      title: barrel.barrel_number,
-      status: barrel.status,
-      statusCategory: mapBarrelStatus(barrel.status),
-      detail: `${barrel.spirit_type} — fill`,
-    });
-  }
-
   for (const bottling of data.bottlings) {
     const startDate = toDateOnly(bottling.bottling_date);
     if (!startDate) continue;
@@ -427,22 +393,6 @@ export function buildCalendarEventsFromData(
     });
   }
 
-  for (const transfer of data.transfers) {
-    const startDate = toDateOnly(transfer.transfer_date);
-    if (!startDate) continue;
-    events.push({
-      id: `transfer-${transfer.id}`,
-      recordId: transfer.id,
-      startDate,
-      allDay: true,
-      kind: 'transfer',
-      title: `${transfer.source_tank_name ?? 'Tank'} → ${transfer.dest_tank_name ?? 'Tank'}`,
-      status: 'transfer',
-      statusCategory: 'other',
-      detail: `${transfer.volume_gal.toFixed(1)} gal @ ${transfer.abv.toFixed(1)}%`,
-    });
-  }
-
   return sortCalendarEvents(events);
 }
 
@@ -451,10 +401,10 @@ export function buildCalendarEvents(): CalendarEvent[] {
     mashes: getMashBatches(),
     fermentationLogs: getAllFermentationLogs(),
     runs: getDistillationRuns(),
-    barrels: getBarrels(),
+    barrels: [],
     bottlings: getBottlingRuns(),
     blends: getBlendProducts(),
-    transfers: getHoldingTankTransfers(),
+    transfers: [],
   });
 }
 
