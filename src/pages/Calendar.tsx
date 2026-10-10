@@ -486,7 +486,7 @@ function TodayStaffSheet({ events, day }: { events: CalendarEvent[]; day: Date }
         groups.map((group) => (
           <section key={group.name} className="today-staff-person">
             <h4>{group.name}</h4>
-            <div className="table-wrap">
+            <div className="today-staff-table-wrap">
               <table className="today-staff-table">
                 <thead>
                   <tr>
@@ -538,7 +538,7 @@ function CalendarDetailItem({ event }: { event: CalendarEvent }) {
       </Link>
       <p className="calendar-detail-meta text-muted">{formatEventDateRange(event)}</p>
       <p className="calendar-detail-meta text-muted">
-        Assigned to {event.assignee?.trim() || 'Unassigned'}
+        {event.assignee?.trim() ? `Assigned to ${event.assignee.trim()}` : 'Unassigned'}
       </p>
       {event.detail && <p className="calendar-detail-meta text-muted">{event.detail}</p>}
     </li>

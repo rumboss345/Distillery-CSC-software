@@ -3599,6 +3599,15 @@ tr.volume-change-kind:hover td {
   font-size: 1.05rem;
 }
 
+.today-staff-table-wrap {
+  overflow-x: auto;
+}
+
+.today-staff-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
 .today-sheet-check-col {
   width: 3.25rem;
   text-align: center;
@@ -4295,7 +4304,14 @@ tr.calendar-record-focus td {
     border-color: #111 !important;
   }
 
+  body:has(.today-staff-sheet) .today-staff-table-wrap {
+    display: block !important;
+    overflow: visible !important;
+    width: 100% !important;
+  }
+
   body:has(.today-staff-sheet) .today-staff-table {
+    display: table !important;
     width: 100%;
     border-collapse: collapse;
   }
