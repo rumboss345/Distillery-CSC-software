@@ -30,7 +30,7 @@ import {
   filterCalendarEvents,
   formatEventDateRange,
   groupEventsByDate,
-  isMultiDayEvent,
+  layoutCalendarWeek,
   type CalendarActivityKind,
   type CalendarEvent,
   type CalendarProgress,
@@ -50,7 +50,7 @@ const VIEW_LABELS: Record<CalendarViewMode, string> = {
 };
 
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const MONTH_EVENT_LIMIT = 2;
+const MAX_SPAN_LANES = 3;
 
 function dateKey(date: Date): string {
   return format(date, 'yyyy-MM-dd');
@@ -242,15 +242,15 @@ export function Calendar() {
                   <div key={label} className="calendar-weekday">{label}</div>
                 ))}
               </div>
-              <div className="calendar-grid">
-                {calendarDays.map((day) => (
-                  <CalendarDayCell
-                    key={dateKey(day)}
-                    day={day}
-                    inMonth={isSameMonth(day, monthStart)}
-                    selected={dateKey(day) === selectedDate}
-                    events={eventsByDate.get(dateKey(day)) ?? []}
-                    onSelect={() => selectDay(day)}
+              <div className="calendar-month">
+                {chunkWeeks(calendarDays).map((week) => (
+                  <CalendarSpanWeek
+                    key={dateKey(week[0])}
+                    days={week}
+                    events={filteredEvents}
+                    month={monthStart}
+                    selectedDate={selectedDate}
+                    onSelectDay={selectDay}
                   />
                 ))}
               </div>
@@ -258,29 +258,13 @@ export function Calendar() {
           )}
 
           {viewMode === 'week' && (
-            <div className="calendar-week-view">
-              {weekDays.map((day) => (
-                <div key={dateKey(day)} className="calendar-week-column">
-                  <button
-                    type="button"
-                    className={[
-                      'calendar-week-column-header',
-                      isToday(day) && 'calendar-day-today',
-                      dateKey(day) === selectedDate && 'calendar-day-selected',
-                    ].filter(Boolean).join(' ')}
-                    onClick={() => selectDay(day)}
-                  >
-                    <span className="calendar-weekday">{format(day, 'EEE')}</span>
-                    <span className="calendar-day-number">{format(day, 'd')}</span>
-                  </button>
-                  <div className="calendar-week-events">
-                    {(eventsByDate.get(dateKey(day)) ?? []).map((event) => (
-                      <WeekEventChip key={`${event.id}-${dateKey(day)}`} event={event} day={day} />
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
+            <CalendarSpanWeek
+              days={weekDays}
+              events={filteredEvents}
+              selectedDate={selectedDate}
+              onSelectDay={selectDay}
+              showWeekday
+            />
           )}
 
           {viewMode === 'agenda' && (
@@ -348,91 +332,123 @@ export function Calendar() {
   );
 }
 
-function CalendarDayCell({
-  day,
-  inMonth,
-  selected,
-  events,
-  onSelect,
-}: {
-  day: Date;
-  inMonth: boolean;
-  selected: boolean;
-  events: CalendarEvent[];
-  onSelect: () => void;
-}) {
-  const key = dateKey(day);
-  const visible = events.slice(0, MONTH_EVENT_LIMIT);
-  const hidden = events.length - visible.length;
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      className={[
-        'calendar-day',
-        !inMonth && 'calendar-day-outside',
-        selected && 'calendar-day-selected',
-        isToday(day) && 'calendar-day-today',
-      ].filter(Boolean).join(' ')}
-      onClick={onSelect}
-      onKeyDown={(event) => {
-        if (event.target !== event.currentTarget) return;
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault();
-          onSelect();
-        }
-      }}
-    >
-      <span className="calendar-day-number">{format(day, 'd')}</span>
-      {events.length > 0 && (
-        <div className="calendar-day-events">
-          {visible.map((event) => (
-            <Link
-              key={`${event.id}-${key}`}
-              to={calendarEventPath(event)}
-              className={[
-                'calendar-month-event',
-                `calendar-kind-${event.kind}`,
-                isMultiDayEvent(event) && event.startDate !== key && 'calendar-event-continued',
-              ].filter(Boolean).join(' ')}
-              title={[
-                CALENDAR_KIND_LABELS[event.kind],
-                event.title,
-                event.assignee,
-              ].filter(Boolean).join(' · ')}
-              onClick={(eventClick) => eventClick.stopPropagation()}
-            >
-              {event.title}
-            </Link>
-          ))}
-          {hidden > 0 && (
-            <span className="calendar-event-more">+{hidden}</span>
-          )}
-        </div>
-      )}
-    </div>
-  );
+function chunkWeeks(days: Date[]): Date[][] {
+  const weeks: Date[][] = [];
+  for (let index = 0; index < days.length; index += 7) {
+    weeks.push(days.slice(index, index + 7));
+  }
+  return weeks;
 }
 
-function WeekEventChip({ event, day }: { event: CalendarEvent; day: Date }) {
-  const key = dateKey(day);
-  const isStart = event.startDate === key;
-  const continued = isMultiDayEvent(event) && !isStart;
+function CalendarSpanWeek({
+  days,
+  events,
+  month,
+  selectedDate,
+  onSelectDay,
+  showWeekday = false,
+}: {
+  days: Date[];
+  events: CalendarEvent[];
+  month?: Date;
+  selectedDate: string;
+  onSelectDay: (day: Date) => void;
+  showWeekday?: boolean;
+}) {
+  const keys = days.map(dateKey);
+  const spans = layoutCalendarWeek(keys, events);
+  const visible = spans.filter((span) => span.lane < MAX_SPAN_LANES);
+  const hiddenByCol = keys.map((_, column) => spans.filter((span) => (
+    span.lane >= MAX_SPAN_LANES && span.startCol <= column && column <= span.endCol
+  )).length);
+  const laneCount = visible.reduce((max, span) => Math.max(max, span.lane + 1), 0);
+  const showMore = hiddenByCol.some((count) => count > 0);
 
   return (
-    <Link
-      to={calendarEventPath(event)}
-      className={[
-        'calendar-week-event',
-        `calendar-kind-${event.kind}`,
-        continued && 'calendar-event-continued',
-      ].filter(Boolean).join(' ')}
-      title={formatEventDateRange(event)}
+    <div
+      className={showWeekday ? 'calendar-span-week calendar-span-week--labeled' : 'calendar-span-week'}
+      style={{
+        gridTemplateRows: `auto repeat(${laneCount}, 1.2rem)${showMore ? ' auto' : ''}`,
+      }}
     >
-      <span className="calendar-week-event-title">{event.title}</span>
-      {event.assignee && <span className="calendar-week-event-assignee">{event.assignee}</span>}
-      {isStart && <StatusBadge status={event.status} />}
-    </Link>
+      {days.map((day, index) => {
+        const key = keys[index];
+        return (
+          <div
+            key={key}
+            role="button"
+            tabIndex={0}
+            className={[
+              'calendar-day',
+              month && !isSameMonth(day, month) && 'calendar-day-outside',
+              key === selectedDate && 'calendar-day-selected',
+              isToday(day) && 'calendar-day-today',
+            ].filter(Boolean).join(' ')}
+            style={{ gridColumn: index + 1, gridRow: '1 / -1' }}
+            onClick={() => onSelectDay(day)}
+            onKeyDown={(event) => {
+              if (event.target !== event.currentTarget) return;
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                onSelectDay(day);
+              }
+            }}
+          />
+        );
+      })}
+      {days.map((day, index) => (
+        <span
+          key={`label-${keys[index]}`}
+          className={[
+            'calendar-day-label',
+            month && !isSameMonth(day, month) && 'calendar-day-outside',
+            isToday(day) && 'calendar-day-today',
+          ].filter(Boolean).join(' ')}
+          style={{ gridColumn: index + 1, gridRow: 1 }}
+        >
+          {showWeekday && <span className="calendar-weekday">{format(day, 'EEE')}</span>}
+          <span className="calendar-day-number">{format(day, 'd')}</span>
+        </span>
+      ))}
+      {visible.map((span) => (
+        <Link
+          key={`${span.event.id}-${keys[span.startCol]}`}
+          to={calendarEventPath(span.event)}
+          className={[
+            'calendar-span-bar',
+            `calendar-kind-${span.event.kind}`,
+            span.continuesBefore && 'calendar-span-continues-before',
+            span.continuesAfter && 'calendar-span-continues-after',
+          ].filter(Boolean).join(' ')}
+          style={{
+            gridColumn: `${span.startCol + 1} / ${span.endCol + 2}`,
+            gridRow: span.lane + 2,
+          }}
+          title={[
+            CALENDAR_KIND_LABELS[span.event.kind],
+            span.event.title,
+            formatEventDateRange(span.event),
+          ].filter(Boolean).join(' · ')}
+          onClick={(eventClick) => eventClick.stopPropagation()}
+        >
+          <span className="calendar-span-title">{span.event.title}</span>
+        </Link>
+      ))}
+      {hiddenByCol.map((count, index) => count > 0 ? (
+        <button
+          key={`more-${keys[index]}`}
+          type="button"
+          className="calendar-event-more"
+          style={{ gridColumn: index + 1, gridRow: laneCount + 2 }}
+          onClick={(event) => {
+            event.stopPropagation();
+            onSelectDay(days[index]);
+          }}
+        >
+          +{count}
+        </button>
+      ) : null)}
+    </div>
   );
 }
 

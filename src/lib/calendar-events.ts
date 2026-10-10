@@ -505,6 +505,63 @@ export function filterCalendarEvents(
   return filterEventsByProgress(filterEventsByKind(events, enabledKinds), enabledProgress);
 }
 
+export interface CalendarWeekSpan {
+  event: CalendarEvent;
+  startCol: number;
+  endCol: number;
+  lane: number;
+  continuesBefore: boolean;
+  continuesAfter: boolean;
+}
+
+/** Place events on one week so a multi-day process occupies one bar, not a box per day. */
+export function layoutCalendarWeek(dayKeys: string[], events: CalendarEvent[]): CalendarWeekSpan[] {
+  if (dayKeys.length === 0) return [];
+  const weekStart = dayKeys[0];
+  const weekEnd = dayKeys[dayKeys.length - 1];
+  const indexOf = new Map(dayKeys.map((key, index) => [key, index]));
+
+  const segments: CalendarWeekSpan[] = [];
+  for (const event of events) {
+    const eventEnd = eventEndDate(event);
+    if (eventEnd < weekStart || event.startDate > weekEnd) continue;
+    const visibleStart = event.startDate < weekStart ? weekStart : event.startDate;
+    const visibleEnd = eventEnd > weekEnd ? weekEnd : eventEnd;
+    const startCol = indexOf.get(visibleStart);
+    const endCol = indexOf.get(visibleEnd);
+    if (startCol == null || endCol == null) continue;
+    segments.push({
+      event,
+      startCol,
+      endCol,
+      lane: 0,
+      continuesBefore: event.startDate < weekStart,
+      continuesAfter: eventEnd > weekEnd,
+    });
+  }
+
+  segments.sort((a, b) => {
+    if (a.startCol !== b.startCol) return a.startCol - b.startCol;
+    const byLength = (b.endCol - b.startCol) - (a.endCol - a.startCol);
+    if (byLength !== 0) return byLength;
+    return a.event.title.localeCompare(b.event.title);
+  });
+
+  const lanes: CalendarWeekSpan[][] = [];
+  for (const segment of segments) {
+    let lane = lanes.findIndex((row) => row.every((item) => (
+      item.endCol < segment.startCol || item.startCol > segment.endCol
+    )));
+    if (lane === -1) {
+      lane = lanes.length;
+      lanes.push([]);
+    }
+    segment.lane = lane;
+    lanes[lane].push(segment);
+  }
+  return segments;
+}
+
 export function groupEventsByDate(events: CalendarEvent[]): Map<string, CalendarEvent[]> {
   const map = new Map<string, CalendarEvent[]>();
   for (const event of events) {
