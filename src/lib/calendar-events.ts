@@ -15,7 +15,6 @@ import {
   getAllFermentationLogs,
 } from '../db/queries';
 import { formatLinesSummary } from './bottling-lines';
-import { washRecordPath } from './wash-stage';
 import type {
   Barrel,
   BlendProduct,
@@ -28,6 +27,7 @@ import type {
 
 export type CalendarActivityKind =
   | 'wash'
+  | 'fermentation'
   | 'distillation'
   | 'barrel'
   | 'bottling'
@@ -44,7 +44,8 @@ export type CalendarStatusCategory =
   | 'other';
 
 export const CALENDAR_KIND_LABELS: Record<CalendarActivityKind, string> = {
-  wash: 'Wash & Ferment',
+  wash: 'Wash',
+  fermentation: 'Fermentation',
   distillation: 'Distillation',
   barrel: 'Barrel Aging',
   bottling: 'Bottling',
@@ -54,6 +55,7 @@ export const CALENDAR_KIND_LABELS: Record<CalendarActivityKind, string> = {
 
 export const CALENDAR_KIND_ROUTES: Record<CalendarActivityKind, string> = {
   wash: '/wash',
+  fermentation: '/fermentation',
   distillation: '/distillation',
   barrel: '/barrels',
   bottling: '/bottling',
@@ -73,6 +75,7 @@ export const CALENDAR_STATUS_LABELS: Record<CalendarStatusCategory, string> = {
 
 export const ALL_CALENDAR_KINDS: CalendarActivityKind[] = [
   'wash',
+  'fermentation',
   'distillation',
   'barrel',
   'bottling',
@@ -149,13 +152,8 @@ function toDateOnly(value: string | null | undefined): string | undefined {
   return day || undefined;
 }
 
-export function calendarEventPath(event: Pick<CalendarEvent, 'kind' | 'status' | 'recordId' | 'washOnFermentation'>): string {
-  const base = event.kind === 'wash'
-    ? washRecordPath(event.status, {
-      hasLogs: Boolean(event.washOnFermentation),
-      hasAssignments: Boolean(event.washOnFermentation),
-    })
-    : CALENDAR_KIND_ROUTES[event.kind];
+export function calendarEventPath(event: Pick<CalendarEvent, 'kind' | 'recordId'>): string {
+  const base = CALENDAR_KIND_ROUTES[event.kind];
   if (event.recordId == null) return base;
   return `${base}?record=${event.recordId}`;
 }
@@ -271,48 +269,77 @@ export function deriveFermentationEndDate(
   return logDates[logDates.length - 1];
 }
 
+function fermentationHasStarted(batch: MashBatch, logs: FermentationLog[]): boolean {
+  if (batch.status === 'fermenting' || batch.status === 'complete') return true;
+  if (toDateOnly(batch.fermentation_start_date)) return true;
+  return batch.status === 'discarded' && fermentationLogsForBatch(logs, batch.id).length > 0;
+}
+
+/** The wash cook, separate from the fermentation that follows it. */
 export function buildWashCalendarEvent(
   batch: MashBatch,
-  logs: FermentationLog[],
+  _logs: FermentationLog[] = [],
   today: string = localIsoDate(),
 ): CalendarEvent | null {
   const startDate = toDateOnly(batch.start_date);
   if (!startDate) return null;
 
-  const fermenting = batch.status === 'fermenting';
-  const fermentStart = fermenting
-    ? (toDateOnly(batch.fermentation_start_date ?? '') || startDate)
-    : startDate;
-  const expected = toDateOnly(batch.expected_completion_date ?? '');
-  const endFromLogs = deriveFermentationEndDate(batch, logs);
-  let endDate: string | undefined;
-  if (fermenting && expected && expected > fermentStart) {
-    endDate = expected < today && today > fermentStart ? today : expected;
-  } else if (batch.status === 'mashing' || fermenting) {
-    endDate = spanThroughToday(fermentStart, today);
-  } else if (endFromLogs && endFromLogs > startDate) {
-    endDate = endFromLogs;
-  }
-  const expectedLabel = expected ? `Expected done ${formatDateDisplay(expected)}` : '';
-  const batchLogs = fermentationLogsForBatch(logs, batch.id);
-  const washOnFermentation = washRecordPath(batch.status, {
-    hasLogs: batchLogs.length > 0,
-    hasAssignments: false,
-  }) === '/fermentation';
+  const washing = batch.status === 'mashing';
+  const washFinished = batch.status === 'fermenting' || batch.status === 'complete';
+  const washStatus = washFinished ? 'complete' : batch.status;
 
   return {
     id: `wash-${batch.id}`,
     recordId: batch.id,
+    startDate,
+    endDate: washing ? spanThroughToday(startDate, today) : undefined,
+    allDay: true,
+    kind: 'wash',
+    title: `Wash ${batch.batch_number}`,
+    status: washStatus,
+    statusCategory: mapWashStatus(washStatus),
+    assignee: batch.assigned_user_name || undefined,
+    detail: [batch.recipe_name || batch.grain_type, 'Wash'].filter(Boolean).join(' · ') || undefined,
+  };
+}
+
+/** The fermentation, from the day it starts through the expected completion. */
+export function buildFermentationCalendarEvent(
+  batch: MashBatch,
+  logs: FermentationLog[],
+  today: string = localIsoDate(),
+): CalendarEvent | null {
+  if (!fermentationHasStarted(batch, logs)) return null;
+  const washStart = toDateOnly(batch.start_date);
+  const fermentStart = toDateOnly(batch.fermentation_start_date ?? '') || washStart;
+  if (!fermentStart) return null;
+
+  const expected = toDateOnly(batch.expected_completion_date ?? '');
+  const endFromLogs = deriveFermentationEndDate(batch, logs);
+  const active = batch.status === 'fermenting';
+  let endDate: string | undefined;
+  if (active && expected && expected > fermentStart) {
+    endDate = expected < today && today > fermentStart ? today : expected;
+  } else if (active) {
+    endDate = spanThroughToday(fermentStart, today);
+  } else if (endFromLogs && endFromLogs > fermentStart) {
+    endDate = endFromLogs;
+  }
+  const expectedLabel = expected ? `Expected done ${formatDateDisplay(expected)}` : 'Fermentation';
+
+  return {
+    id: `ferment-${batch.id}`,
+    recordId: batch.id,
     startDate: fermentStart,
     endDate,
     allDay: true,
-    kind: 'wash',
-    title: batch.batch_number,
+    kind: 'fermentation',
+    title: `Ferment ${batch.batch_number}`,
     status: batch.status,
     statusCategory: mapWashStatus(batch.status),
     assignee: batch.assigned_user_name || undefined,
     detail: [batch.recipe_name || batch.grain_type, expectedLabel].filter(Boolean).join(' · ') || undefined,
-    washOnFermentation,
+    washOnFermentation: true,
   };
 }
 
@@ -323,8 +350,10 @@ export function buildCalendarEventsFromData(
   const events: CalendarEvent[] = [];
 
   for (const batch of data.mashes) {
-    const event = buildWashCalendarEvent(batch, data.fermentationLogs, today);
-    if (event) events.push(event);
+    const wash = buildWashCalendarEvent(batch, data.fermentationLogs, today);
+    if (wash) events.push(wash);
+    const fermentation = buildFermentationCalendarEvent(batch, data.fermentationLogs, today);
+    if (fermentation) events.push(fermentation);
   }
 
   for (const run of data.runs) {

@@ -11,6 +11,7 @@ import type {
 } from '../types';
 import {
   buildCalendarEventsFromData,
+  buildFermentationCalendarEvent,
   buildWashCalendarEvent,
   deriveFermentationEndDate,
   enumerateEventDates,
@@ -77,55 +78,67 @@ describe('buildWashCalendarEvent', () => {
     expect(isMultiDayEvent(event!)).toBe(false);
   });
 
-  it('spans completed fermentation when log dates exist', () => {
-    const logs: FermentationLog[] = [
-      {
-        id: 1,
-        mash_batch_id: 1,
-        floor_equipment_id: 1,
-        logged_at: '2026-03-02T12:00:00Z',
-        temperature_f: 72,
-        brix: 10,
-        ph: 4,
-        notes: '',
-      },
-      {
-        id: 2,
-        mash_batch_id: 1,
-        floor_equipment_id: 1,
-        logged_at: '2026-03-05T08:00:00Z',
-        temperature_f: 70,
-        brix: 2,
-        ph: 4,
-        notes: '',
-      },
-    ];
-    const event = buildWashCalendarEvent(baseMash({ status: 'complete' }), logs);
+  it('keeps a finished wash on its cook day when fermentation continues', () => {
+    const wash = buildWashCalendarEvent(baseMash({
+      status: 'fermenting',
+      fermentation_start_date: '2026-03-03',
+    }), [], '2026-03-10');
+    expect(wash).toMatchObject({
+      kind: 'wash',
+      startDate: '2026-03-01',
+      endDate: undefined,
+      status: 'complete',
+    });
+    expect(calendarEventPath(wash!)).toBe('/wash?record=1');
+  });
+});
+
+describe('buildFermentationCalendarEvent', () => {
+  const logs: FermentationLog[] = [
+    {
+      id: 1,
+      mash_batch_id: 1,
+      floor_equipment_id: 1,
+      logged_at: '2026-03-02T12:00:00Z',
+      temperature_f: 72,
+      brix: 10,
+      ph: 4,
+      notes: '',
+    },
+    {
+      id: 2,
+      mash_batch_id: 1,
+      floor_equipment_id: 1,
+      logged_at: '2026-03-05T08:00:00Z',
+      temperature_f: 70,
+      brix: 2,
+      ph: 4,
+      notes: '',
+    },
+  ];
+
+  it('does not create a fermentation before one has started', () => {
+    expect(buildFermentationCalendarEvent(baseMash({ status: 'planned' }), [], '2026-03-01')).toBeNull();
+    expect(buildFermentationCalendarEvent(baseMash({ status: 'mashing' }), [], '2026-03-10')).toBeNull();
+  });
+
+  it('spans a completed fermentation across its log dates, apart from the wash day', () => {
+    const event = buildFermentationCalendarEvent(baseMash({ status: 'complete' }), logs);
+    expect(event?.kind).toBe('fermentation');
     expect(event?.startDate).toBe('2026-03-01');
     expect(event?.endDate).toBe(localCalendarDayKey('2026-03-05T08:00:00Z'));
     expect(isMultiDayEvent(event!)).toBe(true);
+    expect(calendarEventPath(event!)).toBe('/fermentation?record=1');
   });
 
   it('keeps an in-progress fermentation on the calendar through today', () => {
-    const logs: FermentationLog[] = [
-      {
-        id: 1,
-        mash_batch_id: 1,
-        floor_equipment_id: null,
-        logged_at: '2026-03-03T12:00:00Z',
-        temperature_f: null,
-        brix: 8,
-        ph: null,
-        notes: '',
-      },
-    ];
-    const event = buildWashCalendarEvent(baseMash({ status: 'fermenting' }), logs, '2026-03-10');
+    const event = buildFermentationCalendarEvent(baseMash({ status: 'fermenting' }), logs, '2026-03-10');
     expect(event?.endDate).toBe('2026-03-10');
     expect(eventOccursOnDate(event!, '2026-03-07')).toBe(true);
   });
 
   it('shows a fermentation from the day it starts through the expected completion date', () => {
-    const event = buildWashCalendarEvent(baseMash({
+    const event = buildFermentationCalendarEvent(baseMash({
       status: 'fermenting',
       fermentation_start_date: '2026-03-03',
       expected_completion_date: '2026-03-12',
@@ -138,7 +151,7 @@ describe('buildWashCalendarEvent', () => {
   });
 
   it('keeps an overdue fermentation on the calendar through today', () => {
-    const event = buildWashCalendarEvent(baseMash({
+    const event = buildFermentationCalendarEvent(baseMash({
       status: 'fermenting',
       fermentation_start_date: '2026-03-01',
       expected_completion_date: '2026-03-04',
@@ -150,21 +163,14 @@ describe('buildWashCalendarEvent', () => {
   });
 
   it('does not extend an in-progress fermentation that starts today or later', () => {
-    const today = buildWashCalendarEvent(baseMash({ status: 'fermenting' }), [], '2026-03-01');
-    const future = buildWashCalendarEvent(
+    const today = buildFermentationCalendarEvent(baseMash({ status: 'fermenting' }), [], '2026-03-01');
+    const future = buildFermentationCalendarEvent(
       baseMash({ status: 'fermenting', start_date: '2026-03-20' }),
       [],
       '2026-03-01',
     );
     expect(today?.endDate).toBeUndefined();
     expect(future?.endDate).toBeUndefined();
-  });
-
-  it('opens the wash or fermentation record for that batch', () => {
-    const planned = buildWashCalendarEvent(baseMash(), [], '2026-03-01');
-    const fermenting = buildWashCalendarEvent(baseMash({ status: 'fermenting' }), [], '2026-03-10');
-    expect(calendarEventPath(planned!)).toBe('/wash?record=1');
-    expect(calendarEventPath(fermenting!)).toBe('/fermentation?record=1');
   });
 });
 

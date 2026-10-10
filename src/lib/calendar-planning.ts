@@ -13,6 +13,7 @@ export const CALENDAR_PLAN_ACTIVITY_KINDS: CalendarActivityKind[] = [
 
 export const CALENDAR_PLAN_PERMISSION: Record<CalendarActivityKind, PermissionKey> = {
   wash: 'wash',
+  fermentation: 'wash',
   distillation: 'distillation',
   barrel: 'barrels',
   bottling: 'bottling',
