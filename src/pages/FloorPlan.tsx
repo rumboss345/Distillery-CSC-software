@@ -22,6 +22,7 @@ import { ProcessEquipmentCanvas } from '../components/equipment/ProcessEquipment
 import { HoldingTankIntakeHistory } from '../components/HoldingTankIntakeHistory';
 import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
+import { StatusDateLog } from '../components/StatusDateLog';
 import { holdingTankIntakeKey } from '../db/queries';
 import { EquipmentIconPicker } from '../components/equipment/EquipmentIconPicker';
 import {
@@ -554,7 +555,9 @@ export function FloorPlanPage() {
                   <option key={s} value={s}>{s.replace('_', ' ')}</option>
                 ))}
               </select>
+              <p className="field-hint">The date is logged each time this status changes.</p>
             </div>
+            <StatusDateLog kind="equipment" recordId={editId} />
             <div className="form-group">
               <label>Capacity (gal)</label>
               <input

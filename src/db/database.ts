@@ -638,6 +638,7 @@ function runMigrations(): void {
   migrateAdvancedBlending();
   migrateAssignedEmployee();
   migrateFermentationSchedule();
+  migrateProductionStatusLogs();
   migrateRecipeNutrients();
   migrateMashBatchNutrients();
   migrateBlendRecipeVersions();
@@ -832,6 +833,26 @@ function migrateFermentationSchedule(): void {
   if (!db) return;
   addColumnIfMissing('mash_batches', 'fermentation_start_date', 'TEXT');
   addColumnIfMissing('mash_batches', 'expected_completion_date', 'TEXT');
+}
+
+function migrateProductionStatusLogs(): void {
+  if (!db) return;
+  db.run(`
+    CREATE TABLE IF NOT EXISTS production_status_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      record_kind TEXT NOT NULL,
+      record_id INTEGER NOT NULL,
+      floor_equipment_id INTEGER,
+      previous_status TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL,
+      changed_at TEXT NOT NULL DEFAULT (datetime('now')),
+      changed_by TEXT NOT NULL DEFAULT ''
+    )
+  `);
+  db.run(`
+    CREATE INDEX IF NOT EXISTS idx_production_status_logs_record
+      ON production_status_logs(record_kind, record_id, changed_at)
+  `);
 }
 
 function migrateAssignedEmployee(): void {

@@ -49,6 +49,7 @@ import { GinBotanicalFields } from '../components/GinBotanicalFields';
 import { Modal } from '../components/Modal';
 import { RecentCompletedNote } from '../components/RecentCompletedNote';
 import { StatusBadge } from '../components/StatusBadge';
+import { StatusDateLog } from '../components/StatusDateLog';
 import {
   ALL_RUN_TYPES,
   isFermenterSourcedRun,
@@ -1485,7 +1486,9 @@ export function Distillation() {
               <select value={runForm.status} onChange={(e) => handleRunStatusChange(e.target.value as RunStatus)}>
                 {RUN_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
+              <p className="field-hint">The date is logged each time this status changes.</p>
             </div>
+            <StatusDateLog kind="distillation" recordId={editRunId} />
             {runForm.status === 'complete' && runAsksForStillage(runForm.run_type) && (
               <div className="form-group full-width">
                 <label>Stillage left in the still</label>

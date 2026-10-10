@@ -8,6 +8,7 @@ import { FermenterLogPanel } from '../components/FermenterLogPanel';
 import { Modal } from '../components/Modal';
 import { RecentCompletedNote } from '../components/RecentCompletedNote';
 import { StatusBadge } from '../components/StatusBadge';
+import { StatusDateLog } from '../components/StatusDateLog';
 import {
   deleteOneFermentation,
   getAllFermentationLogSources,
@@ -817,7 +818,15 @@ export function Fermentation() {
                 <option value="fermenting">fermenting</option>
                 <option value="complete">complete</option>
               </select>
+              <p className="field-hint">The date is logged each time this status changes.</p>
             </div>
+            {formMode === 'edit' && (
+              <StatusDateLog
+                kind="fermentation"
+                recordId={editBatch.id}
+                equipmentId={editEquipmentId}
+              />
+            )}
             {formMode === 'start' && (
               <div className="form-group full-width">
                 <label className="checkbox-label">

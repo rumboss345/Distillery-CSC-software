@@ -496,6 +496,20 @@ CREATE TABLE IF NOT EXISTS equipment_maintenance_log (
 CREATE INDEX IF NOT EXISTS idx_equipment_maintenance_log_equipment ON equipment_maintenance_log(floor_equipment_id);
 CREATE INDEX IF NOT EXISTS idx_equipment_maintenance_log_created ON equipment_maintenance_log(created_at);
 
+CREATE TABLE IF NOT EXISTS production_status_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  record_kind TEXT NOT NULL,
+  record_id INTEGER NOT NULL,
+  floor_equipment_id INTEGER,
+  previous_status TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL,
+  changed_at TEXT NOT NULL DEFAULT (datetime('now')),
+  changed_by TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_production_status_logs_record
+  ON production_status_logs(record_kind, record_id, changed_at);
+
 CREATE TABLE IF NOT EXISTS mash_fermenter_assignments (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   mash_batch_id INTEGER NOT NULL REFERENCES mash_batches(id) ON DELETE CASCADE,
