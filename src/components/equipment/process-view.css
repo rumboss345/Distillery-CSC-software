@@ -781,6 +781,21 @@
   text-decoration: none;
 }
 
+/* The process sidebar is a light panel. Restore the filled buttons so the label stays readable. */
+.process-view:not(.warehouse-view) .process-sidebar .btn-secondary,
+.process-view:not(.warehouse-view) .process-sidebar .btn-outline {
+  background: var(--bg-hover);
+  color: var(--text);
+  border: 1px solid #6f665d;
+}
+
+.process-view:not(.warehouse-view) .process-sidebar .btn-secondary:hover,
+.process-view:not(.warehouse-view) .process-sidebar .btn-outline:hover {
+  background: var(--border);
+  color: var(--text);
+  border-color: #6f665d;
+}
+
 .process-next-hint {
   margin: 0;
   font-size: 0.75rem;
