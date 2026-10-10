@@ -207,19 +207,6 @@ export function mapRunStatus(status: DistillationRun['status']): CalendarStatusC
   }
 }
 
-export function mapBarrelStatus(status: Barrel['status']): CalendarStatusCategory {
-  switch (status) {
-    case 'aging':
-      return 'in_progress';
-    case 'empty':
-      return 'complete';
-    case 'dumped':
-      return 'cancelled';
-    default:
-      return 'other';
-  }
-}
-
 export function mapBlendStatus(status: BlendProduct['status']): CalendarStatusCategory {
   switch (status) {
     case 'draft':
