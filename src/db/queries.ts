@@ -42,6 +42,7 @@ import { countActiveFermentations, fermenterShowsAssignedWash } from '../lib/mas
 import { compareStoredDatesDesc } from '../lib/date-input';
 import { expectedCompletionDateError } from '../lib/fermentation';
 import { eventDateWhenLeavingPlanned, localIsoDate } from '../lib/planned-event-date';
+import { deleteStatusDateLog, recordStatusDateLog } from './status-logs';
 import { DISCARD_DESTINATION, fermenterTransferError } from '../lib/fermenter-transfer';
 import {
   distillationStillageTankError,
@@ -2480,8 +2481,16 @@ export function saveMashFermenterAssignments(
   mashBatchId: number,
   assignments: FermenterAssignmentInput[],
 ): void {
-  const batchStatus = getMashBatch(mashBatchId)?.status;
+  const batch = getMashBatch(mashBatchId);
+  const batchStatus = batch?.status;
   const planOnly = plannedRecordSkipsEquipmentStatus(batchStatus);
+  const previousAssignments = queryAll<{ floor_equipment_id: number; status: string | null }>(
+    'SELECT floor_equipment_id, status FROM mash_fermenter_assignments WHERE mash_batch_id = ?',
+    [mashBatchId],
+  );
+  const previousStatusByEquipment = new Map(
+    previousAssignments.map((row) => [row.floor_equipment_id, assignmentStatus(row.status)]),
+  );
   if (planOnly) {
     const fermenters = queryAll<{ floor_equipment_id: number }>(
       'SELECT floor_equipment_id FROM mash_fermenter_assignments WHERE mash_batch_id = ?',
@@ -2500,6 +2509,15 @@ export function saveMashFermenterAssignments(
       `INSERT INTO mash_fermenter_assignments (mash_batch_id, floor_equipment_id, volume_gal, status) VALUES (?, ?, ?, ?)`,
       [mashBatchId, a.equipmentId, a.volumeGal, status],
     );
+    const hadEquipment = previousStatusByEquipment.has(a.equipmentId);
+    recordStatusDateLog({
+      recordKind: 'fermentation',
+      recordId: mashBatchId,
+      floorEquipmentId: a.equipmentId,
+      previousStatus: hadEquipment ? previousStatusByEquipment.get(a.equipmentId) : '',
+      status,
+      changedBy: batch?.assigned_user_name,
+    });
   }
   syncFermenterAndStillStatuses();
 }
@@ -2606,10 +2624,19 @@ export function saveMashBatchWithFermenters(
     syncWashTankForMashBatch(mashId, datedBatch.status);
   } catch (err) {
     if (!id) {
+      deleteStatusDateLog('wash', mashId);
+      deleteStatusDateLog('fermentation', mashId);
       runQuery('DELETE FROM mash_batches WHERE id = ?', [mashId]);
     }
     throw err;
   }
+  recordStatusDateLog({
+    recordKind: 'wash',
+    recordId: mashId,
+    previousStatus: previous?.status,
+    status: datedBatch.status,
+    changedBy: datedBatch.assigned_user_name,
+  });
   return mashId;
 }
 
@@ -2662,6 +2689,13 @@ export function saveFermentationSet(
     const status = batch.status === 'discarded' ? 'fermenting' : batch.status;
     if (status !== batch.status) {
       runQuery(`UPDATE mash_batches SET status = ? WHERE id = ?`, [status, mashBatchId]);
+      recordStatusDateLog({
+        recordKind: 'wash',
+        recordId: mashBatchId,
+        previousStatus: batch.status,
+        status,
+        changedBy: batch.assigned_user_name,
+      });
     }
     saveMashFermenterAssignments(mashBatchId, []);
     return;
@@ -2669,6 +2703,13 @@ export function saveFermentationSet(
 
   if (nextStatus === 'mashing' && assignments.length === 0) {
     runQuery(`UPDATE mash_batches SET status = 'mashing' WHERE id = ?`, [mashBatchId]);
+    recordStatusDateLog({
+      recordKind: 'wash',
+      recordId: mashBatchId,
+      previousStatus: batch.status,
+      status: 'mashing',
+      changedBy: batch.assigned_user_name,
+    });
     saveMashFermenterAssignments(mashBatchId, []);
     return;
   }
@@ -2920,16 +2961,27 @@ function maybeCompleteMashAfterCharge(mashBatchId: number): void {
     [mashBatchId],
   );
   if (remaining?.count === 0) {
+    const batch = getMashBatch(mashBatchId);
+    if (!batch || (batch.status !== 'fermenting' && batch.status !== 'mashing')) return;
     runQuery(
       `UPDATE mash_batches SET status='complete' WHERE id=? AND status IN ('fermenting', 'mashing')`,
       [mashBatchId],
     );
+    recordStatusDateLog({
+      recordKind: 'wash',
+      recordId: mashBatchId,
+      previousStatus: batch.status,
+      status: 'complete',
+      changedBy: batch.assigned_user_name,
+    });
   }
 }
 
 export function deleteMashBatch(id: number): void {
   releaseWashTankForMashBatch(id);
   releaseFermentersForMash(id);
+  deleteStatusDateLog('wash', id);
+  deleteStatusDateLog('fermentation', id);
   runQuery('DELETE FROM mash_batches WHERE id = ?', [id]);
 }
 
@@ -3467,6 +3519,13 @@ export function saveDistillationRun(
   recordDistillationCollectionLoss(runId);
   syncHoldingTankStatuses();
   syncFermenterAndStillStatuses();
+  recordStatusDateLog({
+    recordKind: 'distillation',
+    recordId: runId,
+    previousStatus: previousRun?.status,
+    status: run.status,
+    changedBy: run.assigned_user_name,
+  });
   return runId;
 }
 
@@ -3566,6 +3625,7 @@ export function deleteDistillationRun(id: number): void {
     releaseStillAfterRunningRun(run, '', 'complete');
   }
   runQuery('DELETE FROM distillation_run_botanicals WHERE distillation_run_id = ?', [id]);
+  deleteStatusDateLog('distillation', id);
   runQuery('DELETE FROM distillation_runs WHERE id = ?', [id]);
   syncHoldingTankStatuses();
   syncFermenterAndStillStatuses();
@@ -3744,6 +3804,10 @@ export function saveBarrel(barrel: Omit<Barrel, 'id' | 'created_at'>, id?: numbe
   assertEnteredAbv(barrel.initial_abv, 'Initial ABV');
   const warehouse_location = normalizeWarehouseLocationName(barrel.warehouse_location);
   if (warehouse_location) saveWarehouseLocation(warehouse_location);
+  const previous = id
+    ? queryOne<{ status: string }>('SELECT status FROM barrels WHERE id = ?', [id])
+    : undefined;
+  let savedId = id ?? 0;
   if (id) {
     runQuery(
       `UPDATE barrels SET barrel_number=?, wood_type=?, capacity_gal=?, fill_date=?, spirit_type=?, source_run_id=?, source_holding_tank_equipment_id=?, initial_abv=?, current_volume_gal=?, warehouse_location=?, status=?, notes=? WHERE id=?`,
@@ -3763,26 +3827,34 @@ export function saveBarrel(barrel: Omit<Barrel, 'id' | 'created_at'>, id?: numbe
         id,
       ],
     );
-    return;
+    savedId = id;
+  } else {
+    deductOneBarrelFromInventory();
+    savedId = insertRow(
+      `INSERT INTO barrels (barrel_number, wood_type, capacity_gal, fill_date, spirit_type, source_run_id, source_holding_tank_equipment_id, initial_abv, current_volume_gal, warehouse_location, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        barrel.barrel_number,
+        barrel.wood_type,
+        barrel.capacity_gal,
+        barrel.fill_date,
+        barrel.spirit_type,
+        barrel.source_run_id,
+        barrel.source_holding_tank_equipment_id,
+        barrel.initial_abv,
+        barrel.current_volume_gal,
+        warehouse_location,
+        barrel.status,
+        barrel.notes,
+      ],
+    );
   }
-  deductOneBarrelFromInventory();
-  return insertRow(
-    `INSERT INTO barrels (barrel_number, wood_type, capacity_gal, fill_date, spirit_type, source_run_id, source_holding_tank_equipment_id, initial_abv, current_volume_gal, warehouse_location, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      barrel.barrel_number,
-      barrel.wood_type,
-      barrel.capacity_gal,
-      barrel.fill_date,
-      barrel.spirit_type,
-      barrel.source_run_id,
-      barrel.source_holding_tank_equipment_id,
-      barrel.initial_abv,
-      barrel.current_volume_gal,
-      warehouse_location,
-      barrel.status,
-      barrel.notes,
-    ],
-  );
+  recordStatusDateLog({
+    recordKind: 'barrel',
+    recordId: savedId,
+    previousStatus: previous?.status,
+    status: barrel.status,
+  });
+  return id ? undefined : savedId;
 }
 
 /** Register a new barrel and transfer the initial fill from a holding tank (ledger + barrel_fills). */
@@ -3810,6 +3882,7 @@ export function createBarrelFromHoldingTank(
 }
 
 export function deleteBarrel(id: number): void {
+  deleteStatusDateLog('barrel', id);
   runQuery('DELETE FROM barrels WHERE id = ?', [id]);
 }
 
@@ -5469,17 +5542,28 @@ export function saveFloorEquipment(
   const maintenanceStatus = item.maintenance_status ?? null;
   const maintenanceNotes = item.maintenance_notes ?? '';
   const icon = resolveEquipmentIcon(item.icon, item.equipment_type);
+  const previous = id
+    ? queryOne<{ status: string }>('SELECT status FROM floor_equipment WHERE id = ?', [id])
+    : undefined;
+  let savedId = id ?? 0;
   if (id) {
     runQuery(
       `UPDATE floor_equipment SET floor_plan_id=?, name=?, equipment_type=?, icon=?, pos_x_ft=?, pos_y_ft=?, width_ft=?, depth_ft=?, capacity_gal=?, status=?, linked_mash_batch_id=?, notes=?, maintenance_status=?, maintenance_notes=? WHERE id=?`,
       [item.floor_plan_id, item.name, item.equipment_type, icon, item.pos_x_ft, item.pos_y_ft, item.width_ft, item.depth_ft, item.capacity_gal, item.status, item.linked_mash_batch_id, item.notes, maintenanceStatus, maintenanceNotes, id],
     );
+    savedId = id;
   } else {
-    insertRow(
+    savedId = insertRow(
       `INSERT INTO floor_equipment (floor_plan_id, name, equipment_type, icon, pos_x_ft, pos_y_ft, width_ft, depth_ft, capacity_gal, status, linked_mash_batch_id, notes, maintenance_status, maintenance_notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [item.floor_plan_id, item.name, item.equipment_type, icon, item.pos_x_ft, item.pos_y_ft, item.width_ft, item.depth_ft, item.capacity_gal, item.status, item.linked_mash_batch_id, item.notes, maintenanceStatus, maintenanceNotes],
     );
   }
+  recordStatusDateLog({
+    recordKind: 'equipment',
+    recordId: savedId,
+    previousStatus: previous?.status,
+    status: item.status,
+  });
 }
 
 export function updateEquipmentPosition(id: number, pos_x_ft: number, pos_y_ft: number): void {
@@ -5506,5 +5590,6 @@ export function moveEquipmentToPlan(
 }
 
 export function deleteFloorEquipment(id: number): void {
+  deleteStatusDateLog('equipment', id);
   runQuery('DELETE FROM floor_equipment WHERE id = ?', [id]);
 }

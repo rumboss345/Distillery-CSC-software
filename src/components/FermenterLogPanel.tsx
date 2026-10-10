@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { StatusDateLog } from './StatusDateLog';
 import { addFermentationLog, getFermentationLogs } from '../db/queries';
 import { formatRecordedAt } from '../lib/date-input';
 import { estimateAbvFromBrix, formatAbvEstimate } from '../lib/fermentation';
@@ -152,6 +153,9 @@ export function FermenterLogPanel({
       ) : readOnly ? (
         <p className="field-hint" style={{ marginTop: '1rem' }}>No fermentation logs recorded.</p>
       ) : null}
+      <div style={{ marginTop: '1.25rem' }}>
+        <StatusDateLog kind="fermentation" recordId={mashBatchId} equipmentId={equipmentId} />
+      </div>
     </div>
   );
 }

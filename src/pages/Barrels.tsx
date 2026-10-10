@@ -16,6 +16,7 @@ import {
 import { DatePicker } from '../components/DatePicker';
 import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
+import { StatusDateLog } from '../components/StatusDateLog';
 import { BarrelVisual } from '../components/barrels/BarrelVisual';
 import { limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
 import { BARREL_STOCK_ITEM_NAME } from '../lib/barrel-inventory';
@@ -599,7 +600,9 @@ export function Barrels() {
               <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as BarrelStatus })}>
                 {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
+              <p className="field-hint">The date is logged each time this status changes.</p>
             </div>
+            <StatusDateLog kind="barrel" recordId={editId} />
             <div className="form-group full-width">
               <label>Notes</label>
               <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />

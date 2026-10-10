@@ -22,6 +22,7 @@ import type { EquipmentVisualData } from '../components/equipment/equipment-visu
 import { Modal } from '../components/Modal';
 import { RecentCompletedNote } from '../components/RecentCompletedNote';
 import { StatusBadge } from '../components/StatusBadge';
+import { StatusDateLog } from '../components/StatusDateLog';
 import { estimateSugarWash } from '../lib/fermentation';
 import type { MashBatchNutrientInput } from '../types';
 import {
@@ -551,12 +552,15 @@ export function MashFermentation() {
               <select value={form.status} onChange={(e) => handleStatusChange(e.target.value as MashStatus)}>
                 {WASH_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
               </select>
+              <p className="field-hint">The date is logged each time this status changes.</p>
               {washTankBlocksSave && (
                 <p className="field-hint" style={{ color: 'var(--danger, #dc2626)' }}>
                   {washTank?.name} is marked out of service on Equipment Maintenance. Return it to service or save as planned until the wash tank is available.
                 </p>
               )}
             </div>
+
+            <StatusDateLog kind="wash" recordId={editId} />
 
             {washTankPreview && (
               <div className="form-group full-width wash-tank-form-preview">
