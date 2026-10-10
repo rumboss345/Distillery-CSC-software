@@ -149,7 +149,9 @@ body.nav-open {
 
 .nav-link:focus-visible,
 .btn:focus-visible,
-.reports-subnav-link:focus-visible {
+.reports-subnav-link:focus-visible,
+.recipe-tab:focus-visible,
+.inventory-category:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -263,32 +265,16 @@ body.nav-open {
 
 .reports-subnav {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.5rem;
   margin-bottom: 1.5rem;
   padding-bottom: 0.75rem;
   border-bottom: 1px solid var(--border-subtle);
-}
-
-.reports-subnav-link {
-  padding: 0.35rem 0.75rem;
-  border-radius: var(--radius);
-  font-size: 0.85rem;
-  color: var(--text-muted);
-  text-decoration: none;
-  border: 1px solid transparent;
-}
-
-.reports-subnav-link:hover {
-  color: var(--text);
-  background: var(--bg-elevated);
-}
-
-.reports-subnav-link.active {
-  color: var(--text);
-  background: var(--accent-muted);
-  border-color: var(--border-subtle);
-  font-weight: 600;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
 }
 
 .report-section-header {
@@ -448,14 +434,24 @@ body.nav-open {
   background: var(--accent-hover);
 }
 
-.btn-secondary {
-  background: var(--bg-hover);
+.btn-secondary,
+.btn-outline {
+  background: transparent;
   color: var(--text);
-  border: 1px solid #6f665d;
+  border: 1px solid #9a8e84;
 }
 
-.btn-secondary:hover {
-  background: var(--border);
+.btn-secondary:hover,
+.btn-outline:hover {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  border-color: var(--text-muted);
+}
+
+.btn-secondary.is-on,
+.btn-secondary.is-on:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .btn-danger {
@@ -821,12 +817,12 @@ table {
 }
 
 thead {
-  background: color-mix(in srgb, var(--accent) 12%, var(--bg-elevated));
+  background: color-mix(in srgb, var(--text) 8%, var(--bg-card));
 }
 
 th {
   text-align: left;
-  padding: 0.75rem 1rem;
+  padding: 1rem 1.15rem;
   font-size: 0.8125rem;
   font-weight: 600;
   color: var(--text);
@@ -836,9 +832,15 @@ th {
 }
 
 td {
-  padding: 0.75rem 1rem;
+  padding: 1rem 1.15rem;
   border-bottom: 1px solid var(--border-subtle);
   color: var(--text);
+}
+
+th.num,
+td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 tr:last-child td {
@@ -2490,7 +2492,16 @@ tr.volume-change-kind:hover td {
   margin-bottom: 0;
 }
 
-.recipe-tab {
+.choice-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.recipe-tab,
+.reports-subnav-link,
+.inventory-category {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2503,7 +2514,18 @@ tr.volume-change-kind:hover td {
   font-family: var(--font);
   font-size: 0.875rem;
   font-weight: 600;
+  line-height: 1.2;
+  text-decoration: none;
   cursor: pointer;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.recipe-tab:hover:not(.active),
+.reports-subnav-link:hover:not(.active),
+.inventory-category:hover:not(.active) {
+  border-color: #a3988e;
+  color: var(--text);
 }
 
 .recipe-io-btn {
@@ -2527,7 +2549,9 @@ tr.volume-change-kind:hover td {
   border-color: var(--border);
 }
 
-.recipe-tab.active {
+.recipe-tab.active,
+.reports-subnav-link.active,
+.inventory-category.active {
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
@@ -3895,6 +3919,11 @@ tr.volume-change-kind:hover td {
   text-transform: none;
   letter-spacing: normal;
   font-size: inherit;
+}
+
+.blend-worksheet-table th.num,
+.blend-worksheet-table td.num {
+  text-align: right;
 }
 
 .blend-worksheet-table th {

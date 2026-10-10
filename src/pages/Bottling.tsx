@@ -548,9 +548,9 @@ export function Bottling() {
               <thead>
                 <tr>
                   <th>Bottle</th>
-                  <th>Size</th>
-                  <th>On Hand</th>
-                  <th>Reorder At</th>
+                  <th className="num">Size</th>
+                  <th className="num">On Hand</th>
+                  <th className="num">Reorder At</th>
                 </tr>
               </thead>
               <tbody>
@@ -561,9 +561,9 @@ export function Bottling() {
                   return (
                     <tr key={bottle.name}>
                       <td><strong>{bottle.name}</strong></td>
-                      <td>{bottle.sizeMl != null ? `${bottle.sizeMl} ml` : '—'}</td>
-                      <td>{inv ? `${inv.quantity.toLocaleString()} ${inv.unit}` : '—'}</td>
-                      <td>{inv ? inv.reorder_level.toLocaleString() : '—'}</td>
+                      <td className="num">{bottle.sizeMl != null ? `${bottle.sizeMl} ml` : '—'}</td>
+                      <td className="num">{inv ? `${inv.quantity.toLocaleString()} ${inv.unit}` : '—'}</td>
+                      <td className="num">{inv ? inv.reorder_level.toLocaleString() : '—'}</td>
                     </tr>
                   );
                 })}
@@ -591,7 +591,7 @@ export function Bottling() {
       {runs.length === 0 ? (
         <div className="empty-state">
           <p>No bottling runs recorded yet.</p>
-          <button type="button" className="btn btn-primary" onClick={() => openNew()} style={{ marginTop: '1rem' }}>Record first bottling</button>
+          <button type="button" className="btn btn-secondary" onClick={() => openNew()} style={{ marginTop: '1rem' }}>Record first bottling</button>
         </div>
       ) : (
         <>
@@ -605,14 +605,14 @@ export function Bottling() {
                 <th>Packaging</th>
                 <th>Lot</th>
                 <th>Date</th>
-                <th>Bottles</th>
-                <th>Volume</th>
-                <th>Tank draw</th>
+                <th className="num">Bottles</th>
+                <th className="num">Volume</th>
+                <th className="num">Tank draw</th>
                 <th>To tank</th>
-                <th>Variance</th>
+                <th className="num">Variance</th>
                 <th>Why</th>
                 <th>Who</th>
-                <th>ABV</th>
+                <th className="num">ABV</th>
                 <th>Source</th>
                 <th></th>
               </tr>
@@ -625,18 +625,18 @@ export function Bottling() {
                   <td>{formatLinesSummary(r.lines)}</td>
                   <td>{r.lot_number}</td>
                   <td>{formatDateDisplay(r.bottling_date)}</td>
-                  <td>{totalBottleCount(r.lines).toLocaleString()}</td>
-                  <td>{totalVolumeGal(r.lines).toFixed(2)} gal</td>
-                  <td>
+                  <td className="num">{totalBottleCount(r.lines).toLocaleString()}</td>
+                  <td className="num">{totalVolumeGal(r.lines).toFixed(2)} gal</td>
+                  <td className="num">
                     {r.source_holding_tank_equipment_id && r.source_volume_gal != null
                       ? `${r.source_volume_gal.toFixed(2)} gal`
                       : '—'}
                   </td>
                   <td>{returnLabel(r)}</td>
-                  <td>{formatVariance(r.volume_variance_gal)}</td>
+                  <td className="num">{formatVariance(r.volume_variance_gal)}</td>
                   <td>{r.variance_reason?.trim() || '—'}</td>
                   <td>{r.variance_changed_by?.trim() || '—'}</td>
-                  <td>{r.final_abv}%</td>
+                  <td className="num">{r.final_abv}%</td>
                   <td>{sourceLabel(r)}</td>
                   <td className="td-actions">
                     <button type="button" className="btn btn-sm btn-ghost" onClick={() => openEdit(r)}>Edit</button>

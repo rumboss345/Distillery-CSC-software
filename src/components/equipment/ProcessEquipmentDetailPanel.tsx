@@ -255,7 +255,7 @@ export function ProcessEquipmentDetailPanel({
           <div className="process-next-actions-row">
             {canChargeFermenter && (
               <>
-                <Link className="btn btn-sm btn-primary" to={`/distillation?chargeFermenter=${equipment.id}&runType=wash`}>
+                <Link className="btn btn-sm btn-secondary" to={`/distillation?chargeFermenter=${equipment.id}&runType=wash`}>
                   Low wine run
                 </Link>
                 <Link className="btn btn-sm btn-secondary" to={`/distillation?chargeFermenter=${equipment.id}&runType=heavy_rum`}>
@@ -267,7 +267,7 @@ export function ProcessEquipmentDetailPanel({
               </>
             )}
             {isTransferVessel && hasLiquid && (
-              <Link className="btn btn-sm btn-primary" to={`/tank-transfer?source=${equipment.id}`}>
+              <Link className="btn btn-sm btn-secondary" to={`/tank-transfer?source=${equipment.id}`}>
                 Transfer
               </Link>
             )}
@@ -297,7 +297,7 @@ export function ProcessEquipmentDetailPanel({
             onChange={setCleanedBy}
             required
           />
-          <button type="button" className="btn btn-sm btn-primary" onClick={handleMarkCleaned}>
+          <button type="button" className="btn btn-sm btn-secondary" onClick={handleMarkCleaned}>
             Mark as cleaned
           </button>
         </div>

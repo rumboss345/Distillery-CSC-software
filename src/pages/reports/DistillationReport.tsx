@@ -41,14 +41,14 @@ export function DistillationReport() {
             <th>Type</th>
             <th>Status</th>
             <th>Source</th>
-            <th>Charge</th>
-            <th>Heads</th>
-            <th>Hearts</th>
-            <th>Tails</th>
-            <th>Hearts LAA</th>
-            <th>Alcohol in</th>
-            <th>Collected</th>
-            <th>Loss</th>
+            <th className="num">Charge</th>
+            <th className="num">Heads</th>
+            <th className="num">Hearts</th>
+            <th className="num">Tails</th>
+            <th className="num">Hearts LAA</th>
+            <th className="num">Alcohol in</th>
+            <th className="num">Collected</th>
+            <th className="num">Loss</th>
             <th>Operator</th>
           </tr>
         </thead>
@@ -61,17 +61,17 @@ export function DistillationReport() {
               <td>{r.run_type}</td>
               <td>{r.status}</td>
               <td>{r.source_label}</td>
-              <td>
+              <td className="num">
                 {r.charge_volume_gal.toFixed(1)} gal
                 {r.charge_abv != null ? ` @ ${r.charge_abv.toFixed(1)}%` : ''}
               </td>
-              <td>{r.heads_gal.toFixed(1)}</td>
-              <td>{r.hearts_gal.toFixed(1)}</td>
-              <td>{r.tails_gal.toFixed(1)}</td>
-              <td>{r.hearts_laa_gal.toFixed(2)}</td>
-              <td>{r.alcohol_charged_gal != null ? `${r.alcohol_charged_gal.toFixed(2)} gal` : '—'}</td>
-              <td>{r.alcohol_collected_gal != null ? `${r.alcohol_collected_gal.toFixed(2)} gal` : '—'}</td>
-              <td>{r.alcohol_loss_gal != null ? formatDistillationLossGal(r.alcohol_loss_gal) : '—'}</td>
+              <td className="num">{r.heads_gal.toFixed(1)}</td>
+              <td className="num">{r.hearts_gal.toFixed(1)}</td>
+              <td className="num">{r.tails_gal.toFixed(1)}</td>
+              <td className="num">{r.hearts_laa_gal.toFixed(2)}</td>
+              <td className="num">{r.alcohol_charged_gal != null ? `${r.alcohol_charged_gal.toFixed(2)} gal` : '—'}</td>
+              <td className="num">{r.alcohol_collected_gal != null ? `${r.alcohol_collected_gal.toFixed(2)} gal` : '—'}</td>
+              <td className="num">{r.alcohol_loss_gal != null ? formatDistillationLossGal(r.alcohol_loss_gal) : '—'}</td>
               <td>{r.operator}</td>
             </tr>
           ))}

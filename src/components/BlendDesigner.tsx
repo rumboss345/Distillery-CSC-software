@@ -526,16 +526,16 @@ export function BlendDesigner({ onUseForBatch }: { onUseForBatch: (recipeId: num
                 <thead>
                   <tr>
                     <th>Ingredient</th>
-                    <th>Volume</th>
-                    <th>Weight</th>
+                    <th className="num">Volume</th>
+                    <th className="num">Weight</th>
                   </tr>
                 </thead>
                 <tbody>
                   {lines.map((line, index) => (
                     <tr key={`${line.label}-${index}`} className={line.total ? 'formulation-total' : undefined}>
                       <td>{line.label}</td>
-                      <td>{line.volume}</td>
-                      <td>{line.weight}</td>
+                      <td className="num">{line.volume}</td>
+                      <td className="num">{line.weight}</td>
                     </tr>
                   ))}
                 </tbody>

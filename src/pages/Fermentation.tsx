@@ -555,9 +555,9 @@ export function Fermentation() {
                     <tr>
                       <th>Wash batch</th>
                       <th>Fermenter</th>
-                      <th>Current volume</th>
-                      <th>Start → Current Brix</th>
-                      <th>Est. ABV</th>
+                      <th className="num">Current volume</th>
+                      <th className="num">Start → Current Brix</th>
+                      <th className="num">Est. ABV</th>
                       <th>Started</th>
                       <th>Assigned to</th>
                       <th></th>
@@ -580,9 +580,9 @@ export function Fermentation() {
                               <span style={{ color: 'var(--text-muted)' }}>Not assigned</span>
                             )}
                           </td>
-                          <td>{row.equipmentId != null ? `${row.volumeGal.toFixed(1)} gal` : '—'}</td>
-                          <td>{row.startBrix ?? '—'} → {row.currentBrix ?? '—'}</td>
-                          <td>{formatAbvEstimate(estAbv)}</td>
+                          <td className="num">{row.equipmentId != null ? `${row.volumeGal.toFixed(1)} gal` : '—'}</td>
+                          <td className="num">{row.startBrix ?? '—'} → {row.currentBrix ?? '—'}</td>
+                          <td className="num">{formatAbvEstimate(estAbv)}</td>
                           <td>{formatDateDisplay(row.batch.start_date)}</td>
                           <td><AssigneeCell name={row.batch.assigned_user_name} /></td>
                           <td className="td-actions">
@@ -630,7 +630,7 @@ export function Fermentation() {
                   <th>Date</th>
                   <th>Wash batch</th>
                   <th>Fermenter</th>
-                  <th>Gallons</th>
+                  <th className="num">Gallons</th>
                   <th>Why</th>
                   <th>Who</th>
                 </tr>
@@ -641,7 +641,7 @@ export function Fermentation() {
                     <td>{formatDateDisplay(row.discarded_date)}</td>
                     <td>{row.batch_number || '—'}</td>
                     <td>{row.fermenter_name}</td>
-                    <td>{row.volume_gal.toFixed(1)} gal</td>
+                    <td className="num">{row.volume_gal.toFixed(1)} gal</td>
                     <td>{row.notes || '—'}</td>
                     <td>{row.changed_by || '—'}</td>
                   </tr>

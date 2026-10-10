@@ -271,7 +271,7 @@ export function Barrels() {
                 ) : (
                   <>
                     <p>No warehouse locations yet.</p>
-                    <button type="button" className="btn btn-primary" onClick={() => { setLocationName(''); setShowLocationForm(true); }} style={{ marginTop: '1rem' }}>
+                    <button type="button" className="btn btn-secondary" onClick={() => { setLocationName(''); setShowLocationForm(true); }} style={{ marginTop: '1rem' }}>
                       Add a location
                     </button>
                   </>

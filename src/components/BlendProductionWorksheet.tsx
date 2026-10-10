@@ -134,9 +134,9 @@ export function BlendProductionWorksheet({
             <tr>
               <th className="blend-worksheet-check">Done</th>
               <th>Source tank</th>
-              <th>Pull amount</th>
-              <th>Expected weight</th>
-              <th>ABV</th>
+              <th className="num">Pull amount</th>
+              <th className="num">Expected weight</th>
+              <th className="num">ABV</th>
               <th>Notes</th>
             </tr>
           </thead>
@@ -158,7 +158,7 @@ export function BlendProductionWorksheet({
                 <tr key={index}>
                   <td className="blend-worksheet-check"><span className="blend-worksheet-box" /></td>
                   <td>{line.tankName}</td>
-                  <td>
+                  <td className="num">
                     {line.amount > 0 ? `${formatQuantityDisplay(line.amount, 3)} ${line.unit}` : `${formatGallonDisplay(line.volumeGal)} gal`}
                     {alt ? ` (${alt.label})` : ''}
                     <br />
@@ -169,8 +169,8 @@ export function BlendProductionWorksheet({
                       line.amount > 0 ? { amount: line.amount, unit: line.unit } : undefined,
                     )}</small>
                   </td>
-                  <td>{pullWeightLabel ?? 'Original entered quantity not recorded'}</td>
-                  <td>{line.abv.toFixed(1)}%</td>
+                  <td className="num">{pullWeightLabel ?? 'Original entered quantity not recorded'}</td>
+                  <td className="num">{line.abv.toFixed(1)}%</td>
                   <td>{abvNote}</td>
                 </tr>
               );
@@ -194,7 +194,7 @@ export function BlendProductionWorksheet({
             <tr>
               <th className="blend-worksheet-check">Done</th>
               <th>Ingredient</th>
-              <th>Amount</th>
+              <th className="num">Amount</th>
               <th>Scale / alternate</th>
             </tr>
           </thead>
@@ -207,7 +207,7 @@ export function BlendProductionWorksheet({
                 <tr key={index}>
                   <td className="blend-worksheet-check"><span className="blend-worksheet-box" /></td>
                   <td>{ingredient.name || ingredient.ingredient_type}</td>
-                  <td>{formatBlendRecipeAdditive(ingredient)}</td>
+                  <td className="num">{formatBlendRecipeAdditive(ingredient)}</td>
                   <td>{alt?.label ?? '—'}</td>
                 </tr>
               );

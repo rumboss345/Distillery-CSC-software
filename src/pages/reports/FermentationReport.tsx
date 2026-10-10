@@ -54,9 +54,9 @@ export function FermentationReport() {
             <th>Wash batch</th>
             <th>Recipe</th>
             <th>Fermenter</th>
-            <th>Volume</th>
+            <th className="num">Volume</th>
             <th>Started</th>
-            <th>Start Brix</th>
+            <th className="num">Start Brix</th>
             <th>Status</th>
             <th>Operator</th>
           </tr>
@@ -67,9 +67,9 @@ export function FermentationReport() {
               <td><strong>{row.batch_number}</strong></td>
               <td>{row.recipe_name}</td>
               <td>{row.fermenter_name}</td>
-              <td>{row.volume_gal != null ? `${row.volume_gal.toFixed(1)} gal` : '—'}</td>
+              <td className="num">{row.volume_gal != null ? `${row.volume_gal.toFixed(1)} gal` : '—'}</td>
               <td>{formatDateDisplay(row.start_date)}</td>
-              <td>{row.start_brix ?? '—'}</td>
+              <td className="num">{row.start_brix ?? '—'}</td>
               <td>{row.status}</td>
               <td>{row.operator}</td>
             </tr>
@@ -94,7 +94,7 @@ export function FermentationReport() {
             <th>Wash batch</th>
             <th>Recipe</th>
             <th>Fermenter</th>
-            <th>Gallons</th>
+            <th className="num">Gallons</th>
             <th>Why</th>
             <th>Who</th>
           </tr>
@@ -106,7 +106,7 @@ export function FermentationReport() {
               <td><strong>{row.batch_number}</strong></td>
               <td>{row.recipe_name}</td>
               <td>{row.fermenter_name}</td>
-              <td>{row.volume_gal.toFixed(1)} gal</td>
+              <td className="num">{row.volume_gal.toFixed(1)} gal</td>
               <td>{row.notes}</td>
               <td>{row.who}</td>
             </tr>
