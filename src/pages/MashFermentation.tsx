@@ -142,6 +142,18 @@ export function MashFermentation() {
     setShowForm(true);
   };
 
+  const calendarRecordHandled = useRef(false);
+  useEffect(() => {
+    const recordId = Number(searchParams.get('record')) || 0;
+    if (!recordId || calendarRecordHandled.current) return;
+    calendarRecordHandled.current = true;
+    const batch = getMashBatches().find((item) => item.id === recordId);
+    if (batch) openEdit(batch);
+    const next = new URLSearchParams(searchParams);
+    next.delete('record');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
   const closeBatchForm = () => {
     setShowForm(false);
   };

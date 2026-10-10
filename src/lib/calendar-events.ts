@@ -3,7 +3,8 @@ import {
   format,
   parseISO,
 } from 'date-fns';
-import { localCalendarDayKey } from './date-input';
+import { formatDateDisplay, localCalendarDayKey } from './date-input';
+import { localIsoDate } from './planned-event-date';
 import {
   getMashBatches,
   getDistillationRuns,
@@ -100,14 +101,25 @@ export const ALL_CALENDAR_STATUS_CATEGORIES: CalendarStatusCategory[] = [
  * - BottlingRun / BlendProduct: single blend_date / bottling_date only.
  */
 export const CALENDAR_DATA_LIMITATIONS = [
-  'Wash batches have no planned end date or completion date field — multi-day spans use fermentation log dates only when status is complete or discarded.',
-  'In-progress wash/fermentation batches remain single-day unless completed with log history.',
-  'Barrel fill dates are shown; empty/dumped barrels have no separate event date in the database.',
+  'Wash batches have no planned end date. Finished cooks span fermentation log dates when those logs exist.',
+  'Washes, runs, blends, and barrels that are still in progress stay on the calendar from their start through today.',
+  'Empty or dumped barrels have no separate end date. Aging barrels stay on the calendar until they leave the warehouse.',
   'Distillation, bottling, blending, and transfers are single-day events based on their recorded dates.',
 ] as const;
 
+export type CalendarProgress = 'upcoming' | 'in_progress' | 'done';
+
+export const CALENDAR_PROGRESS_LABELS: Record<CalendarProgress, string> = {
+  upcoming: 'Upcoming',
+  in_progress: 'In progress',
+  done: 'Done',
+};
+
+export const ALL_CALENDAR_PROGRESS: CalendarProgress[] = ['upcoming', 'in_progress', 'done'];
+
 export interface CalendarEvent {
   id: string;
+  recordId?: number;
   startDate: string;
   endDate?: string;
   allDay?: boolean;
@@ -116,7 +128,10 @@ export interface CalendarEvent {
   /** Raw status value from the production record. */
   status: string;
   statusCategory: CalendarStatusCategory;
+  assignee?: string;
   detail?: string;
+  /** Fermentation page, rather than the wash page, owns this wash record. */
+  washOnFermentation?: boolean;
 }
 
 export interface CalendarProductionData {
@@ -134,9 +149,26 @@ function toDateOnly(value: string | null | undefined): string | undefined {
   return day || undefined;
 }
 
-export function calendarEventPath(event: Pick<CalendarEvent, 'kind' | 'status'>): string {
-  if (event.kind === 'wash') return washRecordPath(event.status);
-  return CALENDAR_KIND_ROUTES[event.kind];
+export function calendarEventPath(event: Pick<CalendarEvent, 'kind' | 'status' | 'recordId' | 'washOnFermentation'>): string {
+  const base = event.kind === 'wash'
+    ? washRecordPath(event.status, {
+      hasLogs: Boolean(event.washOnFermentation),
+      hasAssignments: Boolean(event.washOnFermentation),
+    })
+    : CALENDAR_KIND_ROUTES[event.kind];
+  if (event.recordId == null) return base;
+  return `${base}?record=${event.recordId}`;
+}
+
+/** In-progress work stays on the calendar from its start through today. */
+export function spanThroughToday(startDate: string, today: string): string | undefined {
+  return startDate < today ? today : undefined;
+}
+
+export function calendarProgress(category: CalendarStatusCategory): CalendarProgress {
+  if (category === 'in_progress' || category === 'hold') return 'in_progress';
+  if (category === 'complete' || category === 'cancelled' || category === 'other') return 'done';
+  return 'upcoming';
 }
 
 export function isMultiDayEvent(event: CalendarEvent): boolean {
@@ -242,16 +274,27 @@ export function deriveFermentationEndDate(
 export function buildWashCalendarEvent(
   batch: MashBatch,
   logs: FermentationLog[],
+  today: string = localIsoDate(),
 ): CalendarEvent | null {
   const startDate = toDateOnly(batch.start_date);
   if (!startDate) return null;
 
+  const inProgress = batch.status === 'mashing' || batch.status === 'fermenting';
   const endFromLogs = deriveFermentationEndDate(batch, logs);
-  const endDate =
-    endFromLogs && endFromLogs > startDate ? endFromLogs : undefined;
+  const endDate = inProgress
+    ? spanThroughToday(startDate, today)
+    : endFromLogs && endFromLogs > startDate
+      ? endFromLogs
+      : undefined;
+  const batchLogs = fermentationLogsForBatch(logs, batch.id);
+  const washOnFermentation = washRecordPath(batch.status, {
+    hasLogs: batchLogs.length > 0,
+    hasAssignments: false,
+  }) === '/fermentation';
 
   return {
     id: `wash-${batch.id}`,
+    recordId: batch.id,
     startDate,
     endDate,
     allDay: true,
@@ -259,17 +302,20 @@ export function buildWashCalendarEvent(
     title: batch.batch_number,
     status: batch.status,
     statusCategory: mapWashStatus(batch.status),
-    detail: [batch.recipe_name || batch.grain_type, batch.assigned_user_name]
-      .filter(Boolean)
-      .join(' · '),
+    assignee: batch.assigned_user_name || undefined,
+    detail: batch.recipe_name || batch.grain_type || undefined,
+    washOnFermentation,
   };
 }
 
-export function buildCalendarEventsFromData(data: CalendarProductionData): CalendarEvent[] {
+export function buildCalendarEventsFromData(
+  data: CalendarProductionData,
+  today: string = localIsoDate(),
+): CalendarEvent[] {
   const events: CalendarEvent[] = [];
 
   for (const batch of data.mashes) {
-    const event = buildWashCalendarEvent(batch, data.fermentationLogs);
+    const event = buildWashCalendarEvent(batch, data.fermentationLogs, today);
     if (event) events.push(event);
   }
 
@@ -278,13 +324,16 @@ export function buildCalendarEventsFromData(data: CalendarProductionData): Calen
     if (!startDate) continue;
     events.push({
       id: `run-${run.id}`,
+      recordId: run.id,
       startDate,
+      endDate: run.status === 'running' ? spanThroughToday(startDate, today) : undefined,
       allDay: true,
       kind: 'distillation',
       title: run.batch_number,
       status: run.status,
       statusCategory: mapRunStatus(run.status),
-      detail: [run.still_name, run.assigned_user_name].filter(Boolean).join(' · '),
+      assignee: run.assigned_user_name || undefined,
+      detail: run.still_name || undefined,
     });
   }
 
@@ -293,7 +342,9 @@ export function buildCalendarEventsFromData(data: CalendarProductionData): Calen
     if (!startDate) continue;
     events.push({
       id: `barrel-fill-${barrel.id}`,
+      recordId: barrel.id,
       startDate,
+      endDate: barrel.status === 'aging' ? spanThroughToday(startDate, today) : undefined,
       allDay: true,
       kind: 'barrel',
       title: barrel.barrel_number,
@@ -308,6 +359,7 @@ export function buildCalendarEventsFromData(data: CalendarProductionData): Calen
     if (!startDate) continue;
     events.push({
       id: `bottling-${bottling.id}`,
+      recordId: bottling.id,
       startDate,
       allDay: true,
       kind: 'bottling',
@@ -325,13 +377,16 @@ export function buildCalendarEventsFromData(data: CalendarProductionData): Calen
     if (!startDate) continue;
     events.push({
       id: `blend-${blend.id}`,
+      recordId: blend.id,
       startDate,
+      endDate: blend.status === 'approved' ? spanThroughToday(startDate, today) : undefined,
       allDay: true,
       kind: 'blend',
       title: blend.product_name || blend.batch_number,
       status: blend.status,
       statusCategory: mapBlendStatus(blend.status),
-      detail: [blend.batch_number, blend.assigned_user_name].filter(Boolean).join(' · '),
+      assignee: blend.assigned_user_name || undefined,
+      detail: blend.product_name ? blend.batch_number : undefined,
     });
   }
 
@@ -340,6 +395,7 @@ export function buildCalendarEventsFromData(data: CalendarProductionData): Calen
     if (!startDate) continue;
     events.push({
       id: `transfer-${transfer.id}`,
+      recordId: transfer.id,
       startDate,
       allDay: true,
       kind: 'transfer',
@@ -425,15 +481,20 @@ export function filterEventsByStatusCategory(
   return events.filter((event) => matchesStatusCategoryFilter(event, enabledCategories));
 }
 
+export function filterEventsByProgress(
+  events: CalendarEvent[],
+  enabled: Set<CalendarProgress>,
+): CalendarEvent[] {
+  if (enabled.size === 0) return [];
+  return events.filter((event) => enabled.has(calendarProgress(event.statusCategory)));
+}
+
 export function filterCalendarEvents(
   events: CalendarEvent[],
   enabledKinds: Set<CalendarActivityKind>,
-  enabledStatusCategories: Set<CalendarStatusCategory>,
+  enabledProgress: Set<CalendarProgress>,
 ): CalendarEvent[] {
-  return filterEventsByStatusCategory(
-    filterEventsByKind(events, enabledKinds),
-    enabledStatusCategories,
-  );
+  return filterEventsByProgress(filterEventsByKind(events, enabledKinds), enabledProgress);
 }
 
 export function groupEventsByDate(events: CalendarEvent[]): Map<string, CalendarEvent[]> {
@@ -462,6 +523,7 @@ export function eventsInRange(
 }
 
 export function formatEventDateRange(event: CalendarEvent): string {
-  if (!isMultiDayEvent(event)) return event.startDate;
-  return `${event.startDate} → ${event.endDate}`;
+  const start = formatDateDisplay(event.startDate);
+  if (!isMultiDayEvent(event) || !event.endDate) return start;
+  return `${start} – ${formatDateDisplay(event.endDate)}`;
 }

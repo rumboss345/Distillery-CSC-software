@@ -1,7 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { DatePicker } from '../components/DatePicker';
 import {
   addDays,
   addMonths,
@@ -21,12 +20,11 @@ import {
 import { StatusBadge } from '../components/StatusBadge';
 import {
   ALL_CALENDAR_KINDS,
-  ALL_CALENDAR_STATUS_CATEGORIES,
+  ALL_CALENDAR_PROGRESS,
   buildCalendarEvents,
-  CALENDAR_DATA_LIMITATIONS,
   CALENDAR_KIND_LABELS,
+  CALENDAR_PROGRESS_LABELS,
   calendarEventPath,
-  CALENDAR_STATUS_LABELS,
   eventEndDate,
   eventOccursOnDate,
   filterCalendarEvents,
@@ -35,7 +33,7 @@ import {
   isMultiDayEvent,
   type CalendarActivityKind,
   type CalendarEvent,
-  type CalendarStatusCategory,
+  type CalendarProgress,
 } from '../lib/calendar-events';
 import {
   CALENDAR_PLAN_ACTIVITY_KINDS,
@@ -43,9 +41,16 @@ import {
   calendarPlanPath,
 } from '../lib/calendar-planning';
 
-type CalendarViewMode = 'month' | 'week' | 'day';
+type CalendarViewMode = 'month' | 'week' | 'agenda';
+
+const VIEW_LABELS: Record<CalendarViewMode, string> = {
+  month: 'Month',
+  week: 'Week',
+  agenda: 'Agenda',
+};
 
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTH_EVENT_LIMIT = 2;
 
 function dateKey(date: Date): string {
   return format(date, 'yyyy-MM-dd');
@@ -53,20 +58,22 @@ function dateKey(date: Date): string {
 
 export function Calendar() {
   const { hasPermission } = useAuth();
+  const planRef = useRef<HTMLDivElement>(null);
   const [viewMode, setViewMode] = useState<CalendarViewMode>('month');
   const [anchorDate, setAnchorDate] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState<string>(() => dateKey(new Date()));
+  const [planOpen, setPlanOpen] = useState(false);
   const [enabledKinds, setEnabledKinds] = useState<Set<CalendarActivityKind>>(
     () => new Set(ALL_CALENDAR_KINDS),
   );
-  const [enabledStatusCategories, setEnabledStatusCategories] = useState<
-    Set<CalendarStatusCategory>
-  >(() => new Set(ALL_CALENDAR_STATUS_CATEGORIES));
+  const [enabledProgress, setEnabledProgress] = useState<Set<CalendarProgress>>(
+    () => new Set(ALL_CALENDAR_PROGRESS),
+  );
 
   const allEvents = useMemo(() => buildCalendarEvents(), []);
   const filteredEvents = useMemo(
-    () => filterCalendarEvents(allEvents, enabledKinds, enabledStatusCategories),
-    [allEvents, enabledKinds, enabledStatusCategories],
+    () => filterCalendarEvents(allEvents, enabledKinds, enabledProgress),
+    [allEvents, enabledKinds, enabledProgress],
   );
   const eventsByDate = useMemo(() => groupEventsByDate(filteredEvents), [filteredEvents]);
 
@@ -89,31 +96,42 @@ export function Calendar() {
     [filteredEvents, selectedDate],
   );
 
+  const weekRange = useMemo(() => {
+    const start = dateKey(weekStart);
+    const end = dateKey(addDays(weekStart, 6));
+    return { start, end };
+  }, [weekStart]);
+
   const periodLabel = useMemo(() => {
     if (viewMode === 'month') return format(monthStart, 'MMMM yyyy');
-    if (viewMode === 'week') {
-      const weekEnd = addDays(weekStart, 6);
-      return `${format(weekStart, 'MMM d')} – ${format(weekEnd, 'MMM d, yyyy')}`;
-    }
-    return format(parseISO(selectedDate), 'EEEE, MMMM d, yyyy');
-  }, [viewMode, monthStart, weekStart, selectedDate]);
+    const weekEnd = addDays(weekStart, 6);
+    return `${format(weekStart, 'MMM d')} – ${format(weekEnd, 'MMM d, yyyy')}`;
+  }, [viewMode, monthStart, weekStart]);
 
   const periodEventCount = useMemo(() => {
     if (viewMode === 'month') {
       const prefix = format(monthStart, 'yyyy-MM');
       return filteredEvents.filter(
-        (e) => e.startDate.startsWith(prefix) || eventEndDate(e).startsWith(prefix),
+        (event) => event.startDate.startsWith(prefix) || eventEndDate(event).startsWith(prefix),
       ).length;
     }
-    if (viewMode === 'week') {
-      const start = dateKey(weekStart);
-      const end = dateKey(addDays(weekStart, 6));
-      return filteredEvents.filter(
-        (e) => e.startDate <= end && eventEndDate(e) >= start,
-      ).length;
-    }
-    return selectedEvents.length;
-  }, [viewMode, monthStart, weekStart, filteredEvents, selectedEvents.length]);
+    return filteredEvents.filter(
+      (event) => event.startDate <= weekRange.end && eventEndDate(event) >= weekRange.start,
+    ).length;
+  }, [viewMode, monthStart, filteredEvents, weekRange]);
+
+  const planKinds = CALENDAR_PLAN_ACTIVITY_KINDS.filter((kind) => (
+    hasPermission(CALENDAR_PLAN_PERMISSION[kind])
+  ));
+
+  useEffect(() => {
+    if (!planOpen) return;
+    const close = (event: MouseEvent) => {
+      if (!planRef.current?.contains(event.target as Node)) setPlanOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [planOpen]);
 
   const toggleKind = (kind: CalendarActivityKind) => {
     setEnabledKinds((prev) => {
@@ -124,11 +142,11 @@ export function Calendar() {
     });
   };
 
-  const toggleStatusCategory = (category: CalendarStatusCategory) => {
-    setEnabledStatusCategories((prev) => {
+  const toggleProgress = (progress: CalendarProgress) => {
+    setEnabledProgress((prev) => {
       const next = new Set(prev);
-      if (next.has(category)) next.delete(category);
-      else next.add(category);
+      if (next.has(progress)) next.delete(progress);
+      else next.add(progress);
       return next;
     });
   };
@@ -145,22 +163,20 @@ export function Calendar() {
   };
 
   const goPrevious = () => {
-    if (viewMode === 'month') setAnchorDate((d) => subMonths(d, 1));
-    else if (viewMode === 'week') setAnchorDate((d) => subWeeks(d, 1));
-    else setAnchorDate((d) => addDays(d, -1));
+    if (viewMode === 'month') setAnchorDate((date) => subMonths(date, 1));
+    else setAnchorDate((date) => subWeeks(date, 1));
   };
 
   const goNext = () => {
-    if (viewMode === 'month') setAnchorDate((d) => addMonths(d, 1));
-    else if (viewMode === 'week') setAnchorDate((d) => addWeeks(d, 1));
-    else setAnchorDate((d) => addDays(d, 1));
+    if (viewMode === 'month') setAnchorDate((date) => addMonths(date, 1));
+    else setAnchorDate((date) => addWeeks(date, 1));
   };
 
   return (
     <div>
       <div className="page-header">
         <h2>Production Calendar</h2>
-        <p>View production activity by date, filter by status, and plan new batches on a selected day</p>
+        <p>See what is running, open the record, and plan the selected day.</p>
       </div>
 
       <div className="calendar-toolbar">
@@ -177,14 +193,14 @@ export function Calendar() {
           </button>
         </div>
         <div className="calendar-view-toggle">
-          {(['month', 'week', 'day'] as CalendarViewMode[]).map((mode) => (
+          {(['month', 'week', 'agenda'] as CalendarViewMode[]).map((mode) => (
             <button
               key={mode}
               type="button"
               className={`btn btn-sm btn-secondary${viewMode === mode ? ' active' : ''}`}
               onClick={() => setViewMode(mode)}
             >
-              {mode.charAt(0).toUpperCase() + mode.slice(1)}
+              {VIEW_LABELS[mode]}
             </button>
           ))}
         </div>
@@ -205,14 +221,14 @@ export function Calendar() {
 
       <div className="calendar-filters calendar-status-filters">
         <span className="calendar-filter-heading">Status</span>
-        {ALL_CALENDAR_STATUS_CATEGORIES.map((category) => (
-          <label key={category} className={`calendar-filter-chip calendar-status-${category}`}>
+        {ALL_CALENDAR_PROGRESS.map((progress) => (
+          <label key={progress} className="calendar-filter-chip">
             <input
               type="checkbox"
-              checked={enabledStatusCategories.has(category)}
-              onChange={() => toggleStatusCategory(category)}
+              checked={enabledProgress.has(progress)}
+              onChange={() => toggleProgress(progress)}
             />
-            {CALENDAR_STATUS_LABELS[category]}
+            {CALENDAR_PROGRESS_LABELS[progress]}
           </label>
         ))}
       </div>
@@ -267,17 +283,13 @@ export function Calendar() {
             </div>
           )}
 
-          {viewMode === 'day' && (
-            <div className="calendar-day-view">
-              <DayViewList
-                date={selectedDate}
-                events={selectedEvents}
-                onSelectDate={(next) => {
-                  setSelectedDate(next);
-                  setAnchorDate(parseISO(next));
-                }}
-              />
-            </div>
+          {viewMode === 'agenda' && (
+            <WeekAgenda
+              days={weekDays}
+              eventsByDate={eventsByDate}
+              selectedDate={selectedDate}
+              onSelectDay={selectDay}
+            />
           )}
         </div>
 
@@ -295,51 +307,42 @@ export function Calendar() {
             </ul>
           )}
 
-          {CALENDAR_PLAN_ACTIVITY_KINDS.some((kind) => hasPermission(CALENDAR_PLAN_PERMISSION[kind])) && (
+          {planKinds.length > 0 && (
             <div className="calendar-plan-section">
               <h4 className="calendar-plan-title">Plan production</h4>
               <p className="text-muted calendar-plan-hint">
-                Start a planned record dated {format(parseISO(selectedDate), 'MMM d, yyyy')}. You can fill in recipes, volumes, and assignments on the next screen.
+                Start a planned record dated {format(parseISO(selectedDate), 'MMM d, yyyy')}. Recipes, volumes, and assignments are on the next screen.
               </p>
-              <div className="calendar-plan-actions">
-                {CALENDAR_PLAN_ACTIVITY_KINDS.map((kind) => {
-                  const permission = CALENDAR_PLAN_PERMISSION[kind];
-                  if (!hasPermission(permission)) return null;
-                  return (
-                    <Link
-                      key={kind}
-                      to={calendarPlanPath(kind, selectedDate)}
-                      className={`btn btn-sm btn-secondary calendar-plan-btn calendar-kind-${kind}`}
-                    >
-                      + {CALENDAR_KIND_LABELS[kind]}
-                    </Link>
-                  );
-                })}
+              <div className="calendar-plan-menu" ref={planRef}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  aria-expanded={planOpen}
+                  aria-haspopup="menu"
+                  onClick={() => setPlanOpen((open) => !open)}
+                >
+                  Plan this day
+                </button>
+                {planOpen && (
+                  <div className="calendar-plan-choices" role="menu">
+                    {planKinds.map((kind) => (
+                      <Link
+                        key={kind}
+                        to={calendarPlanPath(kind, selectedDate)}
+                        className="calendar-plan-choice"
+                        role="menuitem"
+                        onClick={() => setPlanOpen(false)}
+                      >
+                        <span className={`calendar-event-dot calendar-kind-${kind}`} />
+                        {CALENDAR_KIND_LABELS[kind]}
+                      </Link>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}
         </aside>
-      </div>
-
-      <div className="calendar-legend card">
-        <h3 className="section-title" style={{ marginTop: 0 }}>Activity types</h3>
-        <div className="calendar-legend-items">
-          {ALL_CALENDAR_KINDS.map((kind) => (
-            <span key={kind} className="calendar-legend-item">
-              <span className={`calendar-event-dot calendar-kind-${kind}`} />
-              {CALENDAR_KIND_LABELS[kind]}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      <div className="card calendar-limitations">
-        <h3 className="section-title" style={{ marginTop: 0 }}>Date range notes</h3>
-        <ul className="calendar-limitations-list">
-          {CALENDAR_DATA_LIMITATIONS.map((note) => (
-            <li key={note}>{note}</li>
-          ))}
-        </ul>
       </div>
     </div>
   );
@@ -359,9 +362,12 @@ function CalendarDayCell({
   onSelect: () => void;
 }) {
   const key = dateKey(day);
+  const visible = events.slice(0, MONTH_EVENT_LIMIT);
+  const hidden = events.length - visible.length;
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       className={[
         'calendar-day',
         !inMonth && 'calendar-day-outside',
@@ -369,34 +375,48 @@ function CalendarDayCell({
         isToday(day) && 'calendar-day-today',
       ].filter(Boolean).join(' ')}
       onClick={onSelect}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onSelect();
+        }
+      }}
     >
       <span className="calendar-day-number">{format(day, 'd')}</span>
       {events.length > 0 && (
         <div className="calendar-day-events">
-          {events.slice(0, 3).map((event) => (
-            <span
+          {visible.map((event) => (
+            <Link
               key={`${event.id}-${key}`}
+              to={calendarEventPath(event)}
               className={[
-                'calendar-event-pill',
+                'calendar-month-event',
                 `calendar-kind-${event.kind}`,
                 isMultiDayEvent(event) && event.startDate !== key && 'calendar-event-continued',
               ].filter(Boolean).join(' ')}
-              title={`${CALENDAR_KIND_LABELS[event.kind]}: ${event.title}`}
-            />
+              title={[
+                CALENDAR_KIND_LABELS[event.kind],
+                event.title,
+                event.assignee,
+              ].filter(Boolean).join(' · ')}
+              onClick={(eventClick) => eventClick.stopPropagation()}
+            >
+              {event.title}
+            </Link>
           ))}
-          {events.length > 3 && (
-            <span className="calendar-event-more">+{events.length - 3}</span>
+          {hidden > 0 && (
+            <span className="calendar-event-more">+{hidden}</span>
           )}
         </div>
       )}
-    </button>
+    </div>
   );
 }
 
 function WeekEventChip({ event, day }: { event: CalendarEvent; day: Date }) {
   const key = dateKey(day);
   const isStart = event.startDate === key;
-  const isEnd = eventEndDate(event) === key;
   const continued = isMultiDayEvent(event) && !isStart;
 
   return (
@@ -406,41 +426,60 @@ function WeekEventChip({ event, day }: { event: CalendarEvent; day: Date }) {
         'calendar-week-event',
         `calendar-kind-${event.kind}`,
         continued && 'calendar-event-continued',
-        isStart && 'calendar-event-start',
-        isEnd && 'calendar-event-end',
       ].filter(Boolean).join(' ')}
       title={formatEventDateRange(event)}
     >
       <span className="calendar-week-event-title">{event.title}</span>
+      {event.assignee && <span className="calendar-week-event-assignee">{event.assignee}</span>}
       {isStart && <StatusBadge status={event.status} />}
     </Link>
   );
 }
 
-function DayViewList({
-  date,
-  events,
-  onSelectDate,
+function WeekAgenda({
+  days,
+  eventsByDate,
+  selectedDate,
+  onSelectDay,
 }: {
-  date: string;
-  events: CalendarEvent[];
-  onSelectDate: (date: string) => void;
+  days: Date[];
+  eventsByDate: Map<string, CalendarEvent[]>;
+  selectedDate: string;
+  onSelectDay: (day: Date) => void;
 }) {
+  const groups = days
+    .map((day) => ({ day, events: eventsByDate.get(dateKey(day)) ?? [] }))
+    .filter((group) => group.events.length > 0);
+
+  if (groups.length === 0) {
+    return <p className="text-muted">No activities this week with the current filters.</p>;
+  }
+
   return (
-    <div className="calendar-day-view-inner">
-      <label className="calendar-day-picker">
-        <span>Select date</span>
-        <DatePicker value={date} onChange={onSelectDate} />
-      </label>
-      {events.length === 0 ? (
-        <p className="text-muted">No activities on this date with the current filters.</p>
-      ) : (
-        <ul className="calendar-detail-list">
-          {events.map((event) => (
-            <CalendarDetailItem key={event.id} event={event} />
-          ))}
-        </ul>
-      )}
+    <div className="calendar-agenda">
+      {groups.map(({ day, events }) => {
+        const key = dateKey(day);
+        return (
+          <section key={key} className={key === selectedDate ? 'calendar-agenda-day calendar-day-selected' : 'calendar-agenda-day'}>
+            <button type="button" className="calendar-agenda-date" onClick={() => onSelectDay(day)}>
+              <span>{format(day, 'EEEE, MMM d')}</span>
+              {isToday(day) && <span className="calendar-agenda-today">Today</span>}
+            </button>
+            <ul className="calendar-agenda-list">
+              {events.map((event) => (
+                <li key={`${event.id}-${key}`}>
+                  <Link to={calendarEventPath(event)} className="calendar-agenda-row">
+                    <span className={`calendar-event-dot calendar-kind-${event.kind}`} />
+                    <span className="calendar-agenda-title">{event.title}</span>
+                    <span className="calendar-agenda-assignee">{event.assignee || '—'}</span>
+                    <StatusBadge status={event.status} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        );
+      })}
     </div>
   );
 }
@@ -449,7 +488,8 @@ function CalendarDetailItem({ event }: { event: CalendarEvent }) {
   return (
     <li className="calendar-detail-item">
       <div className="calendar-detail-header">
-        <span className={`calendar-kind-label calendar-kind-${event.kind}`}>
+        <span className="calendar-kind-label">
+          <span className={`calendar-event-dot calendar-kind-${event.kind}`} />
           {CALENDAR_KIND_LABELS[event.kind]}
         </span>
         <StatusBadge status={event.status} />
@@ -457,10 +497,8 @@ function CalendarDetailItem({ event }: { event: CalendarEvent }) {
       <Link to={calendarEventPath(event)} className="calendar-detail-title">
         {event.title}
       </Link>
-      <p className="calendar-detail-meta text-muted">
-        {formatEventDateRange(event)}
-        {isMultiDayEvent(event) ? ' · multi-day' : ''}
-      </p>
+      <p className="calendar-detail-meta text-muted">{formatEventDateRange(event)}</p>
+      {event.assignee && <p className="calendar-detail-meta text-muted">{event.assignee}</p>}
       {event.detail && <p className="calendar-detail-meta text-muted">{event.detail}</p>}
     </li>
   );

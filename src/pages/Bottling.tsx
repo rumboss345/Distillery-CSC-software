@@ -271,6 +271,18 @@ export function Bottling() {
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
 
+  const calendarRecordHandled = useRef(false);
+  useEffect(() => {
+    const recordId = Number(searchParams.get('record')) || 0;
+    if (!recordId || calendarRecordHandled.current) return;
+    calendarRecordHandled.current = true;
+    const run = getBottlingRuns().find((item) => item.id === recordId);
+    if (run) openEdit(run);
+    const next = new URLSearchParams(searchParams);
+    next.delete('record');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
   const openEdit = (run: BottlingRunView) => {
     setEditId(run.id);
     setForm({

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { AssigneeCell } from '../components/AssigneeSelect';
@@ -481,6 +481,18 @@ export function Fermentation() {
   const openLogs = (row: FermentationRow) => {
     setLogTarget(logTargetFromRow(row));
   };
+
+  const calendarRecordHandled = useRef(false);
+  useEffect(() => {
+    const recordId = Number(searchParams.get('record')) || 0;
+    if (!recordId || calendarRecordHandled.current) return;
+    calendarRecordHandled.current = true;
+    const row = rows.find((item) => item.batch.id === recordId);
+    if (row) openLogs(row);
+    const next = new URLSearchParams(searchParams);
+    next.delete('record');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams, rows]);
 
   const closeLogs = () => {
     setLogTarget(null);

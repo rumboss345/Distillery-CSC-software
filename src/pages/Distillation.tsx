@@ -401,6 +401,18 @@ export function Distillation() {
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams, user]);
 
+  const calendarRecordHandled = useRef(false);
+  useEffect(() => {
+    const recordId = Number(searchParams.get('record')) || 0;
+    if (!recordId || calendarRecordHandled.current) return;
+    calendarRecordHandled.current = true;
+    const run = getDistillationRuns().find((item) => item.id === recordId);
+    if (run) openEditRun(run);
+    const next = new URLSearchParams(searchParams);
+    next.delete('record');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
   const openEditRun = (run: DistillationRun) => {
     setEditRunId(run.id);
     setPlannedScheduleDate(null);
