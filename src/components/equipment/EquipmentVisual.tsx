@@ -39,6 +39,7 @@ export function EquipmentVisual(props: EquipmentVisualProps) {
     case 'collection_vessel':
       return (
         <TankVisual
+          shape={kind === 'stillage_tank' ? 'stillage' : kind === 'collection_vessel' ? 'collection' : 'holding'}
           tank={tankVisualDataFromVisualData(view.data)}
           selected={view.selected}
           size={view.size}
