@@ -29,7 +29,6 @@ import {
   eventOccursOnDate,
   filterCalendarEvents,
   formatEventDateRange,
-  groupEventsByDate,
   layoutCalendarWeek,
   type CalendarActivityKind,
   type CalendarEvent,
@@ -40,13 +39,14 @@ import {
   CALENDAR_PLAN_PERMISSION,
   calendarPlanPath,
 } from '../lib/calendar-planning';
+import { groupEventsByStaff } from '../lib/today-staff-sheet';
 
-type CalendarViewMode = 'month' | 'week' | 'agenda';
+type CalendarViewMode = 'month' | 'week' | 'today';
 
 const VIEW_LABELS: Record<CalendarViewMode, string> = {
   month: 'Month',
   week: 'Week',
-  agenda: 'Agenda',
+  today: 'Today',
 };
 
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -59,7 +59,7 @@ function dateKey(date: Date): string {
 export function Calendar() {
   const { hasPermission } = useAuth();
   const planRef = useRef<HTMLDivElement>(null);
-  const [viewMode, setViewMode] = useState<CalendarViewMode>('month');
+  const [viewMode, setViewMode] = useState<CalendarViewMode>('today');
   const [anchorDate, setAnchorDate] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState<string>(() => dateKey(new Date()));
   const [planOpen, setPlanOpen] = useState(false);
@@ -75,8 +75,6 @@ export function Calendar() {
     () => filterCalendarEvents(allEvents, enabledKinds, enabledProgress),
     [allEvents, enabledKinds, enabledProgress],
   );
-  const eventsByDate = useMemo(() => groupEventsByDate(filteredEvents), [filteredEvents]);
-
   const monthStart = startOfMonth(anchorDate);
   const weekStart = startOfWeek(anchorDate, { weekStartsOn: 0 });
 
@@ -102,13 +100,21 @@ export function Calendar() {
     return { start, end };
   }, [weekStart]);
 
+  const todayKey = dateKey(new Date());
+  const todayEvents = useMemo(
+    () => filteredEvents.filter((event) => eventOccursOnDate(event, todayKey)),
+    [filteredEvents, todayKey],
+  );
+
   const periodLabel = useMemo(() => {
+    if (viewMode === 'today') return 'Today';
     if (viewMode === 'month') return format(monthStart, 'MMMM yyyy');
     const weekEnd = addDays(weekStart, 6);
     return `${format(weekStart, 'MMM d')} – ${format(weekEnd, 'MMM d, yyyy')}`;
   }, [viewMode, monthStart, weekStart]);
 
   const periodEventCount = useMemo(() => {
+    if (viewMode === 'today') return todayEvents.length;
     if (viewMode === 'month') {
       const prefix = format(monthStart, 'yyyy-MM');
       return filteredEvents.filter(
@@ -118,7 +124,7 @@ export function Calendar() {
     return filteredEvents.filter(
       (event) => event.startDate <= weekRange.end && eventEndDate(event) >= weekRange.start,
     ).length;
-  }, [viewMode, monthStart, filteredEvents, weekRange]);
+  }, [viewMode, monthStart, filteredEvents, weekRange, todayEvents.length]);
 
   const planKinds = CALENDAR_PLAN_ACTIVITY_KINDS.filter((kind) => (
     hasPermission(CALENDAR_PLAN_PERMISSION[kind])
@@ -181,24 +187,32 @@ export function Calendar() {
 
       <div className="calendar-toolbar">
         <div className="calendar-nav">
-          <button type="button" className="btn btn-secondary btn-sm" onClick={goPrevious} aria-label="Previous">
-            ←
-          </button>
-          <h3 className="calendar-month-label">{periodLabel}</h3>
-          <button type="button" className="btn btn-secondary btn-sm" onClick={goNext} aria-label="Next">
-            →
-          </button>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={goToday}>
-            Today
-          </button>
+          {viewMode !== 'today' && (
+            <>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={goPrevious} aria-label="Previous">
+                ←
+              </button>
+              <h3 className="calendar-month-label">{periodLabel}</h3>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={goNext} aria-label="Next">
+                →
+              </button>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={goToday}>
+                Today
+              </button>
+            </>
+          )}
+          {viewMode === 'today' && <h3 className="calendar-month-label">Today</h3>}
         </div>
         <div className="calendar-view-toggle">
-          {(['month', 'week', 'agenda'] as CalendarViewMode[]).map((mode) => (
+          {(['today', 'week', 'month'] as CalendarViewMode[]).map((mode) => (
             <button
               key={mode}
               type="button"
               className={`btn btn-sm btn-secondary${viewMode === mode ? ' active' : ''}`}
-              onClick={() => setViewMode(mode)}
+              onClick={() => {
+                setViewMode(mode);
+                if (mode === 'today') goToday();
+              }}
             >
               {VIEW_LABELS[mode]}
             </button>
@@ -267,13 +281,8 @@ export function Calendar() {
             />
           )}
 
-          {viewMode === 'agenda' && (
-            <WeekAgenda
-              days={weekDays}
-              eventsByDate={eventsByDate}
-              selectedDate={selectedDate}
-              onSelectDay={selectDay}
-            />
+          {viewMode === 'today' && (
+            <TodayStaffSheet events={todayEvents} day={parseISO(todayKey)} />
           )}
         </div>
 
@@ -452,50 +461,64 @@ function CalendarSpanWeek({
   );
 }
 
-function WeekAgenda({
-  days,
-  eventsByDate,
-  selectedDate,
-  onSelectDay,
-}: {
-  days: Date[];
-  eventsByDate: Map<string, CalendarEvent[]>;
-  selectedDate: string;
-  onSelectDay: (day: Date) => void;
-}) {
-  const groups = days
-    .map((day) => ({ day, events: eventsByDate.get(dateKey(day)) ?? [] }))
-    .filter((group) => group.events.length > 0);
-
-  if (groups.length === 0) {
-    return <p className="text-muted">No activities this week with the current filters.</p>;
-  }
+function TodayStaffSheet({ events, day }: { events: CalendarEvent[]; day: Date }) {
+  const groups = groupEventsByStaff(events);
 
   return (
-    <div className="calendar-agenda">
-      {groups.map(({ day, events }) => {
-        const key = dateKey(day);
-        return (
-          <section key={key} className={key === selectedDate ? 'calendar-agenda-day calendar-day-selected' : 'calendar-agenda-day'}>
-            <button type="button" className="calendar-agenda-date" onClick={() => onSelectDay(day)}>
-              <span>{format(day, 'EEEE, MMM d')}</span>
-              {isToday(day) && <span className="calendar-agenda-today">Today</span>}
-            </button>
-            <ul className="calendar-agenda-list">
-              {events.map((event) => (
-                <li key={`${event.id}-${key}`}>
-                  <Link to={calendarEventPath(event)} className="calendar-agenda-row">
-                    <span className={`calendar-event-dot calendar-kind-${event.kind}`} />
-                    <span className="calendar-agenda-title">{event.title}</span>
-                    <span className="calendar-agenda-assignee">{event.assignee || '—'}</span>
-                    <StatusBadge status={event.status} />
-                  </Link>
-                </li>
-              ))}
-            </ul>
+    <div className="today-staff-sheet">
+      <header className="today-staff-sheet-header">
+        <div>
+          <p className="today-staff-sheet-kicker">Daily work sheet</p>
+          <h3 className="today-staff-sheet-title">Today</h3>
+          <p className="today-staff-sheet-date">{format(day, 'EEEE, MMMM d, yyyy')}</p>
+        </div>
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm no-print"
+          onClick={() => window.print()}
+        >
+          Print staff sheet
+        </button>
+      </header>
+      {groups.length === 0 ? (
+        <p className="text-muted">Nothing is scheduled today.</p>
+      ) : (
+        groups.map((group) => (
+          <section key={group.name} className="today-staff-person">
+            <h4>{group.name}</h4>
+            <div className="today-staff-table-wrap">
+              <table className="today-staff-table">
+                <thead>
+                  <tr>
+                    <th className="today-sheet-check-col">Done</th>
+                    <th>Work</th>
+                    <th>What</th>
+                    <th>Status</th>
+                    <th>Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {group.events.map((event) => (
+                    <tr key={event.id}>
+                      <td className="today-sheet-check-col">
+                        <span className="today-sheet-check" aria-hidden="true" />
+                      </td>
+                      <td>{CALENDAR_KIND_LABELS[event.kind]}</td>
+                      <td>
+                        <Link to={calendarEventPath(event)} className="today-sheet-link">
+                          {event.title}
+                        </Link>
+                      </td>
+                      <td><StatusBadge status={event.status} /></td>
+                      <td>{event.detail || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </section>
-        );
-      })}
+        ))
+      )}
     </div>
   );
 }
@@ -514,7 +537,9 @@ function CalendarDetailItem({ event }: { event: CalendarEvent }) {
         {event.title}
       </Link>
       <p className="calendar-detail-meta text-muted">{formatEventDateRange(event)}</p>
-      {event.assignee && <p className="calendar-detail-meta text-muted">{event.assignee}</p>}
+      <p className="calendar-detail-meta text-muted">
+        {event.assignee?.trim() ? `Assigned to ${event.assignee.trim()}` : 'Unassigned'}
+      </p>
       {event.detail && <p className="calendar-detail-meta text-muted">{event.detail}</p>}
     </li>
   );
