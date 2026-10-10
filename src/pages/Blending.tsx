@@ -887,6 +887,18 @@ export function Blending() {
     }
   }, [searchParams, setSearchParams, blendRecipes, user]);
 
+  const calendarRecordHandled = useRef(false);
+  useEffect(() => {
+    const recordId = Number(searchParams.get('record')) || 0;
+    if (!recordId || calendarRecordHandled.current) return;
+    calendarRecordHandled.current = true;
+    const blend = getBlendProducts().find((item) => item.id === recordId);
+    if (blend) openContinue(blend);
+    const next = new URLSearchParams(searchParams);
+    next.delete('record');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
   const openContinue = (blend: BlendProduct) => {
     setEditId(blend.id);
     setForm({

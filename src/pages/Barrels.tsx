@@ -127,6 +127,15 @@ export function Barrels() {
 
   useEffect(() => {
     if (calendarPlanHandled.current) return;
+    const recordId = Number(searchParams.get('record')) || 0;
+    if (recordId) {
+      calendarPlanHandled.current = true;
+      setSelectedId(recordId);
+      const next = new URLSearchParams(searchParams);
+      next.delete('record');
+      setSearchParams(next, { replace: true });
+      return;
+    }
     const plan = readCalendarPlanQuery(searchParams);
     if (!plan || plan.transfer) return;
     calendarPlanHandled.current = true;

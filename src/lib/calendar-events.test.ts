@@ -15,6 +15,8 @@ import {
   deriveFermentationEndDate,
   enumerateEventDates,
   eventOccursOnDate,
+  calendarEventPath,
+  calendarProgress,
   filterCalendarEvents,
   filterEventsByKind,
   filterEventsByStatusCategory,
@@ -100,7 +102,7 @@ describe('buildWashCalendarEvent', () => {
     expect(isMultiDayEvent(event!)).toBe(true);
   });
 
-  it('does not invent an end date for in-progress batches with logs', () => {
+  it('keeps an in-progress fermentation on the calendar through today', () => {
     const logs: FermentationLog[] = [
       {
         id: 1,
@@ -113,8 +115,27 @@ describe('buildWashCalendarEvent', () => {
         notes: '',
       },
     ];
-    const event = buildWashCalendarEvent(baseMash({ status: 'fermenting' }), logs);
-    expect(event?.endDate).toBeUndefined();
+    const event = buildWashCalendarEvent(baseMash({ status: 'fermenting' }), logs, '2026-03-10');
+    expect(event?.endDate).toBe('2026-03-10');
+    expect(eventOccursOnDate(event!, '2026-03-07')).toBe(true);
+  });
+
+  it('does not extend an in-progress fermentation that starts today or later', () => {
+    const today = buildWashCalendarEvent(baseMash({ status: 'fermenting' }), [], '2026-03-01');
+    const future = buildWashCalendarEvent(
+      baseMash({ status: 'fermenting', start_date: '2026-03-20' }),
+      [],
+      '2026-03-01',
+    );
+    expect(today?.endDate).toBeUndefined();
+    expect(future?.endDate).toBeUndefined();
+  });
+
+  it('opens the wash or fermentation record for that batch', () => {
+    const planned = buildWashCalendarEvent(baseMash(), [], '2026-03-01');
+    const fermenting = buildWashCalendarEvent(baseMash({ status: 'fermenting' }), [], '2026-03-10');
+    expect(calendarEventPath(planned!)).toBe('/wash?record=1');
+    expect(calendarEventPath(fermenting!)).toBe('/fermentation?record=1');
   });
 });
 
@@ -239,13 +260,20 @@ describe('buildCalendarEventsFromData', () => {
         notes: '',
         created_at: '2026-06-01',
       } satisfies Barrel],
-    }));
+    }), '2026-07-01');
 
     expect(events).toHaveLength(5);
-    for (const event of events) {
+    const barrel = events.find((event) => event.kind === 'barrel');
+    expect(barrel?.endDate).toBe('2026-07-01');
+    expect(calendarEventPath(barrel!)).toBe('/barrels?record=1');
+    for (const event of events.filter((item) => item.kind !== 'barrel')) {
       expect(event.endDate).toBeUndefined();
       expect(event.allDay).toBe(true);
     }
+    expect(calendarEventPath(events.find((event) => event.kind === 'distillation')!)).toBe('/distillation?record=1');
+    expect(calendarEventPath(events.find((event) => event.kind === 'blend')!)).toBe('/blending?record=1');
+    expect(calendarEventPath(events.find((event) => event.kind === 'bottling')!)).toBe('/bottling?record=1');
+    expect(calendarEventPath(events.find((event) => event.kind === 'transfer')!)).toBe('/tank-transfer?record=1');
   });
 
   it('skips records with missing dates', () => {
@@ -397,11 +425,20 @@ describe('filters', () => {
     expect(matchesStatusCategoryFilter(sample[0], new Set(['scheduled']))).toBe(true);
   });
 
-  it('applies kind and status filters together', () => {
+  it('groups planned work as upcoming, active work as in progress, and finished work as done', () => {
+    expect(calendarProgress('planned')).toBe('upcoming');
+    expect(calendarProgress('in_progress')).toBe('in_progress');
+    expect(calendarProgress('hold')).toBe('in_progress');
+    expect(calendarProgress('complete')).toBe('done');
+    expect(calendarProgress('cancelled')).toBe('done');
+    expect(calendarProgress('other')).toBe('done');
+  });
+
+  it('applies kind and progress filters together', () => {
     const filtered = filterCalendarEvents(
       sample,
       new Set(['wash', 'distillation']),
-      new Set(['planned', 'in_progress']),
+      new Set(['upcoming', 'in_progress']),
     );
     expect(filtered.map((e) => e.id)).toEqual(['1', '2']);
   });

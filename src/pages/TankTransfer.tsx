@@ -117,6 +117,10 @@ export function TankTransfer() {
     (transfer) => transfer.transfer_date,
     (transfer) => transfer.id,
   );
+  const focusTransferId = Number(searchParams.get('record')) || 0;
+  const transferRows = focusTransferId && !recentTransfers.shown.some((transfer) => transfer.id === focusTransferId)
+    ? [...recentTransfers.shown, ...tankTransfers.filter((transfer) => transfer.id === focusTransferId)]
+    : recentTransfers.shown;
   const fermentersWithWash = getFermentersWithWash();
   const discardedFermentations = getDiscardedFermentations();
   const recentLeftovers = latestCompleted(
@@ -263,6 +267,11 @@ export function TankTransfer() {
     next.delete('source');
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams, sourceTanksForTransfer, fermentersWithWash]);
+
+  useEffect(() => {
+    if (!focusTransferId) return;
+    document.getElementById(`transfer-${focusTransferId}`)?.scrollIntoView({ block: 'center' });
+  }, [focusTransferId]);
 
   const handleSourceTankChange = (tankId: number) => {
     setTransferForm((prev) => applySourceTankToForm(prev, tankId));
@@ -767,8 +776,12 @@ export function TankTransfer() {
                 </tr>
               </thead>
               <tbody>
-                {recentTransfers.shown.map((t) => (
-                  <tr key={t.id}>
+                {transferRows.map((t) => (
+                  <tr
+                    key={t.id}
+                    id={`transfer-${t.id}`}
+                    className={Number(searchParams.get('record')) === t.id ? 'calendar-record-focus' : undefined}
+                  >
                     <td>{formatDateDisplay(t.transfer_date)}</td>
                     <td>{t.source_tank_name}</td>
                     <td>{t.dest_tank_name ?? 'Discarded'}</td>
