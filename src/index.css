@@ -3065,6 +3065,14 @@ tr.volume-change-kind:hover td {
   text-align: center;
 }
 
+.calendar-day-picker {
+  width: 11.5rem;
+}
+
+.calendar-day-picker .date-picker {
+  width: 11.5rem;
+}
+
 .calendar-month-summary {
   margin: 0;
   font-size: 0.95rem;
