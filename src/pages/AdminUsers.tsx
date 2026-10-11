@@ -10,7 +10,7 @@ import {
   updateAdminUser,
   type AuthUser,
 } from '../lib/auth-api';
-import { resetAllData } from '../db/queries';
+import { emptyAllHoldingTanks, getHoldingTanksWithContents, resetAllData } from '../db/queries';
 import { useAuth } from '../context/AuthContext';
 import { formatRecordedAt } from '../lib/date-input';
 import {
@@ -213,6 +213,32 @@ export function AdminUsers() {
     void resetAllData();
   }
 
+  function handleEmptyAllTanks() {
+    const tanksWithSpirit = getHoldingTanksWithContents().filter((t) => t.volume_gal > 0);
+    if (tanksWithSpirit.length === 0) {
+      alert('All holding tanks are already empty.');
+      return;
+    }
+    const tankList = tanksWithSpirit
+      .map((t) => `${t.name} (${t.volume_gal.toFixed(1)} gal)`)
+      .join('\n');
+    if (!confirm(
+      `Empty all holding tanks?\n\nThis clears tank spirit from:\n${tankList}\n\n`
+      + 'Distillation cut records stay, but tank volumes, transfers, and blend draws are zeroed. '
+      + 'This cannot be undone.',
+    )) {
+      return;
+    }
+    const result = emptyAllHoldingTanks();
+    alert(
+      `All holding tanks emptied.\n\n`
+      + `${result.transfersRemoved} transfer(s) removed\n`
+      + `${result.cutsCleared} cut(s) cleared from tanks\n`
+      + `${result.runsCleared} low-wines charge(s) cleared\n`
+      + `${result.blendsCleared} blend draw(s) cleared`,
+    );
+  }
+
   function formatPermissions(u: AuthUser) {
     if (u.role === 'admin') return 'Full access';
     if (u.permissions.length === 0) return 'No access';
@@ -383,11 +409,16 @@ export function AdminUsers() {
       <div className="card admin-section" data-testid="admin-data-management">
         <h2 className="admin-section-title">Data Management</h2>
         <p className="admin-hint">
-          Reset the app to fresh sample data. All entered production records in this browser will be deleted.
+          Reset the app to fresh sample data, or empty every holding tank and leave the other records in place.
         </p>
-        <button type="button" className="btn btn-secondary" onClick={handleClearAllData}>
-          Clear all data
-        </button>
+        <div className="admin-data-actions">
+          <button type="button" className="btn btn-secondary" onClick={handleClearAllData}>
+            Clear all data
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={handleEmptyAllTanks}>
+            Empty All Tanks
+          </button>
+        </div>
       </div>
 
       {editUser && (
