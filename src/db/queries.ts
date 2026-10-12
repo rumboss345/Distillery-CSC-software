@@ -41,9 +41,12 @@ import { equipmentTypeDeleteError, equipmentTypeNameError, normalizeEquipmentTyp
 import { countActiveFermentations, fermenterShowsAssignedWash } from '../lib/mash-fermenter-fill';
 import { compareStoredDatesDesc } from '../lib/date-input';
 import {
+  applyTankWithdrawals,
   intakeAtOrBefore,
-  productNameFromIntakes,
+  productNamesFromRemainingLots,
   TANK_PRODUCT_WALK_LIMIT,
+  type TankLot,
+  type TankWithdrawal,
 } from '../lib/tank-product-name';
 import { expectedCompletionDateError } from '../lib/fermentation';
 import { eventDateWhenLeavingPlanned, localIsoDate } from '../lib/planned-event-date';
@@ -1984,6 +1987,159 @@ export function getHoldingTankIntakeHistory(
   return entries.slice(0, limit);
 }
 
+function tankLotsOnHand(tankId: number, asOf: string | null): { ins: TankLot[]; outs: TankWithdrawal[] } {
+  const within = (at: string) => asOf == null || intakeAtOrBefore(at, asOf);
+  const ins: TankLot[] = [];
+  const outs: TankWithdrawal[] = [];
+
+  for (const row of queryAll<{ at: string; volume_gal: number }>(`
+    SELECT c.start_time as at, c.volume_gal
+    FROM distillation_cuts c
+    JOIN distillation_runs r ON r.id = c.distillation_run_id
+    WHERE c.holding_tank_equipment_id = ?
+      AND r.status IN ('running', 'complete')
+      AND c.volume_gal > 0
+  `, [tankId])) {
+    if (!within(row.at)) continue;
+    ins.push({ at: row.at, volumeGal: row.volume_gal, kind: 'cut' });
+  }
+
+  for (const row of queryAll<{ at: string; volume_gal: number; source_tank_equipment_id: number }>(`
+    SELECT COALESCE(created_at, transfer_date) as at, volume_gal, source_tank_equipment_id
+    FROM holding_tank_transfers
+    WHERE dest_tank_equipment_id = ? AND volume_gal > 0
+  `, [tankId])) {
+    if (!within(row.at)) continue;
+    ins.push({
+      at: row.at,
+      volumeGal: row.volume_gal,
+      kind: 'transfer',
+      sourceTankId: row.source_tank_equipment_id,
+    });
+  }
+
+  for (const row of queryAll<{ at: string; volume_gal: number; product_name: string }>(`
+    SELECT COALESCE(executed_at, created_at) as at, final_volume_gal as volume_gal, product_name
+    FROM blend_products
+    WHERE output_holding_tank_equipment_id = ?
+      AND status IN ${BLEND_LEDGER_STATUSES_SQL}
+      AND final_volume_gal > 0
+  `, [tankId])) {
+    if (!within(row.at)) continue;
+    ins.push({
+      at: row.at,
+      volumeGal: row.volume_gal,
+      kind: 'blend',
+      productName: row.product_name,
+    });
+  }
+
+  for (const row of queryAll<{ at: string; volume_gal: number }>(`
+    SELECT run_date as at, stillage_volume_gal as volume_gal
+    FROM distillation_runs
+    WHERE stillage_holding_tank_equipment_id = ?
+      AND status = 'complete'
+      AND COALESCE(stillage_discarded, 0) = 0
+      AND stillage_volume_gal > 0
+  `, [tankId])) {
+    if (!within(row.at)) continue;
+    ins.push({ at: row.at, volumeGal: row.volume_gal, kind: 'stillage' });
+  }
+
+  for (const row of queryAll<{ at: string; volume_gal: number }>(`
+    SELECT recorded_at as at, volume_gal
+    FROM holding_tank_opening_balances
+    WHERE tank_equipment_id = ? AND ABS(volume_gal) > 0.001
+  `, [tankId])) {
+    if (!within(row.at)) continue;
+    // volume_gal is the gauge adjustment, not the measured total.
+    // A short gauge removes the oldest liquid; a long gauge is unnamed stock.
+    if (row.volume_gal > 0) {
+      ins.push({ at: row.at, volumeGal: row.volume_gal, kind: 'opening' });
+    } else {
+      outs.push({ at: row.at, volumeGal: Math.abs(row.volume_gal) });
+    }
+  }
+
+  for (const row of queryAll<{ at: string; volume_gal: number; product_name: string }>(`
+    SELECT b.bottling_date as at, r.volume_gal, b.product_name
+    FROM bottling_run_returns r
+    JOIN bottling_runs b ON b.id = r.bottling_run_id
+    WHERE r.holding_tank_equipment_id = ? AND r.volume_gal > 0
+  `, [tankId])) {
+    if (!within(row.at)) continue;
+    ins.push({
+      at: row.at,
+      volumeGal: row.volume_gal,
+      kind: 'return',
+      productName: row.product_name,
+    });
+  }
+
+  for (const row of queryAll<{ at: string; volume_gal: number }>(`
+    SELECT COALESCE(created_at, transfer_date) as at, volume_gal
+    FROM holding_tank_transfers
+    WHERE source_tank_equipment_id = ? AND volume_gal > 0
+  `, [tankId])) {
+    if (!within(row.at)) continue;
+    outs.push({ at: row.at, volumeGal: row.volume_gal });
+  }
+
+  for (const row of queryAll<{ at: string; volume_gal: number }>(`
+    SELECT bottling_date as at, source_volume_gal as volume_gal
+    FROM bottling_runs
+    WHERE source_holding_tank_equipment_id = ? AND source_volume_gal > 0
+  `, [tankId])) {
+    if (!within(row.at)) continue;
+    outs.push({ at: row.at, volumeGal: row.volume_gal });
+  }
+
+  for (const row of queryAll<{ at: string; volume_gal: number }>(`
+    SELECT COALESCE(NULLIF(TRIM(created_at), ''), fill_date) as at, volume_gal
+    FROM barrel_fills
+    WHERE source_holding_tank_equipment_id = ? AND volume_gal > 0
+  `, [tankId])) {
+    if (!within(row.at)) continue;
+    outs.push({ at: row.at, volumeGal: row.volume_gal });
+  }
+
+  for (const row of queryAll<{ at: string; volume_gal: number }>(`
+    SELECT run_date as at, ${TANK_CHARGE_DRAWN_GAL_SQL} as volume_gal
+    FROM distillation_runs
+    WHERE source_holding_tank_equipment_id = ?
+      AND status IN ('running', 'complete')
+  `, [tankId])) {
+    if (!(row.volume_gal > 0) || !within(row.at)) continue;
+    outs.push({ at: row.at, volumeGal: row.volume_gal });
+  }
+
+  for (const row of queryAll<{ at: string; volume_gal: number }>(`
+    SELECT COALESCE(b.executed_at, b.created_at) as at, bss.volume_gal
+    FROM blend_spirit_sources bss
+    JOIN blend_products b ON b.id = bss.blend_product_id
+    WHERE bss.holding_tank_equipment_id = ?
+      AND b.status IN ${BLEND_LEDGER_STATUSES_SQL}
+      AND bss.volume_gal > 0
+  `, [tankId])) {
+    if (!within(row.at)) continue;
+    outs.push({ at: row.at, volumeGal: row.volume_gal });
+  }
+
+  for (const row of queryAll<{ at: string; volume_gal: number }>(`
+    SELECT COALESCE(executed_at, created_at) as at, base_spirit_volume_gal as volume_gal
+    FROM blend_products b
+    WHERE source_holding_tank_equipment_id = ?
+      AND status IN ${BLEND_LEDGER_STATUSES_SQL}
+      AND base_spirit_volume_gal > 0
+      AND NOT EXISTS (SELECT 1 FROM blend_spirit_sources s WHERE s.blend_product_id = b.id)
+  `, [tankId])) {
+    if (!within(row.at)) continue;
+    outs.push({ at: row.at, volumeGal: row.volume_gal });
+  }
+
+  return { ins, outs };
+}
+
 function blendProductNameAt(
   tankId: number,
   asOf: string | null,
@@ -1991,18 +2147,13 @@ function blendProductNameAt(
 ): string | null {
   if (seen.has(tankId) || seen.size >= TANK_PRODUCT_WALK_LIMIT) return null;
   seen.add(tankId);
-  const history = getHoldingTankIntakeHistory(tankId, 500).filter((entry) => (
-    asOf == null || intakeAtOrBefore(entry.occurred_at, asOf)
-  ));
-  return productNameFromIntakes(
-    history.map((entry) => ({
-      kind: entry.kind,
-      occurredAt: entry.occurred_at,
-      productName: entry.productName,
-      sourceTankId: entry.sourceTankId,
-    })),
-    (sourceTankId, occurredAt) => blendProductNameAt(sourceTankId, occurredAt, seen),
-  );
+  const { ins, outs } = tankLotsOnHand(tankId, asOf);
+  const remaining = applyTankWithdrawals(ins, outs);
+  for (const lot of remaining) {
+    if (lot.kind !== 'transfer' || !lot.sourceTankId || lot.productName?.trim()) continue;
+    lot.productName = blendProductNameAt(lot.sourceTankId, lot.at, seen);
+  }
+  return productNamesFromRemainingLots(remaining);
 }
 
 /** Blend product name for spirit still in the tank. Empty tanks stay unlabeled. */

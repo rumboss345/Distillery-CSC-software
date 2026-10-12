@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  applyTankWithdrawals,
   intakeAtOrBefore,
   productNameFromIntakes,
+  productNamesFromRemainingLots,
+  type TankLot,
   type TankProductIntake,
 } from './tank-product-name';
 
@@ -57,6 +60,51 @@ describe('productNameFromIntakes', () => {
       expect(occurredAt).toBe('2026-04-04 09:00:00');
       return 'Dark Rum';
     })).toBe('Dark Rum');
+  });
+});
+
+const lot = (productName: string, at: string, volumeGal: number): TankLot => ({
+  at,
+  volumeGal,
+  kind: 'blend',
+  productName,
+});
+
+describe('applyTankWithdrawals', () => {
+  it('names only the blend gallons that are still in the tank', () => {
+    const remaining = applyTankWithdrawals(
+      [
+        lot('rum for barrels', '2026-01-01 10:00:00', 40),
+        lot('sf', '2026-02-01 10:00:00', 40),
+        lot('GR Dark', '2026-03-01 10:00:00', 40),
+        lot('Dark', '2026-04-01 10:00:00', 30),
+      ],
+      [{ at: '2026-04-02 10:00:00', volumeGal: 120 }],
+    );
+    expect(productNamesFromRemainingLots(remaining)).toBe('Dark');
+    expect(remaining.reduce((sum, item) => sum + item.volumeGal, 0)).toBeCloseTo(30);
+  });
+
+  it('keeps an older blend when that liquid is still in the tank', () => {
+    const remaining = applyTankWithdrawals(
+      [
+        lot('GR Dark', '2026-03-01 10:00:00', 40),
+        lot('Dark', '2026-04-01 10:00:00', 30),
+      ],
+      [{ at: '2026-04-02 10:00:00', volumeGal: 20 }],
+    );
+    expect(productNamesFromRemainingLots(remaining)).toBe('Dark · GR Dark');
+  });
+
+  it('drops a blend once its gallons have left', () => {
+    const remaining = applyTankWithdrawals(
+      [
+        lot('GR Dark', '2026-03-01 10:00:00', 10),
+        lot('Dark', '2026-04-01 10:00:00', 30),
+      ],
+      [{ at: '2026-04-02 10:00:00', volumeGal: 10 }],
+    );
+    expect(productNamesFromRemainingLots(remaining)).toBe('Dark');
   });
 });
 
