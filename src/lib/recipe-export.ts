@@ -1,4 +1,5 @@
 import { formatGallonDisplay } from './formulation-quantity';
+import { normalizeBotanicalPlace } from './gin-botanicals';
 import { LITERS_PER_US_GALLON, ML_PER_LITER } from './material-densities';
 import type {
   BlendRecipeIngredient,
@@ -259,11 +260,15 @@ function addBotanical(
   into: Map<string, string>,
 ) {
   if (!(botanical.weight > 0) || !text(botanical.name)) return;
+  const place = normalizeBotanicalPlace(botanical.place);
+  const header = place
+    ? `${text(botanical.name)} (botanical, ${place})`
+    : recipeIngredientHeader(botanical.name, 'botanical');
   collectIngredient(
     columns,
     reserved,
     rowUsed,
-    recipeIngredientHeader(botanical.name, 'botanical'),
+    header,
     formatRecipeExportAmount(botanical.weight, botanical.weight_unit),
     into,
   );

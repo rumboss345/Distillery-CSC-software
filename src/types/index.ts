@@ -266,6 +266,9 @@ export interface DistillationRunView extends DistillationRun {
   stillage_tank_name?: string;
 }
 
+/** Botanicals either steep in the pot or sit in the gin basket. */
+export type BotanicalPlace = 'pot' | 'basket';
+
 export interface GinBotanicalInput {
   name: string;
   /** Count or measure of this botanical, separate from the scale weight. */
@@ -273,6 +276,8 @@ export interface GinBotanicalInput {
   /** Scale weight. */
   weight: number;
   weight_unit: string;
+  /** Where this botanical goes. Empty until the recipe asks. */
+  place?: BotanicalPlace | null;
 }
 
 export interface DistillationRunBotanical extends GinBotanicalInput {

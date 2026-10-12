@@ -12,12 +12,14 @@ import {
   type RecipeIngredientRole,
 } from './recipe-export';
 import { parseCsv } from './reporting/csv';
+import { normalizeBotanicalPlace } from './gin-botanicals';
 import { knownNutrientUnit } from './wash-recipe-nutrients';
 import type {
   BlendIngredientInput,
   BlendIngredientType,
   BlendRecipeSourceType,
   BlendRecipeSpiritSourceInput,
+  BotanicalPlace,
   RecipeNutrientInput,
 } from '../types';
 
@@ -25,7 +27,7 @@ const ADDITIVE_ROLES = new Set<RecipeIngredientRole>(['water', 'sugar', 'syrup',
 const BOTANICAL_UNITS = new Set(['g', 'kg', 'lbs', 'oz']);
 
 const ROLE_PATTERN = new RegExp(
-  `^(.*) \\((${RECIPE_INGREDIENT_ROLES.join('|')})\\)(?: \\d+)?$`,
+  `^(.*) \\((${RECIPE_INGREDIENT_ROLES.join('|')})(?:, (pot|basket))?\\)(?: \\d+)?$`,
   'i',
 );
 
@@ -46,7 +48,7 @@ export interface ImportedWashRecipe {
 export interface ImportedGinRecipe {
   name: string;
   notes: string;
-  botanicals: { name: string; amount: number; weight: number; weight_unit: string }[];
+  botanicals: { name: string; amount: number; weight: number; weight_unit: string; place: BotanicalPlace }[];
 }
 
 export interface ImportedBlendRecipe {
@@ -76,13 +78,17 @@ interface ParsedAmount {
   abv: number | null;
 }
 
-export function parseRecipeIngredientHeader(header: string): { name: string; role: RecipeIngredientRole } | null {
+export function parseRecipeIngredientHeader(header: string): {
+  name: string;
+  role: RecipeIngredientRole;
+  place: BotanicalPlace | null;
+} | null {
   const match = header.trim().match(ROLE_PATTERN);
   if (!match) return null;
   const role = match[2].toLowerCase() as RecipeIngredientRole;
   const name = match[1].trim();
   if (!name || !RECIPE_INGREDIENT_ROLES.includes(role)) return null;
-  return { name, role };
+  return { name, role, place: normalizeBotanicalPlace(match[3]) };
 }
 
 function canonicalUnit(unit: string): string {
@@ -171,7 +177,7 @@ export function importRecipeCsv(csv: string): ImportedRecipeFile {
       continue;
     }
 
-    const ingredients: { name: string; role: RecipeIngredientRole; amount: ParsedAmount }[] = [];
+    const ingredients: { name: string; role: RecipeIngredientRole; place: BotanicalPlace | null; amount: ParsedAmount }[] = [];
     for (const column of ingredientColumns) {
       const raw = (row[column.index] ?? '').trim();
       if (!raw) continue;
@@ -298,7 +304,7 @@ function readGin(
   name: string,
   headers: string[],
   row: string[],
-  ingredients: { name: string; role: RecipeIngredientRole; amount: ParsedAmount }[],
+  ingredients: { name: string; role: RecipeIngredientRole; place: BotanicalPlace | null; amount: ParsedAmount }[],
   errors: string[],
 ): ImportedGinRecipe | null {
   const botanicals: ImportedGinRecipe['botanicals'] = [];
@@ -312,11 +318,17 @@ function readGin(
       errors.push(`${where}: ${ingredient.name} must be a weight, such as g or lbs.`);
       continue;
     }
+    const place = normalizeBotanicalPlace(ingredient.place);
+    if (!place) {
+      errors.push(`${where}: choose whether ${ingredient.name} goes in the pot or in the basket.`);
+      continue;
+    }
     botanicals.push({
       name: ingredient.name,
       amount: 0,
       weight: ingredient.amount.amount,
       weight_unit: unit,
+      place,
     });
   }
   if (botanicals.length === 0) errors.push(`${where}: add at least one botanical with a weight.`);
