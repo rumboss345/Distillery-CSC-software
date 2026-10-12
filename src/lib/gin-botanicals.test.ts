@@ -38,7 +38,7 @@ describe('gin botanicals', () => {
     expect(normalizeBotanicalPlace(' Basket ')).toBe('basket');
     expect(normalizeBotanicalPlace('still')).toBeNull();
     const lines = [{ name: 'Juniper', amount: 0, weight: 500, weight_unit: 'g', place: null }];
-    expect(ginBotanicalPlaceError(lines)).toBe('Choose whether Juniper goes in the pot or in the basket.');
+    expect(ginBotanicalPlaceError(lines)).toBe('Choose whether Juniper will go in the pot or in the basket.');
     expect(ginBotanicalPlaceError([{ ...lines[0], place: 'pot' }])).toBeNull();
   });
 });

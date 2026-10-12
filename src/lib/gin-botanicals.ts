@@ -42,7 +42,7 @@ export function activeGinBotanicals(lines: GinBotanicalInput[]): GinBotanicalInp
 export function ginBotanicalPlaceError(lines: GinBotanicalInput[]): string | null {
   const missing = activeGinBotanicals(lines).find((line) => !line.place);
   if (!missing) return null;
-  return `Choose whether ${missing.name} goes in the pot or in the basket.`;
+  return `Choose whether ${missing.name} will go in the pot or in the basket.`;
 }
 
 export function botanicalsFromRecipe(lines: GinBotanicalInput[]): GinBotanicalInput[] {
