@@ -40,6 +40,11 @@ import { EQUIPMENT_TYPES, isSpiritLedgerEquipmentType, resolveEquipmentIcon } fr
 import { equipmentTypeDeleteError, equipmentTypeNameError, normalizeEquipmentTypeName } from '../lib/equipment-type';
 import { countActiveFermentations, fermenterShowsAssignedWash } from '../lib/mash-fermenter-fill';
 import { compareStoredDatesDesc } from '../lib/date-input';
+import {
+  intakeAtOrBefore,
+  productNameFromIntakes,
+  TANK_PRODUCT_WALK_LIMIT,
+} from '../lib/tank-product-name';
 import { expectedCompletionDateError } from '../lib/fermentation';
 import { eventDateWhenLeavingPlanned, localIsoDate } from '../lib/planned-event-date';
 import { deleteStatusDateLog, recordStatusDateLog } from './status-logs';
@@ -1841,6 +1846,7 @@ export function getHoldingTankIntakeHistory(
     abv: number;
     notes: string;
     source_tank_name: string;
+    source_tank_equipment_id: number;
   }>(`
     SELECT
       t.id,
@@ -1848,7 +1854,8 @@ export function getHoldingTankIntakeHistory(
       t.volume_gal,
       t.abv,
       t.notes,
-      src.name as source_tank_name
+      src.name as source_tank_name,
+      t.source_tank_equipment_id
     FROM holding_tank_transfers t
     JOIN floor_equipment src ON src.id = t.source_tank_equipment_id
     WHERE t.dest_tank_equipment_id = ?
@@ -1910,6 +1917,7 @@ export function getHoldingTankIntakeHistory(
       summary: `Transfer from ${t.source_tank_name}`,
       detail: undefined,
       notes: t.notes?.trim() || undefined,
+      sourceTankId: t.source_tank_equipment_id,
     })),
     ...blends.map((b) => ({
       kind: 'blend' as const,
@@ -1920,6 +1928,7 @@ export function getHoldingTankIntakeHistory(
       summary: `Blend ${b.batch_number} — ${b.product_name}`,
       detail: 'Finished batch',
       notes: b.notes?.trim() || undefined,
+      productName: b.product_name,
     })),
     ...queryAll<{
       id: number;
@@ -1973,6 +1982,34 @@ export function getHoldingTankIntakeHistory(
 
   entries.sort((a, b) => compareStoredDatesDesc(a.occurred_at, b.occurred_at));
   return entries.slice(0, limit);
+}
+
+function blendProductNameAt(
+  tankId: number,
+  asOf: string | null,
+  seen: Set<number>,
+): string | null {
+  if (seen.has(tankId) || seen.size >= TANK_PRODUCT_WALK_LIMIT) return null;
+  seen.add(tankId);
+  const history = getHoldingTankIntakeHistory(tankId, 500).filter((entry) => (
+    asOf == null || intakeAtOrBefore(entry.occurred_at, asOf)
+  ));
+  return productNameFromIntakes(
+    history.map((entry) => ({
+      kind: entry.kind,
+      occurredAt: entry.occurred_at,
+      productName: entry.productName,
+      sourceTankId: entry.sourceTankId,
+    })),
+    (sourceTankId, occurredAt) => blendProductNameAt(sourceTankId, occurredAt, seen),
+  );
+}
+
+/** Blend product name for spirit still in the tank. Empty tanks stay unlabeled. */
+export function holdingTankProductName(tankId: number, volumeGal?: number): string | null {
+  const volume = volumeGal ?? getHoldingTankContents(tankId).volume_gal;
+  if (!(volume > 0.05)) return null;
+  return blendProductNameAt(tankId, null, new Set());
 }
 
 export function getHoldingTankTransfers(): HoldingTankTransferView[] {
@@ -5204,11 +5241,13 @@ export function getEquipmentVolumeReport(): EquipmentVolumeReport[] {
   return equipment.map((eq) => {
     if (isSpiritLedgerEquipmentType(eq.equipment_type)) {
       const contents = getHoldingTankContents(eq.id);
-      const detail = eq.equipment_type === 'collection_vessel'
-        ? collectionVesselContentsDetail(eq.id, contents.volume_gal)
-        : contents.run_count > 0
-          ? `${contents.run_count} distillation run${contents.run_count === 1 ? '' : 's'} · ${contents.cut_count} cut${contents.cut_count === 1 ? '' : 's'}`
-          : '';
+      const productName = eq.active_liquid_name?.trim() || '';
+      const detail = productName
+        || (eq.equipment_type === 'collection_vessel'
+          ? collectionVesselContentsDetail(eq.id, contents.volume_gal)
+          : contents.run_count > 0
+            ? `${contents.run_count} distillation run${contents.run_count === 1 ? '' : 's'} · ${contents.cut_count} cut${contents.cut_count === 1 ? '' : 's'}`
+            : '');
       return {
         id: eq.id,
         name: eq.name,
@@ -5357,11 +5396,13 @@ export function getFloorEquipmentWithContext(planId = 1): FloorEquipmentView[] {
     if (isSpiritLedgerEquipmentType(eq.equipment_type)) {
       const contents = getHoldingTankContents(eq.id);
       if (contents.volume_gal <= 0) return eq;
+      const productName = holdingTankProductName(eq.id, contents.volume_gal);
       return {
         ...eq,
         active_volume_gal: contents.volume_gal,
         active_abv: contents.abv,
         active_run_count: contents.run_count,
+        active_liquid_name: productName ?? undefined,
       };
     }
     if (eq.equipment_type === 'mash_tun' && eq.linked_mash_batch_id) {

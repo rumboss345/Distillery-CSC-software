@@ -32,7 +32,7 @@ import {
   totalVolumeGal,
 } from '../lib/bottling-lines';
 import { packagingBottleOptions, type PackagingBottleOption } from '../lib/packaging-bottles';
-import { tankDropdownLabel } from '../lib/tank-menu-label';
+import { tankContentsPhrase, tankDropdownLabel } from '../lib/tank-menu-label';
 import { volumeChangeReasonError } from '../lib/tank-volume-variance';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
 import type { BottlingRunLineInput, BottlingRunReturnInput, BottlingRunView } from '../types';
@@ -151,6 +151,9 @@ export function Bottling() {
 
   const selectedTankAvailable = form.source_holding_tank_equipment_id
     ? getHoldingTankContents(form.source_holding_tank_equipment_id, undefined, undefined, editId)
+    : null;
+  const selectedTankContents = form.source_holding_tank_equipment_id
+    ? tankContentsPhrase(form.source_holding_tank_equipment_id)
     : null;
 
   const plannedDrawGal = totalVolumeGal(lines);
@@ -740,7 +743,8 @@ export function Bottling() {
                 )}
                 {selectedTankAvailable && form.source_holding_tank_equipment_id && (
                   <p className="field-hint">
-                    In tank: {selectedTankAvailable.volume_gal.toFixed(1)} gal @ {selectedTankAvailable.abv.toFixed(1)}% ABV.
+                    In tank: {selectedTankAvailable.volume_gal.toFixed(1)} gal @ {selectedTankAvailable.abv.toFixed(1)}% ABV
+                    {selectedTankContents ? ` — ${selectedTankContents}` : ''}.
                     {' '}Saving empties the tank (draws {selectedTankAvailable.volume_gal.toFixed(1)} gal).
                     {returnLines.some((line) => (line.volume_gal ?? 0) > 0.01 && line.holding_tank_equipment_id) && (
                       <>

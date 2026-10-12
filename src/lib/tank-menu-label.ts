@@ -2,11 +2,14 @@ import {
   getCollectionVesselStoredCutType,
   getHoldingTankContents,
   getHoldingTankIntakeHistory,
+  holdingTankProductName,
 } from '../db/queries';
 
 /** What is in the tank, without a gallon amount. Null when the tank is empty. */
 export function tankContentsPhrase(tankId: number): string | null {
   if (getHoldingTankContents(tankId).volume_gal <= 0.001) return null;
+  const product = holdingTankProductName(tankId);
+  if (product) return product;
   const intake = getHoldingTankIntakeHistory(tankId, 1)[0]?.summary?.trim();
   if (intake) return intake;
   const cutType = getCollectionVesselStoredCutType(tankId);
