@@ -18,6 +18,93 @@ export function intakeAtOrBefore(occurredAt: string, asOf: string): boolean {
   return occurred <= cutoff;
 }
 
+export interface TankLot {
+  at: string;
+  volumeGal: number;
+  kind: 'cut' | 'transfer' | 'blend' | 'stillage' | 'opening' | 'return';
+  productName?: string | null;
+  sourceTankId?: number | null;
+}
+
+export interface TankWithdrawal {
+  at: string;
+  volumeGal: number;
+}
+
+function storedTime(value: string): number {
+  return parseStoredDate(value)?.getTime() ?? 0;
+}
+
+/**
+ * Gallons still in the tank. Withdrawals take the oldest liquid first,
+ * so a blend that has already left does not stay on the label.
+ */
+export function applyTankWithdrawals(ins: TankLot[], outs: TankWithdrawal[]): TankLot[] {
+  const lots = ins.filter((lot) => lot.volumeGal > 0.001).map((lot) => ({ ...lot }));
+  lots.sort((a, b) => storedTime(a.at) - storedTime(b.at));
+  const removals = outs
+    .filter((out) => out.volumeGal > 0.001)
+    .map((out) => ({ ...out }))
+    .sort((a, b) => storedTime(a.at) - storedTime(b.at));
+
+  const consume = (volumeGal: number, onlyLotsAlreadyThere: boolean, at: string) => {
+    let left = volumeGal;
+    const cutoff = storedTime(at);
+    for (const lot of lots) {
+      if (left <= 0.001) break;
+      if (onlyLotsAlreadyThere && storedTime(lot.at) > cutoff) continue;
+      if (lot.volumeGal <= 0.001) continue;
+      const take = Math.min(lot.volumeGal, left);
+      lot.volumeGal -= take;
+      left -= take;
+    }
+    return left;
+  };
+
+  for (const out of removals) {
+    const leftover = consume(out.volumeGal, true, out.at);
+    if (leftover > 0.001) consume(leftover, false, out.at);
+  }
+  return lots.filter((lot) => lot.volumeGal > 0.05);
+}
+
+/** One second before a stored time, so a withdrawal is not counted as already gone. */
+export function instantBefore(value: string): string {
+  const parsed = parseStoredDate(value);
+  if (!parsed) return value;
+  return new Date(parsed.getTime() - 1000).toISOString();
+}
+
+/** Oldest gallons a withdrawal takes. Those are the gallons that leave the tank. */
+export function consumeOldestLots(lots: TankLot[], volumeGal: number): TankLot[] {
+  const ordered = lots
+    .filter((lot) => lot.volumeGal > 0.001)
+    .map((lot) => ({ ...lot }))
+    .sort((a, b) => storedTime(a.at) - storedTime(b.at));
+  let left = volumeGal;
+  const taken: TankLot[] = [];
+  for (const lot of ordered) {
+    if (left <= 0.001) break;
+    const take = Math.min(lot.volumeGal, left);
+    left -= take;
+    if (take > 0.05) taken.push({ ...lot, volumeGal: take });
+  }
+  return taken;
+}
+
+/** Product names for blend lots that still have gallons, newest first. */
+export function productNamesFromRemainingLots(lots: TankLot[]): string | null {
+  const named = lots
+    .filter((lot) => lot.volumeGal > 0.05 && lot.productName?.trim())
+    .sort((a, b) => storedTime(b.at) - storedTime(a.at));
+  const unique: string[] = [];
+  for (const lot of named) {
+    const name = lot.productName?.trim() ?? '';
+    if (name && !unique.includes(name)) unique.push(name);
+  }
+  return unique.length > 0 ? unique.join(' · ') : null;
+}
+
 /**
  * Product name for the liquid these intakes describe (newest first).
  * The newest blend names the tank. Older blends stay in the history and are not added on.
