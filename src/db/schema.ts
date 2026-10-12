@@ -142,6 +142,7 @@ CREATE TABLE IF NOT EXISTS distillation_run_botanicals (
   amount REAL NOT NULL DEFAULT 0,
   weight REAL NOT NULL DEFAULT 0,
   weight_unit TEXT NOT NULL DEFAULT 'g',
+  place TEXT,
   sort_order INTEGER NOT NULL DEFAULT 0
 );
 
@@ -162,6 +163,7 @@ CREATE TABLE IF NOT EXISTS gin_recipe_botanicals (
   amount REAL NOT NULL DEFAULT 0,
   weight REAL NOT NULL DEFAULT 0,
   weight_unit TEXT NOT NULL DEFAULT 'g',
+  place TEXT,
   sort_order INTEGER NOT NULL DEFAULT 0
 );
 

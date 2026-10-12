@@ -1,7 +1,9 @@
 import {
   emptyGinBotanical,
+  normalizeBotanicalPlace,
   normalizeBotanicalWeightUnit,
 } from '../lib/gin-botanicals';
+import type { BotanicalPlace } from '../types';
 import { NUTRIENT_UNITS } from '../lib/wash-recipe-nutrients';
 import type { GinBotanicalInput } from '../types';
 
@@ -33,7 +35,7 @@ export function GinBotanicalFields({
         </button>
       </div>
       <p className="field-hint">
-        Enter the weight of each botanical.
+        Enter the weight of each botanical, and say whether it goes in the pot or in the basket.
       </p>
       {lines.map((line, index) => (
         <div key={index} className="form-grid" style={{ marginBottom: '0.75rem' }}>
@@ -69,6 +71,22 @@ export function GinBotanicalFields({
                 <option key={unit.value} value={unit.value}>{unit.label}</option>
               ))}
             </select>
+          </div>
+          <div className="form-group full-width">
+            <span className="measure-mode-label">Where will this botanical go?</span>
+            <div className="measure-mode-buttons">
+              {(['pot', 'basket'] as BotanicalPlace[]).map((place) => (
+                <button
+                  key={place}
+                  type="button"
+                  data-testid={`gin-botanical-place-${place}-${index}`}
+                  className={`btn btn-sm ${normalizeBotanicalPlace(line.place) === place ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => update(index, { place })}
+                >
+                  {place === 'pot' ? 'In the pot' : 'In the basket'}
+                </button>
+              ))}
+            </div>
           </div>
           {lines.length > 1 && (
             <div className="form-group">

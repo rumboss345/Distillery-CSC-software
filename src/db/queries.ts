@@ -18,7 +18,7 @@ import {
 } from '../lib/collection-vessel-cuts';
 import { distillationAlcoholBalance, washChargeAbvFromBrix, type AlcoholChargeBasis, type DistillationAlcoholBalance } from '../lib/distillation-loss';
 import { isFermenterSourcedRun, isSpiritStyleRun, isTankSourcedRun } from '../lib/distillation-run-types';
-import { activeGinBotanicals, normalizeBotanicalWeightUnit } from '../lib/gin-botanicals';
+import { activeGinBotanicals, ginBotanicalPlaceError, normalizeBotanicalWeightUnit } from '../lib/gin-botanicals';
 import {
   chargeExceedsStillCapacity,
   plannedRecordSkipsEquipmentStatus,
@@ -3567,13 +3567,16 @@ export function saveDistillationRun(
 }
 
 function persistRunBotanicals(runId: number, botanicals: GinBotanicalInput[]): void {
+  const lines = activeGinBotanicals(botanicals);
+  const placeError = ginBotanicalPlaceError(lines);
+  if (placeError) throw new Error(placeError);
   runQuery('DELETE FROM distillation_run_botanicals WHERE distillation_run_id = ?', [runId]);
-  activeGinBotanicals(botanicals).forEach((line, index) => {
+  lines.forEach((line, index) => {
     insertRow(
       `INSERT INTO distillation_run_botanicals
-        (distillation_run_id, name, amount, weight, weight_unit, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [runId, line.name, line.amount, line.weight, line.weight_unit, index],
+        (distillation_run_id, name, amount, weight, weight_unit, place, sort_order)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [runId, line.name, line.amount, line.weight, line.weight_unit, line.place ?? null, index],
     );
   });
 }
@@ -3618,6 +3621,8 @@ export function saveGinRecipe(
   if (lines.length === 0) {
     throw new Error('Add at least one botanical with a weight.');
   }
+  const placeError = ginBotanicalPlaceError(lines);
+  if (placeError) throw new Error(placeError);
   const named = queryOne<{ id: number }>(
     'SELECT id FROM gin_recipes WHERE name = ? COLLATE NOCASE AND (? IS NULL OR id != ?)',
     [name, id ?? null, id ?? 0],
@@ -3640,9 +3645,9 @@ export function saveGinRecipe(
   lines.forEach((line, index) => {
     insertRow(
       `INSERT INTO gin_recipe_botanicals
-        (gin_recipe_id, name, amount, weight, weight_unit, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [recipeId, line.name, line.amount, line.weight, normalizeBotanicalWeightUnit(line.weight_unit), index],
+        (gin_recipe_id, name, amount, weight, weight_unit, place, sort_order)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [recipeId, line.name, line.amount, line.weight, normalizeBotanicalWeightUnit(line.weight_unit), line.place ?? null, index],
     );
   });
   return recipeId;

@@ -64,6 +64,7 @@ import {
   botanicalsFromRecipe,
   emptyGinBotanical,
   formatGinBotanicalsSummary,
+  ginBotanicalPlaceError,
 } from '../lib/gin-botanicals';
 import { FERMENTATION_READY_MAX_BRIX, isBrixReadyForDistillation } from '../lib/fermentation';
 import { eventDateWhenLeavingPlanned, localIsoDate, localIsoDateTime } from '../lib/planned-event-date';
@@ -649,6 +650,13 @@ export function Distillation() {
           proof_water_gal: 0,
           proof_place: null,
         };
+      if (savedRun.run_type === 'gin') {
+        const placeError = ginBotanicalPlaceError(botanicals);
+        if (placeError) {
+          alert(placeError);
+          return;
+        }
+      }
       try {
         saveDistillationRun(
           savedRun,

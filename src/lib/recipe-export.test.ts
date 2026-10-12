@@ -45,6 +45,7 @@ function gin(): GinRecipe {
       amount: 0,
       weight: 500,
       weight_unit: 'g',
+      place: 'pot',
     }],
   };
 }
@@ -133,7 +134,7 @@ describe('buildRecipeExport', () => {
       'Water (wash water)',
       'DADY (wash yeast)',
       'DAP (nutrient)',
-      'Juniper berries (botanical)',
+      'Juniper berries (botanical, pot)',
       'High wines (spirit)',
       'Proofing water (water)',
       'Vanilla (flavoring)',
@@ -153,7 +154,7 @@ describe('buildRecipeExport', () => {
 
     const ginRow = sheet.rows[1];
     expect(ginRow[0]).toBe('Gin');
-    expect(ginRow[sheet.headers.indexOf('Juniper berries (botanical)')]).toBe('500 g');
+    expect(ginRow[sheet.headers.indexOf('Juniper berries (botanical, pot)')]).toBe('500 g');
 
     const blendRow = sheet.rows[2];
     expect(blendRow[0]).toBe('Blend');

@@ -665,6 +665,7 @@ function migrateGinRuns(): void {
       amount REAL NOT NULL DEFAULT 0,
       weight REAL NOT NULL DEFAULT 0,
       weight_unit TEXT NOT NULL DEFAULT 'g',
+      place TEXT,
       sort_order INTEGER NOT NULL DEFAULT 0
     )
   `);
@@ -686,10 +687,13 @@ function migrateGinRuns(): void {
       amount REAL NOT NULL DEFAULT 0,
       weight REAL NOT NULL DEFAULT 0,
       weight_unit TEXT NOT NULL DEFAULT 'g',
+      place TEXT,
       sort_order INTEGER NOT NULL DEFAULT 0
     )
   `);
   db.run('CREATE INDEX IF NOT EXISTS idx_gin_recipe_botanicals_recipe ON gin_recipe_botanicals(gin_recipe_id)');
+  addColumnIfMissing('distillation_run_botanicals', 'place', 'TEXT');
+  addColumnIfMissing('gin_recipe_botanicals', 'place', 'TEXT');
   db.run(`INSERT OR IGNORE INTO inventory_categories (name) VALUES ('botanicals')`);
   const botanicals = [
     'Juniper berries',

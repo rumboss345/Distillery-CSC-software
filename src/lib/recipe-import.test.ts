@@ -45,6 +45,7 @@ function gin(): GinRecipe {
       amount: 0,
       weight: 500,
       weight_unit: 'g',
+      place: 'basket',
     }],
   };
 }
@@ -123,7 +124,7 @@ describe('importRecipeCsv', () => {
     ]);
 
     expect(imported.gin[0].botanicals).toEqual([
-      { name: 'Juniper berries', amount: 0, weight: 500, weight_unit: 'g' },
+      { name: 'Juniper berries', amount: 0, weight: 500, weight_unit: 'g', place: 'basket' },
     ]);
 
     expect(imported.blend[0].spirit_sources[0]).toMatchObject({
