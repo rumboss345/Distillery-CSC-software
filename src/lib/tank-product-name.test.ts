@@ -6,6 +6,8 @@ import {
   intakeAtOrBefore,
   productNameFromIntakes,
   productNamesFromRemainingLots,
+  transferIntakeSummary,
+  transferredLiquidPhrase,
   type TankLot,
   type TankProductIntake,
 } from './tank-product-name';
@@ -158,6 +160,22 @@ describe('distillationLabelsFromLots', () => {
       distilled('tails', 'wash', '2026-01-01 10:00:00'),
       distilled('hearts', 'low_wines', '2026-04-01 10:00:00'),
     ])).toBe('Spirit Run · Hearts, Low Wine Run · Tails');
+  });
+});
+
+describe('transferIntakeSummary', () => {
+  it('names the blend that was transferred', () => {
+    expect(transferIntakeSummary('Canning blending tank', transferredLiquidPhrase('Dark', null)))
+      .toBe('Dark from Canning blending tank');
+  });
+
+  it('names the distillation and cut that were transferred', () => {
+    expect(transferIntakeSummary('Latina 500L', transferredLiquidPhrase(null, 'Low Wine Run · Heads')))
+      .toBe('Low Wine Run · Heads from Latina 500L');
+  });
+
+  it('keeps the source tank when the liquid is unknown', () => {
+    expect(transferIntakeSummary('Latina 500L', null)).toBe('Transfer from Latina 500L');
   });
 });
 

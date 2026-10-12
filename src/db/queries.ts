@@ -45,6 +45,8 @@ import {
   consumeOldestLots,
   distillationLabelsFromLots,
   instantBefore,
+  transferIntakeSummary,
+  transferredLiquidPhrase,
   intakeAtOrBefore,
   productNamesFromRemainingLots,
   TANK_PRODUCT_WALK_LIMIT,
@@ -1914,17 +1916,26 @@ export function getHoldingTankIntakeHistory(
         notes: c.notes?.trim() || undefined,
       };
     }),
-    ...transfers.map((t) => ({
-      kind: 'transfer' as const,
-      id: t.id,
-      occurred_at: t.occurred_at,
-      volume_gal: t.volume_gal,
-      abv: t.abv,
-      summary: `Transfer from ${t.source_tank_name}`,
-      detail: undefined,
-      notes: t.notes?.trim() || undefined,
-      sourceTankId: t.source_tank_equipment_id,
-    })),
+    ...transfers.map((t) => {
+      const moved = withdrawnDetails(
+        t.source_tank_equipment_id,
+        t.occurred_at,
+        t.volume_gal,
+        new Set(),
+      );
+      const liquid = transferredLiquidPhrase(moved.productName, moved.distillationLabel);
+      return {
+        kind: 'transfer' as const,
+        id: t.id,
+        occurred_at: t.occurred_at,
+        volume_gal: t.volume_gal,
+        abv: t.abv,
+        summary: transferIntakeSummary(t.source_tank_name, liquid),
+        detail: undefined,
+        notes: t.notes?.trim() || undefined,
+        sourceTankId: t.source_tank_equipment_id,
+      };
+    }),
     ...blends.map((b) => ({
       kind: 'blend' as const,
       id: b.id,
