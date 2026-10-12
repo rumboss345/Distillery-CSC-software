@@ -43,6 +43,7 @@ import {
   volumeChangeReasonError,
 } from '../lib/tank-volume-variance';
 import { DISCARD_DESTINATION, fermenterTransferError } from '../lib/fermenter-transfer';
+import { tankDropdownLabel } from '../lib/tank-menu-label';
 const destAcceptsTransferFrom = (sourceId: number, destId: number): boolean => {
   const sourceIsStillage = sourceId > 0 && transferSourceIsStillage(sourceId);
   if (destId === STILLAGE_DISCARD_DESTINATION) return sourceIsStillage;
@@ -167,8 +168,8 @@ export function TankTransfer() {
     const product = currentLabel ?? cutType ?? null;
     return product ? `In tank: ${quantity} — ${product}` : `In tank: ${quantity}`;
   };
-  const transferSourceTankOptionLabel = (t: { id: number; name: string; volume_gal: number; abv: number }) =>
-    `${t.name} — ${transferSourceInTankLine(t)}`;
+  const transferSourceTankOptionLabel = (t: { id: number; name: string }) =>
+    tankDropdownLabel(t.name, t.id);
   const selectedTransferSourceTank = sourceTanksForTransfer.find(
     (t) => t.id === transferForm.source_tank_equipment_id,
   );
@@ -840,13 +841,9 @@ export function TankTransfer() {
                 {sourceSendsStillage && (
                   <option value={String(STILLAGE_DISCARD_DESTINATION)}>Discarded</option>
                 )}
-                {destTanksForTransfer.map((t) => {
-                  const contents = getHoldingTankContents(t.id);
-                  const label = contents.volume_gal > 0
-                    ? `${t.name} (${contents.volume_gal.toFixed(1)} gal @ ${contents.abv.toFixed(1)}%)`
-                    : `${t.name} (empty · ${t.capacity_gal} gal cap)`;
-                  return <option key={t.id} value={t.id}>{label}</option>;
-                })}
+                {destTanksForTransfer.map((t) => (
+                  <option key={t.id} value={t.id}>{tankDropdownLabel(t.name, t.id)}</option>
+                ))}
               </select>
               <p className="field-hint">
                 {sourceSendsStillage

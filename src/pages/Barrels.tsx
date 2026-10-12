@@ -24,6 +24,7 @@ import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-p
 import { formatDateDisplay, isIsoDate } from '../lib/date-input';
 import { localIsoDate } from '../lib/planned-event-date';
 import { formatGal } from '../components/equipment/equipment-visual-shared';
+import { tankDropdownLabel } from '../lib/tank-menu-label';
 import {
   UNASSIGNED_WAREHOUSE_LOCATION,
   groupBarrelsByLocation,
@@ -516,7 +517,7 @@ export function Barrels() {
                 <option value="">— None (manual volume / ABV) —</option>
                 {tanksWithSpirit.map((t) => (
                   <option key={t.id} value={t.id}>
-                    {t.name} — {t.volume_gal.toFixed(1)} gal @ {t.abv.toFixed(1)}% ABV
+                    {tankDropdownLabel(t.name, t.id)}
                   </option>
                 ))}
               </select>
