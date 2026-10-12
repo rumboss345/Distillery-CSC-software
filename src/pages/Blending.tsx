@@ -29,6 +29,7 @@ import {
   hasDuplicateBarrelSelections,
   spiritLabelForBarrel,
 } from '../lib/barrel-blending';
+import { tankDropdownLabel } from '../lib/tank-menu-label';
 import { AbvTemperatureInput, correctedAbvFromInputs } from '../components/AbvTemperatureInput';
 import { BlendAbvConfirmation } from '../components/BlendAbvConfirmation';
 import { ProofingWaterConfirm } from '../components/ProofingWaterConfirm';
@@ -1857,7 +1858,7 @@ export function Blending() {
                           <option value="">— Choose a tank —</option>
                           {tankOptionsFor(src.holding_tank_equipment_id).map((t) => (
                             <option key={t.id} value={t.id}>
-                              {t.name} — {t.available_gal.toFixed(1)} gal available @ {t.available_abv.toFixed(1)}%
+                              {tankDropdownLabel(t.name, t.id)}
                             </option>
                           ))}
                         </select>
@@ -2319,13 +2320,9 @@ export function Blending() {
         const selectedOutputId = form.output_holding_tank_equipment_id
           ?? defaultBlendingOutputTankId(sourceTankIds)
           ?? 0;
-        const formatOutputTankLabel = (tank: (typeof outputTanks)[number]) => {
-          const contents = getHoldingTankContents(tank.id);
-          if (contents.volume_gal <= 0) {
-            return `${tank.name} (empty · ${tank.capacity_gal} gal cap)`;
-          }
-          return `${tank.name} (${contents.volume_gal.toFixed(1)} gal @ ${contents.abv.toFixed(1)}% · ${tank.capacity_gal} gal cap)`;
-        };
+        const formatOutputTankLabel = (tank: (typeof outputTanks)[number]) => (
+          tankDropdownLabel(tank.name, tank.id)
+        );
         const outputTankName = selectedOutputId > 0
           ? outputTanks.find((t) => t.id === selectedOutputId)?.name ?? null
           : null;

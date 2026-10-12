@@ -30,7 +30,6 @@ import {
   getChargeableHoldingTanks,
   getStillageTanks,
   defaultTankForCutType,
-  getCollectionVesselStoredCutType,
   getCollectionVessels,
   getCutDestinationsForRun,
   getHoldingTankContents,
@@ -43,6 +42,7 @@ import {
   useRefreshKey,
 } from '../db/queries';
 import { AbvVolumeTemperatureFields } from '../components/AbvVolumeTemperatureFields';
+import { tankDropdownLabel } from '../lib/tank-menu-label';
 import { AbvTemperatureInput, correctedAbvFromInputs } from '../components/AbvTemperatureInput';
 import { AdminCredentialConfirmModal } from '../components/AdminCredentialConfirmModal';
 import { GinBotanicalFields } from '../components/GinBotanicalFields';
@@ -878,19 +878,7 @@ export function Distillation() {
     ? getHoldingTankContents(cutForm.holding_tank_equipment_id)
     : null;
 
-  const tankOptionLabel = (tank: { id: number; name: string; capacity_gal: number }) => {
-    const contents = getHoldingTankContents(tank.id);
-    const storedCut = getCollectionVesselStoredCutType(tank.id, editCutId);
-    const cutNote = storedCut === 'mixed'
-      ? ' · mixed cuts'
-      : storedCut
-        ? ` · holds ${storedCut}`
-        : '';
-    if (contents.volume_gal <= 0) {
-      return `${tank.name} (empty · ${tank.capacity_gal} gal cap${cutNote})`;
-    }
-    return `${tank.name} (${contents.volume_gal.toFixed(1)} gal @ ${contents.abv.toFixed(1)}% · ${contents.run_count} run${contents.run_count === 1 ? '' : 's'}${cutNote})`;
-  };
+  const tankOptionLabel = (tank: { id: number; name: string }) => tankDropdownLabel(tank.name, tank.id);
 
   const handleDeleteCut = (id: number) => {
     if (selectedRunIsComplete) {
@@ -1194,7 +1182,7 @@ export function Distillation() {
                   <option value="">— Select tank —</option>
                   {chargeableSourceTanks.map((t) => (
                     <option key={t.id} value={t.id}>
-                      {t.name} ({t.available_gal.toFixed(1)} gal @ {t.available_abv.toFixed(1)}%)
+                      {tankDropdownLabel(t.name, t.id)}
                     </option>
                   ))}
                 </select>

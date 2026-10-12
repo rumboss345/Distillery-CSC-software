@@ -32,6 +32,7 @@ import {
   totalVolumeGal,
 } from '../lib/bottling-lines';
 import { packagingBottleOptions, type PackagingBottleOption } from '../lib/packaging-bottles';
+import { tankDropdownLabel } from '../lib/tank-menu-label';
 import { volumeChangeReasonError } from '../lib/tank-volume-variance';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
 import type { BottlingRunLineInput, BottlingRunReturnInput, BottlingRunView } from '../types';
@@ -730,7 +731,7 @@ export function Bottling() {
                   <option value="">— Select tank —</option>
                   {tankOptions.map((t) => (
                     <option key={t.id} value={t.id}>
-                      {t.name} ({t.available_gal.toFixed(1)} gal @ {t.available_abv.toFixed(1)}%)
+                      {tankDropdownLabel(t.name, t.id)}
                     </option>
                   ))}
                 </select>
@@ -893,10 +894,7 @@ export function Bottling() {
                           <option value="">{shownReturnLines.length > 1 ? '— Select tank —' : '— Leave as variance —'}</option>
                           {options.map((tank) => (
                             <option key={tank.id} value={tank.id}>
-                              {tank.name}
-                              {tank.roomGal != null
-                                ? ` (${tank.volume_gal.toFixed(1)} gal, ${tank.roomGal.toFixed(1)} gal room)`
-                                : ` (${tank.volume_gal.toFixed(1)} gal)`}
+                              {tankDropdownLabel(tank.name, tank.id)}
                             </option>
                           ))}
                         </select>
