@@ -68,6 +68,30 @@ export function applyTankWithdrawals(ins: TankLot[], outs: TankWithdrawal[]): Ta
   return lots.filter((lot) => lot.volumeGal > 0.05);
 }
 
+/** One second before a stored time, so a withdrawal is not counted as already gone. */
+export function instantBefore(value: string): string {
+  const parsed = parseStoredDate(value);
+  if (!parsed) return value;
+  return new Date(parsed.getTime() - 1000).toISOString();
+}
+
+/** Oldest gallons a withdrawal takes. Those are the gallons that leave the tank. */
+export function consumeOldestLots(lots: TankLot[], volumeGal: number): TankLot[] {
+  const ordered = lots
+    .filter((lot) => lot.volumeGal > 0.001)
+    .map((lot) => ({ ...lot }))
+    .sort((a, b) => storedTime(a.at) - storedTime(b.at));
+  let left = volumeGal;
+  const taken: TankLot[] = [];
+  for (const lot of ordered) {
+    if (left <= 0.001) break;
+    const take = Math.min(lot.volumeGal, left);
+    left -= take;
+    if (take > 0.05) taken.push({ ...lot, volumeGal: take });
+  }
+  return taken;
+}
+
 /** Product names for blend lots that still have gallons, newest first. */
 export function productNamesFromRemainingLots(lots: TankLot[]): string | null {
   const named = lots

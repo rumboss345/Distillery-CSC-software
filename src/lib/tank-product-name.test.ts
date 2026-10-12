@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyTankWithdrawals,
+  consumeOldestLots,
   intakeAtOrBefore,
   productNameFromIntakes,
   productNamesFromRemainingLots,
@@ -94,6 +95,19 @@ describe('applyTankWithdrawals', () => {
       [{ at: '2026-04-02 10:00:00', volumeGal: 20 }],
     );
     expect(productNamesFromRemainingLots(remaining)).toBe('Dark · GR Dark');
+  });
+
+  it('names the gallons a withdrawal takes, not the gallons that stay', () => {
+    const taken = consumeOldestLots(
+      [
+        lot('rum for barrels', '2026-01-01 10:00:00', 40),
+        lot('sf', '2026-02-01 10:00:00', 40),
+        lot('GR Dark', '2026-03-01 10:00:00', 40),
+        lot('Dark', '2026-04-01 10:00:00', 30),
+      ],
+      120,
+    );
+    expect(productNamesFromRemainingLots(taken)).toBe('GR Dark · sf · rum for barrels');
   });
 
   it('drops a blend once its gallons have left', () => {

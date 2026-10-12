@@ -42,6 +42,8 @@ import { countActiveFermentations, fermenterShowsAssignedWash } from '../lib/mas
 import { compareStoredDatesDesc } from '../lib/date-input';
 import {
   applyTankWithdrawals,
+  consumeOldestLots,
+  instantBefore,
   intakeAtOrBefore,
   productNamesFromRemainingLots,
   TANK_PRODUCT_WALK_LIMIT,
@@ -2140,6 +2142,26 @@ function tankLotsOnHand(tankId: number, asOf: string | null): { ins: TankLot[]; 
   return { ins, outs };
 }
 
+/** Product names of the gallons a transfer or barrel fill took from a tank. */
+function productWithdrawnFromTank(
+  tankId: number,
+  at: string,
+  volumeGal: number,
+  seen: Set<number>,
+): string | null {
+  if (seen.has(tankId) || seen.size >= TANK_PRODUCT_WALK_LIMIT) return null;
+  seen.add(tankId);
+  const cutoff = /^\d{4}-\d{2}-\d{2}$/.test(at.trim()) ? `${at.trim()} 23:59:59` : at;
+  const { ins, outs } = tankLotsOnHand(tankId, instantBefore(cutoff));
+  const present = applyTankWithdrawals(ins, outs);
+  const taken = consumeOldestLots(present, volumeGal);
+  for (const lot of taken) {
+    if (lot.kind !== 'transfer' || !lot.sourceTankId || lot.productName?.trim()) continue;
+    lot.productName = productWithdrawnFromTank(lot.sourceTankId, lot.at, lot.volumeGal, seen);
+  }
+  return productNamesFromRemainingLots(taken);
+}
+
 function blendProductNameAt(
   tankId: number,
   asOf: string | null,
@@ -2151,7 +2173,7 @@ function blendProductNameAt(
   const remaining = applyTankWithdrawals(ins, outs);
   for (const lot of remaining) {
     if (lot.kind !== 'transfer' || !lot.sourceTankId || lot.productName?.trim()) continue;
-    lot.productName = blendProductNameAt(lot.sourceTankId, lot.at, seen);
+    lot.productName = productWithdrawnFromTank(lot.sourceTankId, lot.at, lot.volumeGal, seen);
   }
   return productNamesFromRemainingLots(remaining);
 }
@@ -2175,8 +2197,9 @@ export function barrelBlendProductName(barrelId: number): string | null {
     source_holding_tank_equipment_id: number;
     fill_date: string;
     created_at: string;
+    volume_gal: number;
   }>(`
-    SELECT source_holding_tank_equipment_id, fill_date, created_at
+    SELECT source_holding_tank_equipment_id, fill_date, created_at, volume_gal
     FROM barrel_fills
     WHERE barrel_id = ?
       AND volume_gal > 0
@@ -2187,20 +2210,28 @@ export function barrelBlendProductName(barrelId: number): string | null {
     LIMIT 1
   `, [barrelId]);
   if (fill?.source_holding_tank_equipment_id) {
-    return holdingTankProductNameAsOf(
+    return productWithdrawnFromTank(
       fill.source_holding_tank_equipment_id,
       fill.created_at?.trim() || fill.fill_date,
+      fill.volume_gal,
+      new Set(),
     );
   }
   const barrel = queryOne<{
     source_holding_tank_equipment_id: number | null;
     fill_date: string;
+    current_volume_gal: number;
   }>(
-    'SELECT source_holding_tank_equipment_id, fill_date FROM barrels WHERE id = ?',
+    'SELECT source_holding_tank_equipment_id, fill_date, current_volume_gal FROM barrels WHERE id = ?',
     [barrelId],
   );
   if (!barrel?.source_holding_tank_equipment_id) return null;
-  return holdingTankProductNameAsOf(barrel.source_holding_tank_equipment_id, barrel.fill_date);
+  return productWithdrawnFromTank(
+    barrel.source_holding_tank_equipment_id,
+    barrel.fill_date,
+    barrel.current_volume_gal,
+    new Set(),
+  );
 }
 
 export function getHoldingTankTransfers(): HoldingTankTransferView[] {
