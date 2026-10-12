@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applyTankWithdrawals,
   consumeOldestLots,
+  distillationLabelsFromLots,
   intakeAtOrBefore,
   productNameFromIntakes,
   productNamesFromRemainingLots,
@@ -119,6 +120,44 @@ describe('applyTankWithdrawals', () => {
       [{ at: '2026-04-02 10:00:00', volumeGal: 10 }],
     );
     expect(productNamesFromRemainingLots(remaining)).toBe('Dark');
+  });
+});
+
+describe('distillationLabelsFromLots', () => {
+  const distilled = (
+    cutType: string,
+    runType: string,
+    at: string,
+    volumeGal = 10,
+  ): TankLot => ({
+    at,
+    volumeGal,
+    kind: 'cut',
+    cutType,
+    runType,
+  });
+
+  it('names the distillation and the cut when the gallons are not a blend', () => {
+    expect(distillationLabelsFromLots([
+      distilled('tails', 'wash', '2026-01-01 10:00:00'),
+    ])).toBe('Low Wine Run · Tails');
+    expect(distillationLabelsFromLots([
+      distilled('hearts', 'low_wines', '2026-02-01 10:00:00'),
+    ])).toBe('Spirit Run · Hearts');
+  });
+
+  it('leaves a blend name off the distillation line', () => {
+    expect(distillationLabelsFromLots([
+      lot('Dark', '2026-04-01 10:00:00', 30),
+      distilled('heads', 'gin', '2026-03-01 10:00:00', 5),
+    ])).toBe('Gin Run · Heads');
+  });
+
+  it('lists each distillation and cut that still has gallons', () => {
+    expect(distillationLabelsFromLots([
+      distilled('tails', 'wash', '2026-01-01 10:00:00'),
+      distilled('hearts', 'low_wines', '2026-04-01 10:00:00'),
+    ])).toBe('Spirit Run · Hearts, Low Wine Run · Tails');
   });
 });
 

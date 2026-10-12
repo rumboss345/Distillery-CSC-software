@@ -1,4 +1,5 @@
 import { parseStoredDate } from './date-input';
+import { runTypeLabel } from './distillation-run-types';
 
 /** How many tanks a transfer chain may cross while looking up a blend name. */
 export const TANK_PRODUCT_WALK_LIMIT = 8;
@@ -24,6 +25,10 @@ export interface TankLot {
   kind: 'cut' | 'transfer' | 'blend' | 'stillage' | 'opening' | 'return';
   productName?: string | null;
   sourceTankId?: number | null;
+  cutType?: string | null;
+  runType?: string | null;
+  /** Cut and distillation already resolved for liquid that arrived by transfer. */
+  distillationLabel?: string | null;
 }
 
 export interface TankWithdrawal {
@@ -90,6 +95,42 @@ export function consumeOldestLots(lots: TankLot[], volumeGal: number): TankLot[]
     if (take > 0.05) taken.push({ ...lot, volumeGal: take });
   }
   return taken;
+}
+
+const CUT_LABELS: Record<string, string> = {
+  heads: 'Heads',
+  hearts: 'Hearts',
+  tails: 'Tails',
+};
+
+function cutLabel(cutType: string | null | undefined): string | null {
+  const cut = cutType?.trim().toLowerCase() ?? '';
+  if (!cut) return null;
+  return CUT_LABELS[cut] ?? cut.charAt(0).toUpperCase() + cut.slice(1);
+}
+
+/** Distillation type, then the cut. A blend name is not a distillation. */
+export function distillationLotLabel(lot: Pick<TankLot, 'kind' | 'cutType' | 'runType' | 'distillationLabel'>): string | null {
+  const resolved = lot.distillationLabel?.trim();
+  if (resolved) return resolved;
+  const run = lot.runType?.trim() ? runTypeLabel(lot.runType) : null;
+  if (lot.kind === 'stillage') return run ? `${run} · Stillage` : 'Stillage';
+  const cut = cutLabel(lot.cutType);
+  if (run && cut) return `${run} · ${cut}`;
+  return run || cut;
+}
+
+/** Distillation and cut for gallons that are not a blend, newest first. */
+export function distillationLabelsFromLots(lots: TankLot[]): string | null {
+  const ordered = lots
+    .filter((lot) => lot.volumeGal > 0.05 && !lot.productName?.trim())
+    .sort((a, b) => storedTime(b.at) - storedTime(a.at));
+  const unique: string[] = [];
+  for (const lot of ordered) {
+    const label = distillationLotLabel(lot);
+    if (label && !unique.includes(label)) unique.push(label);
+  }
+  return unique.length > 0 ? unique.join(', ') : null;
 }
 
 /** Product names for blend lots that still have gallons, newest first. */

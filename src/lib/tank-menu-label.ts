@@ -2,6 +2,7 @@ import {
   getCollectionVesselStoredCutType,
   getHoldingTankContents,
   getHoldingTankIntakeHistory,
+  holdingTankDistillationContents,
   holdingTankProductName,
 } from '../db/queries';
 
@@ -38,9 +39,14 @@ export function preferContentsSummary(
 
 /** What is in the tank, without a gallon amount. Null when the tank is empty. */
 export function tankContentsPhrase(tankId: number): string | null {
-  if (getHoldingTankContents(tankId).volume_gal <= 0.001) return null;
+  const ledger = getHoldingTankContents(tankId);
+  if (!(ledger.volume_gal > 0.001)) return null;
+  const product = holdingTankProductName(tankId, ledger.volume_gal);
+  if (product) return product;
+  const distilled = holdingTankDistillationContents(tankId, ledger.volume_gal);
+  if (distilled) return distilled;
   return preferContentsSummary(
-    holdingTankProductName(tankId),
+    null,
     getHoldingTankIntakeHistory(tankId, 12),
     getCollectionVesselStoredCutType(tankId),
   );
