@@ -18,12 +18,16 @@ export function tankContentsPhrase(tankId: number): string | null {
   return 'Spirit';
 }
 
-/** Dropdown text: tank name and what it holds. Volumes stay off the menu. */
-export function formatTankMenuLabel(name: string, contents: string | null): string {
+/** Dropdown text: tank name, what it holds, and the proof. Gallons stay off the menu. */
+export function formatTankMenuLabel(name: string, contents: string | null, abv?: number | null): string {
   const product = contents?.trim();
-  return product ? `${name} — ${product}` : `${name} (empty)`;
+  if (!product) return `${name} (empty)`;
+  const proof = abv != null && Number.isFinite(abv) ? `${abv.toFixed(1)}% ABV` : null;
+  return proof ? `${name} — ${product} · ${proof}` : `${name} — ${product}`;
 }
 
 export function tankDropdownLabel(name: string, tankId: number): string {
-  return formatTankMenuLabel(name, tankContentsPhrase(tankId));
+  const ledger = getHoldingTankContents(tankId);
+  if (!(ledger.volume_gal > 0.001)) return formatTankMenuLabel(name, null);
+  return formatTankMenuLabel(name, tankContentsPhrase(tankId), ledger.abv);
 }
