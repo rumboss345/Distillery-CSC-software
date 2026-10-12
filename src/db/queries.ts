@@ -43,6 +43,7 @@ import { compareStoredDatesDesc } from '../lib/date-input';
 import {
   applyTankWithdrawals,
   consumeOldestLots,
+  distillationLabelsFromLots,
   instantBefore,
   intakeAtOrBefore,
   productNamesFromRemainingLots,
@@ -1994,8 +1995,8 @@ function tankLotsOnHand(tankId: number, asOf: string | null): { ins: TankLot[]; 
   const ins: TankLot[] = [];
   const outs: TankWithdrawal[] = [];
 
-  for (const row of queryAll<{ at: string; volume_gal: number }>(`
-    SELECT c.start_time as at, c.volume_gal
+  for (const row of queryAll<{ at: string; volume_gal: number; cut_type: string; run_type: string }>(`
+    SELECT c.start_time as at, c.volume_gal, c.cut_type, r.run_type
     FROM distillation_cuts c
     JOIN distillation_runs r ON r.id = c.distillation_run_id
     WHERE c.holding_tank_equipment_id = ?
@@ -2003,7 +2004,13 @@ function tankLotsOnHand(tankId: number, asOf: string | null): { ins: TankLot[]; 
       AND c.volume_gal > 0
   `, [tankId])) {
     if (!within(row.at)) continue;
-    ins.push({ at: row.at, volumeGal: row.volume_gal, kind: 'cut' });
+    ins.push({
+      at: row.at,
+      volumeGal: row.volume_gal,
+      kind: 'cut',
+      cutType: row.cut_type,
+      runType: row.run_type,
+    });
   }
 
   for (const row of queryAll<{ at: string; volume_gal: number; source_tank_equipment_id: number }>(`
@@ -2036,8 +2043,8 @@ function tankLotsOnHand(tankId: number, asOf: string | null): { ins: TankLot[]; 
     });
   }
 
-  for (const row of queryAll<{ at: string; volume_gal: number }>(`
-    SELECT run_date as at, stillage_volume_gal as volume_gal
+  for (const row of queryAll<{ at: string; volume_gal: number; run_type: string }>(`
+    SELECT run_date as at, stillage_volume_gal as volume_gal, run_type
     FROM distillation_runs
     WHERE stillage_holding_tank_equipment_id = ?
       AND status = 'complete'
@@ -2045,7 +2052,12 @@ function tankLotsOnHand(tankId: number, asOf: string | null): { ins: TankLot[]; 
       AND stillage_volume_gal > 0
   `, [tankId])) {
     if (!within(row.at)) continue;
-    ins.push({ at: row.at, volumeGal: row.volume_gal, kind: 'stillage' });
+    ins.push({
+      at: row.at,
+      volumeGal: row.volume_gal,
+      kind: 'stillage',
+      runType: row.run_type,
+    });
   }
 
   for (const row of queryAll<{ at: string; volume_gal: number }>(`
@@ -2142,6 +2154,38 @@ function tankLotsOnHand(tankId: number, asOf: string | null): { ins: TankLot[]; 
   return { ins, outs };
 }
 
+function annotateTransferLots(lots: TankLot[], seen: Set<number>): void {
+  for (const lot of lots) {
+    if (lot.kind !== 'transfer' || !lot.sourceTankId) continue;
+    if (lot.productName?.trim() && lot.distillationLabel?.trim()) continue;
+    const details = withdrawnDetails(lot.sourceTankId, lot.at, lot.volumeGal, seen);
+    if (!lot.productName?.trim()) lot.productName = details.productName;
+    if (!lot.distillationLabel?.trim()) lot.distillationLabel = details.distillationLabel;
+  }
+}
+
+/** What a transfer or barrel fill took: a blend name, or the distillation and cut. */
+function withdrawnDetails(
+  tankId: number,
+  at: string,
+  volumeGal: number,
+  seen: Set<number>,
+): { productName: string | null; distillationLabel: string | null } {
+  if (seen.has(tankId) || seen.size >= TANK_PRODUCT_WALK_LIMIT) {
+    return { productName: null, distillationLabel: null };
+  }
+  seen.add(tankId);
+  const cutoff = /^\d{4}-\d{2}-\d{2}$/.test(at.trim()) ? `${at.trim()} 23:59:59` : at;
+  const { ins, outs } = tankLotsOnHand(tankId, instantBefore(cutoff));
+  const present = applyTankWithdrawals(ins, outs);
+  annotateTransferLots(present, seen);
+  const taken = consumeOldestLots(present, volumeGal);
+  return {
+    productName: productNamesFromRemainingLots(taken),
+    distillationLabel: distillationLabelsFromLots(taken),
+  };
+}
+
 /** Product names of the gallons a transfer or barrel fill took from a tank. */
 function productWithdrawnFromTank(
   tankId: number,
@@ -2149,17 +2193,7 @@ function productWithdrawnFromTank(
   volumeGal: number,
   seen: Set<number>,
 ): string | null {
-  if (seen.has(tankId) || seen.size >= TANK_PRODUCT_WALK_LIMIT) return null;
-  seen.add(tankId);
-  const cutoff = /^\d{4}-\d{2}-\d{2}$/.test(at.trim()) ? `${at.trim()} 23:59:59` : at;
-  const { ins, outs } = tankLotsOnHand(tankId, instantBefore(cutoff));
-  const present = applyTankWithdrawals(ins, outs);
-  const taken = consumeOldestLots(present, volumeGal);
-  for (const lot of taken) {
-    if (lot.kind !== 'transfer' || !lot.sourceTankId || lot.productName?.trim()) continue;
-    lot.productName = productWithdrawnFromTank(lot.sourceTankId, lot.at, lot.volumeGal, seen);
-  }
-  return productNamesFromRemainingLots(taken);
+  return withdrawnDetails(tankId, at, volumeGal, seen).productName;
 }
 
 function blendProductNameAt(
@@ -2171,11 +2205,28 @@ function blendProductNameAt(
   seen.add(tankId);
   const { ins, outs } = tankLotsOnHand(tankId, asOf);
   const remaining = applyTankWithdrawals(ins, outs);
-  for (const lot of remaining) {
-    if (lot.kind !== 'transfer' || !lot.sourceTankId || lot.productName?.trim()) continue;
-    lot.productName = productWithdrawnFromTank(lot.sourceTankId, lot.at, lot.volumeGal, seen);
-  }
+  annotateTransferLots(remaining, seen);
   return productNamesFromRemainingLots(remaining);
+}
+
+/** Distillation type and cut for spirit still in the tank, when it is not a blend. */
+function distillationContentsAt(
+  tankId: number,
+  seen: Set<number>,
+): string | null {
+  if (seen.has(tankId) || seen.size >= TANK_PRODUCT_WALK_LIMIT) return null;
+  seen.add(tankId);
+  const { ins, outs } = tankLotsOnHand(tankId, null);
+  const remaining = applyTankWithdrawals(ins, outs);
+  annotateTransferLots(remaining, seen);
+  return distillationLabelsFromLots(remaining);
+}
+
+/** Cut and distillation for gallons still in the tank. Blends stay unlabeled here. */
+export function holdingTankDistillationContents(tankId: number, volumeGal?: number): string | null {
+  const volume = volumeGal ?? getHoldingTankContents(tankId).volume_gal;
+  if (!(volume > 0.05)) return null;
+  return distillationContentsAt(tankId, new Set());
 }
 
 /** Blend product name for spirit still in the tank. Empty tanks stay unlabeled. */
