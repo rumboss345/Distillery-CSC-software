@@ -110,6 +110,8 @@ export interface FloorEquipmentView extends FloorEquipment {
   active_volume_gal?: number;
   active_abv?: number;
   active_run_count?: number;
+  /** Blend product name when that finished batch is what the tank holds. */
+  active_liquid_name?: string;
   active_mash_status?: MashStatus;
   /** Latest fermentation log Brix for this fermenter, or mash starting Brix if no logs yet. */
   active_latest_brix?: number | null;
@@ -329,6 +331,10 @@ export interface HoldingTankIntakeEntry {
   notes?: string;
   /** Distillation run this cut or stillage came from. */
   distillationRunId?: number;
+  /** Finished-batch name when this intake is a blend. */
+  productName?: string;
+  /** Tank the spirit came from when this intake is a transfer. */
+  sourceTankId?: number;
 }
 
 export interface HoldingTankTransfer {

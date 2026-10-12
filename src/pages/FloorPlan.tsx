@@ -405,7 +405,11 @@ export function FloorPlanPage() {
                     <dd>
                       {selected.active_volume_gal.toFixed(1)} gal
                       {selected.active_abv != null ? ` @ ${selected.active_abv.toFixed(1)}% ABV` : ''}
-                      {selected.active_run_count ? ` · ${selected.active_run_count} run${selected.active_run_count === 1 ? '' : 's'}` : ''}
+                      {selected.active_liquid_name
+                        ? ` · ${selected.active_liquid_name}`
+                        : selected.active_run_count
+                          ? ` · ${selected.active_run_count} run${selected.active_run_count === 1 ? '' : 's'}`
+                          : ''}
                     </dd>
                   </>
                 )}

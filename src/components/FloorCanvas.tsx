@@ -181,6 +181,13 @@ export function FloorCanvas({
                 <div className="floor-equipment-batch">{item.active_abv.toFixed(1)}% ABV</div>
               )}
               {(item.equipment_type === 'holding_tank' || item.equipment_type === 'stillage_tank' || item.equipment_type === 'collection_vessel')
+                && item.active_liquid_name && (
+                <div className="floor-equipment-batch floor-equipment-batch--product" title={item.active_liquid_name}>
+                  {item.active_liquid_name}
+                </div>
+              )}
+              {(item.equipment_type === 'holding_tank' || item.equipment_type === 'stillage_tank' || item.equipment_type === 'collection_vessel')
+                && !item.active_liquid_name
                 && item.active_run_count != null && item.active_run_count > 1 && (
                 <div className="floor-equipment-batch">{item.active_run_count} runs</div>
               )}

@@ -1801,6 +1801,13 @@ tr.volume-change-kind:hover td {
   text-align: center;
 }
 
+.floor-equipment-batch--product {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .fermenter-tag {
   display: inline-block;
   background: var(--accent-muted);

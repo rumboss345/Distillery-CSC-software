@@ -18,6 +18,7 @@ import {
   getFloorEquipment,
   getHoldingTankContents,
   getHoldingTankIntakeHistory,
+  holdingTankProductName,
   getHoldingTankOnHand,
   getHoldingTankTransfers,
   getHoldingTankVolumeVariances,
@@ -61,6 +62,8 @@ const sourceTankVolumeGal = (tankId: number) => {
 
 const tankContentsSummary = (tankId: number, volumeGal: number): string => {
   if (volumeGal <= 0.001) return '—';
+  const product = holdingTankProductName(tankId, volumeGal);
+  if (product) return product;
   const intake = getHoldingTankIntakeHistory(tankId, 1)[0]?.summary;
   if (intake) return intake;
   const cutType = getCollectionVesselStoredCutType(tankId);
@@ -162,7 +165,8 @@ export function TankTransfer() {
     );
   const sourceTanksForTransfer = tanksWithContents.filter((t) => t.volume_gal > 0);
   const transferSourceInTankLine = (t: { id: number; volume_gal: number; abv: number }) => {
-    const currentLabel = getHoldingTankIntakeHistory(t.id, 1)[0]?.summary;
+    const currentLabel = holdingTankProductName(t.id, t.volume_gal)
+      ?? getHoldingTankIntakeHistory(t.id, 1)[0]?.summary;
     const cutType = getCollectionVesselStoredCutType(t.id);
     const quantity = `${t.volume_gal.toFixed(1)} gal @ ${t.abv.toFixed(1)}% ABV`;
     const product = currentLabel ?? cutType ?? null;
