@@ -120,6 +120,26 @@ export function distillationLotLabel(lot: Pick<TankLot, 'kind' | 'cutType' | 'ru
   return run || cut;
 }
 
+/** Blend name and distillation for the gallons a transfer moved. */
+export function transferredLiquidPhrase(
+  productName: string | null | undefined,
+  distillationLabel: string | null | undefined,
+): string | null {
+  const parts: string[] = [];
+  for (const value of [productName, distillationLabel]) {
+    const text = value?.trim() ?? '';
+    if (text && !parts.includes(text)) parts.push(text);
+  }
+  return parts.length > 0 ? parts.join(', ') : null;
+}
+
+/** Intake line for a transfer: what moved, then the tank it left. */
+export function transferIntakeSummary(sourceTankName: string, liquid: string | null | undefined): string {
+  const what = liquid?.trim() ?? '';
+  if (!what) return `Transfer from ${sourceTankName}`;
+  return `${what} from ${sourceTankName}`;
+}
+
 /** Distillation and cut for gallons that are not a blend, newest first. */
 export function distillationLabelsFromLots(lots: TankLot[]): string | null {
   const ordered = lots
