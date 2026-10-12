@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatTankMenuLabel } from './tank-menu-label';
+import { formatTankMenuLabel, preferContentsSummary } from './tank-menu-label';
 
 describe('formatTankMenuLabel', () => {
   it('names what is in the tank and its proof, and leaves the gallons off the menu', () => {
@@ -12,6 +12,19 @@ describe('formatTankMenuLabel', () => {
     expect(formatTankMenuLabel('Hearts tank', 'Hearts from LW-4 (spirit run)')).toBe(
       'Hearts tank — Hearts from LW-4 (spirit run)',
     );
+  });
+
+  it('keeps a gauge reading from hiding the liquid already in the tank', () => {
+    expect(preferContentsSummary(null, [
+      { kind: 'opening', summary: 'On hand' },
+      { kind: 'cut', summary: 'Heads from D-2025-001 (low wine run)' },
+    ], 'heads')).toBe('Heads from D-2025-001 (low wine run)');
+  });
+
+  it('keeps an on-hand reading when that is the only record', () => {
+    expect(preferContentsSummary(null, [
+      { kind: 'opening', summary: 'On hand' },
+    ], null)).toBe('On hand');
   });
 
   it('says a tank is empty without a capacity', () => {
