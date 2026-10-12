@@ -6,6 +6,7 @@ import {
   getBottlingRuns,
   saveBottlingRun,
   deleteBottlingRun,
+  barrelBlendProductName,
   getBarrels,
   getInventoryByCategory,
   getChargeableHoldingTanksForBottling,
@@ -719,7 +720,7 @@ export function Bottling() {
                 >
                   <option value="">— Select barrel —</option>
                   {barrels.map((b) => (
-                    <option key={b.id} value={b.id}>{b.barrel_number} — {b.spirit_type}</option>
+                    <option key={b.id} value={b.id}>{b.barrel_number} — {barrelBlendProductName(b.id) || b.spirit_type}</option>
                   ))}
                 </select>
               </div>

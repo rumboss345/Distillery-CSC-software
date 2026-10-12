@@ -1,4 +1,5 @@
 import { queryAll, queryOne } from '../../db/database';
+import { barrelBlendProductName } from '../../db/queries';
 import { compareStoredDatesDesc, localCalendarDayKey, parseStoredDate } from '../date-input';
 import { runTypeLabel } from '../distillation-run-types';
 
@@ -235,7 +236,7 @@ export function searchTraceability(query: string, limit = 50): TraceabilityHit[]
       id: b.id,
       batch_or_ref: b.barrel_number,
       date: b.fill_date,
-      summary: `${b.spirit_type.replace(/_/g, ' ')} · ${b.status}`,
+      summary: `${(barrelBlendProductName(b.id) || b.spirit_type).replace(/_/g, ' ')} · ${b.status}`,
     });
   }
 
@@ -776,7 +777,7 @@ export function getTraceabilityPath(kind: TraceabilityKind, id: number): Traceab
       where: row.warehouse_location?.trim() || 'Not recorded',
       what: joinParts([
         row.wood_type,
-        row.spirit_type?.replace(/_/g, ' '),
+        (barrelBlendProductName(barrelId) || row.spirit_type)?.replace(/_/g, ' '),
         gal(row.current_volume_gal),
         row.status,
         row.run_batch ? `filled from ${row.run_batch}` : null,

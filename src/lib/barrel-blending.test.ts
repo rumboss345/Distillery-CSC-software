@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { barrelsForBlendRow, hasDuplicateBarrelSelections } from './barrel-blending';
+import { barrelShownContents, barrelsForBlendRow, hasDuplicateBarrelSelections } from './barrel-blending';
 import type { Barrel } from '../types';
 
 const barrel = (id: number): Barrel => ({
@@ -30,6 +30,15 @@ describe('barrelsForBlendRow', () => {
   it('keeps the current row barrel in the list when another row uses a different barrel', () => {
     const options = barrelsForBlendRow(inventory, [1, 2, null], 1);
     expect(options.map((b) => b.id)).toEqual([2, 3]);
+  });
+});
+
+describe('barrelShownContents', () => {
+  it('shows the blend that was filled, not an older joined spirit type', () => {
+    const filled = barrel(4);
+    filled.spirit_type = 'GR Dark · sf · rum';
+    expect(barrelShownContents(filled, 'Dark')).toBe('Dark');
+    expect(barrelShownContents(filled, null)).toBe('GR Dark · sf · rum');
   });
 });
 

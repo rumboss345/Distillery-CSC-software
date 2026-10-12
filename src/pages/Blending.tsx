@@ -6,6 +6,7 @@ import {
   defaultBlendingOutputTankId,
   executeBlendProduct,
   undoBlendProduction,
+  barrelBlendProductName,
   getBarrelsForBlend,
   getBlendIngredients,
   getBlendProducts,
@@ -1840,7 +1841,7 @@ export function Blending() {
                           <option value="">— Choose a barrel —</option>
                           {barrelOptionsForRow(index).map((barrel) => (
                             <option key={barrel.id} value={barrel.id}>
-                              {formatBarrelInventoryOption(barrel)}
+                              {formatBarrelInventoryOption(barrel, barrelBlendProductName(barrel.id))}
                             </option>
                           ))}
                         </select>
@@ -2152,7 +2153,7 @@ export function Blending() {
               ? barrelInventory.find((b) => b.id === source.barrel_id)
               : undefined;
             const sourceName = barrel
-              ? spiritLabelForBarrel(barrel)
+              ? spiritLabelForBarrel(barrel, barrelBlendProductName(barrel.id))
               : (tank?.name ?? 'Spirit');
             const weightLb = straightSpirit
               ? table6SpiritPounds(source.volume_gal, source.abv)

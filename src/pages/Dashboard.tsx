@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { format } from 'date-fns';
-import { getProductionSummary, getMashBatches, getDistillationRuns, getBarrels, getInventoryItems } from '../db/queries';
+import { getProductionSummary, getMashBatches, getDistillationRuns, getBarrels, getInventoryItems, barrelBlendProductName } from '../db/queries';
 import { StatusBadge } from '../components/StatusBadge';
 import { useAuth } from '../context/AuthContext';
 import { formatDateDisplay } from '../lib/date-input';
@@ -151,7 +151,7 @@ export function Dashboard() {
                 {agingBarrels.map((b) => (
                   <tr key={b.id}>
                     <td><strong>{b.barrel_number}</strong></td>
-                    <td>{b.spirit_type} @ {b.initial_abv}%</td>
+                    <td>{barrelBlendProductName(b.id) || b.spirit_type} @ {b.initial_abv}%</td>
                     <td>{formatDateDisplay(b.fill_date)}</td>
                     <td className="num">{b.current_volume_gal} gal</td>
                     <td>{b.warehouse_location}</td>

@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   intakeAtOrBefore,
   productNameFromIntakes,
-  productNamesLabel,
   type TankProductIntake,
 } from './tank-product-name';
 
@@ -10,14 +9,6 @@ const blend = (productName: string, occurredAt = '2026-04-02 12:00:00'): TankPro
   kind: 'blend',
   occurredAt,
   productName,
-});
-
-describe('productNamesLabel', () => {
-  it('joins distinct product names and drops blanks', () => {
-    expect(productNamesLabel([' Dark Rum ', 'Gold Rum', 'Dark Rum', '', '  '])).toBe(
-      'Dark Rum · Gold Rum',
-    );
-  });
 });
 
 describe('productNameFromIntakes', () => {
@@ -28,12 +19,13 @@ describe('productNameFromIntakes', () => {
     ], () => 'should not walk')).toBe('Dark Rum');
   });
 
-  it('joins consecutive blends and stops at older spirit', () => {
+  it('uses only the newest blend when older blends are still in the history', () => {
     expect(productNameFromIntakes([
-      blend('Gold Rum', '2026-04-03 12:00:00'),
-      blend('Dark Rum', '2026-04-02 12:00:00'),
-      { kind: 'cut', occurredAt: '2026-04-01 08:00:00', productName: 'Hearts' },
-    ], () => null)).toBe('Gold Rum · Dark Rum');
+      blend('Dark', '2026-04-04 12:00:00'),
+      blend('GR Dark', '2026-04-03 12:00:00'),
+      blend('sf', '2026-04-02 12:00:00'),
+      blend('rum', '2026-04-01 12:00:00'),
+    ], () => null)).toBe('Dark');
   });
 
   it('does not use an older blend after a cut, stillage, or opening balance', () => {

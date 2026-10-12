@@ -10,17 +10,6 @@ export interface TankProductIntake {
   sourceTankId?: number | null;
 }
 
-/** Distinct product names, newest first, joined for a tank label. */
-export function productNamesLabel(names: Array<string | null | undefined>): string {
-  const unique: string[] = [];
-  for (const name of names) {
-    const trimmed = name?.trim() ?? '';
-    if (!trimmed || unique.includes(trimmed)) continue;
-    unique.push(trimmed);
-  }
-  return unique.join(' · ');
-}
-
 /** True when an intake happened at or before the moment liquid was transferred. */
 export function intakeAtOrBefore(occurredAt: string, asOf: string): boolean {
   const occurred = parseStoredDate(occurredAt)?.getTime();
@@ -31,7 +20,7 @@ export function intakeAtOrBefore(occurredAt: string, asOf: string): boolean {
 
 /**
  * Product name for the liquid these intakes describe (newest first).
- * Consecutive blends at the top of the history name the tank.
+ * The newest blend names the tank. Older blends stay in the history and are not added on.
  * A transfer asks the caller for the source tank's name at that time.
  * A cut, stillage, or opening balance does not use an older blend.
  */
@@ -42,12 +31,8 @@ export function productNameFromIntakes(
   const newest = entriesNewestFirst[0];
   if (!newest) return null;
   if (newest.kind === 'blend') {
-    const names: string[] = [];
-    for (const entry of entriesNewestFirst) {
-      if (entry.kind !== 'blend') break;
-      names.push(entry.productName ?? '');
-    }
-    return productNamesLabel(names) || null;
+    const name = newest.productName?.trim() ?? '';
+    return name || null;
   }
   if (newest.kind === 'transfer' && newest.sourceTankId) {
     return resolveTransfer(newest.sourceTankId, newest.occurredAt);
