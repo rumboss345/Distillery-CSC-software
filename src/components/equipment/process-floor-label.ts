@@ -29,20 +29,29 @@ export function spiritLiquidLabel(kind: SpiritLiquidClass): string | null {
   return LIQUID_LABELS[kind];
 }
 
-/** What the liquid is, from the vessel name and the ledger contents line. */
+function matchLiquid(text: string): SpiritLiquidClass | null {
+  const value = text.toLowerCase();
+  if (/\bheads?\b/.test(value)) return 'heads';
+  if (/\btails?\b/.test(value)) return 'tails';
+  if (/dunder|backset/.test(value)) return 'dunder';
+  if (/stillage/.test(value)) return 'stillage';
+  if (/\bgin\b/.test(value)) return 'gin';
+  if (/low wine/.test(value)) return 'low_wine';
+  if (/heavy rum/.test(value)) return 'heavy_rum';
+  if (/vodka|high proof|high wine|\bhearts?\b|cane spirit/.test(value)) return 'high_proof';
+  if (/blend|gold rum|bulk spirit|canning/.test(value)) return 'blend';
+  if (/\bwash\b|ferment|molasses|\bmash\b/.test(value)) return 'wash';
+  return null;
+}
+
+/** What the liquid is. A ledger contents line wins over the vessel name. */
 export function classifyProcessLiquid(name: string, liquidName?: string | null): SpiritLiquidClass {
-  const text = `${name} ${liquidName ?? ''}`.toLowerCase();
-  if (/\bheads?\b/.test(text)) return 'heads';
-  if (/\btails?\b/.test(text)) return 'tails';
-  if (/dunder|backset/.test(text)) return 'dunder';
-  if (/stillage/.test(text)) return 'stillage';
-  if (/\bgin\b/.test(text)) return 'gin';
-  if (/low wine/.test(text)) return 'low_wine';
-  if (/heavy rum/.test(text)) return 'heavy_rum';
-  if (/vodka|high proof|high wine|\bhearts?\b|cane spirit/.test(text)) return 'high_proof';
-  if (/blend|gold rum|bulk spirit|canning/.test(text)) return 'blend';
-  if (/\bwash\b|ferment|molasses|\bmash\b/.test(text)) return 'wash';
-  return 'unknown';
+  const contents = (liquidName ?? '').replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim();
+  if (contents) {
+    const fromContents = matchLiquid(contents);
+    if (fromContents) return fromContents;
+  }
+  return matchLiquid(name) ?? 'unknown';
 }
 
 export interface LiquidPalette {

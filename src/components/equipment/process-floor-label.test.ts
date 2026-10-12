@@ -18,6 +18,9 @@ describe('processEquipmentShortName', () => {
 describe('classifyProcessLiquid', () => {
   it('prefers the contents line over a generic tank name', () => {
     expect(classifyProcessLiquid('Latina 500L', 'Hearts from D-12')).toBe('high_proof');
+    expect(classifyProcessLiquid('Storage tank of tails runs', 'Hearts from D-2025-001 (low wine run)')).toBe('high_proof');
+    expect(classifyProcessLiquid('Latina 500L', 'Heads from D-2025-001 (low wine run)')).toBe('heads');
+    expect(classifyProcessLiquid('Latina 500L', 'Tails from D-2025-001 (spirit run)')).toBe('tails');
     expect(classifyProcessLiquid('Storage tank of tails runs')).toBe('tails');
     expect(classifyProcessLiquid('Dunder tank')).toBe('dunder');
   });
