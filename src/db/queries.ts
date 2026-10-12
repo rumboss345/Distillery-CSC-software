@@ -2012,6 +2012,46 @@ export function holdingTankProductName(tankId: number, volumeGal?: number): stri
   return blendProductNameAt(tankId, null, new Set());
 }
 
+/** Product name of a tank at a fill or transfer, even if that tank is empty now. */
+export function holdingTankProductNameAsOf(tankId: number, asOf: string): string | null {
+  const cutoff = /^\d{4}-\d{2}-\d{2}$/.test(asOf.trim()) ? `${asOf.trim()} 23:59:59` : asOf;
+  return blendProductNameAt(tankId, cutoff, new Set());
+}
+
+/** Blend product that was filled into this barrel. Older blends are not included. */
+export function barrelBlendProductName(barrelId: number): string | null {
+  const fill = queryOne<{
+    source_holding_tank_equipment_id: number;
+    fill_date: string;
+    created_at: string;
+  }>(`
+    SELECT source_holding_tank_equipment_id, fill_date, created_at
+    FROM barrel_fills
+    WHERE barrel_id = ?
+      AND volume_gal > 0
+      AND source_holding_tank_equipment_id IS NOT NULL
+    ORDER BY datetime(
+      CASE WHEN TRIM(COALESCE(created_at, '')) = '' THEN fill_date ELSE created_at END
+    ) DESC, id DESC
+    LIMIT 1
+  `, [barrelId]);
+  if (fill?.source_holding_tank_equipment_id) {
+    return holdingTankProductNameAsOf(
+      fill.source_holding_tank_equipment_id,
+      fill.created_at?.trim() || fill.fill_date,
+    );
+  }
+  const barrel = queryOne<{
+    source_holding_tank_equipment_id: number | null;
+    fill_date: string;
+  }>(
+    'SELECT source_holding_tank_equipment_id, fill_date FROM barrels WHERE id = ?',
+    [barrelId],
+  );
+  if (!barrel?.source_holding_tank_equipment_id) return null;
+  return holdingTankProductNameAsOf(barrel.source_holding_tank_equipment_id, barrel.fill_date);
+}
+
 export function getHoldingTankTransfers(): HoldingTankTransferView[] {
   return queryAll(
     `SELECT t.*,
@@ -3981,8 +4021,8 @@ export function fillBarrelFromHoldingTank(input: FillBarrelFromTankInput): void 
   }
 
   insertRow(
-    `INSERT INTO barrel_fills (barrel_id, source_holding_tank_equipment_id, volume_gal, abv, fill_date, notes)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO barrel_fills (barrel_id, source_holding_tank_equipment_id, volume_gal, abv, fill_date, notes, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`,
     [
       input.barrelId,
       input.sourceHoldingTankEquipmentId,

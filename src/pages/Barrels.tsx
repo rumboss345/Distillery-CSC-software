@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { differenceInDays, parseISO } from 'date-fns';
 import {
+  barrelBlendProductName,
   createBarrelFromHoldingTank,
+  holdingTankProductName,
   deleteBarrel,
   deleteWarehouseLocation,
   getBarrels,
@@ -56,6 +58,10 @@ function barrelAgeDays(fillDate: string): number | null {
   return differenceInDays(new Date(), parseISO(fillDate));
 }
 
+function barrelContents(barrel: Barrel): string {
+  return barrelBlendProductName(barrel.id) || barrel.spirit_type;
+}
+
 function barrelVolumeLabel(barrel: Barrel): string {
   if (barrel.status === 'empty' || barrel.current_volume_gal <= 0) {
     return `EMPTY · ${formatGal(barrel.capacity_gal)} gal`;
@@ -87,6 +93,7 @@ export function Barrels() {
   const visibleBarrels = barrelQuery
     ? barrels.filter((barrel) => (
       barrel.barrel_number.toLocaleLowerCase().includes(barrelQuery)
+      || barrelContents(barrel).toLocaleLowerCase().includes(barrelQuery)
       || barrel.spirit_type.toLocaleLowerCase().includes(barrelQuery)
       || barrel.wood_type.toLocaleLowerCase().includes(barrelQuery)
       || barrel.warehouse_location.toLocaleLowerCase().includes(barrelQuery)
@@ -94,6 +101,7 @@ export function Barrels() {
     : barrels;
   const groups = groupBarrelsByLocation(visibleBarrels, barrelQuery ? [] : locations);
   const selected = barrels.find((barrel) => barrel.id === selectedId) ?? null;
+  const selectedContents = selected ? barrelContents(selected) : '';
 
   void key;
 
@@ -119,6 +127,7 @@ export function Barrels() {
       fill_date: planDate ?? emptyBarrel().fill_date,
       warehouse_location: warehouseLocation ?? '',
       source_holding_tank_equipment_id: firstTank?.id ?? null,
+      spirit_type: firstTank ? (holdingTankProductName(firstTank.id, firstTank.volume_gal) ?? '') : '',
       initial_abv: firstTank?.abv ?? 0,
       current_volume_gal: firstTank
         ? Math.min(firstTank.volume_gal, 53)
@@ -327,7 +336,7 @@ export function Barrels() {
                   ) : (
                     <div className="warehouse-barrel-row">
                       {group.barrels.map((barrel) => {
-                        const contents = barrel.spirit_type || barrel.wood_type;
+                        const contents = barrelContents(barrel) || barrel.wood_type;
                         const age = barrelAgeDays(barrel.fill_date);
                         return (
                           <button
@@ -393,11 +402,10 @@ export function Barrels() {
                 ) : (
                   <>
                     <h4 className="process-panel-title">{selected.barrel_number}</h4>
-                    <p className="process-equipment-detail-code">
-                      {selected.wood_type}
-                      {selected.spirit_type ? ` · ${selected.spirit_type}` : ''}
-                    </p>
+                    <p className="process-equipment-detail-code">{selected.wood_type}</p>
                     <dl className="process-equipment-detail-list">
+                      <dt>Contents</dt>
+                      <dd>{selectedContents || '—'}</dd>
                       <dt>Status</dt>
                       <dd><StatusBadge status={selected.status} /></dd>
                       <dt>Location</dt>
@@ -503,10 +511,12 @@ export function Barrels() {
                   const tank = source_holding_tank_equipment_id
                     ? holdingTanks.find((t) => t.id === source_holding_tank_equipment_id)
                     : undefined;
+                  const product = tank ? holdingTankProductName(tank.id, tank.volume_gal) : null;
                   setForm((prev) => ({
                     ...prev,
                     source_holding_tank_equipment_id,
                     source_run_id: null,
+                    spirit_type: editId ? prev.spirit_type : (product ?? ''),
                     initial_abv: tank?.abv ?? prev.initial_abv,
                     current_volume_gal: tank && !editId
                       ? Math.min(tank.volume_gal, prev.capacity_gal)

@@ -1226,6 +1226,7 @@ function migrateBarrelFills(): void {
   `);
   db.run(`CREATE INDEX IF NOT EXISTS idx_barrel_fills_barrel ON barrel_fills(barrel_id)`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_barrel_fills_tank ON barrel_fills(source_holding_tank_equipment_id)`);
+  addColumnIfMissing('barrel_fills', 'created_at', "TEXT NOT NULL DEFAULT ''");
 }
 
 function migrateBarrelSourceHoldingTank(): void {
