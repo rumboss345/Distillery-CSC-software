@@ -52,16 +52,34 @@ export function tankContentsPhrase(tankId: number): string | null {
   );
 }
 
-/** Dropdown text: tank name, what it holds, and the proof. Gallons stay off the menu. */
-export function formatTankMenuLabel(name: string, contents: string | null, abv?: number | null): string {
+/** Dropdown text: tank name, what it holds, and the proof. Gallons are included when moving. */
+export function formatTankMenuLabel(
+  name: string,
+  contents: string | null,
+  abv?: number | null,
+  volumeGal?: number | null,
+): string {
   const product = contents?.trim();
   if (!product) return `${name} (empty)`;
-  const proof = abv != null && Number.isFinite(abv) ? `${abv.toFixed(1)}% ABV` : null;
-  return proof ? `${name} — ${product} · ${proof}` : `${name} — ${product}`;
+  const parts = [product];
+  if (abv != null && Number.isFinite(abv)) parts.push(`${abv.toFixed(1)}% ABV`);
+  if (volumeGal != null && Number.isFinite(volumeGal) && volumeGal > 0.001) {
+    parts.push(`${volumeGal.toFixed(1)} gal available`);
+  }
+  return `${name} — ${parts.join(' · ')}`;
 }
 
-export function tankDropdownLabel(name: string, tankId: number): string {
+export function tankDropdownLabel(
+  name: string,
+  tankId: number,
+  options?: { volume?: boolean },
+): string {
   const ledger = getHoldingTankContents(tankId);
   if (!(ledger.volume_gal > 0.001)) return formatTankMenuLabel(name, null);
-  return formatTankMenuLabel(name, tankContentsPhrase(tankId), ledger.abv);
+  return formatTankMenuLabel(
+    name,
+    tankContentsPhrase(tankId),
+    ledger.abv,
+    options?.volume ? ledger.volume_gal : undefined,
+  );
 }
