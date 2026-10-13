@@ -173,7 +173,7 @@ export function TankTransfer() {
     return product ? `In tank: ${quantity} — ${product}` : `In tank: ${quantity}`;
   };
   const transferSourceTankOptionLabel = (t: { id: number; name: string }) =>
-    tankDropdownLabel(t.name, t.id);
+    tankDropdownLabel(t.name, t.id, { volume: true });
   const selectedTransferSourceTank = sourceTanksForTransfer.find(
     (t) => t.id === transferForm.source_tank_equipment_id,
   );

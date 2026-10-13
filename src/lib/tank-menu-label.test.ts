@@ -8,6 +8,12 @@ describe('formatTankMenuLabel', () => {
     );
   });
 
+  it('includes the gallons available when product is being moved', () => {
+    expect(formatTankMenuLabel('Latina 500L', 'Low Wine Run · Heads', 78, 3.4)).toBe(
+      'Latina 500L — Low Wine Run · Heads · 78.0% ABV · 3.4 gal available',
+    );
+  });
+
   it('names the contents when no proof is known', () => {
     expect(formatTankMenuLabel('Hearts tank', 'Hearts from LW-4 (spirit run)')).toBe(
       'Hearts tank — Hearts from LW-4 (spirit run)',
