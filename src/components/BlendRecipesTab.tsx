@@ -13,6 +13,7 @@ import {
   useRefreshKey,
 } from '../db/queries';
 import { Modal } from './Modal';
+import { QuickAddIngredient } from './QuickAddIngredient';
 import { ProofingWaterConfirm } from './ProofingWaterConfirm';
 import {
   BLEND_INGREDIENT_TYPES,
@@ -22,6 +23,7 @@ import {
   formatBlendRecipeSpiritPull,
   ingredientWeightLbs,
   filterInventoryForBlendIngredient,
+  inventoryCategoriesForBlendType,
   convertIngredientAmount,
   convertSpiritAmount,
   inferMeasureMode,
@@ -851,6 +853,22 @@ export function BlendRecipesTab({
                                   </option>
                                 ))}
                               </select>
+                              {inventoryCategoriesForBlendType(ingredient.ingredient_type)[0] && (
+                                <QuickAddIngredient
+                                  category={inventoryCategoriesForBlendType(ingredient.ingredient_type)[0]}
+                                  unit={ingredient.unit}
+                                  label={ingredient.ingredient_type === 'other' ? 'additive' : (BLEND_INGREDIENT_TYPES.find((type) => type.value === ingredient.ingredient_type)?.label.toLowerCase() ?? 'ingredient')}
+                                  testId={`blend-ingredient-${index}`}
+                                  onAdded={(item) => updateIngredient(index, {
+                                    inventory_item_id: item.id,
+                                    name: item.name,
+                                    unit: item.unit,
+                                    abv: item.abv ?? null,
+                                    density_g_per_ml: item.density_g_per_ml ?? null,
+                                    density_assumption: null,
+                                  })}
+                                />
+                              )}
                             </div>
                           )}
                         </div>

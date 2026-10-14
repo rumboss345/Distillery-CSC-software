@@ -20,6 +20,7 @@ import {
 import { MashTunVisual } from '../components/equipment/MashTunVisual';
 import type { EquipmentVisualData } from '../components/equipment/equipment-visual.types';
 import { Modal } from '../components/Modal';
+import { QuickAddIngredient } from '../components/QuickAddIngredient';
 import { RecentCompletedNote } from '../components/RecentCompletedNote';
 import { StatusBadge } from '../components/StatusBadge';
 import { StatusDateLog } from '../components/StatusDateLog';
@@ -414,6 +415,13 @@ export function MashFermentation() {
                   <option value={form.grain_type}>{form.grain_type} (not in inventory)</option>
                 )}
               </select>
+              <QuickAddIngredient
+                category="sugar"
+                unit="lbs"
+                label="sugar"
+                testId="wash-sugar"
+                onAdded={(item) => setForm({ ...form, grain_type: item.name })}
+              />
             </div>
             <div className="form-group">
               <label>Sugar (lbs)</label>
@@ -439,6 +447,13 @@ export function MashFermentation() {
                   <option value={form.yeast_strain}>{form.yeast_strain} (not in inventory)</option>
                 )}
               </select>
+              <QuickAddIngredient
+                category="yeast"
+                unit="lbs"
+                label="yeast"
+                testId="wash-yeast"
+                onAdded={(item) => setForm({ ...form, yeast_strain: item.name })}
+              />
             </div>
             <div className="form-group">
               <label>Yeast (lbs)</label>
@@ -467,6 +482,15 @@ export function MashFermentation() {
                         <option value={row.name}>{row.name} (not in inventory)</option>
                       )}
                     </select>
+                    <QuickAddIngredient
+                      category="nutrients"
+                      unit={normalizeNutrientUnit(row.unit)}
+                      label="nutrient"
+                      testId={`wash-nutrient-${index}`}
+                      onAdded={(item) => {
+                        setBatchNutrients((prev) => prev.map((n, i) => (i === index ? { ...n, name: item.name } : n)));
+                      }}
+                    />
                   </div>
                   <div className="form-group">
                     <label>Amount</label>

@@ -19,6 +19,7 @@ import {
 import { distillationAlcoholBalance, washChargeAbvFromBrix, type AlcoholChargeBasis, type DistillationAlcoholBalance } from '../lib/distillation-loss';
 import { isFermenterSourcedRun, isSpiritStyleRun, isTankSourcedRun } from '../lib/distillation-run-types';
 import { activeGinBotanicals, ginBotanicalPlaceError, normalizeBotanicalWeightUnit } from '../lib/gin-botanicals';
+import { preparedIngredientName } from '../lib/quick-ingredient';
 import {
   chargeExceedsStillCapacity,
   plannedRecordSkipsEquipmentStatus,
@@ -436,6 +437,36 @@ function bottlingLinesToInventoryInput(lines: BottlingRunLine[]): BottlingRunLin
     bottle_size_ml: line.bottle_size_ml,
     bottle_count: line.bottle_count,
   }));
+}
+
+/** Create an inventory ingredient, or return the same-category item that already has this name. */
+export function ensureInventoryItem(input: {
+  name: string;
+  category: string;
+  unit?: string;
+}): InventoryItem {
+  const name = preparedIngredientName(input.name);
+  const category = input.category.trim().toLowerCase();
+  if (!category) throw new Error('Choose an ingredient category.');
+  const existing = findInventoryItem(category, name);
+  if (existing) return existing;
+  const unit = input.unit?.trim() || 'lbs';
+  runQuery('INSERT OR IGNORE INTO inventory_categories (name) VALUES (?)', [category]);
+  saveInventoryItem({
+    name,
+    category,
+    unit,
+    quantity: 0,
+    reorder_level: 0,
+    notes: '',
+    package_size_ml: null,
+    density_g_per_ml: null,
+    density_reference: '',
+    abv: null,
+  });
+  const created = findInventoryItem(category, name);
+  if (!created) throw new Error('Could not save that ingredient.');
+  return created;
 }
 
 export function saveInventoryItem(item: Omit<InventoryItem, 'id' | 'created_at' | 'updated_at'>, id?: number): void {

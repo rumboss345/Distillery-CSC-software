@@ -1,3 +1,4 @@
+import { QuickAddIngredient } from './QuickAddIngredient';
 import {
   emptyGinBotanical,
   normalizeBotanicalPlace,
@@ -47,6 +48,15 @@ export function GinBotanicalFields({
               value={line.name}
               onChange={(e) => update(index, { name: e.target.value })}
               placeholder="Botanical name"
+            />
+            <QuickAddIngredient
+              category="botanicals"
+              unit={normalizeBotanicalWeightUnit(line.weight_unit)}
+              label="botanical"
+              typedName={line.name}
+              existingNames={inventoryNames}
+              testId={`botanical-${index}`}
+              onAdded={(item) => update(index, { name: item.name })}
             />
           </div>
           <div className="form-group">

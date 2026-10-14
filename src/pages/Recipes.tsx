@@ -12,6 +12,7 @@ import {
   useRefreshKey,
 } from '../db/queries';
 import { Modal } from '../components/Modal';
+import { QuickAddIngredient } from '../components/QuickAddIngredient';
 import { BlendDesigner } from '../components/BlendDesigner';
 import { BlendRecipesTab } from '../components/BlendRecipesTab';
 import { GinRecipesTab } from '../components/GinRecipesTab';
@@ -456,6 +457,7 @@ export function Recipes() {
             <div className="form-group">
               <label>Sugar Type</label>
               <select
+                data-testid="wash-recipe-sugar"
                 value={form.grain_type}
                 onChange={(e) => setForm({ ...form, grain_type: e.target.value })}
               >
@@ -467,6 +469,13 @@ export function Recipes() {
                   <option value={form.grain_type}>{form.grain_type}</option>
                 )}
               </select>
+              <QuickAddIngredient
+                category="sugar"
+                unit="lbs"
+                label="sugar"
+                testId="sugar"
+                onAdded={(item) => setForm({ ...form, grain_type: item.name })}
+              />
             </div>
             <div className="form-group">
               <label>Sugar (lbs)</label>
@@ -502,6 +511,13 @@ export function Recipes() {
                   <option value={form.yeast_strain}>{form.yeast_strain}</option>
                 )}
               </select>
+              <QuickAddIngredient
+                category="yeast"
+                unit="lbs"
+                label="yeast"
+                testId="yeast"
+                onAdded={(item) => setForm({ ...form, yeast_strain: item.name })}
+              />
             </div>
             <div className="form-group">
               <label>Yeast (lbs)</label>
@@ -531,6 +547,13 @@ export function Recipes() {
                         <option value={row.name}>{row.name}</option>
                       )}
                     </select>
+                    <QuickAddIngredient
+                      category="nutrients"
+                      unit={normalizeNutrientUnit(row.unit)}
+                      label="nutrient"
+                      testId={`nutrient-${index}`}
+                      onAdded={(item) => updateNutrient(index, { name: item.name })}
+                    />
                   </div>
                   <div className="form-group">
                     <label>Amount</label>
