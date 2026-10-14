@@ -1,3 +1,4 @@
+import { IngredientSelect } from './IngredientSelect';
 import {
   emptyGinBotanical,
   normalizeBotanicalPlace,
@@ -35,18 +36,23 @@ export function GinBotanicalFields({
         </button>
       </div>
       <p className="field-hint">
-        Enter the weight of each botanical, and say whether it goes in the pot or in the basket.
+        Choose each botanical, enter its weight, and say whether it goes in the pot or in the basket.
       </p>
       {lines.map((line, index) => (
         <div key={index} className="form-grid" style={{ marginBottom: '0.75rem' }}>
           <div className="form-group">
             <label>Botanical</label>
-            <input
-              list="gin-botanical-names"
-              data-testid={`gin-botanical-name-${index}`}
+            <IngredientSelect
+              testId={`gin-botanical-name-${index}`}
               value={line.name}
-              onChange={(e) => update(index, { name: e.target.value })}
-              placeholder="Botanical name"
+              emptyLabel="— Select botanical —"
+              noun="botanical"
+              category="botanicals"
+              unit={normalizeBotanicalWeightUnit(line.weight_unit)}
+              options={inventoryNames.map((name) => ({ value: name, label: name }))}
+              orphanLabel={line.name || undefined}
+              onSelect={(name) => update(index, { name })}
+              onAdded={(item) => update(index, { name: item.name })}
             />
           </div>
           <div className="form-group">
@@ -102,11 +108,6 @@ export function GinBotanicalFields({
           )}
         </div>
       ))}
-      <datalist id="gin-botanical-names">
-        {inventoryNames.map((name) => (
-          <option key={name} value={name} />
-        ))}
-      </datalist>
     </div>
   );
 }

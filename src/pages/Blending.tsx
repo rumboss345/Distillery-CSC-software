@@ -39,6 +39,7 @@ import { AssigneeCell, AssigneeSelect } from '../components/AssigneeSelect';
 import { DatePicker } from '../components/DatePicker';
 import { AdminCredentialConfirmModal } from '../components/AdminCredentialConfirmModal';
 import { Modal } from '../components/Modal';
+import { IngredientSelect } from '../components/IngredientSelect';
 import { useAuth } from '../context/AuthContext';
 import { limitAbvInput, limitAbvNumber, MAX_ENTERED_ABV } from '../lib/abv-limits';
 import { defaultAssignee } from '../lib/assignee';
@@ -57,6 +58,7 @@ import {
   formatReviewVolume,
   formatReviewWeight,
   inferMeasureMode,
+  inventoryCategoriesForBlendType,
   isWeightUnit,
   ingredientVolumeGal,
   ingredientWeightLbs,
@@ -2115,21 +2117,49 @@ export function Blending() {
               <input type="checkbox" checked={showInventoryDetails} onChange={(e) => setShowInventoryDetails(e.target.checked)} />
               Show inventory &amp; lot tracking
             </label>
-            {showInventoryDetails && ingredients.map((ing, index) => (
-              <div key={`inv-${index}`} className="wizard-inventory-row">
-                <span>{ing.name || BLEND_INGREDIENT_TYPES.find((t) => t.value === ing.ingredient_type)?.label}</span>
-                <input placeholder="Lot #" value={ing.lot_number ?? ''} onChange={(e) => updateIngredient(index, { lot_number: e.target.value })} />
-                <select
-                  value={ing.inventory_item_id ?? ''}
-                  onChange={(e) => updateIngredient(index, { inventory_item_id: e.target.value ? parseInt(e.target.value) : null })}
-                >
-                  <option value="">— Inventory item —</option>
-                  {inventoryItems.map((item) => (
-                    <option key={item.id} value={item.id}>{item.name} ({item.quantity} {item.unit})</option>
-                  ))}
-                </select>
-              </div>
-            ))}
+            {showInventoryDetails && ingredients.map((ing, index) => {
+              const quickCategory = inventoryCategoriesForBlendType(ing.ingredient_type)[0];
+              const typeLabel = BLEND_INGREDIENT_TYPES.find((t) => t.value === ing.ingredient_type)?.label;
+              return (
+                <div key={`inv-${index}`}>
+                  <div className="wizard-inventory-row">
+                    <span>{ing.name || typeLabel}</span>
+                    <input placeholder="Lot #" value={ing.lot_number ?? ''} onChange={(e) => updateIngredient(index, { lot_number: e.target.value })} />
+                    {quickCategory ? (
+                      <IngredientSelect
+                        testId={`wizard-ingredient-${index}`}
+                        value={ing.inventory_item_id != null ? String(ing.inventory_item_id) : ''}
+                        emptyLabel="— Inventory item —"
+                        noun={ing.ingredient_type === 'other' ? 'additive' : (typeLabel?.toLowerCase() ?? 'ingredient')}
+                        category={quickCategory}
+                        unit={ing.unit}
+                        options={inventoryItems.map((item) => ({
+                          value: String(item.id),
+                          label: `${item.name} (${item.quantity} ${item.unit})`,
+                        }))}
+                        onSelect={(rawId) => updateIngredient(index, {
+                          inventory_item_id: rawId ? parseInt(rawId, 10) : null,
+                        })}
+                        onAdded={(item) => updateIngredient(index, {
+                          inventory_item_id: item.id,
+                          name: ing.name.trim() ? ing.name : item.name,
+                        })}
+                      />
+                    ) : (
+                      <select
+                        value={ing.inventory_item_id ?? ''}
+                        onChange={(e) => updateIngredient(index, { inventory_item_id: e.target.value ? parseInt(e.target.value) : null })}
+                      >
+                        <option value="">— Inventory item —</option>
+                        {inventoryItems.map((item) => (
+                          <option key={item.id} value={item.id}>{item.name} ({item.quantity} {item.unit})</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
             {formulation.theoretical.abv > 0 && (
               <p className="wizard-result-banner">
                 Current calculated proof: <strong>{formulation.theoretical.abv.toFixed(1)}% ABV</strong>

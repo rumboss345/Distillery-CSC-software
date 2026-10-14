@@ -12,6 +12,7 @@ import {
   useRefreshKey,
 } from '../db/queries';
 import { Modal } from '../components/Modal';
+import { IngredientSelect } from '../components/IngredientSelect';
 import { BlendDesigner } from '../components/BlendDesigner';
 import { BlendRecipesTab } from '../components/BlendRecipesTab';
 import { GinRecipesTab } from '../components/GinRecipesTab';
@@ -455,18 +456,18 @@ export function Recipes() {
             </div>
             <div className="form-group">
               <label>Sugar Type</label>
-              <select
+              <IngredientSelect
+                testId="wash-recipe-sugar"
                 value={form.grain_type}
-                onChange={(e) => setForm({ ...form, grain_type: e.target.value })}
-              >
-                <option value="">— Select sugar from inventory —</option>
-                {sugarItems.map((item) => (
-                  <option key={item.id} value={item.name}>{item.name}</option>
-                ))}
-                {form.grain_type && !sugarItems.some((i) => i.name === form.grain_type) && (
-                  <option value={form.grain_type}>{form.grain_type}</option>
-                )}
-              </select>
+                emptyLabel="— Select sugar from inventory —"
+                noun="sugar"
+                category="sugar"
+                unit="lbs"
+                options={sugarItems.map((item) => ({ value: item.name, label: item.name }))}
+                orphanLabel={form.grain_type || undefined}
+                onSelect={(grain_type) => setForm({ ...form, grain_type })}
+                onAdded={(item) => setForm({ ...form, grain_type: item.name })}
+              />
             </div>
             <div className="form-group">
               <label>Sugar (lbs)</label>
@@ -490,18 +491,18 @@ export function Recipes() {
             </div>
             <div className="form-group">
               <label>Yeast Strain</label>
-              <select
+              <IngredientSelect
+                testId="wash-recipe-yeast"
                 value={form.yeast_strain}
-                onChange={(e) => setForm({ ...form, yeast_strain: e.target.value })}
-              >
-                <option value="">— Select yeast from inventory —</option>
-                {yeastItems.map((item) => (
-                  <option key={item.id} value={item.name}>{item.name}</option>
-                ))}
-                {form.yeast_strain && !yeastItems.some((i) => i.name === form.yeast_strain) && (
-                  <option value={form.yeast_strain}>{form.yeast_strain}</option>
-                )}
-              </select>
+                emptyLabel="— Select yeast from inventory —"
+                noun="yeast"
+                category="yeast"
+                unit="lbs"
+                options={yeastItems.map((item) => ({ value: item.name, label: item.name }))}
+                orphanLabel={form.yeast_strain || undefined}
+                onSelect={(yeast_strain) => setForm({ ...form, yeast_strain })}
+                onAdded={(item) => setForm({ ...form, yeast_strain: item.name })}
+              />
             </div>
             <div className="form-group">
               <label>Yeast (lbs)</label>
@@ -519,18 +520,18 @@ export function Recipes() {
                 <div className="form-grid" style={{ marginBottom: 0 }}>
                   <div className="form-group">
                     <label>{index === 0 ? 'Nutrient' : `Nutrient ${index + 1}`}</label>
-                    <select
+                    <IngredientSelect
+                      testId={`nutrient-${index}`}
                       value={row.name}
-                      onChange={(e) => updateNutrient(index, { name: e.target.value })}
-                    >
-                      <option value="">— Select nutrient from inventory —</option>
-                      {nutrientItems.map((item) => (
-                        <option key={item.id} value={item.name}>{item.name}</option>
-                      ))}
-                      {row.name && !nutrientItems.some((i) => i.name === row.name) && (
-                        <option value={row.name}>{row.name}</option>
-                      )}
-                    </select>
+                      emptyLabel="— Select nutrient from inventory —"
+                      noun="nutrient"
+                      category="nutrients"
+                      unit={normalizeNutrientUnit(row.unit)}
+                      options={nutrientItems.map((item) => ({ value: item.name, label: item.name }))}
+                      orphanLabel={row.name || undefined}
+                      onSelect={(name) => updateNutrient(index, { name })}
+                      onAdded={(item) => updateNutrient(index, { name: item.name })}
+                    />
                   </div>
                   <div className="form-group">
                     <label>Amount</label>
