@@ -33,8 +33,8 @@ export function washChargeAbvFromBrix(
 
 /**
  * Alcohol charged into the still versus alcohol in the cuts.
- * Loss is charged alcohol minus collected alcohol. A negative loss means
- * the collections contained more alcohol than the charge.
+ * The difference is charged alcohol minus collected alcohol.
+ * When more alcohol is collected than was charged, that difference is a gain.
  * Proofing water is not alcohol: a proofed charge uses the spirit pulled.
  */
 export function distillationAlcoholBalance(input: {
@@ -105,10 +105,15 @@ export function stillageResidualAbv(
 }
 
 export function formatDistillationLossGal(lossGal: number): string {
+  const rounded = Math.round(Math.abs(lossGal) * 100) / 100;
+  return `${rounded.toFixed(2)} gal`;
+}
+
+/** "Loss 1.60 gal" or "Gain 0.80 gal". Collected alcohol above the charge is a gain. */
+export function formatDistillationAlcoholResult(lossGal: number): string {
   const rounded = Math.round(lossGal * 100) / 100;
-  const abs = Math.abs(rounded).toFixed(2);
-  if (rounded < 0) return `−${abs} gal`;
-  return `${abs} gal`;
+  const label = rounded < 0 ? 'Gain' : 'Loss';
+  return `${label} ${formatDistillationLossGal(rounded)}`;
 }
 
 /** One line for the cuts screen and the run list. */
@@ -126,5 +131,5 @@ export function formatDistillationLossSummary(balance: DistillationAlcoholBalanc
       : balance.chargeAbv != null
         ? `Charge ${balance.chargeAbv.toFixed(1)}% ABV. `
         : '';
-  return `${basisNote}Alcohol charged ${balance.chargedGal.toFixed(2)} gal. Collected ${balance.collectedGal.toFixed(2)} gal. Loss ${formatDistillationLossGal(balance.lossGal)} alcohol.`;
+  return `${basisNote}Alcohol charged ${balance.chargedGal.toFixed(2)} gal. Collected ${balance.collectedGal.toFixed(2)} gal. ${formatDistillationAlcoholResult(balance.lossGal)} alcohol.`;
 }

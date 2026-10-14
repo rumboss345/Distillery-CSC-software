@@ -2,7 +2,7 @@ import { queryAll } from '../../db/database';
 import { getBlendProducts, getBottlingRuns, getHoldingTankVolumeVariances } from '../../db/queries';
 import { compareStoredDatesDesc } from '../date-input';
 import { reportedBottlingVarianceGal } from '../bottling-lines';
-import { formatDistillationLossGal, stillageResidualAbv } from '../distillation-loss';
+import { formatDistillationAlcoholResult, stillageResidualAbv } from '../distillation-loss';
 import { formatTankVolumeVariance, tankReadingChanged } from '../tank-volume-variance';
 import { buildBlendReportRows } from './blend-rows';
 import { buildDistillationReportRows } from './distillation-rows';
@@ -211,7 +211,7 @@ export function buildVolumeChangeRows(range: ReportDateRange): VolumeChangeRow[]
       occurred_at: run.run_date,
       kind: VOLUME_CHANGE_KINDS.distillation,
       place: run.batch_number,
-      change: `Loss ${formatDistillationLossGal(run.alcohol_loss_gal)} alcohol (${(run.alcohol_charged_gal ?? 0).toFixed(2)} gal charged, ${(run.alcohol_collected_gal ?? 0).toFixed(2)} gal collected)${stillageNote}`,
+      change: `${formatDistillationAlcoholResult(run.alcohol_loss_gal)} alcohol (${(run.alcohol_charged_gal ?? 0).toFixed(2)} gal charged, ${(run.alcohol_collected_gal ?? 0).toFixed(2)} gal collected)${stillageNote}`,
       why,
       who: shown(run.operator === '—' ? '' : run.operator),
       gallons: -run.alcohol_loss_gal,

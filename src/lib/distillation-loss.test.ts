@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   distillationAlcoholBalance,
+  formatDistillationAlcoholResult,
   formatDistillationLossSummary,
   stillageResidualAbv,
   washChargeAbvFromBrix,
@@ -46,6 +47,8 @@ describe('distillationAlcoholBalance', () => {
     expect(balance.chargedGal).toBeCloseTo(4, 4);
     expect(balance.collectedGal).toBeCloseTo(4.8, 4);
     expect(balance.lossGal).toBeCloseTo(-0.8, 4);
+    expect(formatDistillationAlcoholResult(balance.lossGal!)).toBe('Gain 0.80 gal');
+    expect(formatDistillationLossSummary(balance)).toContain('Gain 0.80 gal alcohol');
   });
 
   it('leaves loss blank when the charge alcohol is unknown', () => {

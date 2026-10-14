@@ -1,5 +1,5 @@
 import { formatDateDisplay } from '../../lib/date-input';
-import { formatDistillationLossGal } from '../../lib/distillation-loss';
+import { formatDistillationAlcoholResult } from '../../lib/distillation-loss';
 import { buildDistillationReportRows } from '../../lib/reporting/distillation-rows';
 import { useReportContext } from './report-context';
 import { ReportTableShell } from './ReportTableShell';
@@ -24,7 +24,7 @@ export function DistillationReport() {
   return (
     <ReportTableShell
       title="Distillation runs"
-      description="One row per distillation run with cut totals, hearts LAA, and alcohol loss. Loss is the alcohol charged minus the alcohol collected. The Distillation page keeps the latest 10 completed runs."
+      description="One row per distillation run with cut totals, hearts LAA, and alcohol loss or gain. The difference is the alcohol charged minus the alcohol collected. When more alcohol is collected than was charged, the result is recorded as a gain. The Distillation page keeps the latest 10 completed runs."
       periodLabel={range.label}
       csvFilename={`distillation-${range.from ?? 'all'}`}
       csvHeaders={csvHeaders}
@@ -48,7 +48,7 @@ export function DistillationReport() {
             <th className="num">Hearts LAA</th>
             <th className="num">Alcohol in</th>
             <th className="num">Collected</th>
-            <th className="num">Loss</th>
+            <th className="num">Loss or gain</th>
             <th>Operator</th>
           </tr>
         </thead>
@@ -71,7 +71,7 @@ export function DistillationReport() {
               <td className="num">{r.hearts_laa_gal.toFixed(2)}</td>
               <td className="num">{r.alcohol_charged_gal != null ? `${r.alcohol_charged_gal.toFixed(2)} gal` : '—'}</td>
               <td className="num">{r.alcohol_collected_gal != null ? `${r.alcohol_collected_gal.toFixed(2)} gal` : '—'}</td>
-              <td className="num">{r.alcohol_loss_gal != null ? formatDistillationLossGal(r.alcohol_loss_gal) : '—'}</td>
+              <td className="num">{r.alcohol_loss_gal != null ? formatDistillationAlcoholResult(r.alcohol_loss_gal) : '—'}</td>
               <td>{r.operator}</td>
             </tr>
           ))}
