@@ -83,6 +83,7 @@ describe('volume change groups', () => {
       row({ key: 'loss', kind: VOLUME_CHANGE_KINDS.distillation, gallons: -1.5 }),
       row({ key: 'left', kind: VOLUME_CHANGE_KINDS.leftovers, gallons: 10 }),
       row({ key: 'sent', kind: VOLUME_CHANGE_KINDS.bottlingToTank, gallons: 4 }),
+      row({ key: 'water', kind: VOLUME_CHANGE_KINDS.wateredDown, gallons: 12, abvPoints: -20 }),
     ];
     expect(totalVolumeVarianceGal(rows)).toBe(-0.45);
     expect(formatTankVolumeVariance(totalVolumeVarianceGal(rows))).toBe('-0.45 gal');

@@ -645,6 +645,7 @@ function runMigrations(): void {
   clearAllBlendRecipesOnce();
   migrateStillageDiscardTransfers();
   migrateHoldingTankVolumeVariances();
+  migrateHoldingTankDilutions();
   migrateGinRuns();
   db.run(`
     UPDATE floor_equipment
@@ -717,6 +718,28 @@ function migrateGinRuns(): void {
 }
 
 /** Stillage leaving a stillage tank can be discarded, so the destination tank is optional. */
+/** Water added to alcohol that stays in the same tank. */
+function migrateHoldingTankDilutions(): void {
+  if (!db) return;
+  db.run(`
+    CREATE TABLE IF NOT EXISTS holding_tank_dilutions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tank_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
+      spirit_volume_gal REAL NOT NULL,
+      spirit_abv REAL NOT NULL,
+      water_gal REAL NOT NULL,
+      finished_volume_gal REAL NOT NULL,
+      finished_abv REAL NOT NULL,
+      recorded_at TEXT NOT NULL,
+      notes TEXT NOT NULL DEFAULT '',
+      changed_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  db.run('CREATE INDEX IF NOT EXISTS idx_tank_dilutions_tank ON holding_tank_dilutions(tank_equipment_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_tank_dilutions_date ON holding_tank_dilutions(recorded_at)');
+}
+
 function migrateHoldingTankVolumeVariances(): void {
   if (!db) return;
   db.run(`

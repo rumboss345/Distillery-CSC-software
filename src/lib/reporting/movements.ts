@@ -7,6 +7,7 @@ export type LiquidMovementType =
   | 'distillation_cut'
   | 'still_charge'
   | 'tank_transfer'
+  | 'tank_dilution'
   | 'blend_output'
   | 'blend_draw'
   | 'bottling'
@@ -293,6 +294,41 @@ export function buildLiquidMovements(range: ReportDateRange): LiquidMovementRow[
       user_label: '—',
       reference: `Barrel fill ${f.id}`,
       notes: '',
+    });
+  }
+
+  const dilutions = queryAll<{
+    id: number;
+    recorded_at: string;
+    water_gal: number;
+    spirit_abv: number;
+    finished_abv: number;
+    finished_volume_gal: number;
+    tank_name: string;
+    changed_by: string | null;
+  }>(`
+    SELECT d.id, d.recorded_at, d.water_gal, d.spirit_abv, d.finished_abv,
+           d.finished_volume_gal, e.name as tank_name, d.changed_by
+    FROM holding_tank_dilutions d
+    JOIN floor_equipment e ON e.id = d.tank_equipment_id
+    WHERE d.water_gal > 0
+  `);
+  for (const row of dilutions) {
+    if (!eventInReportRange(row.recorded_at, range)) continue;
+    rows.push({
+      row_key: `dilution:${row.id}`,
+      occurred_at: row.recorded_at,
+      movement_type: 'tank_dilution',
+      source_label: 'Water',
+      dest_label: row.tank_name,
+      product_liquid: 'Proofing water',
+      batch_ref: '',
+      volume_gal: row.water_gal,
+      abv: 0,
+      laa_gal: 0,
+      user_label: row.changed_by?.trim() || '—',
+      reference: `Watered down ${row.id}`,
+      notes: `${row.spirit_abv.toFixed(1)}% ABV to ${row.finished_abv.toFixed(1)}% ABV, tank finishes at ${row.finished_volume_gal.toFixed(1)} gal`,
     });
   }
 
