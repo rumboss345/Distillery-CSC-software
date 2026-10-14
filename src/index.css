@@ -2002,13 +2002,19 @@ tr.volume-change-kind:hover td {
   flex: 1;
 }
 
-.quick-add-ingredient {
-  margin-top: 0.35rem;
+.ingredient-select select,
+.ingredient-select input {
+  width: 100%;
 }
 
-.quick-add-ingredient .field-hint,
+.ingredient-select input,
+.ingredient-select .field-hint,
 .quick-add-error {
   margin: 0.3rem 0 0;
+}
+
+.ingredient-select .field-hint,
+.quick-add-error {
   font-size: 0.8rem;
 }
 

@@ -39,7 +39,7 @@ import { AssigneeCell, AssigneeSelect } from '../components/AssigneeSelect';
 import { DatePicker } from '../components/DatePicker';
 import { AdminCredentialConfirmModal } from '../components/AdminCredentialConfirmModal';
 import { Modal } from '../components/Modal';
-import { QuickAddIngredient } from '../components/QuickAddIngredient';
+import { IngredientSelect } from '../components/IngredientSelect';
 import { useAuth } from '../context/AuthContext';
 import { limitAbvInput, limitAbvNumber, MAX_ENTERED_ABV } from '../lib/abv-limits';
 import { defaultAssignee } from '../lib/assignee';
@@ -2125,28 +2125,38 @@ export function Blending() {
                   <div className="wizard-inventory-row">
                     <span>{ing.name || typeLabel}</span>
                     <input placeholder="Lot #" value={ing.lot_number ?? ''} onChange={(e) => updateIngredient(index, { lot_number: e.target.value })} />
-                    <select
-                      value={ing.inventory_item_id ?? ''}
-                      onChange={(e) => updateIngredient(index, { inventory_item_id: e.target.value ? parseInt(e.target.value) : null })}
-                    >
-                      <option value="">— Inventory item —</option>
-                      {inventoryItems.map((item) => (
-                        <option key={item.id} value={item.id}>{item.name} ({item.quantity} {item.unit})</option>
-                      ))}
-                    </select>
+                    {quickCategory ? (
+                      <IngredientSelect
+                        testId={`wizard-ingredient-${index}`}
+                        value={ing.inventory_item_id != null ? String(ing.inventory_item_id) : ''}
+                        emptyLabel="— Inventory item —"
+                        noun={ing.ingredient_type === 'other' ? 'additive' : (typeLabel?.toLowerCase() ?? 'ingredient')}
+                        category={quickCategory}
+                        unit={ing.unit}
+                        options={inventoryItems.map((item) => ({
+                          value: String(item.id),
+                          label: `${item.name} (${item.quantity} ${item.unit})`,
+                        }))}
+                        onSelect={(rawId) => updateIngredient(index, {
+                          inventory_item_id: rawId ? parseInt(rawId, 10) : null,
+                        })}
+                        onAdded={(item) => updateIngredient(index, {
+                          inventory_item_id: item.id,
+                          name: ing.name.trim() ? ing.name : item.name,
+                        })}
+                      />
+                    ) : (
+                      <select
+                        value={ing.inventory_item_id ?? ''}
+                        onChange={(e) => updateIngredient(index, { inventory_item_id: e.target.value ? parseInt(e.target.value) : null })}
+                      >
+                        <option value="">— Inventory item —</option>
+                        {inventoryItems.map((item) => (
+                          <option key={item.id} value={item.id}>{item.name} ({item.quantity} {item.unit})</option>
+                        ))}
+                      </select>
+                    )}
                   </div>
-                  {quickCategory && (
-                    <QuickAddIngredient
-                      category={quickCategory}
-                      unit={ing.unit}
-                      label={ing.ingredient_type === 'other' ? 'additive' : (typeLabel?.toLowerCase() ?? 'ingredient')}
-                      testId={`wizard-ingredient-${index}`}
-                      onAdded={(item) => updateIngredient(index, {
-                        inventory_item_id: item.id,
-                        name: ing.name.trim() ? ing.name : item.name,
-                      })}
-                    />
-                  )}
                 </div>
               );
             })}

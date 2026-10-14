@@ -1,3 +1,16 @@
+/** Sentinel value for the “Add new …” choice inside an ingredient menu. */
+export const ADD_NEW_INGREDIENT_VALUE = '__add_new_ingredient__';
+
+/** Last option in an ingredient menu, for example “Add new sugar…”. */
+export function addNewIngredientLabel(noun: string): string {
+  const trimmed = noun.trim() || 'ingredient';
+  return `Add new ${trimmed}…`;
+}
+
+export function isAddNewIngredientChoice(value: string): boolean {
+  return value === ADD_NEW_INGREDIENT_VALUE;
+}
+
 /** Trim an ingredient name, or explain why it cannot be saved. */
 export function preparedIngredientName(name: string): string {
   const trimmed = name.trim();

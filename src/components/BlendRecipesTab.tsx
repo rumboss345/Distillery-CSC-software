@@ -13,7 +13,7 @@ import {
   useRefreshKey,
 } from '../db/queries';
 import { Modal } from './Modal';
-import { QuickAddIngredient } from './QuickAddIngredient';
+import { IngredientSelect } from './IngredientSelect';
 import { ProofingWaterConfirm } from './ProofingWaterConfirm';
 import {
   BLEND_INGREDIENT_TYPES,
@@ -842,23 +842,25 @@ export function BlendRecipesTab({
                           {!isWater && (
                             <div className="form-group">
                               <label>Inventory item</label>
-                              <select
-                                value={ingredient.inventory_item_id ?? ''}
-                                onChange={(e) => handleInventorySelect(index, e.target.value)}
-                              >
-                                <option value="">— Select item —</option>
-                                {inventoryOptions.map((item) => (
-                                  <option key={item.id} value={item.id}>
-                                    {item.name} ({item.quantity} {item.unit})
-                                  </option>
-                                ))}
-                              </select>
-                              {inventoryCategoriesForBlendType(ingredient.ingredient_type)[0] && (
-                                <QuickAddIngredient
+                              {inventoryCategoriesForBlendType(ingredient.ingredient_type)[0] ? (
+                                <IngredientSelect
+                                  testId={`blend-ingredient-${index}`}
+                                  value={ingredient.inventory_item_id != null ? String(ingredient.inventory_item_id) : ''}
+                                  emptyLabel="— Select item —"
+                                  noun={ingredient.ingredient_type === 'other' ? 'additive' : (BLEND_INGREDIENT_TYPES.find((type) => type.value === ingredient.ingredient_type)?.label.toLowerCase() ?? 'ingredient')}
                                   category={inventoryCategoriesForBlendType(ingredient.ingredient_type)[0]}
                                   unit={ingredient.unit}
-                                  label={ingredient.ingredient_type === 'other' ? 'additive' : (BLEND_INGREDIENT_TYPES.find((type) => type.value === ingredient.ingredient_type)?.label.toLowerCase() ?? 'ingredient')}
-                                  testId={`blend-ingredient-${index}`}
+                                  options={inventoryOptions.map((item) => ({
+                                    value: String(item.id),
+                                    label: `${item.name} (${item.quantity} ${item.unit})`,
+                                  }))}
+                                  orphanLabel={
+                                    ingredient.inventory_item_id != null
+                                    && !inventoryOptions.some((item) => item.id === ingredient.inventory_item_id)
+                                      ? ingredient.name
+                                      : undefined
+                                  }
+                                  onSelect={(rawId) => handleInventorySelect(index, rawId)}
                                   onAdded={(item) => updateIngredient(index, {
                                     inventory_item_id: item.id,
                                     name: item.name,
@@ -868,6 +870,18 @@ export function BlendRecipesTab({
                                     density_assumption: null,
                                   })}
                                 />
+                              ) : (
+                                <select
+                                  value={ingredient.inventory_item_id ?? ''}
+                                  onChange={(e) => handleInventorySelect(index, e.target.value)}
+                                >
+                                  <option value="">— Select item —</option>
+                                  {inventoryOptions.map((item) => (
+                                    <option key={item.id} value={item.id}>
+                                      {item.name} ({item.quantity} {item.unit})
+                                    </option>
+                                  ))}
+                                </select>
                               )}
                             </div>
                           )}
