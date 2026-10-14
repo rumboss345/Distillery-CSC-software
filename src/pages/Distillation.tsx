@@ -7,7 +7,7 @@ import { limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
 import { defaultAssignee } from '../lib/assignee';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
 import { formatDateDisplay, formatRecordedAt } from '../lib/date-input';
-import { formatDistillationLossGal, formatDistillationLossSummary } from '../lib/distillation-loss';
+import { formatDistillationAlcoholResult, formatDistillationLossSummary } from '../lib/distillation-loss';
 import { latestCompleted } from '../lib/recent-completed';
 import {
   getDistillationRuns,
@@ -990,7 +990,7 @@ export function Distillation() {
                             {r.charge_volume_gal} gal
                             {r.charge_abv != null ? ` @ ${r.charge_abv.toFixed(1)}%${r.alcohol_charge_basis === 'estimated_brix' ? ' est.' : ''}` : ''}
                             {r.alcohol_loss_gal != null && (
-                              <div className="field-hint">Loss {formatDistillationLossGal(r.alcohol_loss_gal)} alcohol</div>
+                              <div className="field-hint">{formatDistillationAlcoholResult(r.alcohol_loss_gal)} alcohol</div>
                             )}
                             {spiritChargeDetail(r) && (
                               <div className="field-hint">{spiritChargeDetail(r)}</div>
