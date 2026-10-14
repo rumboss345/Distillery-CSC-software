@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   distillationAlcoholBalance,
   formatDistillationLossSummary,
+  stillageResidualAbv,
   washChargeAbvFromBrix,
 } from './distillation-loss';
 
@@ -71,6 +72,24 @@ describe('distillationAlcoholBalance', () => {
     expect(balance.lossGal).toBeCloseTo(3.4, 4);
     expect(formatDistillationLossSummary(balance)).toContain('Loss 3.40 gal alcohol');
     expect(formatDistillationLossSummary(balance)).toContain('estimated from Brix');
+  });
+});
+
+describe('stillageResidualAbv', () => {
+  it('turns alcohol left in the stillage into an ABV', () => {
+    expect(stillageResidualAbv(7.2, 90)).toBeCloseTo(8, 5);
+  });
+
+  it('caps the strength at the stillage volume', () => {
+    expect(stillageResidualAbv(10, 5)).toBeCloseTo(100, 5);
+  });
+
+  it('stays blank when there is no stillage alcohol to report', () => {
+    expect(stillageResidualAbv(0, 90)).toBeNull();
+    expect(stillageResidualAbv(-1.2, 90)).toBeNull();
+    expect(stillageResidualAbv(4, 0)).toBeNull();
+    expect(stillageResidualAbv(null, 90)).toBeNull();
+    expect(stillageResidualAbv(4, null)).toBeNull();
   });
 });
 

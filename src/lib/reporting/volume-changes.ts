@@ -2,7 +2,7 @@ import { queryAll } from '../../db/database';
 import { getBlendProducts, getBottlingRuns, getHoldingTankVolumeVariances } from '../../db/queries';
 import { compareStoredDatesDesc } from '../date-input';
 import { reportedBottlingVarianceGal } from '../bottling-lines';
-import { formatDistillationLossGal } from '../distillation-loss';
+import { formatDistillationLossGal, stillageResidualAbv } from '../distillation-loss';
 import { formatTankVolumeVariance, tankReadingChanged } from '../tank-volume-variance';
 import { buildBlendReportRows } from './blend-rows';
 import { buildDistillationReportRows } from './distillation-rows';
@@ -49,7 +49,7 @@ export interface VolumeChangeRow {
    * amounts are positive gallons moved, and they stay out of the summary total.
    */
   gallons: number | null;
-  /** Signed ABV percentage points. Set volume and blend differences count on the summary. */
+  /** Signed ABV percentage points. Set volume, blend differences, and stillage left after a distillation count on the summary. */
   abvPoints: number | null;
 }
 
@@ -202,16 +202,20 @@ export function buildVolumeChangeRows(range: ReportDateRange): VolumeChangeRow[]
       : run.alcohol_charge_basis === 'proofed_spirit'
         ? 'Collected alcohol compared with the spirit charged'
         : 'Collected alcohol compared with the alcohol charged';
+    const stillageAbv = stillageResidualAbv(run.alcohol_loss_gal, run.stillage_volume_gal);
+    const stillageNote = stillageAbv != null && run.stillage_volume_gal != null
+      ? `, stillage ${run.stillage_volume_gal.toFixed(1)} gal at ${stillageAbv.toFixed(1)}% ABV`
+      : '';
     rows.push({
       key: `distillation:${run.run_id}`,
       occurred_at: run.run_date,
       kind: VOLUME_CHANGE_KINDS.distillation,
       place: run.batch_number,
-      change: `Loss ${formatDistillationLossGal(run.alcohol_loss_gal)} alcohol (${(run.alcohol_charged_gal ?? 0).toFixed(2)} gal charged, ${(run.alcohol_collected_gal ?? 0).toFixed(2)} gal collected)`,
+      change: `Loss ${formatDistillationLossGal(run.alcohol_loss_gal)} alcohol (${(run.alcohol_charged_gal ?? 0).toFixed(2)} gal charged, ${(run.alcohol_collected_gal ?? 0).toFixed(2)} gal collected)${stillageNote}`,
       why,
       who: shown(run.operator === '—' ? '' : run.operator),
       gallons: -run.alcohol_loss_gal,
-      abvPoints: null,
+      abvPoints: stillageAbv == null ? null : -stillageAbv,
     });
   }
 
@@ -263,7 +267,7 @@ export function totalVolumeVarianceGal(rows: VolumeChangeRow[]): number {
   return Math.round(total * 1000) / 1000;
 }
 
-/** Net ABV percentage points from set volume and blend rows. Bottling to a tank is not included. */
+/** Net ABV percentage points from set volume, blend rows, and stillage left after distillation. Bottling to a tank is not included. */
 export function totalVolumeVarianceAbv(rows: VolumeChangeRow[]): number {
   let total = 0;
   for (const row of rows) {

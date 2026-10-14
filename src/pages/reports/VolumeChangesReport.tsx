@@ -19,7 +19,7 @@ export function VolumeChangesReport() {
   return (
     <ReportTableShell
       title="Volume changes"
-      description="Grouped by kind. Fermenter leftovers, set tank volumes and ABV, bottling variances, blend differences, and distillation alcohol loss. The summary Volume variances box totals the gallons and the ABV changes. Gallons sent to a tank are not a loss and stay out of that total. A distillation loss is the alcohol charged minus the alcohol collected."
+      description="Grouped by kind. Fermenter leftovers, set tank volumes and ABV, bottling variances, blend differences, and distillation alcohol loss. The summary Volume variances box totals the gallons and the ABV changes. Gallons sent to a tank are not a loss and stay out of that total. A distillation loss is the alcohol charged minus the alcohol collected. Alcohol left in the stillage is part of that loss, and its ABV is included in the summary."
       periodLabel={range.label}
       csvFilename={`volume-changes-${range.from ?? 'all'}`}
       csvHeaders={csvHeaders}
