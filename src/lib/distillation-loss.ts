@@ -87,6 +87,23 @@ export function distillationAlcoholBalance(input: {
   };
 }
 
+/**
+ * ABV of the alcohol left in the stillage.
+ * The alcohol not collected is the loss. When stillage volume is known, that
+ * loss has a strength: alcohol gallons divided by stillage gallons.
+ */
+export function stillageResidualAbv(
+  alcoholLossGal: number | null | undefined,
+  stillageVolumeGal: number | null | undefined,
+): number | null {
+  if (alcoholLossGal == null || stillageVolumeGal == null) return null;
+  if (!(alcoholLossGal > 0.01) || !(stillageVolumeGal > 0.01)) return null;
+  const alcoholGal = Math.min(alcoholLossGal, stillageVolumeGal);
+  const abv = (alcoholGal / stillageVolumeGal) * 100;
+  if (!Number.isFinite(abv) || abv <= 0) return null;
+  return abv;
+}
+
 export function formatDistillationLossGal(lossGal: number): string {
   const rounded = Math.round(lossGal * 100) / 100;
   const abs = Math.abs(rounded).toFixed(2);

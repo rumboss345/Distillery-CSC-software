@@ -102,4 +102,14 @@ describe('volume change groups', () => {
     const setGroup = groupVolumeChanges(rows).find((group) => group.kind === VOLUME_CHANGE_KINDS.setVolume);
     expect(setGroup?.totalLabel).toBe('+0.20 gal, +1.5% ABV');
   });
+
+  it('includes the ABV of alcohol left in the stillage in the summary', () => {
+    const rows = [
+      row({ key: 'set', kind: VOLUME_CHANGE_KINDS.setVolume, gallons: 0.2, abvPoints: 1.5 }),
+      row({ key: 'loss', kind: VOLUME_CHANGE_KINDS.distillation, gallons: -7.2, abvPoints: -8 }),
+    ];
+    expect(totalVolumeVarianceGal(rows)).toBeCloseTo(-7, 5);
+    expect(totalVolumeVarianceAbv(rows)).toBeCloseTo(-6.5, 5);
+    expect(formatVolumeVarianceAbv(totalVolumeVarianceAbv(rows))).toBe('-6.5% ABV');
+  });
 });

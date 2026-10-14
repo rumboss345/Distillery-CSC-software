@@ -1245,8 +1245,16 @@ function computeHoldingTankContents(
       AND final_volume_gal > 0
   `, [tankId]);
 
-  const stillageIns = queryOne<{ volume_gal: number }>(`
-    SELECT COALESCE(SUM(stillage_volume_gal), 0) as volume_gal
+  const stillageIns = queryOne<{ volume_gal: number; gpa: number }>(`
+    SELECT
+      COALESCE(SUM(stillage_volume_gal), 0) as volume_gal,
+      COALESCE(SUM(
+        CASE
+          WHEN COALESCE(alcohol_loss_gal, 0) > 0 AND COALESCE(stillage_volume_gal, 0) > 0
+          THEN MIN(alcohol_loss_gal, stillage_volume_gal)
+          ELSE 0
+        END
+      ), 0) as gpa
     FROM distillation_runs
     WHERE stillage_holding_tank_equipment_id = ?
       AND status = 'complete'
@@ -1265,7 +1273,7 @@ function computeHoldingTankContents(
   const volumeOut = (runOuts?.volume_gal ?? 0) + (blendOuts?.volume_gal ?? 0)
     + (bottlingOuts?.volume_gal ?? 0) + (barrelFillOuts?.volume_gal ?? 0) + (transferOuts?.volume_gal ?? 0);
   const gpaIn = (ins?.gpa ?? 0) + (transferIns?.gpa ?? 0) + (blendIns?.gpa ?? 0)
-    + (bottlingReturns?.gpa ?? 0);
+    + (bottlingReturns?.gpa ?? 0) + (stillageIns?.gpa ?? 0);
   const gpaOut = (runOuts?.gpa ?? 0) + (blendOuts?.gpa ?? 0)
     + (bottlingOuts?.gpa ?? 0) + (barrelFillOuts?.gpa ?? 0) + (transferOuts?.gpa ?? 0);
   const productionVolume = volumeIn - volumeOut;
@@ -3307,6 +3315,62 @@ function applyFermenterChargeChanges(
   }
 }
 
+/**
+ * A fermenter chosen for a low wine or heavy rum run is finished.
+ * Mark that fermentation complete so the fermentation report lists it,
+ * even when the wash was still fermenting.
+ */
+export function completeFermentationsSelectedForDistillation(): void {
+  const selected = queryAll<{ mash_batch_id: number; floor_equipment_id: number }>(`
+    SELECT DISTINCT source_mash_batch_id as mash_batch_id,
+           source_fermenter_equipment_id as floor_equipment_id
+    FROM distillation_runs
+    WHERE run_type IN ('wash', 'heavy_rum')
+      AND source_mash_batch_id IS NOT NULL
+      AND source_fermenter_equipment_id IS NOT NULL
+  `);
+  const mashIds = new Set<number>();
+  for (const row of selected) {
+    const assignment = queryOne<{ id: number; status: string | null }>(
+      `SELECT id, status FROM mash_fermenter_assignments
+       WHERE mash_batch_id = ? AND floor_equipment_id = ?`,
+      [row.mash_batch_id, row.floor_equipment_id],
+    );
+    if (!assignment || assignmentStatus(assignment.status) !== 'fermenting') continue;
+    const batch = getMashBatch(row.mash_batch_id);
+    if (!batch || batch.status === 'discarded') continue;
+    runQuery(
+      `UPDATE mash_fermenter_assignments SET status = 'complete' WHERE id = ?`,
+      [assignment.id],
+    );
+    recordStatusDateLog({
+      recordKind: 'fermentation',
+      recordId: row.mash_batch_id,
+      floorEquipmentId: row.floor_equipment_id,
+      previousStatus: 'fermenting',
+      status: 'complete',
+      changedBy: batch.assigned_user_name,
+    });
+    mashIds.add(row.mash_batch_id);
+  }
+  for (const mashId of mashIds) {
+    const batch = getMashBatch(mashId);
+    if (!batch || batch.status === 'discarded' || batch.status === 'complete') continue;
+    const statuses = getMashFermenterAssignments(mashId).map((assignment) => assignmentStatus(assignment.status));
+    const next = mashStatusFromFermentations(batch.status, statuses);
+    if (next === batch.status) continue;
+    runQuery(`UPDATE mash_batches SET status = ? WHERE id = ?`, [next, mashId]);
+    recordStatusDateLog({
+      recordKind: 'wash',
+      recordId: mashId,
+      previousStatus: batch.status,
+      status: next,
+      changedBy: batch.assigned_user_name,
+    });
+  }
+  if (mashIds.size > 0) syncFermenterAndStillStatuses();
+}
+
 function maybeCompleteMashAfterCharge(mashBatchId: number): void {
   const remaining = queryOne<{ count: number }>(
     'SELECT COUNT(*) as count FROM mash_fermenter_assignments WHERE mash_batch_id = ?',
@@ -3838,6 +3902,13 @@ export function saveDistillationRun(
     );
   }
 
+  if (
+    isFermenterSourcedRun(runType)
+    && run.source_mash_batch_id
+    && run.source_fermenter_equipment_id
+  ) {
+    completeFermentationsSelectedForDistillation();
+  }
   applyFermenterChargeChanges(run, runType, id, previousRun);
   if (
     id

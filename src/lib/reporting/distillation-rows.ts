@@ -23,6 +23,7 @@ export interface DistillationReportRow {
   alcohol_collected_gal: number | null;
   alcohol_loss_gal: number | null;
   alcohol_charge_basis: AlcoholChargeBasis | null;
+  stillage_volume_gal: number | null;
   operator: string;
   notes: string;
 }
@@ -44,6 +45,7 @@ export function buildDistillationReportRows(range: ReportDateRange): Distillatio
     alcohol_collected_gal: number | null;
     alcohol_loss_gal: number | null;
     alcohol_charge_basis: AlcoholChargeBasis | null;
+    stillage_volume_gal: number | null;
     assigned_user_name: string | null;
     notes: string;
     fermenter_name: string | null;
@@ -57,6 +59,7 @@ export function buildDistillationReportRows(range: ReportDateRange): Distillatio
     SELECT r.id, r.batch_number, r.run_date, r.still_name, r.run_type, r.status,
            r.charge_volume_gal, r.charge_abv, r.proof_spirit_gal, r.proof_spirit_abv, r.proof_water_gal,
            r.alcohol_charged_gal, r.alcohol_collected_gal, r.alcohol_loss_gal, r.alcohol_charge_basis,
+           r.stillage_volume_gal,
            r.assigned_user_name, r.notes, r.source_mash_batch_id, r.source_fermenter_equipment_id,
            fe.name as fermenter_name, src.name as source_tank_name, m.batch_number as mash_batch,
            COALESCE(m.actual_brix, m.target_brix) as start_brix, m.actual_final_brix as final_brix
@@ -175,6 +178,7 @@ export function buildDistillationReportRows(range: ReportDateRange): Distillatio
       alcohol_collected_gal: alcoholCollected,
       alcohol_loss_gal: alcoholLoss,
       alcohol_charge_basis: alcoholBasis,
+      stillage_volume_gal: r.stillage_volume_gal,
       operator: r.assigned_user_name?.trim() || '—',
       notes: r.notes?.trim() || '',
     });
