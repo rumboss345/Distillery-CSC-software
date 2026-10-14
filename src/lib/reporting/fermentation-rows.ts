@@ -19,6 +19,7 @@ export function buildFermentationHistoryRows(range: ReportDateRange): Fermentati
   const rows = queryAll<{
     mash_id: number;
     assignment_id: number | null;
+    floor_equipment_id: number | null;
     batch_number: string;
     recipe_name: string;
     fermenter_name: string | null;
@@ -28,7 +29,7 @@ export function buildFermentationHistoryRows(range: ReportDateRange): Fermentati
     row_status: string;
     assigned_user_name: string | null;
   }>(`
-    SELECT m.id as mash_id, a.id as assignment_id, m.batch_number, m.recipe_name,
+    SELECT m.id as mash_id, a.id as assignment_id, a.floor_equipment_id, m.batch_number, m.recipe_name,
            fe.name as fermenter_name, a.volume_gal, m.start_date, m.actual_brix,
            COALESCE(a.status, m.status) as row_status, m.assigned_user_name
     FROM mash_batches m
@@ -61,11 +62,13 @@ export function buildFermentationHistoryRows(range: ReportDateRange): Fermentati
     start_date: string;
     actual_brix: number | null;
     assigned_user_name: string | null;
+    run_date: string;
   }>(`
     SELECT m.id as mash_id, fe.id as fermenter_id, m.batch_number, m.recipe_name,
            fe.name as fermenter_name,
            SUM(r.charge_volume_gal) as volume_gal,
-           m.start_date, m.actual_brix, m.assigned_user_name
+           m.start_date, m.actual_brix, m.assigned_user_name,
+           MAX(r.run_date) as run_date
     FROM distillation_runs r
     JOIN mash_batches m ON m.id = r.source_mash_batch_id
     JOIN floor_equipment fe ON fe.id = r.source_fermenter_equipment_id
@@ -82,10 +85,29 @@ export function buildFermentationHistoryRows(range: ReportDateRange): Fermentati
     ORDER BY m.start_date DESC, m.id DESC, fe.id DESC
   `);
   const releasedMashIds = new Set(released.map((row) => row.mash_id));
+  const runDates = queryAll<{
+    mash_batch_id: number;
+    floor_equipment_id: number;
+    run_date: string;
+  }>(`
+    SELECT source_mash_batch_id as mash_batch_id,
+           source_fermenter_equipment_id as floor_equipment_id,
+           run_date
+    FROM distillation_runs
+    WHERE run_type IN ('wash', 'heavy_rum')
+      AND source_mash_batch_id IS NOT NULL
+      AND source_fermenter_equipment_id IS NOT NULL
+  `);
+  const datesFor = (mashId: number, fermenterId: number | null): string[] => runDates
+    .filter((run) => run.mash_batch_id === mashId && (fermenterId == null || run.floor_equipment_id === fermenterId))
+    .map((run) => run.run_date);
+  const listedInPeriod = (startDate: string, mashId: number, fermenterId: number | null) => (
+    eventInReportRange(startDate, range) || datesFor(mashId, fermenterId).some((date) => eventInReportRange(date, range))
+  );
 
   const listed = rows
     .filter((row) => !(row.assignment_id == null && releasedMashIds.has(row.mash_id)))
-    .filter((row) => eventInReportRange(row.start_date, range))
+    .filter((row) => listedInPeriod(row.start_date, row.mash_id, row.floor_equipment_id))
     .map((row) => ({
       key: row.assignment_id != null ? `assign-${row.assignment_id}` : `batch-${row.mash_id}`,
       batch_number: row.batch_number,
@@ -99,7 +121,7 @@ export function buildFermentationHistoryRows(range: ReportDateRange): Fermentati
     }));
 
   const charged = released
-    .filter((row) => eventInReportRange(row.start_date, range))
+    .filter((row) => listedInPeriod(row.start_date, row.mash_id, row.fermenter_id))
     .map((row) => ({
       key: `charged-${row.mash_id}-${row.fermenter_id}`,
       batch_number: row.batch_number,
