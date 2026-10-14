@@ -29,6 +29,17 @@ describe('collection vessel cut type rule', () => {
     expect(collectionVesselAcceptsIncomingCut('tails', 'hearts')).toBe(false);
   });
 
+  it('keeps the cut when proofing water raises the gauge', () => {
+    expect(storedCutTypeFromInflows(
+      [
+        { volumeGal: 8, cutType: null, proofingWater: true },
+        { volumeGal: 10, cutType: 'heads' },
+        { volumeGal: 5, cutType: 'tails' },
+      ],
+      18,
+    )).toBe('heads');
+  });
+
   it('rejects a vessel whose current gallons mix cut types', () => {
     expect(storedCutTypeFromInflows(
       [

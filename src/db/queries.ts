@@ -36,6 +36,7 @@ import {
 } from '../lib/equipment-maintenance';
 import { equipmentCleaningStatusLabel, equipmentNeedsCleaning, equipmentStatusWhenReturningToPlanned } from '../lib/equipment-cleaning';
 import { assertEnteredAbv } from '../lib/abv-limits';
+import { planTankProofDown } from '../lib/tank-proof-down';
 import { roundThousandths, tankReadingChanged, tankVolumeVarianceGal, volumeChangeReasonError } from '../lib/tank-volume-variance';
 import { EQUIPMENT_TYPES, isSpiritLedgerEquipmentType, resolveEquipmentIcon } from '../lib/equipment';
 import { equipmentTypeDeleteError, equipmentTypeNameError, normalizeEquipmentTypeName } from '../lib/equipment-type';
@@ -114,6 +115,7 @@ import type {
   DiscardedFermentation,
   HoldingTankTransfer,
   HoldingTankTransferView,
+  HoldingTankDilutionView,
   DistillationRun,
   DistillationRunBotanical,
   DistillationRunType,
@@ -1053,20 +1055,44 @@ export function getCollectionVesselStoredCutType(
       occurredAt: cut.occurred_at,
       volumeGal: cut.volume_gal,
       cutType: cut.cut_type as CutType,
+      proofingWater: false,
     })),
     ...transfers.map((transfer) => ({
       occurredAt: transfer.occurred_at,
       volumeGal: transfer.volume_gal,
       cutType: singleCutTypeOnEquipment(transfer.source_tank_equipment_id),
+      proofingWater: false,
     })),
     ...stillage.map((row) => ({
       occurredAt: row.occurred_at,
       volumeGal: row.volume_gal,
       cutType: null as CutType | null,
+      proofingWater: false,
     })),
+    ...proofingWaterInflows(vesselId),
   ].sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
 
   return storedCutTypeFromInflows(inflows, volume);
+}
+
+/** Gauge rise from watering down alcohol that stayed in the tank. */
+function proofingWaterInflows(tankId: number): {
+  occurredAt: string;
+  volumeGal: number;
+  cutType: CutType | null;
+  proofingWater: true;
+}[] {
+  return queryAll<{ volume_gal: number; occurred_at: string }>(`
+    SELECT (finished_volume_gal - spirit_volume_gal) as volume_gal, recorded_at as occurred_at
+    FROM holding_tank_dilutions
+    WHERE tank_equipment_id = ?
+      AND finished_volume_gal > spirit_volume_gal + 0.001
+  `, [tankId]).map((row) => ({
+    occurredAt: row.occurred_at,
+    volumeGal: row.volume_gal,
+    cutType: null,
+    proofingWater: true as const,
+  }));
 }
 
 /** Cut type from cuts on a vessel, without following transfers (avoids a lookup loop). */
@@ -1082,10 +1108,16 @@ function singleCutTypeOnEquipment(equipmentId: number): CutType | null {
      ORDER BY c.start_time DESC`,
     [equipmentId],
   );
-  const stored = storedCutTypeFromInflows(
-    cuts.map((cut) => ({ volumeGal: cut.volume_gal, cutType: cut.cut_type })),
-    volume,
-  );
+  const inflows = [
+    ...cuts.map((cut) => ({
+      occurredAt: cut.occurred_at,
+      volumeGal: cut.volume_gal,
+      cutType: cut.cut_type,
+      proofingWater: false,
+    })),
+    ...proofingWaterInflows(equipmentId),
+  ].sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
+  const stored = storedCutTypeFromInflows(inflows, volume);
   return stored === 'mixed' || stored == null ? null : stored;
 }
 
@@ -1268,8 +1300,16 @@ function computeHoldingTankContents(
     WHERE tank_equipment_id = ?
   `, [tankId]);
 
+  const dilutionIns = queryOne<{ volume_gal: number }>(`
+    SELECT COALESCE(SUM(finished_volume_gal - spirit_volume_gal), 0) as volume_gal
+    FROM holding_tank_dilutions
+    WHERE tank_equipment_id = ?
+      AND finished_volume_gal > spirit_volume_gal
+  `, [tankId]);
+
   const volumeIn = (ins?.volume_gal ?? 0) + (transferIns?.volume_gal ?? 0) + (blendIns?.volume_gal ?? 0)
-    + (stillageIns?.volume_gal ?? 0) + (bottlingReturns?.volume_gal ?? 0);
+    + (stillageIns?.volume_gal ?? 0) + (bottlingReturns?.volume_gal ?? 0)
+    + (dilutionIns?.volume_gal ?? 0);
   const volumeOut = (runOuts?.volume_gal ?? 0) + (blendOuts?.volume_gal ?? 0)
     + (bottlingOuts?.volume_gal ?? 0) + (barrelFillOuts?.volume_gal ?? 0) + (transferOuts?.volume_gal ?? 0);
   const gpaIn = (ins?.gpa ?? 0) + (transferIns?.gpa ?? 0) + (blendIns?.gpa ?? 0)
@@ -1683,22 +1723,37 @@ function tankVolumeInflows(tankId: number, seen: Set<number>): VesselInflow[] {
       volumeGal: cut.volume_gal,
       cutType: cut.cut_type,
       stillage: false,
+      proofingWater: false,
     })),
     ...transfers.map((transfer) => ({
       occurredAt: transfer.occurred_at,
       volumeGal: transfer.volume_gal,
       cutType: null as CutType | null,
       stillage: sourceHoldsStillage(transfer.source_tank_equipment_id, seen),
+      proofingWater: false,
     })),
     ...stillage.map((row) => ({
       occurredAt: row.occurred_at,
       volumeGal: row.volume_gal,
       cutType: null as CutType | null,
       stillage: true,
+      proofingWater: false,
+    })),
+    ...proofingWaterInflows(tankId).map((row) => ({
+      occurredAt: row.occurredAt,
+      volumeGal: row.volumeGal,
+      cutType: null as CutType | null,
+      stillage: false,
+      proofingWater: true,
     })),
   ]
     .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
-    .map(({ volumeGal, cutType, stillage }) => ({ volumeGal, cutType, stillage }));
+    .map(({ volumeGal, cutType, stillage, proofingWater }) => ({
+      volumeGal,
+      cutType,
+      stillage,
+      proofingWater,
+    }));
 }
 
 /**
@@ -2407,6 +2462,77 @@ export function deleteHoldingTankTransfer(id: number): void {
   syncHoldingTankStatuses();
 }
 
+export function getHoldingTankDilutions(): HoldingTankDilutionView[] {
+  return queryAll<HoldingTankDilutionView>(`
+    SELECT d.id, d.tank_equipment_id, e.name as tank_name,
+           d.spirit_volume_gal, d.spirit_abv, d.water_gal,
+           d.finished_volume_gal, d.finished_abv,
+           d.recorded_at, d.notes, d.changed_by, d.created_at
+    FROM holding_tank_dilutions d
+    JOIN floor_equipment e ON e.id = d.tank_equipment_id
+    ORDER BY d.recorded_at DESC, d.id DESC
+  `);
+}
+
+/** Add proofing water to alcohol that is already in a tank. The spirit stays in that tank. */
+export function saveHoldingTankDilution(input: {
+  tankEquipmentId: number;
+  targetAbvPercent?: number | null;
+  waterGal?: number | null;
+  recordedAt: string;
+  notes?: string;
+  changedBy: string;
+}): void {
+  assertSpiritTransferVessel(input.tankEquipmentId, 'destination');
+  assertEquipmentUsableForProduction(input.tankEquipmentId, 'Tank');
+  const tank = queryOne<{ name: string; equipment_type: string; capacity_gal: number }>(
+    'SELECT name, equipment_type, capacity_gal FROM floor_equipment WHERE id = ?',
+    [input.tankEquipmentId],
+  );
+  if (!tank) throw new Error('Tank not found.');
+  if (isStillageTankType(tank.equipment_type)) {
+    throw new Error(`${tank.name} holds stillage. Water down alcohol in a holding tank or collection vessel.`);
+  }
+  if (!input.recordedAt?.trim()) {
+    throw new Error('Enter the date of this watering down.');
+  }
+  if (input.targetAbvPercent != null) assertEnteredAbv(input.targetAbvPercent, 'Target ABV');
+  const contents = getHoldingTankContents(input.tankEquipmentId);
+  const plan = planTankProofDown({
+    spiritGal: contents.volume_gal,
+    spiritAbvPercent: contents.abv,
+    capacityGal: tank.capacity_gal,
+    tankName: tank.name,
+    targetAbvPercent: input.targetAbvPercent,
+    waterGal: input.waterGal,
+  });
+  if (!plan.ok) {
+    throw new Error(plan.message ?? 'Could not water down this tank.');
+  }
+  insertRow(
+    `INSERT INTO holding_tank_dilutions
+      (tank_equipment_id, spirit_volume_gal, spirit_abv, water_gal, finished_volume_gal, finished_abv, recorded_at, notes, changed_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      input.tankEquipmentId,
+      plan.spiritGal,
+      plan.spiritAbvPercent,
+      plan.waterGal,
+      plan.finishedGal,
+      plan.finishedAbvPercent,
+      input.recordedAt.trim(),
+      input.notes?.trim() ?? '',
+      input.changedBy.trim() || 'Unknown',
+    ],
+  );
+  syncHoldingTankStatuses();
+}
+
+export function deleteHoldingTankDilution(id: number): void {
+  runQuery('DELETE FROM holding_tank_dilutions WHERE id = ?', [id]);
+  syncHoldingTankStatuses();
+}
+
 export interface FermenterWithWash extends Omit<FermenterWashSourceOption, 'status'> {
   capacity_gal: number;
   status: FloorEquipment['status'];
@@ -2719,6 +2845,7 @@ export function emptyAllHoldingTanks(): {
     'SELECT COUNT(*) as count FROM holding_tank_transfers',
   )?.count ?? 0;
   runQuery('DELETE FROM holding_tank_transfers');
+  runQuery('DELETE FROM holding_tank_dilutions');
 
   const cutsCleared = queryOne<{ count: number }>(`
     SELECT COUNT(*) as count FROM distillation_cuts

@@ -93,6 +93,11 @@ export function ProcessEquipmentDetailPanel({
     && (visual.abv ?? 0) > 0
     && liquidClass !== 'stillage'
     && liquidClass !== 'dunder';
+  const canWaterDown = (isHoldingTank || equipment.equipment_type === 'collection_vessel')
+    && hasLiquid
+    && (visual.abv ?? 0) > 0
+    && liquidClass !== 'stillage'
+    && liquidClass !== 'dunder';
   const canChargeFermenter = equipment.equipment_type === 'fermenter'
     && !!equipment.active_batch_number
     && hasLiquid;
@@ -269,6 +274,11 @@ export function ProcessEquipmentDetailPanel({
             {isTransferVessel && hasLiquid && (
               <Link className="btn btn-sm btn-secondary" to={`/tank-transfer?source=${equipment.id}`}>
                 Transfer
+              </Link>
+            )}
+            {canWaterDown && (
+              <Link className="btn btn-sm btn-secondary" to={`/tank-transfer?waterDown=${equipment.id}`}>
+                Water down
               </Link>
             )}
             {canProcessSpirit && (

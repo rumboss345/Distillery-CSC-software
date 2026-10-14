@@ -11,6 +11,7 @@ import { eventInReportRange, type ReportDateRange } from './period';
 export const VOLUME_CHANGE_KINDS = {
   leftovers: 'Fermenter leftovers',
   setVolume: 'Set volume',
+  wateredDown: 'Watered down',
   bottlingVariance: 'Bottling variance',
   bottlingToTank: 'Bottling to tank',
   blend: 'Blend volume',
@@ -20,6 +21,7 @@ export const VOLUME_CHANGE_KINDS = {
 const KIND_ORDER: readonly string[] = [
   VOLUME_CHANGE_KINDS.leftovers,
   VOLUME_CHANGE_KINDS.setVolume,
+  VOLUME_CHANGE_KINDS.wateredDown,
   VOLUME_CHANGE_KINDS.bottlingVariance,
   VOLUME_CHANGE_KINDS.bottlingToTank,
   VOLUME_CHANGE_KINDS.blend,
@@ -219,6 +221,39 @@ export function buildVolumeChangeRows(range: ReportDateRange): VolumeChangeRow[]
     });
   }
 
+  const dilutions = queryAll<{
+    id: number;
+    tank_name: string;
+    spirit_volume_gal: number;
+    spirit_abv: number;
+    water_gal: number;
+    finished_volume_gal: number;
+    finished_abv: number;
+    recorded_at: string;
+    notes: string;
+    changed_by: string | null;
+  }>(`
+    SELECT d.id, e.name as tank_name, d.spirit_volume_gal, d.spirit_abv, d.water_gal,
+           d.finished_volume_gal, d.finished_abv, d.recorded_at, d.notes, d.changed_by
+    FROM holding_tank_dilutions d
+    JOIN floor_equipment e ON e.id = d.tank_equipment_id
+  `);
+  for (const row of dilutions) {
+    if (!eventInReportRange(row.recorded_at, range)) continue;
+    const added = row.finished_volume_gal - row.spirit_volume_gal;
+    rows.push({
+      key: `dilution:${row.id}`,
+      occurred_at: row.recorded_at,
+      kind: VOLUME_CHANGE_KINDS.wateredDown,
+      place: row.tank_name,
+      change: `${row.spirit_volume_gal.toFixed(2)} gal at ${row.spirit_abv.toFixed(1)}% ABV to ${row.finished_volume_gal.toFixed(2)} gal at ${row.finished_abv.toFixed(1)}% ABV with ${row.water_gal.toFixed(2)} gal water`,
+      why: shown(row.notes) === '—' ? 'Water added in the tank' : shown(row.notes),
+      who: shown(row.changed_by),
+      gallons: Math.round(added * 1000) / 1000,
+      abvPoints: Math.round((row.finished_abv - row.spirit_abv) * 1000) / 1000,
+    });
+  }
+
   rows.sort((a, b) => compareStoredDatesDesc(a.occurred_at, b.occurred_at));
   return rows;
 }
@@ -241,6 +276,9 @@ function formatKindTotal(kind: string, gallons: number): string {
   }
   if (kind === VOLUME_CHANGE_KINDS.bottlingToTank) {
     return `${gallons.toFixed(2)} gal sent`;
+  }
+  if (kind === VOLUME_CHANGE_KINDS.wateredDown) {
+    return `${gallons.toFixed(2)} gal added`;
   }
   return formatTankVolumeVariance(gallons);
 }

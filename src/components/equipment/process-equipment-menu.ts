@@ -86,6 +86,18 @@ export function buildProcessEquipmentContextMenu(
       to: `/tank-transfer?source=${source.id}`,
     });
   }
+  const canWaterDown = (isHoldingTank || source.equipment_type === 'collection_vessel')
+    && hasLiquid
+    && (source.abv ?? 0) > 0
+    && liquidClass !== 'stillage'
+    && liquidClass !== 'dunder';
+  if (canWaterDown) {
+    next.push({
+      key: 'water-down',
+      label: 'Water down',
+      to: `/tank-transfer?waterDown=${source.id}`,
+    });
+  }
   if (canProcessSpirit) {
     next.push(
       {

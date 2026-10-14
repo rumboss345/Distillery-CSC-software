@@ -359,6 +359,25 @@ export interface HoldingTankTransferView extends HoldingTankTransfer {
   dest_tank_name?: string;
 }
 
+/** Proofing water mixed into alcohol that stays in the same tank. */
+export interface HoldingTankDilution {
+  id: number;
+  tank_equipment_id: number;
+  spirit_volume_gal: number;
+  spirit_abv: number;
+  water_gal: number;
+  finished_volume_gal: number;
+  finished_abv: number;
+  recorded_at: string;
+  notes: string;
+  changed_by: string | null;
+  created_at: string;
+}
+
+export interface HoldingTankDilutionView extends HoldingTankDilution {
+  tank_name: string;
+}
+
 /** Gallons from a fermenter that cannot be used. The fermentation itself stays. */
 export interface DiscardedFermentation {
   id: number;

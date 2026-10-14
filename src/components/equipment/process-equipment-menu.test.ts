@@ -76,7 +76,8 @@ describe('buildProcessEquipmentContextMenu', () => {
       abv: 28,
       liquidName: 'Low wine',
     }));
-    expect(labels(spirit.next)).toEqual(['Transfer', 'Spirit run', 'Blend', 'Bottle']);
+    expect(labels(spirit.next)).toEqual(['Transfer', 'Water down', 'Spirit run', 'Blend', 'Bottle']);
+    expect(spirit.next.find((item) => item.key === 'water-down')?.to).toBe('/tank-transfer?waterDown=9');
 
     const stillage = buildProcessEquipmentContextMenu(source({
       id: 10,
@@ -87,6 +88,19 @@ describe('buildProcessEquipmentContextMenu', () => {
       liquidName: 'Stillage',
     }));
     expect(labels(stillage.next)).toEqual(['Transfer']);
+  });
+
+  it('offers water down for spirit already in a collection vessel', () => {
+    const menu = buildProcessEquipmentContextMenu(source({
+      id: 12,
+      name: 'Latina 500L',
+      equipment_type: 'collection_vessel',
+      volumeGal: 3.4,
+      abv: 78,
+      liquidName: 'Heads',
+    }));
+    expect(labels(menu.next)).toEqual(['Transfer', 'Water down']);
+    expect(menu.next[1]?.to).toBe('/tank-transfer?waterDown=12');
   });
 
   it('offers add cuts for a still with an open run, and maintenance when idle', () => {
