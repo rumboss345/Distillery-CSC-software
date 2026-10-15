@@ -8,6 +8,7 @@ const KIND_ORDER: CalendarActivityKind[] = [
   'distillation',
   'bottling',
   'blend',
+  'cleaning',
 ];
 
 export interface StaffDayGroup {

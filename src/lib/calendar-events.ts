@@ -30,7 +30,8 @@ export type CalendarActivityKind =
   | 'barrel'
   | 'bottling'
   | 'blend'
-  | 'transfer';
+  | 'transfer'
+  | 'cleaning';
 
 export type CalendarStatusCategory =
   | 'planned'
@@ -49,6 +50,7 @@ export const CALENDAR_KIND_LABELS: Record<CalendarActivityKind, string> = {
   bottling: 'Bottling',
   blend: 'Blending',
   transfer: 'Tank Transfer',
+  cleaning: 'Cleaning',
 };
 
 export const CALENDAR_KIND_ROUTES: Record<CalendarActivityKind, string> = {
@@ -59,6 +61,7 @@ export const CALENDAR_KIND_ROUTES: Record<CalendarActivityKind, string> = {
   bottling: '/bottling',
   blend: '/blending',
   transfer: '/tank-transfer',
+  cleaning: '/equipment-maintenance',
 };
 
 export const CALENDAR_STATUS_LABELS: Record<CalendarStatusCategory, string> = {
@@ -149,6 +152,10 @@ function toDateOnly(value: string | null | undefined): string | undefined {
 }
 
 export function calendarEventPath(event: Pick<CalendarEvent, 'kind' | 'recordId'>): string {
+  if (event.kind === 'cleaning') {
+    if (event.recordId == null) return CALENDAR_KIND_ROUTES.cleaning;
+    return `${CALENDAR_KIND_ROUTES.cleaning}?equipment=${event.recordId}`;
+  }
   const base = CALENDAR_KIND_ROUTES[event.kind];
   if (event.recordId == null) return base;
   return `${base}?record=${event.recordId}`;
