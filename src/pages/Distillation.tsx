@@ -882,10 +882,6 @@ export function Distillation() {
     refresh();
   };
 
-  const selectedTankContents = cutForm.holding_tank_equipment_id
-    ? getHoldingTankContents(cutForm.holding_tank_equipment_id)
-    : null;
-
   const tankOptionLabel = (tank: { id: number; name: string }) => tankDropdownLabel(tank.name, tank.id);
 
   const handleDeleteCut = (id: number) => {
@@ -1691,15 +1687,6 @@ export function Distillation() {
                 temperatureValue={cutForm.sample_temp_f}
                 onAbvChange={(observed_abv) => setCutForm({ ...cutForm, observed_abv })}
                 onTemperatureChange={(sample_temp_f) => setCutForm({ ...cutForm, sample_temp_f })}
-                blendPreview={
-                  selectedTankContents && selectedTankContents.volume_gal > 0
-                    ? {
-                      existingVolumeGal: selectedTankContents.volume_gal,
-                      existingAbv: selectedTankContents.abv,
-                      runCount: selectedTankContents.run_count,
-                    }
-                    : undefined
-                }
               />
             </div>
             <div className="form-group full-width">

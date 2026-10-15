@@ -19,7 +19,6 @@ export interface AbvVolumeTemperatureFieldsProps {
   blendPreview?: {
     existingVolumeGal: number;
     existingAbv: number;
-    runCount?: number;
   };
   showSugaredNote?: boolean;
 }
@@ -90,9 +89,6 @@ export function AbvVolumeTemperatureFields({
         <p className="field-hint abv-blend-preview">
           After adding {volumeGal.toFixed(1)} gal @ {correctedAbv.toFixed(1)}% ABV (60 °F):{' '}
           <strong>{(blendPreview!.existingVolumeGal + volumeGal).toFixed(1)} gal @ {blendedAbv.toFixed(1)}% ABV</strong>
-          {blendPreview!.runCount != null && (
-            <span> (from {blendPreview!.runCount + 1} runs)</span>
-          )}
         </p>
       )}
       {showSugaredNote && (
