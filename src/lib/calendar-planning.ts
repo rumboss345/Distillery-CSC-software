@@ -17,6 +17,7 @@ export const CALENDAR_PLAN_PERMISSION: Record<CalendarActivityKind, PermissionKe
   bottling: 'bottling',
   blend: 'blending',
   transfer: 'distillation',
+  cleaning: 'equipment',
 };
 
 export function isValidCalendarPlanDate(value: string): boolean {

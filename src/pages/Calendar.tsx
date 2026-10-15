@@ -19,7 +19,10 @@ import {
 } from 'date-fns';
 import { DatePicker } from '../components/DatePicker';
 import { StatusBadge } from '../components/StatusBadge';
+import { getTankCleaningLog } from '../db/queries';
 import { isIsoDate } from '../lib/date-input';
+import { localIsoDate } from '../lib/planned-event-date';
+import { tankCleaningStaffEvents } from '../lib/tank-cleaning-staff';
 import {
   ALL_CALENDAR_KINDS,
   ALL_CALENDAR_PROGRESS,
@@ -91,9 +94,16 @@ export function Calendar() {
     [weekStart],
   );
 
+  const tankCleaningEvents = useMemo(
+    () => tankCleaningStaffEvents(getTankCleaningLog(), selectedDate, localIsoDate()),
+    [selectedDate],
+  );
   const selectedEvents = useMemo(
-    () => filteredEvents.filter((event) => eventOccursOnDate(event, selectedDate)),
-    [filteredEvents, selectedDate],
+    () => [
+      ...filteredEvents.filter((event) => eventOccursOnDate(event, selectedDate)),
+      ...tankCleaningEvents,
+    ],
+    [filteredEvents, selectedDate, tankCleaningEvents],
   );
 
   const weekRange = useMemo(() => {
@@ -102,10 +112,7 @@ export function Calendar() {
     return { start, end };
   }, [weekStart]);
 
-  const dayEvents = useMemo(
-    () => filteredEvents.filter((event) => eventOccursOnDate(event, selectedDate)),
-    [filteredEvents, selectedDate],
-  );
+  const dayEvents = selectedEvents;
 
   const periodLabel = useMemo(() => {
     if (viewMode === 'day') return format(parseISO(selectedDate), 'EEEE, MMMM d, yyyy');

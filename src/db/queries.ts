@@ -6008,6 +6008,47 @@ export function getEquipmentMaintenanceReportLog(): EquipmentMaintenanceLogView[
   return queryAll(EQUIPMENT_MAINTENANCE_LOG_SELECT);
 }
 
+/** Tank cleaning log rows for the daily staff sheet. */
+export function getTankCleaningLog(): {
+  id: number;
+  equipmentId: number;
+  equipmentName: string;
+  equipmentType: string;
+  eventType: 'needs_cleaning' | 'marked_cleaned';
+  createdAt: string;
+  recordedBy: string;
+  status: string;
+}[] {
+  return queryAll<{
+    id: number;
+    equipment_id: number;
+    equipment_name: string;
+    equipment_type: string;
+    event_type: 'needs_cleaning' | 'marked_cleaned';
+    created_at: string;
+    recorded_by: string;
+    status: string;
+  }>(`
+    SELECT l.id, l.floor_equipment_id as equipment_id, fe.name as equipment_name,
+           fe.equipment_type, l.event_type, l.created_at,
+           l.recorded_by_user_name as recorded_by, fe.status
+    FROM equipment_maintenance_log l
+    JOIN floor_equipment fe ON fe.id = l.floor_equipment_id
+    WHERE l.event_type IN ('needs_cleaning', 'marked_cleaned')
+      AND fe.equipment_type IN ('mash_tun', 'holding_tank', 'stillage_tank', 'collection_vessel')
+    ORDER BY l.created_at, l.id
+  `).map((row) => ({
+    id: row.id,
+    equipmentId: row.equipment_id,
+    equipmentName: row.equipment_name,
+    equipmentType: row.equipment_type,
+    eventType: row.event_type,
+    createdAt: row.created_at,
+    recordedBy: row.recorded_by,
+    status: row.status,
+  }));
+}
+
 export function updateEquipmentMaintenance(
   equipmentId: number,
   maintenance_status: EquipmentMaintenanceStatus | null,
