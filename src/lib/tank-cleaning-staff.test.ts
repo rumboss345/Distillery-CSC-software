@@ -19,16 +19,33 @@ function row(partial: Partial<TankCleaningLogRow> & Pick<TankCleaningLogRow, 'id
 describe('tankCleaningStaffEvents', () => {
   const today = '2026-10-15';
 
-  it('keeps a tank that still needs cleaning on the sheet through today', () => {
+  it('keeps a dirty tank on the sheet as upcoming through today', () => {
     const logs = [
       row({ id: 1, eventType: 'needs_cleaning', createdAt: '2026-10-14T08:00:00' }),
     ];
 
     expect(tankCleaningStaffEvents(logs, '2026-10-14', today)).toMatchObject([
-      { title: 'Latina 500L', status: 'cleaning', detail: 'Collection Vessels · Needs cleaning', assignee: undefined },
+      { title: 'Latina 500L', status: 'upcoming', statusCategory: 'planned', detail: 'Collection Vessels · Needs cleaning', assignee: undefined },
     ]);
     expect(tankCleaningStaffEvents(logs, today, today)).toHaveLength(1);
     expect(tankCleaningStaffEvents(logs, '2026-10-16', today)).toEqual([]);
+  });
+
+  it('stays upcoming when a clean was logged but the tank is still dirty', () => {
+    const logs = [
+      row({ id: 1, eventType: 'needs_cleaning', createdAt: '2026-10-14T08:00:00', status: 'cleaning' }),
+      row({
+        id: 2,
+        eventType: 'marked_cleaned',
+        createdAt: '2026-10-15T09:30:00',
+        recordedBy: 'Sam',
+        status: 'cleaning',
+      }),
+    ];
+
+    expect(tankCleaningStaffEvents(logs, '2026-10-15', today)).toMatchObject([
+      { status: 'upcoming', statusCategory: 'planned', assignee: undefined, detail: 'Collection Vessels · Needs cleaning' },
+    ]);
   });
 
   it('lists a cleaned tank for the person who cleaned it, on that day', () => {
@@ -44,7 +61,7 @@ describe('tankCleaningStaffEvents', () => {
     ];
 
     const flagged = tankCleaningStaffEvents(logs, '2026-10-14', today);
-    expect(flagged.map((event) => event.status)).toEqual(['cleaning']);
+    expect(flagged.map((event) => event.status)).toEqual(['upcoming']);
 
     const cleaned = tankCleaningStaffEvents(logs, '2026-10-15', today);
     expect(cleaned).toMatchObject([

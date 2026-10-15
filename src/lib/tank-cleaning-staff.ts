@@ -46,8 +46,8 @@ function cleaningEvent(
     allDay: true,
     kind: 'cleaning',
     title: row.equipmentName,
-    status: done ? 'complete' : 'cleaning',
-    statusCategory: done ? 'complete' : 'in_progress',
+    status: done ? 'complete' : 'upcoming',
+    statusCategory: done ? 'complete' : 'planned',
     assignee: done && recordedBy ? recordedBy : undefined,
     detail: done ? `${typeLabel} · Cleaned` : `${typeLabel} · Needs cleaning`,
   };
@@ -55,8 +55,8 @@ function cleaningEvent(
 
 /**
  * Tank cleaning for one staff-sheet day.
- * A tank that still needs cleaning stays on the sheet from the day it was emptied through today.
- * A tank cleaned on this day is listed for the person who cleaned it.
+ * A tank that still needs cleaning stays on the sheet from the day it was emptied through today, with status Upcoming.
+ * A tank cleaned on this day is listed as complete for the person who cleaned it.
  */
 export function tankCleaningStaffEvents(
   rows: TankCleaningLogRow[],
@@ -76,14 +76,18 @@ export function tankCleaningStaffEvents(
   for (const logs of byTank.values()) {
     const ordered = [...logs].sort(byTime);
     let open: TankCleaningLogRow | null = null;
-    for (const log of ordered) {
+    for (let index = 0; index < ordered.length; index += 1) {
+      const log = ordered[index];
       if (log.eventType === 'needs_cleaning') {
         if (!open) open = log;
         continue;
       }
+      const cleanedAgainLater = ordered.slice(index + 1).some((row) => row.eventType === 'needs_cleaning');
+      // A clean log does not finish the job while the tank is still dirty.
+      const stillDirty = log.status === 'cleaning' && !cleanedAgainLater;
       const cleanDay = localCalendarDayKey(log.createdAt);
-      if (cleanDay === day) events.push(cleaningEvent(log, day, true));
-      if (open) {
+      if (!stillDirty && cleanDay === day) events.push(cleaningEvent(log, day, true));
+      if (open && !stillDirty) {
         const start = localCalendarDayKey(open.createdAt);
         if (start && cleanDay && start <= day && day < cleanDay) {
           events.push(cleaningEvent(open, day, false));
