@@ -21,6 +21,7 @@ import {
 } from '../../lib/reporting/volume-changes';
 import { formatTankVolumeVariance } from '../../lib/tank-volume-variance';
 import { useReportContext } from './report-context';
+import { ProductivityChart } from './ProductivityChart';
 
 export function SummaryReport() {
   const { range } = useReportContext();
@@ -79,6 +80,8 @@ export function SummaryReport() {
 
   return (
     <>
+      <ProductivityChart />
+
       <div className="card-grid">
         <div className="stat-card">
           <div className="label">Completed Washes</div>
