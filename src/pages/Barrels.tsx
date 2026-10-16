@@ -255,7 +255,7 @@ export function Barrels() {
         <div className="process-toolbar">
           <span className="process-toolbar-title">Warehouse</span>
           <span className="process-toolbar-hint">
-            Oldest heads are first in each location and show the darkest colour. Select one for fill, age, and proof.
+            Oldest heads are first in each location and show the darkest color. Select one for fill, age, and proof.
           </span>
           <input
             className="warehouse-search"
