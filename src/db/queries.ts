@@ -3444,14 +3444,15 @@ function applyFermenterChargeChanges(
 }
 
 /**
- * A fermenter chosen for a low wine or heavy rum run is finished.
- * Mark that fermentation complete so the fermentation report lists it,
- * even when the wash was still fermenting.
+ * A fermenter charged on a running or completed low wine or heavy rum run is finished.
+ * A planned run leaves that fermentation fermenting. Marking it complete on the
+ * Fermentation page is unchanged.
  */
 export function completeFermentationsSelectedForDistillation(): void {
-  const selected = queryAll<{ mash_batch_id: number; floor_equipment_id: number }>(`
+  const selected = queryAll<{ mash_batch_id: number; floor_equipment_id: number; status: string }>(`
     SELECT DISTINCT source_mash_batch_id as mash_batch_id,
-           source_fermenter_equipment_id as floor_equipment_id
+           source_fermenter_equipment_id as floor_equipment_id,
+           status
     FROM distillation_runs
     WHERE run_type IN ('wash', 'heavy_rum')
       AND source_mash_batch_id IS NOT NULL
@@ -3459,6 +3460,7 @@ export function completeFermentationsSelectedForDistillation(): void {
   `);
   const mashIds = new Set<number>();
   for (const row of selected) {
+    if (!runConsumesSource(row.status)) continue;
     const assignment = queryOne<{ id: number; status: string | null }>(
       `SELECT id, status FROM mash_fermenter_assignments
        WHERE mash_batch_id = ? AND floor_equipment_id = ?`,

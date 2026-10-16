@@ -1586,6 +1586,7 @@ export function Distillation() {
                     {' '}The fermenter can stay dirty until it is cleaned; that does not block marking this run complete.
                   </>
                 )}
+                {' '}The fermentation stays fermenting while this run is <strong>planned</strong>. It is marked complete when the run is <strong>running</strong> or <strong>complete</strong>, or when you mark it complete on the Fermentation page.
               </>
             ) : (
               <>
