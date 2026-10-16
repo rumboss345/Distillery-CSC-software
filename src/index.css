@@ -381,6 +381,10 @@ body.nav-open {
   fill: var(--info);
 }
 
+.productivity-chart .table-wrap > table {
+  min-width: 0;
+}
+
 .productivity-table tr.current-month td {
   color: var(--text);
   font-weight: 600;

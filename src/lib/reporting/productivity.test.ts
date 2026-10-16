@@ -36,6 +36,19 @@ describe('productivity comparison', () => {
     expect(comparison.summary).toContain('480 bottles in 2025');
   });
 
+  it('uses a singular count and keeps a near-total drop under 100 percent', () => {
+    const sparse: MonthlyProduction[] = [
+      { month: '2026-10', heartsGal: 0, pureAlcoholGal: 0, bottles: 1, runs: 0 },
+      { month: '2025-05', heartsGal: 0, pureAlcoholGal: 0, bottles: 480, runs: 1 },
+    ];
+    expect(compareProductivityYears(sparse, 2026, 'bottles').summary).toBe(
+      '1 bottle in 2026, compared with 480 bottles in 2025 (479 bottles less, 99.8%).',
+    );
+    expect(compareProductivityYears(sparse, 2026, 'runs').summary).toBe(
+      'No completed runs recorded in 2026. 2025 had 1 completed run.',
+    );
+  });
+
   it('says when a year has no recorded production', () => {
     const comparison = compareProductivityYears(rows, 2024, 'bottles');
     expect(comparison.summary).toBe('No bottles recorded in 2024 or 2023.');

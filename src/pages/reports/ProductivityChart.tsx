@@ -135,10 +135,13 @@ export function ProductivityChart() {
             {comparison.months.map((month, index) => {
               const center = PAD_LEFT + (index + 0.5) * groupWidth;
               const barWidth = Math.min(16, (groupWidth - 14) / 2);
+              const both = month.current > 0 && month.previous > 0;
+              const previousX = both ? center - barWidth - 1.5 : center - barWidth / 2;
+              const currentX = both ? center + 1.5 : center - barWidth / 2;
               return (
                 <g key={month.label}>
                   <Bar
-                    x={center - barWidth - 1.5}
+                    x={previousX}
                     width={barWidth}
                     value={month.previous}
                     yFor={yFor}
@@ -147,7 +150,7 @@ export function ProductivityChart() {
                     label={`${month.label} ${comparison.previousYear}: ${formatProductivityAmount(metric, month.previous)}`}
                   />
                   <Bar
-                    x={center + 1.5}
+                    x={currentX}
                     width={barWidth}
                     value={month.current}
                     yFor={yFor}

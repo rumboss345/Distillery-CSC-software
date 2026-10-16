@@ -125,8 +125,9 @@ export function productivitySummary(comparison: Omit<ProductivityComparison, 'su
   const direction = delta > 0 ? 'more' : 'less';
   const difference = differencePhrase(metric, Math.abs(delta));
   const percent = Math.abs(delta / previousTotal) * 100;
-  const percentLabel = percent >= 10
-    ? `${Math.round(percent)}%`
+  const rounded = Math.round(percent);
+  const percentLabel = Math.abs(percent - rounded) < 0.05
+    ? `${rounded}%`
     : `${percent.toFixed(1)}%`;
   const percentText = percentLabel === '0.0%' ? '' : `, ${percentLabel}`;
   return `${current} in ${year}, compared with ${previous} in ${previousYear} (${difference} ${direction}${percentText}).`;
@@ -187,8 +188,8 @@ function metricNoun(metric: ProductivityMetric): string {
 function differencePhrase(metric: ProductivityMetric, value: number): string {
   const amount = formatProductivityAmount(metric, value);
   if (metric === 'heartsGal' || metric === 'pureAlcoholGal') return `${amount} gal`;
-  if (metric === 'bottles') return `${amount} bottles`;
-  return `${amount} runs`;
+  if (metric === 'bottles') return counted(value, amount, 'bottle', 'bottles');
+  return counted(value, amount, 'run', 'runs');
 }
 
 function amountPhrase(metric: ProductivityMetric, value: number): string {
@@ -196,9 +197,13 @@ function amountPhrase(metric: ProductivityMetric, value: number): string {
   switch (metric) {
     case 'heartsGal': return `${amount} gal of hearts`;
     case 'pureAlcoholGal': return `${amount} gal of pure alcohol`;
-    case 'bottles': return `${amount} bottles`;
-    case 'runs': return `${amount} completed runs`;
+    case 'bottles': return counted(value, amount, 'bottle', 'bottles');
+    case 'runs': return counted(value, amount, 'completed run', 'completed runs');
   }
+}
+
+function counted(value: number, amount: string, singular: string, plural: string): string {
+  return `${amount} ${Math.round(value) === 1 ? singular : plural}`;
 }
 
 function sameAmount(metric: ProductivityMetric, delta: number): boolean {
