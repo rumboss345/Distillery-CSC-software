@@ -5112,7 +5112,7 @@ export function getBlendProducts(): BlendProductView[] {
     `SELECT b.*, fe.name as source_tank_name, out_fe.name as output_tank_name, br.name as blend_recipe_name,
         brv.version_number as blend_recipe_version_number
      FROM blend_products b
-     JOIN floor_equipment fe ON fe.id = b.source_holding_tank_equipment_id
+     LEFT JOIN floor_equipment fe ON fe.id = b.source_holding_tank_equipment_id
      LEFT JOIN floor_equipment out_fe ON out_fe.id = b.output_holding_tank_equipment_id
      LEFT JOIN blend_recipes br ON br.id = b.blend_recipe_id
      LEFT JOIN blend_recipe_versions brv ON brv.id = b.blend_recipe_version_id
