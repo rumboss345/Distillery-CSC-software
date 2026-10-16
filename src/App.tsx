@@ -33,6 +33,7 @@ import { Register } from './pages/Register';
 import { ApproveUser } from './pages/ApproveUser';
 import { AdminUsers } from './pages/AdminUsers';
 import { SpiritWeightCalculator } from './pages/SpiritWeightCalculator';
+import { IosHomeScreenHint } from './components/IosHomeScreenHint';
 import { useDatabaseReady } from './db/queries';
 
 function AppContent() {
@@ -57,6 +58,7 @@ function AppContent() {
 
   return (
     <BrowserRouter>
+      <IosHomeScreenHint />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
