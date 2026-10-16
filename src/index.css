@@ -3809,7 +3809,38 @@ tr.calendar-record-focus td {
   }
 }
 
+.ios-install-hint {
+  display: none;
+}
+
 @media (max-width: 900px) {
+  .ios-install-hint {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin: 0;
+    padding: 0.75rem 0.9rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
+    background: var(--bg-card);
+    border-top: 1px solid var(--border);
+    color: var(--text);
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 70;
+  }
+
+  .ios-install-hint p {
+    margin: 0;
+    font-size: 0.9rem;
+    line-height: 1.35;
+  }
+
+  body.ios-install-visible .main-content {
+    padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
+  }
+
   .app-layout {
     flex-direction: column;
     min-height: 100dvh;
