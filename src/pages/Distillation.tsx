@@ -42,7 +42,7 @@ import {
   useRefreshKey,
 } from '../db/queries';
 import { AbvVolumeTemperatureFields } from '../components/AbvVolumeTemperatureFields';
-import { tankDropdownLabel } from '../lib/tank-menu-label';
+import { formatTankMenuLabel, tankContentsPhrase, tankDropdownLabel } from '../lib/tank-menu-label';
 import { AbvTemperatureInput, correctedAbvFromInputs } from '../components/AbvTemperatureInput';
 import { AdminCredentialConfirmModal } from '../components/AdminCredentialConfirmModal';
 import { GinBotanicalFields } from '../components/GinBotanicalFields';
@@ -244,6 +244,15 @@ export function Distillation() {
       : `below ${FERMENTATION_READY_MAX_BRIX}° recommended`;
     return `${row.equipment_name} — ${row.batch_number} (${row.volume_gal.toFixed(1)} gal · ${brixNote}, ${readyNote})`;
   };
+
+  const sourceLowWinesTankLabel = (
+    tank: (typeof chargeableSourceTanks)[number],
+  ) => formatTankMenuLabel(
+    tank.name,
+    tankContentsPhrase(tank.id) ?? 'Spirit',
+    tank.available_abv,
+    tank.available_gal,
+  );
 
   const clearChargeProof = () => {
     setProofTarget('');
@@ -1186,7 +1195,7 @@ export function Distillation() {
                   <option value="">— Select tank —</option>
                   {chargeableSourceTanks.map((t) => (
                     <option key={t.id} value={t.id}>
-                      {tankDropdownLabel(t.name, t.id)}
+                      {sourceLowWinesTankLabel(t)}
                     </option>
                   ))}
                 </select>
