@@ -30,7 +30,8 @@ import {
   hasDuplicateBarrelSelections,
   spiritLabelForBarrel,
 } from '../lib/barrel-blending';
-import { tankDropdownLabel } from '../lib/tank-menu-label';
+import { TankContentsLookup } from '../components/TankContentsLookup';
+import { formatTankMenuLabel, tankContentsPhrase, tankDropdownLabel } from '../lib/tank-menu-label';
 import { AbvTemperatureInput, correctedAbvFromInputs } from '../components/AbvTemperatureInput';
 import { BlendAbvConfirmation } from '../components/BlendAbvConfirmation';
 import { ProofingWaterConfirm } from '../components/ProofingWaterConfirm';
@@ -199,6 +200,12 @@ interface SpiritSourceRow extends BlendSpiritSourceInput {
   recipe_abv: number;
   observed_abv: string;
   sample_temp_f: string;
+  /** Recipe name for this pull. Extra tanks keep the same name. */
+  spirit_label: string;
+  /** Index into the recipe spirit list. Extra tanks share the spirit they finish. */
+  follows_recipe_index: number | null;
+  /** Another tank of a spirit the first tank could not cover. */
+  extra_pull: boolean;
 }
 
 const emptySpiritSource = (): SpiritSourceRow => ({
@@ -211,10 +218,19 @@ const emptySpiritSource = (): SpiritSourceRow => ({
   unit: 'gal',
   observed_abv: '',
   sample_temp_f: '60',
+  spirit_label: '',
+  follows_recipe_index: null,
+  extra_pull: false,
 });
 
-function spiritRowWithObservedAbv(row: Omit<SpiritSourceRow, 'observed_abv' | 'sample_temp_f'>): SpiritSourceRow {
+function spiritRowWithObservedAbv(
+  row: Omit<SpiritSourceRow, 'observed_abv' | 'sample_temp_f' | 'spirit_label' | 'follows_recipe_index' | 'extra_pull'>
+    & Partial<Pick<SpiritSourceRow, 'spirit_label' | 'follows_recipe_index' | 'extra_pull'>>,
+): SpiritSourceRow {
   return {
+    spirit_label: '',
+    follows_recipe_index: null,
+    extra_pull: false,
     ...row,
     observed_abv: row.abv > 0 ? row.abv.toString() : '',
     sample_temp_f: '60',
@@ -692,6 +708,9 @@ export function Blending() {
         unit,
         amount,
         volume_gal: volumeGal,
+        spirit_label: template.spirit_sources[index]?.spirit_label ?? prevRow?.spirit_label ?? '',
+        follows_recipe_index: index,
+        extra_pull: false,
       });
     });
     setSpiritSources(nextSpirits);
@@ -1007,6 +1026,8 @@ export function Blending() {
           recipe_abv: templateSources?.[index]?.abv ?? s.abv,
           amount: s.volume_gal,
           unit: 'gal',
+          spirit_label: templateSources?.[index]?.spirit_label ?? '',
+          follows_recipe_index: templateSources?.[index] ? index : null,
         }))
         : [spiritRowWithObservedAbv({
           holding_tank_equipment_id: blend.source_holding_tank_equipment_id,
@@ -1015,6 +1036,8 @@ export function Blending() {
           recipe_abv: templateSources?.[0]?.abv ?? blend.base_spirit_abv,
           amount: blend.base_spirit_volume_gal,
           unit: 'gal',
+          spirit_label: templateSources?.[0]?.spirit_label ?? '',
+          follows_recipe_index: templateSources?.[0] ? 0 : null,
         })],
     );
     const ings = getBlendIngredients(blend.id);
@@ -1067,8 +1090,8 @@ export function Blending() {
       const userEditedAmount = patch.amount !== undefined;
       const abvChanged = Math.abs((next.abv || 0) - (src.abv || 0)) > 0.001;
       const sourceChosen = patch.holding_tank_equipment_id != null || patch.barrel_id !== undefined;
-      if (!userEditedAmount && next.abv > 0 && (abvChanged || sourceChosen)) {
-        const recipeLine = recipeTemplate?.spirit_sources[index];
+      if (!userEditedAmount && !src.extra_pull && next.abv > 0 && (abvChanged || sourceChosen)) {
+        const recipeLine = recipeTemplate?.spirit_sources[src.follows_recipe_index ?? index];
         const recipeAbv = recipeLine?.abv ?? next.recipe_abv;
         const recipeVolume = recipeLine
           ? roundScaledAmount(recipeLine.volume_gal * (form.scale_factor || 1))
@@ -1130,6 +1153,60 @@ export function Blending() {
   };
 
   const addSpiritSource = () => setSpiritSources((prev) => [...prev, emptySpiritSource()]);
+
+  const gallonsReservedOnTank = (tankId: number, exceptIndex: number, rows: SpiritSourceRow[] = spiritSources) => (
+    rows.reduce((sum, row, index) => {
+      if (index === exceptIndex || row.holding_tank_equipment_id !== tankId) return sum;
+      return sum + syncSpiritVolume(row).volume_gal;
+    }, 0)
+  );
+
+  const addAnotherTankOfSameSpirit = (index: number) => {
+    setSpiritSources((prev) => {
+      const src = prev[index];
+      if (!src) return prev;
+      const synced = syncSpiritVolume(src);
+      const tank = tankOptionsFor(src.holding_tank_equipment_id)
+        .find((item) => item.id === src.holding_tank_equipment_id);
+      const reserved = gallonsReservedOnTank(src.holding_tank_equipment_id, index, prev);
+      const available = Math.max(0, (tank?.available_gal ?? 0) - reserved);
+      const shortfall = Math.max(0, Math.round((synced.volume_gal - available) * 10) / 10);
+      const recipeIndex = src.follows_recipe_index ?? index;
+      const label = src.spirit_label.trim()
+        || recipeTemplate?.spirit_sources[recipeIndex]?.spirit_label
+        || `Spirit ${index + 1}`;
+      let current = src;
+      if (tank && available > 0.05 && synced.volume_gal > available + 0.05) {
+        const amount = amountFromSpiritVolumeGal(available, src.unit || 'gal', src.abv || tank.available_abv);
+        current = syncSpiritVolume({ ...src, spirit_label: label, amount });
+      } else if (!src.spirit_label.trim()) {
+        current = { ...src, spirit_label: label };
+      }
+      const extra = spiritRowWithObservedAbv({
+        ...emptySpiritSource(),
+        spirit_label: label,
+        follows_recipe_index: recipeIndex,
+        extra_pull: true,
+        recipe_abv: src.recipe_abv,
+        amount: shortfall,
+        unit: 'gal',
+        volume_gal: shortfall,
+        abv: src.abv,
+      });
+      const next = prev.map((row, rowIndex) => (rowIndex === index ? current : row));
+      let insertAt = index + 1;
+      while (
+        insertAt < next.length
+        && next[insertAt].extra_pull
+        && next[insertAt].follows_recipe_index === recipeIndex
+      ) {
+        insertAt += 1;
+      }
+      next.splice(insertAt, 0, extra);
+      return next;
+    });
+  };
+
   const removeSpiritSource = (index: number) => setSpiritSources((prev) => prev.filter((_, i) => i !== index));
 
   const updateIngredient = (index: number, patch: Partial<BlendIngredientInput>) => {
@@ -1557,7 +1634,9 @@ export function Blending() {
     const worksheetSpiritLines = activeSources.map((s, index) => {
       const tank = getHoldingTanks().find((t) => t.id === s.holding_tank_equipment_id);
       return {
-        label: recipeTemplate?.spirit_sources[index]?.spirit_label ?? `Spirit ${index + 1}`,
+        label: s.spirit_label.trim()
+          || recipeTemplate?.spirit_sources[s.follows_recipe_index ?? index]?.spirit_label
+          || `Spirit ${index + 1}`,
         tankName: tank?.name ?? '—',
         amount: s.amount,
         unit: s.unit,
@@ -1822,14 +1901,30 @@ export function Blending() {
                 ? spiritMeasureAlternate(src.amount, src.unit, src.abv)
                 : null;
               const unitOptions = spiritUnitsForMeasureMode(measureMode);
-              const recipeLine = recipeTemplate?.spirit_sources[index];
+              const recipeLine = src.extra_pull
+                ? undefined
+                : recipeTemplate?.spirit_sources[src.follows_recipe_index ?? index];
               const recipeAbv = recipeLine?.abv ?? src.recipe_abv;
               const recipeVolumeGal = recipeLine
                 ? roundScaledAmount(recipeLine.volume_gal * (form.scale_factor || 1))
                 : 0;
               const abvDiffers = recipeAbv > 0 && src.abv > 0 && Math.abs(src.abv - recipeAbv) > 0.05;
               const pullAdjusted = abvDiffers && recipeVolumeGal > 0 && Math.abs(synced.volume_gal - recipeVolumeGal) > 0.01;
-              const spiritLabel = recipeLine?.spirit_label ?? `Spirit ${index + 1}`;
+              const spiritLabel = src.spirit_label.trim() || recipeLine?.spirit_label || `Spirit ${index + 1}`;
+              const selectedTank = tankOptionsFor(src.holding_tank_equipment_id)
+                .find((tank) => tank.id === src.holding_tank_equipment_id);
+              const reservedGal = selectedTank
+                ? gallonsReservedOnTank(selectedTank.id, index)
+                : 0;
+              const availableGal = selectedTank
+                ? Math.max(0, selectedTank.available_gal - reservedGal)
+                : 0;
+              const shortBy = selectedTank
+                ? Math.max(0, synced.volume_gal - availableGal)
+                : 0;
+              const selectedContents = selectedTank
+                ? (tankContentsPhrase(selectedTank.id) ?? 'Spirit')
+                : null;
               return (
                 <div key={index} className="wizard-additive-card">
                   <div className="form-group">
@@ -1861,10 +1956,45 @@ export function Blending() {
                           <option value="">— Choose a tank —</option>
                           {tankOptionsFor(src.holding_tank_equipment_id).map((t) => (
                             <option key={t.id} value={t.id}>
-                              {tankDropdownLabel(t.name, t.id)}
+                              {formatTankMenuLabel(
+                                t.name,
+                                tankContentsPhrase(t.id) ?? 'Spirit',
+                                t.available_abv,
+                                t.available_gal,
+                              )}
                             </option>
                           ))}
                         </select>
+                        {selectedTank && (
+                          <div className="tank-contents-card" data-testid={`spirit-tank-contents-${index}`}>
+                            <div className="tank-contents-kicker">In this tank</div>
+                            <strong>{selectedTank.name}</strong>
+                            <p>
+                              {selectedContents}
+                              {' · '}
+                              {selectedTank.available_abv.toFixed(1)}% ABV
+                              {' · '}
+                              {availableGal.toFixed(1)} gal available
+                              {selectedTank.capacity_gal > 0 ? ` · capacity ${selectedTank.capacity_gal} gal` : ''}
+                            </p>
+                          </div>
+                        )}
+                        {selectedTank && shortBy > 0.05 && (
+                          <p className="field-hint" data-testid={`spirit-tank-short-${index}`}>
+                            {selectedTank.name} has {availableGal.toFixed(1)} gal available.
+                            This blend still needs {shortBy.toFixed(1)} gal of {spiritLabel}.
+                          </p>
+                        )}
+                        {selectedTank && shortBy > 0.05 && (
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-secondary"
+                            data-testid={`add-same-spirit-tank-${index}`}
+                            onClick={() => addAnotherTankOfSameSpirit(index)}
+                          >
+                            Add another {spiritLabel} tank
+                          </button>
+                        )}
                       </>
                     )}
                   </div>
@@ -2352,7 +2482,7 @@ export function Blending() {
           ?? defaultBlendingOutputTankId(sourceTankIds)
           ?? 0;
         const formatOutputTankLabel = (tank: (typeof outputTanks)[number]) => (
-          tankDropdownLabel(tank.name, tank.id)
+          tankDropdownLabel(tank.name, tank.id, { volume: true })
         );
         const outputTankName = selectedOutputId > 0
           ? outputTanks.find((t) => t.id === selectedOutputId)?.name ?? null
@@ -2403,15 +2533,30 @@ export function Blending() {
                 ))}
               </select>
             </label>
-            {selectedOutputId > 0 && yieldGal > 0 && (() => {
+            {selectedOutputId > 0 && (() => {
               const tank = outputTanks.find((t) => t.id === selectedOutputId);
               if (!tank) return null;
-              const after = getHoldingTankContents(tank.id).volume_gal + yieldGal;
+              const contents = getHoldingTankContents(tank.id);
+              const phrase = contents.volume_gal > 0.001
+                ? (tankContentsPhrase(tank.id) ?? 'Spirit')
+                : null;
+              const after = contents.volume_gal + yieldGal;
               return (
-                <p className="field-hint">
-                  After production, {tank.name} will hold about {after.toFixed(1)} gal
-                  {tank.capacity_gal > 0 ? ` (capacity ${tank.capacity_gal} gal)` : ''}.
-                </p>
+                <div className="tank-contents-card" data-testid="output-tank-contents">
+                  <div className="tank-contents-kicker">In this tank</div>
+                  <strong>{tank.name}</strong>
+                  <p>
+                    {phrase
+                      ? `${phrase} · ${contents.volume_gal.toFixed(1)} gal${contents.abv > 0 ? ` · ${contents.abv.toFixed(1)}% ABV` : ''}`
+                      : 'Empty. Nothing is stored in this tank.'}
+                  </p>
+                  {yieldGal > 0 && (
+                    <p className="field-hint">
+                      After production, {tank.name} will hold about {after.toFixed(1)} gal
+                      {tank.capacity_gal > 0 ? ` (capacity ${tank.capacity_gal} gal)` : ''}.
+                    </p>
+                  )}
+                </div>
               );
             })()}
             <button
@@ -2503,6 +2648,8 @@ export function Blending() {
           <button type="button" className="btn btn-secondary" onClick={openBarrelBlending}>+ Barrel blending</button>
         </div>
       </div>
+
+      <TankContentsLookup />
 
       {blends.length === 0 ? (
         <div className="empty-state">

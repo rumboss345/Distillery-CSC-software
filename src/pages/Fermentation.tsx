@@ -152,11 +152,7 @@ export function Fermentation() {
   const assignedGallons = (mashId: number) =>
     assignmentsFor(mashId).reduce((sum, assignment) => sum + assignment.volume_gal, 0);
 
-  const canStartFrom = (batch: MashBatch) => {
-    if (batch.status === 'planned' || batch.status === 'mashing') return true;
-    if (batch.status !== 'fermenting') return false;
-    return batch.water_gal - assignedGallons(batch.id) > 0.5;
-  };
+  const canStartFrom = (batch: MashBatch) => batch.status === 'planned' || batch.status === 'mashing';
 
   const washChoices = batches.filter(canStartFrom);
   const queryWashId = Number(searchParams.get('wash')) || 0;
@@ -538,19 +534,21 @@ export function Fermentation() {
         <div className="page-actions">
           <button
             className="btn btn-primary"
+            data-testid="start-fermentation"
             onClick={() => {
               const batch = washChoices[0];
               if (!batch) {
-                alert('Create a wash batch first, or leave some of a fermenting wash unassigned.');
+                alert('No wash is waiting to start. A fermentation that is already underway is in the list — use Logs or Edit on that row.');
                 return;
               }
               openNew(batch);
             }}
             disabled={washChoices.length === 0}
           >
-            + Start fermentation
+            + Start from a wash
           </button>
         </div>
+        <p className="field-hint">Starts a wash that is planned or still mashing. A fermentation already underway stays in the list below.</p>
       </div>
 
       {rows.length === 0 ? (

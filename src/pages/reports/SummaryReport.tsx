@@ -80,8 +80,6 @@ export function SummaryReport() {
 
   return (
     <>
-      <ProductivityChart />
-
       <div className="card-grid">
         <div className="stat-card">
           <div className="label">Completed Washes</div>
@@ -113,6 +111,8 @@ export function SummaryReport() {
           <div className="value">{filteredBarrels.length} / {filteredBottlings.length}</div>
         </div>
       </div>
+
+      <ProductivityChart />
 
       <div className="section">
         <h3 className="section-title">Equipment & Current Volumes</h3>
