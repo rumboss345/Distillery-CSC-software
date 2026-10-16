@@ -248,14 +248,14 @@ export function Barrels() {
     <div>
       <div className="page-header">
         <h2>Barrel Aging</h2>
-        <p>Locations group the barrels. Each barrel shows only its head, and the oldest barrels sit at the top of a location.</p>
+        <p>Locations group the barrels. A barrel with liquid starts light gold and darkens each month, reaching dark brown at about two years. Empty barrels stay pale.</p>
       </div>
 
       <div className="process-view warehouse-view">
         <div className="process-toolbar">
           <span className="process-toolbar-title">Warehouse</span>
           <span className="process-toolbar-hint">
-            Oldest heads are first in each location. Select one for fill, age, and proof.
+            Oldest heads are first in each location and show the darkest colour. Select one for fill, age, and proof.
           </span>
           <input
             className="warehouse-search"
@@ -358,6 +358,8 @@ export function Barrels() {
                             <BarrelVisual
                               barrelNumber={barrel.barrel_number}
                               status={barrel.status}
+                              volumeGal={barrel.current_volume_gal}
+                              fillDate={barrel.fill_date}
                             />
                           </button>
                         );

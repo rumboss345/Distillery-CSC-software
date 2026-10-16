@@ -351,6 +351,7 @@ CREATE TABLE IF NOT EXISTS blend_spirit_sources (
   holding_tank_equipment_id INTEGER NOT NULL DEFAULT 0 REFERENCES floor_equipment(id),
   barrel_id INTEGER REFERENCES barrels(id),
   volume_gal REAL NOT NULL DEFAULT 0,
+  emptied_volume_gal REAL,
   abv REAL NOT NULL DEFAULT 0,
   sort_order INTEGER NOT NULL DEFAULT 0
 );

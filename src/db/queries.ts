@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { gallonsRestoredToEmptiedBarrel } from '../lib/barrel-blending';
 import { BARREL_STOCK_CATEGORY, BARREL_STOCK_ITEM_NAME } from '../lib/barrel-inventory';
 import {
   bottlingReturnsError,
@@ -5516,18 +5517,24 @@ export function executeBlendProduct(id: number, outputTankId: number): void {
     throw new Error('Finished batch cannot go into a tank you are pulling spirit from.');
   }
 
+  const emptiedBarrels = new Set<number>();
   for (const source of sources) {
-    if (!source.barrel_id || source.volume_gal <= 0) continue;
+    if (!source.barrel_id || source.volume_gal <= 0 || emptiedBarrels.has(source.barrel_id)) continue;
     const barrel = queryOne<{ current_volume_gal: number }>(
       'SELECT current_volume_gal FROM barrels WHERE id = ?',
       [source.barrel_id],
     );
     if (!barrel) continue;
-    const remaining = Math.max(0, barrel.current_volume_gal - source.volume_gal);
-    const nextStatus = remaining <= 0.01 ? 'empty' : 'aging';
+    emptiedBarrels.add(source.barrel_id);
     runQuery(
-      'UPDATE barrels SET current_volume_gal = ?, status = ? WHERE id = ?',
-      [remaining, nextStatus, source.barrel_id],
+      'UPDATE barrels SET current_volume_gal = 0, status = ? WHERE id = ?',
+      ['empty', source.barrel_id],
+    );
+    runQuery(
+      `UPDATE blend_spirit_sources
+       SET emptied_volume_gal = ?
+       WHERE blend_product_id = ? AND barrel_id = ?`,
+      [barrel.current_volume_gal, id, source.barrel_id],
     );
   }
 
@@ -5603,7 +5610,7 @@ export function executeBlendProduct(id: number, outputTankId: number): void {
 
 /**
  * Reverse an executed blend. The blending page requires an administrator email and password first.
- * Restores inventory and barrel pulls and removes
+ * Restores inventory and the volume that was in each chosen barrel, and removes
  * the finished batch from the output-tank ledger by returning status to approved.
  */
 export function undoBlendProduction(id: number): void {
@@ -5630,18 +5637,28 @@ export function undoBlendProduction(id: number): void {
   }
 
   const spiritSources = getBlendSpiritSources(id);
+  const restoredBarrels = new Set<number>();
   for (const source of spiritSources) {
-    if (!source.barrel_id || source.volume_gal <= 0) continue;
+    if (!source.barrel_id || restoredBarrels.has(source.barrel_id)) continue;
+    const restoreGal = gallonsRestoredToEmptiedBarrel(spiritSources, source.barrel_id);
+    if (restoreGal <= 0) continue;
+    restoredBarrels.add(source.barrel_id);
     const barrel = queryOne<{ current_volume_gal: number }>(
       'SELECT current_volume_gal FROM barrels WHERE id = ?',
       [source.barrel_id],
     );
     if (!barrel) continue;
-    const restored = barrel.current_volume_gal + source.volume_gal;
+    const restored = barrel.current_volume_gal + restoreGal;
     const nextStatus = restored > 0.01 ? 'aging' : 'empty';
     runQuery(
       'UPDATE barrels SET current_volume_gal = ?, status = ? WHERE id = ?',
       [restored, nextStatus, source.barrel_id],
+    );
+    runQuery(
+      `UPDATE blend_spirit_sources
+       SET emptied_volume_gal = NULL
+       WHERE blend_product_id = ? AND barrel_id = ?`,
+      [id, source.barrel_id],
     );
   }
 
