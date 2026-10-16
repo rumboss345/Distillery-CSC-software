@@ -17,6 +17,7 @@ import {
   type VesselInflow,
 } from '../lib/collection-vessel-cuts';
 import { distillationAlcoholBalance, washChargeAbvFromBrix, type AlcoholChargeBasis, type DistillationAlcoholBalance } from '../lib/distillation-loss';
+import type { MonthlyProduction } from '../lib/reporting/productivity';
 import { isFermenterSourcedRun, isSpiritStyleRun, isTankSourcedRun } from '../lib/distillation-run-types';
 import { activeGinBotanicals, ginBotanicalPlaceError, normalizeBotanicalWeightUnit } from '../lib/gin-botanicals';
 import { preparedIngredientName } from '../lib/quick-ingredient';
@@ -5732,6 +5733,80 @@ export function getYieldReports(reportMonth?: string): YieldReport[] {
     HAVING heartsVolumeGal > 0
     ORDER BY m.start_date DESC
   `, params);
+}
+
+/** Month buckets for the productivity graph. Months are YYYY-MM. */
+export function getMonthlyProduction(): MonthlyProduction[] {
+  const hearts = queryAll<{ month: string | null; hearts_gal: number; pure_alcohol_gal: number }>(`
+    SELECT
+      strftime('%Y-%m', r.run_date) as month,
+      COALESCE(SUM(c.volume_gal), 0) as hearts_gal,
+      COALESCE(SUM(c.volume_gal * c.abv / 100.0), 0) as pure_alcohol_gal
+    FROM distillation_cuts c
+    JOIN distillation_runs r ON r.id = c.distillation_run_id
+    WHERE c.cut_type = 'hearts'
+      AND r.status IN ('running', 'complete')
+    GROUP BY month
+  `);
+  const runs = queryAll<{ month: string | null; runs: number }>(`
+    SELECT strftime('%Y-%m', run_date) as month, COUNT(*) as runs
+    FROM distillation_runs
+    WHERE status = 'complete'
+    GROUP BY month
+  `);
+  const bottles = queryAll<{ month: string | null; bottles: number }>(`
+    SELECT month, SUM(bottles) as bottles
+    FROM (
+      SELECT
+        strftime('%Y-%m', r.bottling_date) as month,
+        CASE
+          WHEN COALESCE((
+            SELECT SUM(l.bottle_count) FROM bottling_run_lines l WHERE l.bottling_run_id = r.id
+          ), 0) > 0
+          THEN (
+            SELECT SUM(l.bottle_count) FROM bottling_run_lines l WHERE l.bottling_run_id = r.id
+          )
+          ELSE r.bottle_count
+        END as bottles
+      FROM bottling_runs r
+    )
+    GROUP BY month
+  `);
+
+  const byMonth = new Map<string, MonthlyProduction>();
+  const bucket = (month: string | null): MonthlyProduction | null => {
+    if (!month || !/^\d{4}-\d{2}$/.test(month)) return null;
+    const existing = byMonth.get(month);
+    if (existing) return existing;
+    const created: MonthlyProduction = {
+      month,
+      heartsGal: 0,
+      pureAlcoholGal: 0,
+      bottles: 0,
+      runs: 0,
+    };
+    byMonth.set(month, created);
+    return created;
+  };
+
+  for (const row of hearts) {
+    const month = bucket(row.month);
+    if (!month) continue;
+    month.heartsGal += row.hearts_gal;
+    month.pureAlcoholGal += row.pure_alcohol_gal;
+  }
+  for (const row of runs) {
+    const month = bucket(row.month);
+    if (!month) continue;
+    month.runs += row.runs;
+  }
+  for (const row of bottles) {
+    const month = bucket(row.month);
+    if (!month) continue;
+    month.bottles += row.bottles;
+  }
+
+  return [...byMonth.values()].sort((a, b) => a.month.localeCompare(b.month));
 }
 
 export function getAllFloorEquipmentWithContext(): FloorEquipmentView[] {

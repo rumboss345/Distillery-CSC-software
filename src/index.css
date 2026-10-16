@@ -294,6 +294,102 @@ body.nav-open {
   line-height: 2;
 }
 
+.productivity-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-end;
+  margin-bottom: 0.75rem;
+}
+
+.productivity-toolbar .form-group {
+  flex: 0 1 16rem;
+  margin: 0;
+}
+
+.productivity-toolbar .btn {
+  min-height: 2.75rem;
+}
+
+.productivity-hint {
+  margin-bottom: 0.35rem;
+}
+
+.productivity-summary {
+  margin: 0 0 0.85rem;
+  font-size: 1rem;
+}
+
+.productivity-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 0.35rem;
+  font-size: 0.9rem;
+}
+
+.productivity-swatch {
+  display: inline-block;
+  width: 0.85rem;
+  height: 0.85rem;
+  margin-right: 0.4rem;
+  border-radius: 2px;
+  vertical-align: -1px;
+}
+
+.productivity-swatch.current {
+  background: var(--accent);
+}
+
+.productivity-swatch.previous {
+  background: var(--info);
+}
+
+.productivity-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  margin-bottom: 1rem;
+}
+
+.productivity-svg .productivity-grid {
+  stroke: var(--border-subtle);
+  stroke-width: 1;
+}
+
+.productivity-svg .productivity-baseline {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.productivity-svg .productivity-axis {
+  fill: var(--text-muted);
+  font-size: 12px;
+  font-family: var(--font);
+}
+
+.productivity-svg .productivity-axis.current-month {
+  fill: var(--text);
+  font-weight: 700;
+}
+
+.productivity-svg .bar-current {
+  fill: var(--accent);
+}
+
+.productivity-svg .bar-previous {
+  fill: var(--info);
+}
+
+.productivity-chart .table-wrap > table {
+  min-width: 0;
+}
+
+.productivity-table tr.current-month td {
+  color: var(--text);
+  font-weight: 600;
+}
+
 .traceability-search {
   display: flex;
   flex-wrap: wrap;

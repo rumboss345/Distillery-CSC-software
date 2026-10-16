@@ -1,4 +1,5 @@
 export * from './alcohol-units';
+export * from './productivity';
 export * from './period';
 export * from './csv';
 export * from './movements';
