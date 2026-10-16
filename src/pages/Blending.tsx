@@ -1458,10 +1458,13 @@ export function Blending() {
         return;
       }
     }
+    const barrelNote = isBarrelBlendWizard
+      ? 'The barrels you chose will be emptied. The batch uses the gallons in the formula, and ingredients are deducted from inventory.'
+      : 'Spirit will be pulled from source tanks and ingredients deducted from inventory.';
     if (!confirm(
       `Produce "${form.product_name}" into ${outputTank.name}?\n\n`
       + `Expected yield: ${yieldGal.toFixed(1)} gal @ ${(formulation.reconciliation.effective.abv ?? formulation.theoretical.abv ?? 0).toFixed(1)}% ABV.\n\n`
-      + 'Spirit will be pulled from source tanks and ingredients deducted from inventory.',
+      + barrelNote,
     )) {
       return;
     }
@@ -2054,9 +2057,10 @@ export function Blending() {
                   />
                   {synced.volume_gal > 0 && (
                     <p className="measure-alt">
-                      {isBarrelBlendWizard ? 'Barrel inventory will deduct' : 'Tank ledger will record'}{' '}
+                      {isBarrelBlendWizard ? 'The formula uses' : 'Tank ledger will record'}{' '}
                       <strong>{formatGallonDisplay(synced.volume_gal)} gal</strong>
                       {alternate ? ` (${alternate.label})` : ''}
+                      {isBarrelBlendWizard ? '. Producing empties this barrel.' : ''}
                     </p>
                   )}
                   {pullAdjusted && (
@@ -2494,7 +2498,17 @@ export function Blending() {
               <li>{yieldGal.toFixed(1)} gal expected yield @ {(formulation.reconciliation.effective.abv ?? formulation.theoretical.abv ?? 0).toFixed(1)}% ABV</li>
               {activeSources.map((s, i) => {
                 const tank = getHoldingTanks().find((t) => t.id === s.holding_tank_equipment_id);
+                const barrel = s.barrel_id
+                  ? barrelInventory.find((item) => item.id === s.barrel_id)
+                  : undefined;
                 const entered = s.amount > 0 ? `${s.amount} ${s.unit}` : `${s.volume_gal.toFixed(1)} gal`;
+                if (barrel) {
+                  return (
+                    <li key={i}>
+                      Empty {barrel.barrel_number} ({barrel.current_volume_gal.toFixed(1)} gal). The formula uses {entered}.
+                    </li>
+                  );
+                }
                 return <li key={i}>Pull {entered} ({s.volume_gal.toFixed(2)} gal) from {tank?.name}</li>;
               })}
             </ul>

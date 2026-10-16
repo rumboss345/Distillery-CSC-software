@@ -1231,6 +1231,7 @@ function migrateBarrelBlendRecipes(): void {
   if (!hasBlendBarrel) {
     db.run(`ALTER TABLE blend_spirit_sources ADD COLUMN barrel_id INTEGER REFERENCES barrels(id)`);
   }
+  addColumnIfMissing('blend_spirit_sources', 'emptied_volume_gal', 'REAL');
 }
 
 function migrateBarrelFills(): void {
@@ -1338,6 +1339,7 @@ function migrateAdvancedBlending(): void {
       blend_product_id INTEGER NOT NULL REFERENCES blend_products(id) ON DELETE CASCADE,
       holding_tank_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
       volume_gal REAL NOT NULL DEFAULT 0,
+      emptied_volume_gal REAL,
       abv REAL NOT NULL DEFAULT 0,
       sort_order INTEGER NOT NULL DEFAULT 0
     )

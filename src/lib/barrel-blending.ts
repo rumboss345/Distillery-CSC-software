@@ -39,3 +39,23 @@ export function formatBarrelInventoryOption(barrel: Barrel, blendProductName?: s
 export function spiritLabelForBarrel(barrel: Barrel, blendProductName?: string | null): string {
   return `${barrel.barrel_number} — ${barrelShownContents(barrel, blendProductName)}`;
 }
+
+/**
+ * Gallons to put back when undoing a blend that emptied this barrel.
+ * Production records the volume that was in the barrel. Older batches only stored the formula pull.
+ */
+export function gallonsRestoredToEmptiedBarrel(
+  sources: readonly {
+    barrel_id?: number | null;
+    volume_gal: number;
+    emptied_volume_gal?: number | null;
+  }[],
+  barrelId: number,
+): number {
+  const rows = sources.filter((source) => source.barrel_id === barrelId);
+  const recorded = rows
+    .map((source) => source.emptied_volume_gal)
+    .filter((volume): volume is number => volume != null && volume > 0);
+  if (recorded.length > 0) return Math.max(...recorded);
+  return rows.reduce((sum, source) => sum + Math.max(0, source.volume_gal), 0);
+}

@@ -538,6 +538,8 @@ export interface BlendSpiritSource {
   holding_tank_equipment_id: number;
   barrel_id?: number | null;
   volume_gal: number;
+  /** Gallons that were in the barrel when production emptied it. Null on tank pulls and older batches. */
+  emptied_volume_gal?: number | null;
   abv: number;
   sort_order: number;
   tank_name?: string;
