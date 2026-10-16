@@ -554,42 +554,6 @@ export function Bottling() {
         </div>
       </div>
 
-      {!(showForm && isRumBottling) && (
-        <div className="card" style={{ marginBottom: '1.25rem' }}>
-          <h3 className="section-title" style={{ marginTop: 0 }}>Packaging Bottles</h3>
-          <p className="text-muted" style={{ marginBottom: '0.75rem' }}>
-            Bottle SKUs from Inventory, category Packaging. A bottle you add there shows up in this list and in the bottling dropdown.
-          </p>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Bottle</th>
-                  <th className="num">Size</th>
-                  <th className="num">On Hand</th>
-                  <th className="num">Reorder At</th>
-                </tr>
-              </thead>
-              <tbody>
-                {bottleOptions.map((bottle) => {
-                  const inv = packagingInventory.find(
-                    (i) => i.name.toLowerCase() === bottle.name.toLowerCase(),
-                  );
-                  return (
-                    <tr key={bottle.name}>
-                      <td><strong>{bottle.name}</strong></td>
-                      <td className="num">{bottle.sizeMl != null ? `${bottle.sizeMl} ml` : '—'}</td>
-                      <td className="num">{inv ? `${inv.quantity.toLocaleString()} ${inv.unit}` : '—'}</td>
-                      <td className="num">{inv ? inv.reorder_level.toLocaleString() : '—'}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
       <div className="card-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
         <div className="stat-card">
           <div className="label">Total Bottling Runs</div>
