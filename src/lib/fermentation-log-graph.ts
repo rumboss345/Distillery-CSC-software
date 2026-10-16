@@ -88,7 +88,7 @@ export function formatFermentationGraphValue(measure: FermentationGraphMeasure, 
   switch (measure) {
     case 'brix': return `${text}° Brix`;
     case 'temperature': return `${text}°F`;
-    case 'abv': return `${text}% ABV`;
+    case 'abv': return `${value.toFixed(1)}% ABV`;
     case 'ph': return `pH ${text}`;
   }
 }

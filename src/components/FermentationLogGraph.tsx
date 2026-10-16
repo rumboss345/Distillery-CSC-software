@@ -139,9 +139,9 @@ export function FermentationLogGraph({
               className="fermentation-graph-ready"
             />
             <text
-              x={CHART_WIDTH - PAD_RIGHT - 4}
+              x={PAD_LEFT + 8}
               y={Math.min(plotBottom - 8, Math.max(PAD_TOP + 12, readyY - 6))}
-              textAnchor="end"
+              textAnchor="start"
               className="fermentation-graph-ready-label"
             >
               {`Below ${FERMENTATION_READY_MAX_BRIX}°`}
