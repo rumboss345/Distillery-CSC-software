@@ -171,6 +171,9 @@ export function ProcessEquipmentCanvas({
       distillationRunId: (contextMenuEquipment.equipment_type === 'pot_still' || contextMenuEquipment.equipment_type === 'column_still')
         ? getDistillationRunForCuts(contextMenuEquipment.name)?.id ?? null
         : null,
+      distillationRunStatus: (contextMenuEquipment.equipment_type === 'pot_still' || contextMenuEquipment.equipment_type === 'column_still')
+        ? getDistillationRunForCuts(contextMenuEquipment.name)?.status ?? null
+        : null,
     })
     : null;
 

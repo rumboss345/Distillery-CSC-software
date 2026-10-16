@@ -22,6 +22,7 @@ import {
   getActiveDistillationRunOnStill,
   getFloorEquipment,
   getFermenterWashSourceFermenters,
+  getPlannedDistillationForFermenter,
   getFermenterChargeCapacityGal,
   getLatestFermentationBrix,
   estimatedWashChargeAbv,
@@ -68,6 +69,7 @@ import {
 } from '../lib/gin-botanicals';
 import { FERMENTATION_READY_MAX_BRIX, isBrixReadyForDistillation } from '../lib/fermentation';
 import { eventDateWhenLeavingPlanned, localIsoDate, localIsoDateTime } from '../lib/planned-event-date';
+import { plannedFermenterDistillationMessage } from '../lib/planned-fermenter-distillation';
 import {
   chargeExceedsStillCapacity,
   plannedRecordSkipsEquipmentStatus,
@@ -277,7 +279,30 @@ export function Distillation() {
     setGinRecipeName('');
   };
 
+  const openPlannedFermenterRun = (fermenterId: number, runType: DistillationRunType) => {
+    const planned = getPlannedDistillationForFermenter(fermenterId, runType);
+    if (!planned || planned.id === editRunId) return false;
+    const fermenterName = equipment.find((item) => item.id === fermenterId)?.name
+      ?? fermenterSourceOptions.find((item) => item.floor_equipment_id === fermenterId)?.equipment_name
+      ?? 'This fermenter';
+    alert(plannedFermenterDistillationMessage({
+      fermenterName,
+      runLabel: runTypeLabel(planned.run_type),
+      batchNumber: planned.batch_number,
+      plannedDate: formatDateDisplay(planned.run_date),
+    }));
+    openEditRun(planned);
+    return true;
+  };
+
   const handleFermenterSourceChange = (equipmentId: number | null) => {
+    if (
+      equipmentId
+      && isFermenterSourcedRun(runForm.run_type)
+      && openPlannedFermenterRun(equipmentId, runForm.run_type)
+    ) {
+      return;
+    }
     const row = fermenterSourceOptions.find((f) => f.floor_equipment_id === equipmentId);
     const chargeGal = row && equipmentId
       ? runForm.run_type === 'heavy_rum'
@@ -365,6 +390,14 @@ export function Distillation() {
 
     if (fromFermenter) {
       const runType: DistillationRunType = searchParams.get('runType') === 'heavy_rum' ? 'heavy_rum' : 'wash';
+      if (openPlannedFermenterRun(fermenterId, runType)) {
+        const next = stripCalendarPlanQuery(searchParams);
+        next.delete('chargeFermenter');
+        next.delete('chargeTank');
+        next.delete('runType');
+        setSearchParams(next, { replace: true });
+        return;
+      }
       const row = getFermenterWashSourceFermenters().find((f) => f.floor_equipment_id === fermenterId);
       const chargeGal = row
         ? runType === 'heavy_rum'

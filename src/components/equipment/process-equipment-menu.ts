@@ -28,6 +28,8 @@ export interface ProcessEquipmentMenuSource {
   liquidName?: string | null;
   /** Open distillation run (running, or planned if nothing is running) on this still. */
   distillationRunId?: number | null;
+  /** Status of distillationRunId. Cuts belong in Next step only while the run is distilling. */
+  distillationRunStatus?: string | null;
 }
 
 export function buildProcessEquipmentContextMenu(
@@ -58,6 +60,23 @@ export function buildProcessEquipmentContextMenu(
       key: 'ferment',
       label: 'Ferment',
       to: `/fermentation?wash=${source.linked_mash_batch_id}`,
+    });
+  }
+  if (canChargeFermenter && source.active_mash_status === 'fermenting') {
+    next.push({
+      key: 'logs',
+      label: 'Logs',
+      to: `/fermentation?logsEquipment=${source.id}`,
+    });
+  }
+  const distilling = isStill
+    && source.distillationRunId
+    && source.distillationRunStatus === 'running';
+  if (distilling) {
+    next.push({
+      key: 'cuts',
+      label: 'Cuts',
+      to: `/distillation?cutsRun=${source.distillationRunId}`,
     });
   }
   if (canChargeFermenter) {
@@ -119,19 +138,11 @@ export function buildProcessEquipmentContextMenu(
   }
 
   const records: ProcessEquipmentMenuLink[] = [];
-  if (canChargeFermenter) {
-    const viewing = source.active_mash_status === 'complete';
+  if (canChargeFermenter && source.active_mash_status !== 'fermenting') {
     records.push({
       key: 'logs',
-      label: viewing ? 'View logs' : 'Add logs',
+      label: 'View logs',
       to: `/fermentation?logsEquipment=${source.id}`,
-    });
-  }
-  if (isStill && source.distillationRunId) {
-    records.push({
-      key: 'cuts',
-      label: 'Add cuts',
-      to: `/distillation?cutsRun=${source.distillationRunId}`,
     });
   }
 

@@ -58,6 +58,7 @@ import {
 } from '../lib/tank-product-name';
 import { expectedCompletionDateError } from '../lib/fermentation';
 import { eventDateWhenLeavingPlanned, localIsoDate } from '../lib/planned-event-date';
+import { choosePlannedFermenterRun } from '../lib/planned-fermenter-distillation';
 import { deleteStatusDateLog, recordStatusDateLog } from './status-logs';
 import { DISCARD_DESTINATION, fermenterTransferError } from '../lib/fermenter-transfer';
 import {
@@ -944,6 +945,19 @@ export function getActiveDistillationRunOnStill(
      LIMIT 1`,
     [trimmed, excludeRunId ?? null, excludeRunId ?? -1],
   ) ?? undefined;
+}
+
+/** Planned wash or heavy rum run already scheduled from this fermenter. */
+export function getPlannedDistillationForFermenter(
+  fermenterId: number,
+  preferRunType?: string,
+): DistillationRunView | undefined {
+  const planned = getDistillationRuns().filter((run) => (
+    run.source_fermenter_equipment_id === fermenterId
+    && run.status === 'planned'
+    && (run.run_type === 'wash' || run.run_type === 'heavy_rum')
+  ));
+  return choosePlannedFermenterRun(planned, preferRunType);
 }
 
 /** Running run first, otherwise a planned run, so the process menu can open cuts. */
@@ -3135,6 +3149,34 @@ export function fermenterHasFermentationLogs(mashBatchId: number, floorEquipment
     [mashBatchId, floorEquipmentId],
   );
   return (row?.count ?? 0) > 0;
+}
+
+/** Mark the fermentation in this fermenter complete. A log on that fermenter is required. */
+export function completeFermenterAssignment(equipmentId: number): void {
+  const info = queryOne<{ mash_batch_id: number; status: string }>(`
+    SELECT a.mash_batch_id, COALESCE(a.status, 'fermenting') AS status
+    FROM mash_fermenter_assignments a
+    WHERE a.floor_equipment_id = ?
+      AND a.volume_gal > 0.01
+      AND COALESCE(a.status, 'fermenting') != 'discarded'
+    ORDER BY a.id DESC
+    LIMIT 1
+  `, [equipmentId]);
+  if (!info) throw new Error('This fermenter does not have a fermentation to complete.');
+  if (assignmentStatus(info.status) === 'complete') {
+    throw new Error('This fermentation is already complete.');
+  }
+  const assignments = getMashFermenterAssignments(info.mash_batch_id);
+  saveFermentationSet(
+    info.mash_batch_id,
+    assignments.map((assignment) => ({
+      equipmentId: assignment.floor_equipment_id,
+      volumeGal: assignment.volume_gal,
+      status: assignment.floor_equipment_id === equipmentId
+        ? 'complete'
+        : assignmentStatus(assignment.status),
+    })),
+  );
 }
 
 /** Save one wash's fermenter rows. Mash status follows those fermenters. */

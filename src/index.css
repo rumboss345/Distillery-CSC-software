@@ -2308,6 +2308,39 @@ tr.volume-change-kind:hover td {
   margin-bottom: 0.25rem;
 }
 
+.tank-contents-lookup {
+  margin-bottom: 1rem;
+}
+
+.tank-contents-lookup .form-group {
+  max-width: 28rem;
+}
+
+.tank-contents-card {
+  margin-top: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.tank-contents-kicker {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.tank-contents-card strong {
+  display: block;
+  margin-top: 0.15rem;
+}
+
+.tank-contents-card p {
+  margin: 0.2rem 0 0;
+}
+
 .wizard-additive-card {
   margin-bottom: 1rem;
   padding: 0.75rem;
