@@ -821,7 +821,7 @@ export function SpiritWeightCalculator() {
         <WeightConverter />
       ) : (
         <>
-          <div className="card">
+          <div className="card gauge-known">
             <h3>What do you know?</h3>
             <div className="measure-mode-buttons" style={{ marginBottom: '1rem' }}>
               <button

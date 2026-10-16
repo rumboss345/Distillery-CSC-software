@@ -106,13 +106,16 @@
 }
 
 .warehouse-search {
+  flex: 0 0 auto;
+  width: 14rem;
+  min-height: 2.5rem;
   background: #1f2937;
   color: #f8fafc;
   border: 1px solid #64748b;
   border-radius: 6px;
-  padding: 0.28rem 0.55rem;
-  font-size: 0.8rem;
-  min-width: 11rem;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.875rem;
+  font-family: var(--font);
 }
 
 .warehouse-search::placeholder {
