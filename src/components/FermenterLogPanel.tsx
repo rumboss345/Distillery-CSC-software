@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { StatusDateLog } from './StatusDateLog';
+import { FermentationLogGraph } from './FermentationLogGraph';
 import { addFermentationLog, getFermentationLogs } from '../db/queries';
 import { formatRecordedAt } from '../lib/date-input';
 import { estimateAbvFromBrix, formatAbvEstimate } from '../lib/fermentation';
@@ -36,6 +37,7 @@ export function FermenterLogPanel({
 }) {
   void refreshKey;
   const [logForm, setLogForm] = useState(emptyLogForm());
+  const [showGraph, setShowGraph] = useState(false);
   const logs = getFermentationLogs(mashBatchId, equipmentId);
   const currentBrix = logs.find((l) => l.brix != null)?.brix ?? null;
   const currentAbv = startBrix != null && currentBrix != null
@@ -127,29 +129,44 @@ export function FermenterLogPanel({
       )}
 
       {logs.length > 0 ? (
-        <div className="table-wrap" style={{ marginTop: '1rem' }}>
-          <table>
-            <thead>
-              <tr><th>Date</th><th className="num">Temp (°F)</th><th className="num">Brix</th><th className="num">Est. ABV</th><th className="num">pH</th><th>Notes</th></tr>
-            </thead>
-            <tbody>
-              {logs.map((l) => (
-                <tr key={l.id}>
-                  <td style={{ whiteSpace: 'nowrap' }}>{formatRecordedAt(l.logged_at)}</td>
-                  <td className="num">{l.temperature_f ?? '—'}°F</td>
-                  <td className="num">{l.brix ?? '—'}°</td>
-                  <td className="num">
-                    {startBrix != null && l.brix != null
-                      ? formatAbvEstimate(estimateAbvFromBrix(startBrix, l.brix))
-                      : '—'}
-                  </td>
-                  <td className="num">{l.ph ?? '—'}</td>
-                  <td>{l.notes}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <>
+          <div className="fermenter-log-toolbar">
+            <button
+              type="button"
+              className={`btn btn-sm btn-secondary${showGraph ? ' is-on' : ''}`}
+              aria-pressed={showGraph}
+              onClick={() => setShowGraph((open) => !open)}
+            >
+              {showGraph ? 'Hide graph' : 'View graph'}
+            </button>
+          </div>
+          {showGraph && (
+            <FermentationLogGraph logs={logs} startBrix={startBrix} />
+          )}
+          <div className="table-wrap" style={{ marginTop: '1rem' }}>
+            <table>
+              <thead>
+                <tr><th>Date</th><th className="num">Temp (°F)</th><th className="num">Brix</th><th className="num">Est. ABV</th><th className="num">pH</th><th>Notes</th></tr>
+              </thead>
+              <tbody>
+                {logs.map((l) => (
+                  <tr key={l.id}>
+                    <td style={{ whiteSpace: 'nowrap' }}>{formatRecordedAt(l.logged_at)}</td>
+                    <td className="num">{l.temperature_f ?? '—'}°F</td>
+                    <td className="num">{l.brix ?? '—'}°</td>
+                    <td className="num">
+                      {startBrix != null && l.brix != null
+                        ? formatAbvEstimate(estimateAbvFromBrix(startBrix, l.brix))
+                        : '—'}
+                    </td>
+                    <td className="num">{l.ph ?? '—'}</td>
+                    <td>{l.notes}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       ) : readOnly ? (
         <p className="field-hint" style={{ marginTop: '1rem' }}>No fermentation logs recorded.</p>
       ) : null}

@@ -1973,6 +1973,75 @@ tr.volume-change-kind:hover td {
   color: var(--text);
 }
 
+.fermenter-log-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 1rem;
+}
+
+.fermentation-log-graph {
+  margin-top: 0.75rem;
+}
+
+.fermentation-graph-measures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+
+.fermentation-graph-summary {
+  margin: 0 0 0.5rem;
+  color: var(--text);
+}
+
+.fermentation-graph-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.fermentation-graph-svg .fermentation-graph-grid {
+  stroke: var(--border-subtle);
+  stroke-width: 1;
+}
+
+.fermentation-graph-svg .fermentation-graph-baseline {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.fermentation-graph-svg .fermentation-graph-series {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.fermentation-graph-svg .fermentation-graph-point {
+  fill: var(--accent);
+  stroke: var(--bg-card);
+  stroke-width: 1.5;
+}
+
+.fermentation-graph-svg .fermentation-graph-ready {
+  stroke: var(--success);
+  stroke-width: 1.25;
+  stroke-dasharray: 4 4;
+}
+
+.fermentation-graph-svg .fermentation-graph-ready-label,
+.fermentation-graph-svg .fermentation-graph-axis {
+  fill: var(--text-muted);
+  font-size: 12px;
+  font-family: var(--font);
+}
+
+.fermentation-graph-svg .fermentation-graph-ready-label {
+  fill: var(--success);
+}
+
 .blend-ingredients-section {
   margin-top: 0.5rem;
 }
