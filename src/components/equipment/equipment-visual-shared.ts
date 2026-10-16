@@ -1,7 +1,7 @@
 import type { EquipmentStatus, EquipmentType } from '../../types';
 import { equipmentNeedsCleaning } from '../../lib/equipment-cleaning';
 import { equipmentBlocksProduction } from '../../lib/equipment-maintenance';
-import { equipmentTypeLabel, resolveEquipmentIcon } from '../../lib/equipment';
+import { equipmentTypeLabel, isSpiritLedgerEquipmentType, resolveEquipmentIcon } from '../../lib/equipment';
 import type { EquipmentVolumeReport } from '../../types';
 import type { FloorEquipmentView } from '../../types';
 import { estimateAbvFromBrix, fermenterLiquidBrixPhase } from '../../lib/fermentation';
@@ -87,6 +87,7 @@ export function buildEquipmentVisualData(
   item: FloorEquipmentView,
   report?: EquipmentVolumeReport,
   planName?: string,
+  ledgerContents?: string | null,
 ): EquipmentVisualData {
   const capacityGal = item.capacity_gal > 0 ? item.capacity_gal : (report?.capacity_gal ?? 0);
   const currentVolumeGal = Math.max(0, report?.volume_gal ?? item.active_volume_gal ?? 0);
@@ -100,16 +101,20 @@ export function buildEquipmentVisualData(
   if (!liquidName && item.active_batch_number) {
     liquidName = `Wash ${item.active_batch_number}`;
   }
-  if (item.equipment_type === 'holding_tank' && !liquidName && item.notes) {
-    liquidName = item.notes;
-  }
-  if (
-    item.equipment_type === 'collection_vessel'
-    && !liquidName
-    && currentVolumeGal > 0.05
-    && item.notes
-  ) {
-    liquidName = item.notes;
+  if (isSpiritLedgerEquipmentType(item.equipment_type)) {
+    if (ledgerContents !== undefined) {
+      const product = ledgerContents?.trim();
+      liquidName = product || undefined;
+    } else if (item.equipment_type === 'holding_tank' && !liquidName && item.notes) {
+      liquidName = item.notes;
+    } else if (
+      item.equipment_type === 'collection_vessel'
+      && !liquidName
+      && currentVolumeGal > 0.05
+      && item.notes
+    ) {
+      liquidName = item.notes;
+    }
   }
 
   const visualFillPercent = isWashing && fillPercent <= 0
