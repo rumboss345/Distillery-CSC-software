@@ -647,6 +647,7 @@ function runMigrations(): void {
   migrateHoldingTankVolumeVariances();
   migrateHoldingTankDilutions();
   migrateGinRuns();
+  migrateDistillationTankSources();
   db.run(`
     UPDATE floor_equipment
     SET equipment_type = 'stillage_tank'
@@ -654,6 +655,22 @@ function runMigrations(): void {
       AND name LIKE '%stillage%' COLLATE NOCASE
   `);
   persistDb();
+}
+
+function migrateDistillationTankSources(): void {
+  if (!db) return;
+  db.run(`
+    CREATE TABLE IF NOT EXISTS distillation_run_tank_sources (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      distillation_run_id INTEGER NOT NULL REFERENCES distillation_runs(id) ON DELETE CASCADE,
+      holding_tank_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
+      volume_gal REAL NOT NULL,
+      abv REAL NOT NULL DEFAULT 0,
+      sort_order INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+  db.run('CREATE INDEX IF NOT EXISTS idx_distillation_tank_sources_run ON distillation_run_tank_sources(distillation_run_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_distillation_tank_sources_tank ON distillation_run_tank_sources(holding_tank_equipment_id)');
 }
 
 function migrateGinRuns(): void {

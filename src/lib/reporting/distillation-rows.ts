@@ -1,5 +1,6 @@
 import { queryAll } from '../../db/database';
 import { distillationAlcoholBalance, washChargeAbvFromBrix, type AlcoholChargeBasis } from '../distillation-loss';
+import { distillationSourceSummary } from '../distillation-source-tanks';
 import { ALL_RUN_TYPES, runTypeLabel } from '../distillation-run-types';
 import type { DistillationRunType } from '../../types';
 import { laaGalFromVolumeAbv, roundVolume } from './alcohol-units';
@@ -74,6 +75,20 @@ export function buildDistillationReportRows(range: ReportDateRange): Distillatio
     LEFT JOIN mash_batches m ON m.id = r.source_mash_batch_id
     ORDER BY r.run_date DESC, r.id DESC
   `);
+
+  const sourceNamesByRun = new Map<number, string[]>();
+  const sourceNameRows = queryAll<{ distillation_run_id: number; tank_name: string }>(`
+    SELECT s.distillation_run_id, fe.name as tank_name
+    FROM distillation_run_tank_sources s
+    JOIN floor_equipment fe ON fe.id = s.holding_tank_equipment_id
+    WHERE s.volume_gal > 0
+    ORDER BY s.distillation_run_id, s.sort_order, s.id
+  `);
+  for (const row of sourceNameRows) {
+    const names = sourceNamesByRun.get(row.distillation_run_id) ?? [];
+    names.push(row.tank_name);
+    sourceNamesByRun.set(row.distillation_run_id, names);
+  }
 
   const latestBrix = new Map<string, number>();
   const brixLogs = queryAll<{ mash_batch_id: number; floor_equipment_id: number | null; brix: number }>(`
@@ -158,10 +173,13 @@ export function buildDistillationReportRows(range: ReportDateRange): Distillatio
     const alcoholLoss = !hasCuts ? null : (recorded ? r.alcohol_loss_gal : live.lossGal);
     const alcoholBasis = !hasCuts ? null : (recorded ? r.alcohol_charge_basis : (live.basis === 'unknown' ? null : live.basis));
 
-    const sourceLabel =
-      r.source_tank_name
-      ?? r.fermenter_name
-      ?? (r.mash_batch ? `Wash ${r.mash_batch}` : '—');
+    const sourceNames = sourceNamesByRun.get(r.id);
+    const sourceLabel = (sourceNames && sourceNames.length > 0
+      ? distillationSourceSummary(sourceNames)
+      : '')
+      || r.source_tank_name
+      || r.fermenter_name
+      || (r.mash_batch ? `Wash ${r.mash_batch}` : '—');
 
     rows.push({
       run_id: r.id,

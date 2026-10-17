@@ -1225,13 +1225,29 @@ function computeHoldingTankContents(
 
   const runOuts = queryOne<{ volume_gal: number; gpa: number }>(`
     SELECT
-      COALESCE(SUM(${TANK_CHARGE_DRAWN_GAL_SQL}), 0) as volume_gal,
-      COALESCE(SUM(${TANK_CHARGE_DRAWN_GPA_SQL}), 0) as gpa
-    FROM distillation_runs
-    WHERE source_holding_tank_equipment_id = ?
-      AND status IN ('running', 'complete')
-      AND (? IS NULL OR id != ?)
-  `, [tankId, excludeRunId ?? null, excludeRunId ?? -1]);
+      COALESCE(SUM(drawn_gal), 0) as volume_gal,
+      COALESCE(SUM(drawn_gpa), 0) as gpa
+    FROM (
+      SELECT s.volume_gal as drawn_gal, s.volume_gal * COALESCE(s.abv, 0) / 100.0 as drawn_gpa
+      FROM distillation_run_tank_sources s
+      JOIN distillation_runs r ON r.id = s.distillation_run_id
+      WHERE s.holding_tank_equipment_id = ?
+        AND r.status IN ('running', 'complete')
+        AND (? IS NULL OR r.id != ?)
+      UNION ALL
+      SELECT ${TANK_CHARGE_DRAWN_GAL_SQL} as drawn_gal, ${TANK_CHARGE_DRAWN_GPA_SQL} as drawn_gpa
+      FROM distillation_runs r
+      WHERE r.source_holding_tank_equipment_id = ?
+        AND r.status IN ('running', 'complete')
+        AND (? IS NULL OR r.id != ?)
+        AND NOT EXISTS (
+          SELECT 1 FROM distillation_run_tank_sources s WHERE s.distillation_run_id = r.id
+        )
+    ) AS tank_draws
+  `, [
+    tankId, excludeRunId ?? null, excludeRunId ?? -1,
+    tankId, excludeRunId ?? null, excludeRunId ?? -1,
+  ]);
 
   const blendOuts = queryOne<{ volume_gal: number; gpa: number }>(
     blendTankDrawsSql('?', '?'),
@@ -2264,10 +2280,25 @@ function tankLotsOnHand(tankId: number, asOf: string | null): { ins: TankLot[]; 
   }
 
   for (const row of queryAll<{ at: string; volume_gal: number }>(`
+    SELECT r.run_date as at, s.volume_gal
+    FROM distillation_run_tank_sources s
+    JOIN distillation_runs r ON r.id = s.distillation_run_id
+    WHERE s.holding_tank_equipment_id = ?
+      AND s.volume_gal > 0
+      AND r.status IN ('running', 'complete')
+  `, [tankId])) {
+    if (!within(row.at)) continue;
+    outs.push({ at: row.at, volumeGal: row.volume_gal });
+  }
+
+  for (const row of queryAll<{ at: string; volume_gal: number }>(`
     SELECT run_date as at, ${TANK_CHARGE_DRAWN_GAL_SQL} as volume_gal
-    FROM distillation_runs
-    WHERE source_holding_tank_equipment_id = ?
-      AND status IN ('running', 'complete')
+    FROM distillation_runs r
+    WHERE r.source_holding_tank_equipment_id = ?
+      AND r.status IN ('running', 'complete')
+      AND NOT EXISTS (
+        SELECT 1 FROM distillation_run_tank_sources s WHERE s.distillation_run_id = r.id
+      )
   `, [tankId])) {
     if (!(row.volume_gal > 0) || !within(row.at)) continue;
     outs.push({ at: row.at, volumeGal: row.volume_gal });
@@ -2902,6 +2933,13 @@ export function emptyAllHoldingTanks(): {
     SELECT COUNT(*) as count FROM distillation_runs
     WHERE source_holding_tank_equipment_id IS NOT NULL AND charge_volume_gal > 0
   `)?.count ?? 0;
+  runQuery(`
+    DELETE FROM distillation_run_tank_sources
+    WHERE distillation_run_id IN (
+      SELECT id FROM distillation_runs
+      WHERE source_holding_tank_equipment_id IS NOT NULL AND charge_volume_gal > 0
+    )
+  `);
   runQuery(`
     UPDATE distillation_runs
     SET charge_volume_gal = 0, charge_abv = NULL,
@@ -3914,6 +3952,11 @@ function releaseDistillationEquipmentForReturnToPlan(run: DistillationRun, runId
     for (const cut of cuts) {
       if (cut.holding_tank_equipment_id) tankIds.add(cut.holding_tank_equipment_id);
     }
+    const sources = queryAll<{ holding_tank_equipment_id: number }>(
+      'SELECT holding_tank_equipment_id FROM distillation_run_tank_sources WHERE distillation_run_id = ?',
+      [runId],
+    );
+    for (const source of sources) tankIds.add(source.holding_tank_equipment_id);
   }
   for (const tankId of tankIds) {
     releaseEquipmentWithoutCleaningHold(tankId, tankHasLiquid(tankId));
@@ -3983,10 +4026,79 @@ function fermenterChargeAbvForSave(run: {
   return estimatedWashChargeAbv(run.source_mash_batch_id, run.source_fermenter_equipment_id);
 }
 
+export interface DistillationTankSourceInput {
+  tankId: number;
+  volumeGal: number;
+  abv: number;
+}
+
+export interface DistillationTankSourceRow {
+  id: number;
+  runId: number;
+  tankId: number;
+  volumeGal: number;
+  abv: number;
+  tankName: string;
+  equipmentType: string;
+}
+
+export function listDistillationTankSources(): DistillationTankSourceRow[] {
+  return queryAll<{
+    id: number;
+    distillation_run_id: number;
+    holding_tank_equipment_id: number;
+    volume_gal: number;
+    abv: number;
+    tank_name: string;
+    equipment_type: string;
+  }>(`
+    SELECT s.id, s.distillation_run_id, s.holding_tank_equipment_id, s.volume_gal, s.abv,
+           fe.name as tank_name, fe.equipment_type
+    FROM distillation_run_tank_sources s
+    JOIN floor_equipment fe ON fe.id = s.holding_tank_equipment_id
+    ORDER BY s.distillation_run_id, s.sort_order, s.id
+  `).map((row) => ({
+    id: row.id,
+    runId: row.distillation_run_id,
+    tankId: row.holding_tank_equipment_id,
+    volumeGal: row.volume_gal,
+    abv: row.abv,
+    tankName: row.tank_name,
+    equipmentType: row.equipment_type,
+  }));
+}
+
+export function getDistillationRunTankSources(runId: number): DistillationTankSourceRow[] {
+  return listDistillationTankSources().filter((row) => row.runId === runId);
+}
+
+function persistDistillationTankSources(
+  runId: number,
+  runType: DistillationRunType,
+  sources: DistillationTankSourceInput[] | undefined,
+): void {
+  if (!isTankSourcedRun(runType)) {
+    runQuery('DELETE FROM distillation_run_tank_sources WHERE distillation_run_id = ?', [runId]);
+    return;
+  }
+  if (!sources) return;
+  runQuery('DELETE FROM distillation_run_tank_sources WHERE distillation_run_id = ?', [runId]);
+  sources.forEach((source, index) => {
+    if (!(source.tankId > 0) || !(source.volumeGal > 0)) return;
+    insertRow(
+      `INSERT INTO distillation_run_tank_sources
+        (distillation_run_id, holding_tank_equipment_id, volume_gal, abv, sort_order)
+       VALUES (?, ?, ?, ?, ?)`,
+      [runId, source.tankId, source.volumeGal, source.abv, index],
+    );
+  });
+}
+
 export function saveDistillationRun(
   run: Omit<DistillationRun, 'id' | 'created_at'>,
   id?: number,
   botanicals?: GinBotanicalInput[],
+  tankSources?: DistillationTankSourceInput[],
 ): number {
   assertEnteredAbv(run.charge_abv, 'Charge ABV');
   assertEnteredAbv(run.proof_spirit_abv, 'Tails ABV');
@@ -4009,8 +4121,15 @@ export function saveDistillationRun(
     ) {
       assertEquipmentUsableForProduction(run.source_fermenter_equipment_id, 'Fermenter');
     }
-    if (isTankSourcedRun(runType) && run.source_holding_tank_equipment_id) {
-      assertEquipmentUsableForProduction(run.source_holding_tank_equipment_id, 'Source tank');
+    if (isTankSourcedRun(runType)) {
+      const tankIds = tankSources && tankSources.length > 0
+        ? tankSources.map((source) => source.tankId)
+        : run.source_holding_tank_equipment_id
+          ? [run.source_holding_tank_equipment_id]
+          : [];
+      for (const tankId of tankIds) {
+        if (tankId > 0) assertEquipmentUsableForProduction(tankId, 'Source tank');
+      }
     }
   }
   const stillCapacity = getStillCapacityByName(run.still_name);
@@ -4042,6 +4161,10 @@ export function saveDistillationRun(
     assertStillageFitsTank(stillage.tankId, stillage.volumeGal, id);
   }
   const runDate = eventDateWhenLeavingPlanned(previousRun?.status, run.status, run.run_date);
+  const primarySourceId = isTankSourcedRun(runType)
+    ? (tankSources?.find((source) => source.tankId > 0 && source.volumeGal > 0)?.tankId
+      ?? run.source_holding_tank_equipment_id)
+    : null;
   let runId = id ?? 0;
   if (id) {
     runQuery(
@@ -4051,7 +4174,7 @@ export function saveDistillationRun(
         runType,
         isFermenterSourcedRun(runType) ? run.source_mash_batch_id : null,
         isFermenterSourcedRun(runType) ? run.source_fermenter_equipment_id : null,
-        isTankSourcedRun(runType) ? run.source_holding_tank_equipment_id : null,
+        primarySourceId,
         null,
         run.still_name,
         runDate,
@@ -4079,7 +4202,7 @@ export function saveDistillationRun(
         runType,
         isFermenterSourcedRun(runType) ? run.source_mash_batch_id : null,
         isFermenterSourcedRun(runType) ? run.source_fermenter_equipment_id : null,
-        isTankSourcedRun(runType) ? run.source_holding_tank_equipment_id : null,
+        primarySourceId,
         null,
         run.still_name,
         runDate,
@@ -4137,6 +4260,7 @@ export function saveDistillationRun(
   if (runType === 'gin' && botanicals) {
     persistRunBotanicals(runId, botanicals);
   }
+  persistDistillationTankSources(runId, runType, tankSources);
   recordDistillationCollectionLoss(runId);
   syncHoldingTankStatuses();
   syncFermenterAndStillStatuses();
@@ -4251,6 +4375,7 @@ export function deleteDistillationRun(id: number): void {
     releaseStillAfterRunningRun(run, '', 'complete');
   }
   runQuery('DELETE FROM distillation_run_botanicals WHERE distillation_run_id = ?', [id]);
+  runQuery('DELETE FROM distillation_run_tank_sources WHERE distillation_run_id = ?', [id]);
   deleteStatusDateLog('distillation', id);
   runQuery('DELETE FROM distillation_runs WHERE id = ?', [id]);
   syncHoldingTankStatuses();

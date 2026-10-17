@@ -30,6 +30,9 @@ import {
   getDistillationCollectionLoss,
   recordDistillationCollectionLoss,
   getChargeableSourceTanks,
+  getDistillationRunTankSources,
+  listDistillationTankSources,
+  type DistillationTankSourceInput,
   getStillageTanks,
   defaultTankForCutType,
   getCollectionVessels,
@@ -45,8 +48,13 @@ import {
 } from '../db/queries';
 import { AbvVolumeTemperatureFields } from '../components/AbvVolumeTemperatureFields';
 import {
+  blendDistillationTankPulls,
+  distillationSourceSummary,
   distillationSourceTypeChoices,
+  distillationTankPullError,
+  fitDistillationTankPulls,
   tanksOfEquipmentType,
+  type DistillationTankPull,
 } from '../lib/distillation-source-tanks';
 import { equipmentTypeLabel } from '../lib/equipment';
 import { formatTankMenuLabel, tankContentsPhrase, tankDropdownLabel } from '../lib/tank-menu-label';
@@ -129,6 +137,13 @@ const emptyRun = (runType: DistillationRunType = 'wash'): Omit<DistillationRun, 
   notes: '',
 });
 
+interface SourceTankLine {
+  key: string;
+  equipmentType: string;
+  tankId: number | null;
+  volumeGal: number;
+}
+
 export function Distillation() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -145,7 +160,18 @@ export function Distillation() {
   const [editCutId, setEditCutId] = useState<number | undefined>();
   const [editRunId, setEditRunId] = useState<number | undefined>();
   const [runForm, setRunForm] = useState(emptyRun());
-  const [sourceTankType, setSourceTankType] = useState('');
+  const sourceLineSeq = useRef(1);
+  const freshSourceLine = (partial?: Partial<SourceTankLine>): SourceTankLine => {
+    sourceLineSeq.current += 1;
+    return {
+      key: `src-${sourceLineSeq.current}`,
+      equipmentType: '',
+      tankId: null,
+      volumeGal: 0,
+      ...partial,
+    };
+  };
+  const [sourceLines, setSourceLines] = useState<SourceTankLine[]>(() => [freshSourceLine()]);
   const [plannedScheduleDate, setPlannedScheduleDate] = useState<string | null>(null);
   const planOnly = plannedRecordSkipsEquipmentStatus(runForm.status);
   const equipmentListOptions = planOnly ? { includeUnavailable: true as const } : undefined;
@@ -233,19 +259,29 @@ export function Distillation() {
     : [];
   const sourceTypeOptions = distillationSourceTypeChoices([
     ...chargeableSourceTanks.map((tank) => tank.equipment_type),
-    sourceTankType,
+    ...sourceLines.map((line) => line.equipmentType),
   ]);
-  const tanksForSourceType = tanksOfEquipmentType(chargeableSourceTanks, sourceTankType);
-
-  const selectedSourceTank = chargeableSourceTanks.find(
-    (t) => t.id === runForm.source_holding_tank_equipment_id,
+  const chosenSourceTankIds = new Set(
+    sourceLines.map((line) => line.tankId).filter((id): id is number => id != null && id > 0),
   );
-  const savedLowWineTankName = runForm.source_holding_tank_equipment_id
-    ? equipment.find((e) => e.id === runForm.source_holding_tank_equipment_id)?.name
-    : undefined;
-  const selectedLowWineAvailable = runForm.source_holding_tank_equipment_id
-    ? getHoldingTankContents(runForm.source_holding_tank_equipment_id, editRunId)
-    : null;
+
+  const tankPulls: DistillationTankPull[] = sourceLines.flatMap((line) => {
+    if (!line.tankId) return [];
+    const tank = chargeableSourceTanks.find((item) => item.id === line.tankId);
+    return [{
+      tankId: line.tankId,
+      volumeGal: Number(line.volumeGal) || 0,
+      abv: tank ? roundAbv(tank.available_abv) : 0,
+      tankName: tank?.name ?? equipment.find((item) => item.id === line.tankId)?.name,
+    }];
+  });
+  const blendedPull = blendDistillationTankPulls(tankPulls);
+  const sourceTankNames = tankPulls
+    .filter((pull) => pull.volumeGal > 0)
+    .map((pull) => pull.tankName ?? '')
+    .filter(Boolean);
+  const primarySourceTank = chargeableSourceTanks.find((tank) => tank.id === tankPulls[0]?.tankId)
+    ?? chargeableSourceTanks.find((tank) => tank.id === runForm.source_holding_tank_equipment_id);
 
   const selectedStill = stills.find((s) => s.name === runForm.still_name);
   const fermenterSourceOptionLabel = (
@@ -286,18 +322,38 @@ export function Distillation() {
       assigned_user_name: runForm.assigned_user_name,
     });
     clearChargeProof();
-    setSourceTankType('');
+    setSourceLines([freshSourceLine()]);
     setBotanicals(runType === 'gin' ? [emptyGinBotanical()] : []);
     setGinRecipeId('');
     setGinRecipeName('');
   };
 
-  const handleSourceEquipmentTypeChange = (type: string) => {
-    setSourceTankType(type);
-    const tank = chargeableSourceTanks.find((item) => item.id === runForm.source_holding_tank_equipment_id);
-    if (!type || !tank || tank.equipment_type !== type) {
-      handleRunSourceTankChange(null);
-    }
+  const commitSourceLines = (next: SourceTankLine[]) => {
+    setSourceLines(next);
+    const pulls: DistillationTankPull[] = next.flatMap((line) => {
+      if (!line.tankId) return [];
+      const tank = chargeableSourceTanks.find((item) => item.id === line.tankId);
+      return [{
+        tankId: line.tankId,
+        volumeGal: Number(line.volumeGal) || 0,
+        abv: tank ? roundAbv(tank.available_abv) : 0,
+        tankName: tank?.name,
+      }];
+    });
+    const blend = blendDistillationTankPulls(pulls);
+    const primaryId = pulls.find((pull) => pull.volumeGal > 0)?.tankId ?? pulls[0]?.tankId ?? null;
+    setRunForm((prev) => ({
+      ...prev,
+      source_holding_tank_equipment_id: primaryId,
+      charge_volume_gal: blend.volumeGal,
+      charge_abv: blend.abv,
+    }));
+    setChargeAbvObserved(blend.abv != null ? String(blend.abv) : '');
+    if (blend.abv != null) setChargeTempF('60');
+  };
+
+  const updateSourceLine = (key: string, patch: Partial<SourceTankLine>) => {
+    commitSourceLines(sourceLines.map((line) => (line.key === key ? { ...line, ...patch } : line)));
   };
 
   const openPlannedFermenterRun = (fermenterId: number, runType: DistillationRunType) => {
@@ -339,23 +395,10 @@ export function Distillation() {
     });
   };
 
-  const handleRunSourceTankChange = (tankId: number | null) => {
-    const tank = chargeableSourceTanks.find((t) => t.id === tankId);
-    const chargeAbv = tank ? roundAbv(tank.available_abv) : null;
-    setRunForm({
-      ...runForm,
-      source_holding_tank_equipment_id: tankId,
-      charge_volume_gal: tank ? roundVolume(tank.available_gal) : runForm.charge_volume_gal,
-      charge_abv: chargeAbv,
-      dest_holding_tank_equipment_id: null,
-    });
-    if (tank && chargeAbv != null) {
-      setChargeAbvObserved(String(chargeAbv));
-      setChargeTempF('60');
-    } else {
-      setChargeAbvObserved('');
-      setChargeTempF('60');
-    }
+  const setPrimarySpiritPull = (gallons: number) => {
+    const first = sourceLines[0] ?? freshSourceLine();
+    const rest = sourceLines.slice(1).map((line) => ({ ...line, volumeGal: 0 }));
+    commitSourceLines([{ ...first, volumeGal: roundVolume(gallons) }, ...rest]);
   };
 
   const syncChargeAbvFromObservation = (observed: string, tempF: string) => {
@@ -393,7 +436,7 @@ export function Distillation() {
     setChargeAbvObserved('');
     setChargeTempF('60');
     clearChargeProof();
-    setSourceTankType('');
+    setSourceLines([freshSourceLine()]);
     setBotanicals(runType === 'gin' ? [emptyGinBotanical()] : []);
     setGinRecipeId('');
     setGinRecipeName('');
@@ -440,12 +483,17 @@ export function Distillation() {
       setChargeAbvObserved('');
       setChargeTempF('60');
       clearChargeProof();
+      setSourceLines([freshSourceLine()]);
       setShowRunForm(true);
     } else if (fromTank) {
       const tank = getChargeableSourceTanks().find((t) => t.id === tankId);
       setEditRunId(undefined);
       setPlannedScheduleDate(null);
-      setSourceTankType(tank?.equipment_type ?? '');
+      setSourceLines([freshSourceLine(tank ? {
+        equipmentType: tank.equipment_type,
+        tankId: tank.id,
+        volumeGal: roundVolume(tank.available_gal),
+      } : {})]);
       setRunForm({
         ...emptyRun('low_wines'),
         ...defaultAssignee(user),
@@ -514,11 +562,27 @@ export function Distillation() {
     setBotanicals(savedBotanicals.length > 0 ? botanicalsFromRecipe(savedBotanicals) : [emptyGinBotanical()]);
     setGinRecipeId('');
     setGinRecipeName('');
-    setSourceTankType(
-      isTankSourcedRun(run.run_type ?? 'wash')
-        ? (equipment.find((item) => item.id === run.source_holding_tank_equipment_id)?.equipment_type ?? '')
-        : '',
-    );
+    if (isTankSourcedRun(run.run_type ?? 'wash')) {
+      const savedSources = getDistillationRunTankSources(run.id);
+      if (savedSources.length > 0) {
+        setSourceLines(savedSources.map((source) => freshSourceLine({
+          equipmentType: source.equipmentType,
+          tankId: source.tankId,
+          volumeGal: source.volumeGal,
+        })));
+      } else if (run.source_holding_tank_equipment_id) {
+        const savedTank = equipment.find((item) => item.id === run.source_holding_tank_equipment_id);
+        setSourceLines([freshSourceLine({
+          equipmentType: savedTank?.equipment_type ?? '',
+          tankId: run.source_holding_tank_equipment_id,
+          volumeGal: proofed ? run.proof_spirit_gal! : run.charge_volume_gal,
+        })]);
+      } else {
+        setSourceLines([freshSourceLine()]);
+      }
+    } else {
+      setSourceLines([freshSourceLine()]);
+    }
     setShowRunForm(true);
   };
 
@@ -575,13 +639,15 @@ export function Distillation() {
   };
 
   const sourceTankFreeGal = (() => {
-    if (!runForm.source_holding_tank_equipment_id || !selectedLowWineAvailable) return null;
-    const tank = equipment.find((item) => item.id === runForm.source_holding_tank_equipment_id);
+    const tank = primarySourceTank;
     if (!tank || !(tank.capacity_gal > 0)) return null;
-    return Math.max(0, tank.capacity_gal - selectedLowWineAvailable.volume_gal);
+    return Math.max(0, tank.capacity_gal - tank.available_gal);
   })();
+  const availableSpiritGal = chargeableSourceTanks
+    .filter((tank) => chosenSourceTankIds.has(tank.id))
+    .reduce((sum, tank) => sum + tank.available_gal, 0);
 
-  const pulledSpiritAbv = runForm.charge_abv ?? selectedLowWineAvailable?.abv ?? 0;
+  const pulledSpiritAbv = blendedPull.abv ?? runForm.charge_abv ?? 0;
   const spiritProofPlan = isTankSourcedRun(runForm.run_type) && proofTarget.trim()
     ? (chargeSizeMode === 'finished'
       ? planSpiritChargeForFinishedVolume({
@@ -590,10 +656,10 @@ export function Distillation() {
         targetAbvPercent: Number(proofTarget),
         stillCapacityGal: selectedStill && selectedStill.capacity_gal > 0 ? selectedStill.capacity_gal : null,
         sourceTankFreeGal,
-        availableSpiritGal: selectedLowWineAvailable?.volume_gal ?? null,
+        availableSpiritGal: chosenSourceTankIds.size > 0 ? availableSpiritGal : null,
         place: proofPlace,
         stillName: selectedStill?.name,
-        tankName: selectedSourceTank?.name ?? savedLowWineTankName,
+        tankName: distillationSourceSummary(sourceTankNames) || undefined,
       })
       : planSpiritChargeProof({
         spiritGal: runForm.charge_volume_gal,
@@ -603,7 +669,7 @@ export function Distillation() {
         sourceTankFreeGal,
         place: proofPlace,
         stillName: selectedStill?.name,
-        tankName: selectedSourceTank?.name ?? savedLowWineTankName,
+        tankName: distillationSourceSummary(sourceTankNames) || undefined,
       }))
     : null;
   const tailsToCharge = chargeSizeMode === 'finished' && spiritProofPlan?.ok
@@ -680,8 +746,13 @@ export function Distillation() {
       }
       return;
     } else {
-      if (!runForm.source_holding_tank_equipment_id) {
-        alert('Select the source tank to charge from.');
+      const availableByTank = new Map(chargeableSourceTanks.map((tank) => [tank.id, tank.available_gal]));
+      const pullsToSave = chargeSizeMode === 'finished' && spiritProofPlan?.ok
+        ? fitDistillationTankPulls(tankPulls, spiritProofPlan.spiritGal, availableByTank)
+        : tankPulls;
+      const pullError = distillationTankPullError(pullsToSave, availableByTank);
+      if (pullError) {
+        alert(pullError);
         return;
       }
       if (chargeSizeMode === 'finished' && !proofTarget.trim()) {
@@ -691,30 +762,39 @@ export function Distillation() {
       if (tailsToCharge <= 0) {
         alert(chargeSizeMode === 'finished'
           ? 'Enter the final volume in the still and the proof it needs.'
-          : 'Enter the charge volume drawn from the source tank.');
+          : 'Enter the gallons drawn from each tank.');
         return;
       }
-      const available = getHoldingTankContents(
-        runForm.source_holding_tank_equipment_id,
-        editRunId,
-      );
-      if (tailsToCharge > available.volume_gal + 0.01) {
-        alert(`Only ${available.volume_gal.toFixed(1)} gal available in that tank.`);
+      if (
+        chargeSizeMode === 'finished'
+        && spiritProofPlan?.ok
+        && blendDistillationTankPulls(pullsToSave).volumeGal + 0.01 < spiritProofPlan.spiritGal
+      ) {
+        alert('The selected tanks do not hold enough spirit for that still volume.');
         return;
       }
-      const chargeAbv = runForm.charge_abv ?? available.abv;
+      const savedBlend = blendDistillationTankPulls(pullsToSave);
+      const chargeAbv = savedBlend.abv ?? blendedPull.abv ?? runForm.charge_abv ?? 0;
+      const tankSources: DistillationTankSourceInput[] = pullsToSave
+        .filter((pull) => pull.volumeGal > 0)
+        .map((pull) => ({
+          tankId: pull.tankId,
+          volumeGal: roundVolume(pull.volumeGal),
+          abv: roundAbv(pull.abv),
+        }));
       const savedRun = spiritProofPlan?.ok
         ? {
           ...runForm,
           charge_volume_gal: spiritProofPlan.stillGal,
           charge_abv: spiritProofPlan.targetAbvPercent,
           proof_spirit_gal: spiritProofPlan.spiritGal,
-          proof_spirit_abv: spiritProofPlan.spiritAbvPercent,
+          proof_spirit_abv: savedBlend.abv ?? spiritProofPlan.spiritAbvPercent,
           proof_water_gal: spiritProofPlan.waterGal,
           proof_place: spiritProofPlan.place,
         }
         : {
           ...runForm,
+          charge_volume_gal: savedBlend.volumeGal,
           charge_abv: chargeAbv,
           proof_spirit_gal: null,
           proof_spirit_abv: null,
@@ -733,6 +813,7 @@ export function Distillation() {
           savedRun,
           editRunId,
           savedRun.run_type === 'gin' ? botanicals : undefined,
+          tankSources,
         );
         setShowRunForm(false);
         refresh();
@@ -742,12 +823,22 @@ export function Distillation() {
     }
   };
 
+  const tankSourceNamesByRun = new Map<number, string[]>();
+  for (const source of listDistillationTankSources()) {
+    const names = tankSourceNamesByRun.get(source.runId) ?? [];
+    if (source.tankName) names.push(source.tankName);
+    tankSourceNamesByRun.set(source.runId, names);
+  }
+
   const runSourceSummary = (run: DistillationRun & {
     source_holding_tank_name?: string;
     dest_holding_tank_name?: string;
   }) => {
     if (isTankSourcedRun(run.run_type ?? 'wash')) {
-      const from = run.source_holding_tank_name ?? fermenterLabel(run.source_holding_tank_equipment_id);
+      const savedNames = tankSourceNamesByRun.get(run.id) ?? [];
+      const from = savedNames.length > 0
+        ? distillationSourceSummary(savedNames)
+        : (run.source_holding_tank_name ?? fermenterLabel(run.source_holding_tank_equipment_id));
       const to = run.dest_holding_tank_name ?? fermenterLabel(run.dest_holding_tank_equipment_id);
       return to ? `${from} → ${to}` : from;
     }
@@ -981,7 +1072,7 @@ export function Distillation() {
     <div>
       <div className="page-header">
         <h2>Distillation</h2>
-        <p>Low wine and heavy rum runs charge fermenters · Spirit runs and gin runs charge a source tank · Brix below {FERMENTATION_READY_MAX_BRIX}° recommended before charging</p>
+        <p>Low wine and heavy rum runs charge fermenters · Spirit runs and gin runs can charge more than one tank · Brix below {FERMENTATION_READY_MAX_BRIX}° recommended before charging</p>
         <div className="page-actions">
           <button type="button" className="btn btn-primary" onClick={() => openNewRun('wash')}>
             {RUN_TYPE_BUTTON_LABELS.wash}
@@ -1246,52 +1337,115 @@ export function Distillation() {
                 </>
               </div>
             ) : (
-              <>
-                <div className="form-group">
-                  <label htmlFor="source-equipment-type">Equipment type</label>
-                  <select
-                    id="source-equipment-type"
-                    value={sourceTankType}
-                    onChange={(e) => handleSourceEquipmentTypeChange(e.target.value)}
-                  >
-                    <option value="">— Select equipment type —</option>
-                    {sourceTypeOptions.map((type) => (
-                      <option key={type} value={type}>{equipmentTypeLabel(type)}</option>
-                    ))}
-                  </select>
-                  {sourceTypeOptions.length === 0 && (
-                    <p className="field-hint">No tanks have spirit to charge yet.</p>
-                  )}
-                </div>
-                {sourceTankType && (
-                  <div className="form-group full-width">
-                    <label htmlFor="source-tank">Source Tank</label>
-                    <select
-                      id="source-tank"
-                      value={runForm.source_holding_tank_equipment_id ?? ''}
-                      onChange={(e) => handleRunSourceTankChange(e.target.value ? parseInt(e.target.value) : null)}
-                    >
-                      <option value="">— Select tank —</option>
-                      {tanksForSourceType.map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {sourceTankLabel(t)}
-                        </option>
-                      ))}
-                    </select>
-                    {runForm.source_holding_tank_equipment_id && !selectedSourceTank && savedLowWineTankName && (
-                      <p className="field-hint">Previously charged from {savedLowWineTankName}</p>
-                    )}
-                    {tanksForSourceType.length === 0 && !savedLowWineTankName && (
-                      <p className="field-hint">No tanks of this type have spirit to charge.</p>
-                    )}
-                    {selectedLowWineAvailable && runForm.source_holding_tank_equipment_id && (
-                      <p className="field-hint">
-                        Available: {selectedLowWineAvailable.volume_gal.toFixed(1)} gal @ {selectedLowWineAvailable.abv.toFixed(1)}% ABV
-                      </p>
-                    )}
-                  </div>
+              <div className="form-group full-width" data-testid="source-tank-lines">
+                <label>Source tanks</label>
+                {sourceLines.map((line, index) => {
+                  const lineTanks = tanksOfEquipmentType(chargeableSourceTanks, line.equipmentType)
+                    .filter((tank) => tank.id === line.tankId || !chosenSourceTankIds.has(tank.id));
+                  const selectedTank = chargeableSourceTanks.find((tank) => tank.id === line.tankId);
+                  const savedName = line.tankId
+                    ? equipment.find((item) => item.id === line.tankId)?.name
+                    : undefined;
+                  return (
+                    <div key={line.key} data-testid={`source-tank-line-${index}`} style={{ marginBottom: '0.75rem' }}>
+                      <div className="form-grid">
+                        <div className="form-group">
+                          <label htmlFor={`source-equipment-type-${line.key}`}>Equipment type</label>
+                          <select
+                            id={`source-equipment-type-${line.key}`}
+                            value={line.equipmentType}
+                            onChange={(e) => updateSourceLine(line.key, {
+                              equipmentType: e.target.value,
+                              tankId: null,
+                              volumeGal: 0,
+                            })}
+                          >
+                            <option value="">— Select equipment type —</option>
+                            {sourceTypeOptions.map((type) => (
+                              <option key={type} value={type}>{equipmentTypeLabel(type)}</option>
+                            ))}
+                          </select>
+                        </div>
+                        {line.equipmentType && (
+                          <div className="form-group">
+                            <label htmlFor={`source-tank-${line.key}`}>Source tank</label>
+                            <select
+                              id={`source-tank-${line.key}`}
+                              value={line.tankId ?? ''}
+                              onChange={(e) => {
+                                const tankId = e.target.value ? parseInt(e.target.value, 10) : null;
+                                const tank = chargeableSourceTanks.find((item) => item.id === tankId);
+                                updateSourceLine(line.key, {
+                                  tankId,
+                                  volumeGal: tank ? roundVolume(tank.available_gal) : 0,
+                                });
+                              }}
+                            >
+                              <option value="">— Select tank —</option>
+                              {lineTanks.map((tank) => (
+                                <option key={tank.id} value={tank.id}>{sourceTankLabel(tank)}</option>
+                              ))}
+                              {line.tankId && savedName && !lineTanks.some((tank) => tank.id === line.tankId) && (
+                                <option value={line.tankId}>{savedName}</option>
+                              )}
+                            </select>
+                            {lineTanks.length === 0 && !savedName && (
+                              <p className="field-hint">No tanks of this type have spirit to charge.</p>
+                            )}
+                            {selectedTank && (
+                              <p className="field-hint">
+                                Available: {selectedTank.available_gal.toFixed(1)} gal @ {selectedTank.available_abv.toFixed(1)}% ABV
+                              </p>
+                            )}
+                          </div>
+                        )}
+                        {line.tankId && (
+                          <div className="form-group">
+                            <label htmlFor={`source-tank-gal-${line.key}`}>Gallons from this tank</label>
+                            <input
+                              id={`source-tank-gal-${line.key}`}
+                              type="number"
+                              step="0.1"
+                              min="0"
+                              max={selectedTank?.available_gal}
+                              value={line.volumeGal || ''}
+                              onChange={(e) => updateSourceLine(line.key, {
+                                volumeGal: parseFloat(e.target.value) || 0,
+                              })}
+                            />
+                          </div>
+                        )}
+                      </div>
+                      {sourceLines.length > 1 && (
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-ghost"
+                          onClick={() => commitSourceLines(sourceLines.filter((item) => item.key !== line.key))}
+                        >
+                          Remove tank
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  data-testid="add-source-tank"
+                  onClick={() => commitSourceLines([...sourceLines, freshSourceLine()])}
+                >
+                  Add another tank
+                </button>
+                {sourceTypeOptions.length === 0 && (
+                  <p className="field-hint">No tanks have spirit to charge yet.</p>
                 )}
-              </>
+                {blendedPull.volumeGal > 0 && (
+                  <p className="field-hint" data-testid="spirit-pull-total">
+                    Spirit pull {blendedPull.volumeGal.toFixed(1)} gal
+                    {blendedPull.abv != null ? ` @ ${blendedPull.abv.toFixed(1)}% ABV` : ''}.
+                  </p>
+                )}
+              </div>
             )}
 
             <div className="form-group">
@@ -1355,13 +1509,14 @@ export function Distillation() {
                       : undefined
                 }
                 value={runForm.charge_volume_gal || ''}
+                readOnly={isTankSourcedRun(runForm.run_type)}
                 onChange={(e) => setRunForm({ ...runForm, charge_volume_gal: parseFloat(e.target.value) || 0 })}
               />
               {isTankSourcedRun(runForm.run_type) ? (
                 <p className="field-hint">
                   {chargeSizeMode === 'finished'
-                    ? 'Spirit pulled from the tank. Final volume mode below replaces this pull when you save.'
-                    : 'Gallons of spirit drawn from the tank, before any proofing water.'}
+                    ? 'Spirit pulled from the tanks. Final volume mode below replaces this pull when you save.'
+                    : 'Total gallons drawn from the tanks above, before any proofing water.'}
                 </p>
               ) : (
                 <p className="field-hint">
@@ -1410,7 +1565,7 @@ export function Distillation() {
                   onTemperatureChange={(value) => syncChargeAbvFromObservation(chargeAbvObserved, value)}
                   abvPlaceholder={
                     runForm.charge_abv?.toString()
-                    ?? selectedLowWineAvailable?.abv.toFixed(1)
+                    ?? blendedPull.abv?.toFixed(1)
                     ?? undefined
                   }
                 />
@@ -1504,7 +1659,7 @@ export function Distillation() {
                       className="btn btn-sm btn-secondary"
                       data-testid="use-finished-spirit-pull"
                       onClick={() => {
-                        setRunForm({ ...runForm, charge_volume_gal: spiritProofPlan.spiritGal });
+                        setPrimarySpiritPull(spiritProofPlan.spiritGal);
                         setChargeSizeMode('tails');
                       }}
                     >
@@ -1515,10 +1670,7 @@ export function Distillation() {
                     <button
                       type="button"
                       className="btn btn-sm btn-secondary"
-                      onClick={() => setRunForm({
-                        ...runForm,
-                        charge_volume_gal: spiritProofPlan.maxSpiritGal ?? runForm.charge_volume_gal,
-                      })}
+                      onClick={() => setPrimarySpiritPull(spiritProofPlan.maxSpiritGal ?? 0)}
                     >
                       Use {spiritProofPlan.maxSpiritGal.toFixed(1)} gal of tails
                     </button>
