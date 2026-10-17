@@ -10,6 +10,34 @@ export function washMoveNeedsActualStartBrix(
   return actualBrix == null;
 }
 
+/** Days after the wash is transferred into fermenters. */
+export const FERMENTATION_EXPECTED_DAYS = 4;
+
+/** Four days after the wash moves into the fermenters, as YYYY-MM-DD. */
+export function defaultExpectedCompletionDate(
+  transferDate: string | null | undefined,
+  days: number = FERMENTATION_EXPECTED_DAYS,
+): string {
+  const day = transferDate?.trim() ?? '';
+  if (!isIsoDate(day)) return '';
+  const [year, month, date] = day.split('-').map(Number);
+  const next = new Date(Date.UTC(year, month - 1, date));
+  next.setUTCDate(next.getUTCDate() + days);
+  return next.toISOString().slice(0, 10);
+}
+
+/**
+ * Keep a date the user already chose. Otherwise use four days after the transfer.
+ */
+export function expectedCompletionForTransfer(
+  transferDate: string | null | undefined,
+  existing: string | null | undefined,
+): string {
+  const saved = existing?.trim() ?? '';
+  if (saved) return saved;
+  return defaultExpectedCompletionDate(transferDate);
+}
+
 /** Expected completion must be a real date on or after the fermentation starts. */
 export function expectedCompletionDateError(value: string | null | undefined, startDate: string): string | null {
   const date = value?.trim() ?? '';
