@@ -1,12 +1,17 @@
 import { formatDateDisplay } from '../../lib/date-input';
 import { formatDistillationAlcoholResult } from '../../lib/distillation-loss';
-import { buildDistillationReportRows } from '../../lib/reporting/distillation-rows';
+import {
+  buildDistillationReportRows,
+  groupDistillationReportRows,
+  type DistillationReportRow,
+} from '../../lib/reporting/distillation-rows';
 import { useReportContext } from './report-context';
 import { ReportTableShell } from './ReportTableShell';
 
 export function DistillationReport() {
   const { range } = useReportContext();
   const rows = buildDistillationReportRows(range);
+  const groups = groupDistillationReportRows(rows);
 
   const csvHeaders = [
     'Run ID', 'Batch', 'Date', 'Still', 'Type', 'Status', 'Source', 'Charge gal', 'Charge ABV',
@@ -24,21 +29,45 @@ export function DistillationReport() {
   return (
     <ReportTableShell
       title="Distillation runs"
-      description="One row per distillation run with cut totals, hearts LAA, and alcohol loss or gain. The difference is the alcohol charged minus the alcohol collected. When more alcohol is collected than was charged, the result is recorded as a gain. The Distillation page keeps the latest 10 completed runs."
+      description="Runs are grouped by type: Low Wine Run, Spirit Run, Heavy Rum, and Gin Run. Each row includes cut totals, hearts LAA, and alcohol loss or gain. The difference is the alcohol charged minus the alcohol collected. When more alcohol is collected than was charged, the result is recorded as a gain. The Distillation page keeps the latest 10 completed runs."
       periodLabel={range.label}
       csvFilename={`distillation-${range.from ?? 'all'}`}
       csvHeaders={csvHeaders}
       csvRows={csvRows}
       isEmpty={rows.length === 0}
       emptyMessage="No distillation runs in this period."
+      tableWrap={false}
     >
+      <div className="wash-status-groups">
+        {groups.map((group) => (
+          <section key={group.key} className="card wash-status-group" data-testid={`distillation-group-${group.key}`}>
+            <header className="wash-status-group-header">
+              <h3 className="wash-status-group-title">{group.label}</h3>
+              <span className="text-muted wash-status-group-count">
+                {group.rows.length} {group.rows.length === 1 ? 'run' : 'runs'}
+              </span>
+            </header>
+            {group.rows.length === 0 ? (
+              <p className="text-muted">No runs in this period.</p>
+            ) : (
+              <DistillationRunTable rows={group.rows} />
+            )}
+          </section>
+        ))}
+      </div>
+    </ReportTableShell>
+  );
+}
+
+function DistillationRunTable({ rows }: { rows: DistillationReportRow[] }) {
+  return (
+    <div className="table-wrap">
       <table>
         <thead>
           <tr>
             <th>Batch</th>
             <th>Date</th>
             <th>Still</th>
-            <th>Type</th>
             <th>Status</th>
             <th>Source</th>
             <th className="num">Charge</th>
@@ -58,7 +87,6 @@ export function DistillationReport() {
               <td><strong>{r.batch_number}</strong></td>
               <td>{formatDateDisplay(r.run_date)}</td>
               <td>{r.still_name}</td>
-              <td>{r.run_type}</td>
               <td>{r.status}</td>
               <td>{r.source_label}</td>
               <td className="num">
@@ -77,6 +105,6 @@ export function DistillationReport() {
           ))}
         </tbody>
       </table>
-    </ReportTableShell>
+    </div>
   );
 }

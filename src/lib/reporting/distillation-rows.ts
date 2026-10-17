@@ -1,5 +1,7 @@
 import { queryAll } from '../../db/database';
 import { distillationAlcoholBalance, washChargeAbvFromBrix, type AlcoholChargeBasis } from '../distillation-loss';
+import { ALL_RUN_TYPES, runTypeLabel } from '../distillation-run-types';
+import type { DistillationRunType } from '../../types';
 import { laaGalFromVolumeAbv, roundVolume } from './alcohol-units';
 import { eventInReportRange, type ReportDateRange } from './period';
 
@@ -8,6 +10,9 @@ export interface DistillationReportRow {
   batch_number: string;
   run_date: string;
   still_name: string;
+  /** Stored run type, such as wash or low_wines. */
+  run_type_key: string;
+  /** Display name, such as Low Wine Run or Spirit Run. */
   run_type: string;
   status: string;
   source_label: string;
@@ -163,7 +168,8 @@ export function buildDistillationReportRows(range: ReportDateRange): Distillatio
       batch_number: r.batch_number,
       run_date: r.run_date,
       still_name: r.still_name,
-      run_type: r.run_type.replace(/_/g, ' '),
+      run_type_key: r.run_type,
+      run_type: runTypeLabel(r.run_type),
       status: r.status,
       source_label: sourceLabel,
       charge_volume_gal: r.charge_volume_gal,
@@ -184,4 +190,32 @@ export function buildDistillationReportRows(range: ReportDateRange): Distillatio
     });
   }
   return rows;
+}
+
+export interface DistillationTypeGroup<T extends { run_type_key: string }> {
+  key: string;
+  label: string;
+  rows: T[];
+}
+
+/** Low Wine Run, Spirit Run, Heavy Rum, then Gin Run. Unknown types follow as Other. */
+export function groupDistillationReportRows<T extends { run_type_key: string }>(
+  rows: readonly T[],
+): DistillationTypeGroup<T>[] {
+  const byType = new Map<DistillationRunType, T[]>(ALL_RUN_TYPES.map((type) => [type, []]));
+  const other: T[] = [];
+  for (const row of rows) {
+    const bucket = byType.get(row.run_type_key as DistillationRunType);
+    if (bucket) bucket.push(row);
+    else other.push(row);
+  }
+  const groups: DistillationTypeGroup<T>[] = ALL_RUN_TYPES.map((type) => ({
+    key: type,
+    label: runTypeLabel(type),
+    rows: byType.get(type) ?? [],
+  }));
+  if (other.length > 0) {
+    groups.push({ key: 'other', label: 'Other', rows: other });
+  }
+  return groups;
 }
