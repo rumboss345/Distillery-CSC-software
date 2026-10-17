@@ -10,6 +10,8 @@ export interface ReportTableShellProps {
   csvRows: (string | number | null | undefined)[][];
   emptyMessage?: string;
   isEmpty: boolean;
+  /** When false, children are not wrapped in a single scrolling table frame. */
+  tableWrap?: boolean;
   children: ReactNode;
 }
 
@@ -22,6 +24,7 @@ export function ReportTableShell({
   csvRows,
   emptyMessage,
   isEmpty,
+  tableWrap = true,
   children,
 }: ReportTableShellProps) {
   return (
@@ -47,8 +50,10 @@ export function ReportTableShell({
         <div className="empty-state">
           <p>{emptyMessage ?? 'No rows for this period.'}</p>
         </div>
-      ) : (
+      ) : tableWrap ? (
         <div className="table-wrap">{children}</div>
+      ) : (
+        children
       )}
     </div>
   );
