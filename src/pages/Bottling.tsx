@@ -18,6 +18,7 @@ import {
 } from '../db/queries';
 import { DatePicker } from '../components/DatePicker';
 import { limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
+import { roundAbv } from '../lib/reporting/alcohol-units';
 import { formatDateDisplay } from '../lib/date-input';
 import { latestCompleted } from '../lib/recent-completed';
 import { localIsoDate } from '../lib/planned-event-date';
@@ -41,6 +42,12 @@ import type { BottlingRunLineInput, BottlingRunReturnInput, BottlingRunView } fr
 type BottlingSourceType = 'none' | 'barrel' | 'tank';
 
 type RunHeaderForm = Omit<BottlingRunView, 'id' | 'created_at' | 'lines'>;
+
+/** Show proof to hundredths so tank math does not spill extra digits. */
+function formatBottlingAbv(value: number): string {
+  if (!Number.isFinite(value)) return '0.00';
+  return roundAbv(value).toFixed(2);
+}
 
 const emptyLine = (): BottlingRunLineInput => ({
   packaging_bottle: '',
@@ -261,7 +268,7 @@ export function Bottling() {
       setForm({
         ...emptyRun(),
         source_holding_tank_equipment_id: tankId,
-        final_abv: contents.abv,
+        final_abv: roundAbv(contents.abv),
       });
       setLines([emptyLine()]);
       setReturnLines([]);
@@ -302,7 +309,7 @@ export function Bottling() {
       packaging_bottle: run.packaging_bottle,
       bottle_size_ml: run.bottle_size_ml,
       bottle_count: run.bottle_count,
-      final_abv: run.final_abv,
+      final_abv: roundAbv(run.final_abv),
       product_name: run.product_name,
       lot_number: run.lot_number,
       notes: run.notes,
@@ -376,7 +383,7 @@ export function Bottling() {
       ...form,
       source_holding_tank_equipment_id: tankId,
       source_barrel_id: null,
-      final_abv: contents?.abv ?? tank?.available_abv ?? form.final_abv,
+      final_abv: roundAbv(contents?.abv ?? tank?.available_abv ?? form.final_abv),
     });
     setReturnLines([]);
   };
@@ -617,7 +624,7 @@ export function Bottling() {
                   <td className="num">{formatVariance(r.volume_variance_gal)}</td>
                   <td>{r.variance_reason?.trim() || '—'}</td>
                   <td>{r.variance_changed_by?.trim() || '—'}</td>
-                  <td className="num">{r.final_abv}%</td>
+                  <td className="num">{formatBottlingAbv(r.final_abv)}%</td>
                   <td>{sourceLabel(r)}</td>
                   <td className="td-actions">
                     <button type="button" className="btn btn-sm btn-ghost" onClick={() => openEdit(r)}>Edit</button>
@@ -708,7 +715,7 @@ export function Bottling() {
                 )}
                 {selectedTankAvailable && form.source_holding_tank_equipment_id && (
                   <p className="field-hint">
-                    In tank: {selectedTankAvailable.volume_gal.toFixed(1)} gal @ {selectedTankAvailable.abv.toFixed(1)}% ABV
+                    In tank: {selectedTankAvailable.volume_gal.toFixed(1)} gal @ {formatBottlingAbv(selectedTankAvailable.abv)}% ABV
                     {selectedTankContents ? ` — ${selectedTankContents}` : ''}.
                     {' '}Saving empties the tank (draws {selectedTankAvailable.volume_gal.toFixed(1)} gal).
                     {returnLines.some((line) => (line.volume_gal ?? 0) > 0.01 && line.holding_tank_equipment_id) && (
@@ -896,7 +903,7 @@ export function Bottling() {
                 })}
                 <p className="field-hint">
                   {unbottledInTankGal != null
-                    ? `Up to ${unbottledInTankGal.toFixed(2)} gal left after the bottle lines, at ${form.final_abv || selectedTankAvailable?.abv || 0}% ABV. ${returnGal.toFixed(2)} gal assigned to tanks.`
+                    ? `Up to ${unbottledInTankGal.toFixed(2)} gal left after the bottle lines, at ${formatBottlingAbv(form.final_abv || selectedTankAvailable?.abv || 0)}% ABV. ${returnGal.toFixed(2)} gal assigned to tanks.`
                     : 'Enter the gallons that were not bottled.'}
                 </p>
               </div>
@@ -905,13 +912,14 @@ export function Bottling() {
               <label>Final ABV (%)</label>
               <input
                 type="number"
-                step="0.1"
+                step="0.01"
                 min={0}
                 max={MAX_ENTERED_ABV}
-                value={form.final_abv || ''}
+                value={form.final_abv ? roundAbv(form.final_abv) : ''}
                 onChange={(e) => {
                   const limited = limitAbvInput(e.target.value);
-                  setForm({ ...form, final_abv: limited.trim() === '' ? 0 : parseFloat(limited) || 0 });
+                  const parsed = parseFloat(limited);
+                  setForm({ ...form, final_abv: limited.trim() === '' || !Number.isFinite(parsed) ? 0 : roundAbv(parsed) });
                 }}
               />
             </div>
