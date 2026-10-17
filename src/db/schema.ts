@@ -148,6 +148,18 @@ CREATE TABLE IF NOT EXISTS distillation_run_botanicals (
 
 CREATE INDEX IF NOT EXISTS idx_run_botanicals_run ON distillation_run_botanicals(distillation_run_id);
 
+CREATE TABLE IF NOT EXISTS distillation_run_tank_sources (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  distillation_run_id INTEGER NOT NULL REFERENCES distillation_runs(id) ON DELETE CASCADE,
+  holding_tank_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
+  volume_gal REAL NOT NULL,
+  abv REAL NOT NULL DEFAULT 0,
+  sort_order INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_distillation_tank_sources_run ON distillation_run_tank_sources(distillation_run_id);
+CREATE INDEX IF NOT EXISTS idx_distillation_tank_sources_tank ON distillation_run_tank_sources(holding_tank_equipment_id);
+
 CREATE TABLE IF NOT EXISTS gin_recipes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
