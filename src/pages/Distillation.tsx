@@ -28,7 +28,7 @@ import {
   estimatedWashChargeAbv,
   getDistillationCollectionLoss,
   recordDistillationCollectionLoss,
-  getChargeableHoldingTanks,
+  getChargeableSourceTanks,
   getStillageTanks,
   defaultTankForCutType,
   getCollectionVessels,
@@ -43,6 +43,11 @@ import {
   useRefreshKey,
 } from '../db/queries';
 import { AbvVolumeTemperatureFields } from '../components/AbvVolumeTemperatureFields';
+import {
+  distillationSourceTypeChoices,
+  tanksOfEquipmentType,
+} from '../lib/distillation-source-tanks';
+import { equipmentTypeLabel } from '../lib/equipment';
 import { formatTankMenuLabel, tankContentsPhrase, tankDropdownLabel } from '../lib/tank-menu-label';
 import { AbvTemperatureInput, correctedAbvFromInputs } from '../components/AbvTemperatureInput';
 import { AdminCredentialConfirmModal } from '../components/AdminCredentialConfirmModal';
@@ -139,6 +144,7 @@ export function Distillation() {
   const [editCutId, setEditCutId] = useState<number | undefined>();
   const [editRunId, setEditRunId] = useState<number | undefined>();
   const [runForm, setRunForm] = useState(emptyRun());
+  const [sourceTankType, setSourceTankType] = useState('');
   const [plannedScheduleDate, setPlannedScheduleDate] = useState<string | null>(null);
   const planOnly = plannedRecordSkipsEquipmentStatus(runForm.status);
   const equipmentListOptions = planOnly ? { includeUnavailable: true as const } : undefined;
@@ -222,8 +228,13 @@ export function Distillation() {
   ]);
 
   const chargeableSourceTanks = isTankSourcedRun(runForm.run_type)
-    ? getChargeableHoldingTanks(editRunId, equipmentListOptions)
+    ? getChargeableSourceTanks(editRunId, equipmentListOptions)
     : [];
+  const sourceTypeOptions = distillationSourceTypeChoices([
+    ...chargeableSourceTanks.map((tank) => tank.equipment_type),
+    sourceTankType,
+  ]);
+  const tanksForSourceType = tanksOfEquipmentType(chargeableSourceTanks, sourceTankType);
 
   const selectedSourceTank = chargeableSourceTanks.find(
     (t) => t.id === runForm.source_holding_tank_equipment_id,
@@ -247,7 +258,7 @@ export function Distillation() {
     return `${row.equipment_name} — ${row.batch_number} (${row.volume_gal.toFixed(1)} gal · ${brixNote}, ${readyNote})`;
   };
 
-  const sourceLowWinesTankLabel = (
+  const sourceTankLabel = (
     tank: (typeof chargeableSourceTanks)[number],
   ) => formatTankMenuLabel(
     tank.name,
@@ -274,9 +285,18 @@ export function Distillation() {
       assigned_user_name: runForm.assigned_user_name,
     });
     clearChargeProof();
+    setSourceTankType('');
     setBotanicals(runType === 'gin' ? [emptyGinBotanical()] : []);
     setGinRecipeId('');
     setGinRecipeName('');
+  };
+
+  const handleSourceEquipmentTypeChange = (type: string) => {
+    setSourceTankType(type);
+    const tank = chargeableSourceTanks.find((item) => item.id === runForm.source_holding_tank_equipment_id);
+    if (!type || !tank || tank.equipment_type !== type) {
+      handleRunSourceTankChange(null);
+    }
   };
 
   const openPlannedFermenterRun = (fermenterId: number, runType: DistillationRunType) => {
@@ -371,6 +391,7 @@ export function Distillation() {
     setChargeAbvObserved('');
     setChargeTempF('60');
     clearChargeProof();
+    setSourceTankType('');
     setBotanicals(runType === 'gin' ? [emptyGinBotanical()] : []);
     setGinRecipeId('');
     setGinRecipeName('');
@@ -419,9 +440,10 @@ export function Distillation() {
       clearChargeProof();
       setShowRunForm(true);
     } else if (fromTank) {
-      const tank = getChargeableHoldingTanks().find((t) => t.id === tankId);
+      const tank = getChargeableSourceTanks().find((t) => t.id === tankId);
       setEditRunId(undefined);
       setPlannedScheduleDate(null);
+      setSourceTankType(tank?.equipment_type ?? '');
       setRunForm({
         ...emptyRun('low_wines'),
         ...defaultAssignee(user),
@@ -490,6 +512,11 @@ export function Distillation() {
     setBotanicals(savedBotanicals.length > 0 ? botanicalsFromRecipe(savedBotanicals) : [emptyGinBotanical()]);
     setGinRecipeId('');
     setGinRecipeName('');
+    setSourceTankType(
+      isTankSourcedRun(run.run_type ?? 'wash')
+        ? (equipment.find((item) => item.id === run.source_holding_tank_equipment_id)?.equipment_type ?? '')
+        : '',
+    );
     setShowRunForm(true);
   };
 
@@ -652,7 +679,7 @@ export function Distillation() {
       return;
     } else {
       if (!runForm.source_holding_tank_equipment_id) {
-        alert('Select the low wines holding tank to charge from.');
+        alert('Select the source tank to charge from.');
         return;
       }
       if (chargeSizeMode === 'finished' && !proofTarget.trim()) {
@@ -662,7 +689,7 @@ export function Distillation() {
       if (tailsToCharge <= 0) {
         alert(chargeSizeMode === 'finished'
           ? 'Enter the final volume in the still and the proof it needs.'
-          : 'Enter the charge volume drawn from the low wines tank.');
+          : 'Enter the charge volume drawn from the source tank.');
         return;
       }
       const available = getHoldingTankContents(
@@ -952,7 +979,7 @@ export function Distillation() {
     <div>
       <div className="page-header">
         <h2>Distillation</h2>
-        <p>Low wine and heavy rum runs charge fermenters · Spirit runs and gin runs use holding tanks · Brix below {FERMENTATION_READY_MAX_BRIX}° recommended before charging</p>
+        <p>Low wine and heavy rum runs charge fermenters · Spirit runs and gin runs charge a source tank · Brix below {FERMENTATION_READY_MAX_BRIX}° recommended before charging</p>
         <div className="page-actions">
           <button type="button" className="btn btn-primary" onClick={() => openNewRun('wash')}>
             {RUN_TYPE_BUTTON_LABELS.wash}
@@ -1217,35 +1244,52 @@ export function Distillation() {
                 </>
               </div>
             ) : (
-              <div className="form-group full-width">
-                <label>
-                  {runForm.run_type === 'heavy_rum' ? 'Source Tank' : 'Source Low Wines Tank'}
-                </label>
-                <select
-                  value={runForm.source_holding_tank_equipment_id ?? ''}
-                  onChange={(e) => handleRunSourceTankChange(e.target.value ? parseInt(e.target.value) : null)}
-                >
-                  <option value="">— Select tank —</option>
-                  {chargeableSourceTanks.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {sourceLowWinesTankLabel(t)}
-                    </option>
-                  ))}
-                </select>
-                {runForm.source_holding_tank_equipment_id && !selectedSourceTank && savedLowWineTankName && (
-                  <p className="field-hint">Previously charged from {savedLowWineTankName}</p>
+              <>
+                <div className="form-group">
+                  <label htmlFor="source-equipment-type">Equipment type</label>
+                  <select
+                    id="source-equipment-type"
+                    value={sourceTankType}
+                    onChange={(e) => handleSourceEquipmentTypeChange(e.target.value)}
+                  >
+                    <option value="">— Select equipment type —</option>
+                    {sourceTypeOptions.map((type) => (
+                      <option key={type} value={type}>{equipmentTypeLabel(type)}</option>
+                    ))}
+                  </select>
+                  {sourceTypeOptions.length === 0 && (
+                    <p className="field-hint">No tanks have spirit to charge yet.</p>
+                  )}
+                </div>
+                {sourceTankType && (
+                  <div className="form-group full-width">
+                    <label htmlFor="source-tank">Source Tank</label>
+                    <select
+                      id="source-tank"
+                      value={runForm.source_holding_tank_equipment_id ?? ''}
+                      onChange={(e) => handleRunSourceTankChange(e.target.value ? parseInt(e.target.value) : null)}
+                    >
+                      <option value="">— Select tank —</option>
+                      {tanksForSourceType.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {sourceTankLabel(t)}
+                        </option>
+                      ))}
+                    </select>
+                    {runForm.source_holding_tank_equipment_id && !selectedSourceTank && savedLowWineTankName && (
+                      <p className="field-hint">Previously charged from {savedLowWineTankName}</p>
+                    )}
+                    {tanksForSourceType.length === 0 && !savedLowWineTankName && (
+                      <p className="field-hint">No tanks of this type have spirit to charge.</p>
+                    )}
+                    {selectedLowWineAvailable && runForm.source_holding_tank_equipment_id && (
+                      <p className="field-hint">
+                        Available: {selectedLowWineAvailable.volume_gal.toFixed(1)} gal @ {selectedLowWineAvailable.abv.toFixed(1)}% ABV
+                      </p>
+                    )}
+                  </div>
                 )}
-                {chargeableSourceTanks.length === 0 && !savedLowWineTankName && (
-                  <p className="field-hint">
-                    No spirit in holding tanks yet — add cuts from a low wine run first.
-                  </p>
-                )}
-                {selectedLowWineAvailable && runForm.source_holding_tank_equipment_id && (
-                  <p className="field-hint">
-                    Available: {selectedLowWineAvailable.volume_gal.toFixed(1)} gal @ {selectedLowWineAvailable.abv.toFixed(1)}% ABV
-                  </p>
-                )}
-              </div>
+              </>
             )}
 
             <div className="form-group">

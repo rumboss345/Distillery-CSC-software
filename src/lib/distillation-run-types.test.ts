@@ -11,7 +11,7 @@ describe('distillation-run-types', () => {
     expect(isFermenterSourcedRun('low_wines')).toBe(false);
   });
 
-  it('uses holding tanks for spirit runs and gin runs', () => {
+  it('charges a source tank for spirit runs and gin runs', () => {
     expect(isTankSourcedRun('low_wines')).toBe(true);
     expect(isTankSourcedRun('gin')).toBe(true);
     expect(isTankSourcedRun('wash')).toBe(false);

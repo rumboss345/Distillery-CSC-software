@@ -1556,6 +1556,31 @@ export function getChargeableHoldingTanks(
     .filter((tank) => tank.available_gal > 0);
 }
 
+/** Holding tanks, stillage tanks, and collection vessels that still hold liquid. */
+export function getChargeableSourceTanks(
+  excludeRunId?: number,
+  options?: EquipmentListOptions,
+): (FloorEquipment & {
+  available_gal: number;
+  available_abv: number;
+})[] {
+  syncHoldingTankStatuses();
+  return listForProduction(
+    getFloorEquipment().filter((tank) => isSpiritLedgerEquipmentType(tank.equipment_type)),
+    options,
+  )
+    .map((tank) => {
+      const contents = getHoldingTankContents(tank.id, excludeRunId);
+      return {
+        ...tank,
+        available_gal: contents.volume_gal,
+        available_abv: contents.abv,
+      };
+    })
+    .filter((tank) => tank.available_gal > 0)
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+}
+
 export function getHighWinesDestinationTanks(
   excludeTankId?: number | null,
   options?: EquipmentListOptions,
