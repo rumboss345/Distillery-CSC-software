@@ -7,6 +7,7 @@ import { limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
 import { defaultAssignee } from '../lib/assignee';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
 import { formatDateDisplay, formatRecordedAt } from '../lib/date-input';
+import { roundAbv, roundVolume } from '../lib/reporting/alcohol-units';
 import { formatDistillationAlcoholResult, formatDistillationLossSummary } from '../lib/distillation-loss';
 import { latestCompleted } from '../lib/recent-completed';
 import {
@@ -340,15 +341,16 @@ export function Distillation() {
 
   const handleRunSourceTankChange = (tankId: number | null) => {
     const tank = chargeableSourceTanks.find((t) => t.id === tankId);
+    const chargeAbv = tank ? roundAbv(tank.available_abv) : null;
     setRunForm({
       ...runForm,
       source_holding_tank_equipment_id: tankId,
-      charge_volume_gal: tank?.available_gal ?? runForm.charge_volume_gal,
-      charge_abv: tank ? tank.available_abv : null,
+      charge_volume_gal: tank ? roundVolume(tank.available_gal) : runForm.charge_volume_gal,
+      charge_abv: chargeAbv,
       dest_holding_tank_equipment_id: null,
     });
-    if (tank) {
-      setChargeAbvObserved(tank.available_abv.toString());
+    if (tank && chargeAbv != null) {
+      setChargeAbvObserved(String(chargeAbv));
       setChargeTempF('60');
     } else {
       setChargeAbvObserved('');
@@ -448,11 +450,11 @@ export function Distillation() {
         ...emptyRun('low_wines'),
         ...defaultAssignee(user),
         source_holding_tank_equipment_id: tank ? tankId : null,
-        charge_volume_gal: tank?.available_gal ?? 0,
-        charge_abv: tank?.available_abv ?? null,
+        charge_volume_gal: tank ? roundVolume(tank.available_gal) : 0,
+        charge_abv: tank ? roundAbv(tank.available_abv) : null,
         dest_holding_tank_equipment_id: null,
       });
-      setChargeAbvObserved(tank && tank.available_abv > 0 ? tank.available_abv.toString() : '');
+      setChargeAbvObserved(tank && tank.available_abv > 0 ? String(roundAbv(tank.available_abv)) : '');
       setChargeTempF('60');
       clearChargeProof();
       setShowRunForm(true);
