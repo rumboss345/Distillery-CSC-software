@@ -3,7 +3,9 @@ import {
   FERMENTATION_READY_MAX_BRIX,
   FERMENTER_LIQUID_GREEN_BELOW_BRIX,
   actualStartBrixError,
+  defaultExpectedCompletionDate,
   expectedCompletionDateError,
+  expectedCompletionForTransfer,
   estimateAbvFromBrix,
   fermenterLiquidBrixPhase,
   isBrixReadyForDistillation,
@@ -29,6 +31,19 @@ describe('actual start Brix when a wash moves to fermenting', () => {
 });
 
 describe('expected fermentation completion', () => {
+  it('defaults to four days after the wash is transferred', () => {
+    expect(defaultExpectedCompletionDate('2026-03-01')).toBe('2026-03-05');
+    expect(defaultExpectedCompletionDate('2026-01-30')).toBe('2026-02-03');
+    expect(defaultExpectedCompletionDate('2026-12-30')).toBe('2027-01-03');
+    expect(defaultExpectedCompletionDate('')).toBe('');
+  });
+
+  it('keeps a date that was already chosen', () => {
+    expect(expectedCompletionForTransfer('2026-03-01', '2026-03-10')).toBe('2026-03-10');
+    expect(expectedCompletionForTransfer('2026-03-01', '')).toBe('2026-03-05');
+    expect(expectedCompletionForTransfer('2026-03-01', null)).toBe('2026-03-05');
+  });
+
   it('requires a date on or after the fermentation starts', () => {
     expect(expectedCompletionDateError('', '2026-03-01')).toMatch(/expected completion/i);
     expect(expectedCompletionDateError('2026-02-28', '2026-03-01')).toMatch(/on or after/i);

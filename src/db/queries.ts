@@ -57,7 +57,7 @@ import {
   type TankLot,
   type TankWithdrawal,
 } from '../lib/tank-product-name';
-import { expectedCompletionDateError } from '../lib/fermentation';
+import { defaultExpectedCompletionDate, expectedCompletionDateError } from '../lib/fermentation';
 import { eventDateWhenLeavingPlanned, localIsoDate } from '../lib/planned-event-date';
 import { choosePlannedFermenterRun } from '../lib/planned-fermenter-distillation';
 import { deleteStatusDateLog, recordStatusDateLog } from './status-logs';
@@ -3321,7 +3321,9 @@ export function saveFermentationSet(
       ? (batch.status === 'fermenting' ? batch.start_date : localIsoDate())
       : '');
   const submittedCompletion = options?.expectedCompletionDate?.trim() ?? '';
-  const expectedCompletion = submittedCompletion || batch.expected_completion_date || '';
+  const expectedCompletion = submittedCompletion
+    || batch.expected_completion_date
+    || (fermenting ? defaultExpectedCompletionDate(fermentationStart) : '');
   if (fermenting) {
     const dateError = expectedCompletionDateError(expectedCompletion, fermentationStart);
     if (dateError) throw new Error(dateError);

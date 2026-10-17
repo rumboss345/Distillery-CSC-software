@@ -24,11 +24,18 @@ import {
 } from '../db/queries';
 import { formatDateDisplay } from '../lib/date-input';
 import { latestCompleted } from '../lib/recent-completed';
-import { actualStartBrixError, estimateAbvFromBrix, expectedCompletionDateError, formatAbvEstimate, washMoveNeedsActualStartBrix } from '../lib/fermentation';
+import { actualStartBrixError, estimateAbvFromBrix, expectedCompletionDateError, expectedCompletionForTransfer, formatAbvEstimate, washMoveNeedsActualStartBrix } from '../lib/fermentation';
 import { localIsoDate } from '../lib/planned-event-date';
 import { volumeChangeReasonError } from '../lib/tank-volume-variance';
 import { FERMENTATION_PAGE_STATUSES, washRecordKind } from '../lib/wash-stage';
 import type { FermentationAssignmentStatus, MashBatch, MashFermenterAssignment, MashStatus } from '../types';
+
+function suggestedExpectedCompletion(batch: MashBatch, starting: boolean): string {
+  return expectedCompletionForTransfer(
+    batch.fermentation_start_date || (starting ? localIsoDate() : batch.start_date),
+    batch.expected_completion_date,
+  );
+}
 
 const STATUS_LABELS: Record<MashStatus, string> = {
   planned: 'planned',
@@ -179,7 +186,7 @@ export function Fermentation() {
     setLeftoverGal(0);
     setLeftoverNotes('');
     setActualStartBrix(queryBatch.actual_brix);
-    setExpectedCompletion(queryBatch.expected_completion_date ?? '');
+    setExpectedCompletion(suggestedExpectedCompletion(queryBatch, true));
     completeEditUnlockedRef.current = null;
     setShowForm(true);
   }
@@ -311,7 +318,7 @@ export function Fermentation() {
     setLeftoverGal(0);
     setLeftoverNotes('');
     setActualStartBrix(batch.actual_brix);
-    setExpectedCompletion(batch.expected_completion_date ?? '');
+    setExpectedCompletion(suggestedExpectedCompletion(batch, true));
     completeEditUnlockedRef.current = null;
     setShowForm(true);
   };
@@ -331,7 +338,7 @@ export function Fermentation() {
     setLeftoverGal(0);
     setLeftoverNotes('');
     setActualStartBrix(null);
-    setExpectedCompletion(row.batch.expected_completion_date ?? '');
+    setExpectedCompletion(suggestedExpectedCompletion(row.batch, false));
     setShowForm(true);
   };
 
@@ -797,14 +804,15 @@ export function Fermentation() {
               </div>
             )}
             <div className="form-group">
-              <label>Expected completion</label>
+              <label htmlFor="expected-completion">Expected completion</label>
               <DatePicker
+                id="expected-completion"
                 value={expectedCompletion}
                 onChange={setExpectedCompletion}
               />
               <p className="field-hint">
+                Filled in as 4 days after the wash is transferred into the fermenters. Change the date if this batch will finish on a different day.
                 The fermentation stays on the calendar from the day it starts through this date.
-                If it is still fermenting after that day, it stays on the calendar until it is finished.
               </p>
             </div>
             <div className="form-group">
