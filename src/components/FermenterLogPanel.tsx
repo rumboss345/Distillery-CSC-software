@@ -56,7 +56,7 @@ export function FermenterLogPanel({
       return;
     }
     if (!canAddLog || logBrix == null) {
-      alert('Temperature (°F) and a Brix or gravity reading are required for each fermentation log.');
+      alert('Temperature (°F) and a Brix or specific gravity reading are required for each fermentation log.');
       return;
     }
     try {
@@ -84,12 +84,12 @@ export function FermenterLogPanel({
         <h5 className="fermenter-log-title">
           {equipmentName}
           {volumeGal ? ` · ${volumeGal} gal` : ''}
-          {currentBrix != null ? ` · current ${currentBrix}° Brix (${brixToSg(currentBrix).toFixed(3)} SG)` : ''}
+          {currentBrix != null ? ` · current ${currentBrix}° Brix (${brixToSg(currentBrix).toFixed(3)} specific gravity)` : ''}
           {currentAbv != null ? ` · est. ${formatAbvEstimate(currentAbv)} ABV` : ''}
         </h5>
       )}
       <p className="form-hint">
-        Enter Brix or specific gravity. Gravity is saved as Brix. Estimated ABV uses starting Brix ({startBrix ?? 'set actual start Brix on the wash'}) vs each log’s Brix.
+        Enter Brix or specific gravity. Specific gravity is saved as Brix. Estimated ABV uses starting Brix ({startBrix ?? 'set actual start Brix on the wash'}) vs each log’s Brix.
       </p>
       {readOnly ? (
         <p className="field-hint" style={{ marginBottom: '1rem' }}>
@@ -112,7 +112,7 @@ export function FermenterLogPanel({
             </div>
             <SugarScaleField
               inputId={`ferment-log-sugar-${equipmentId ?? 'batch'}`}
-              label="Brix or gravity"
+              label="Brix or specific gravity"
               brix={logBrix}
               onBrix={setLogBrix}
               onError={setLogBrixError}
@@ -151,7 +151,7 @@ export function FermenterLogPanel({
           <div className="table-wrap" style={{ marginTop: '1rem' }}>
             <table>
               <thead>
-                <tr><th>Date</th><th className="num">Temp (°F)</th><th className="num">Brix</th><th className="num">Gravity</th><th className="num">Est. ABV</th><th className="num">pH</th><th>Notes</th></tr>
+                <tr><th>Date</th><th className="num">Temp (°F)</th><th className="num">Brix</th><th className="num">Specific Gravity</th><th className="num">Est. ABV</th><th className="num">pH</th><th>Notes</th></tr>
               </thead>
               <tbody>
                 {logs.map((l) => (
