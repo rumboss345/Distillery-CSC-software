@@ -25,6 +25,7 @@ import {
 import { formatDateDisplay } from '../lib/date-input';
 import { latestCompleted } from '../lib/recent-completed';
 import { actualStartBrixError, estimateAbvFromBrix, expectedCompletionDateError, expectedCompletionForTransfer, formatAbvEstimate, washMoveNeedsActualStartBrix } from '../lib/fermentation';
+import { SugarScaleField } from '../components/SugarScaleField';
 import { localIsoDate } from '../lib/planned-event-date';
 import { volumeChangeReasonError } from '../lib/tank-volume-variance';
 import { FERMENTATION_PAGE_STATUSES, washRecordKind } from '../lib/wash-stage';
@@ -130,6 +131,7 @@ export function Fermentation() {
   const [leftoverGal, setLeftoverGal] = useState(0);
   const [leftoverNotes, setLeftoverNotes] = useState('');
   const [actualStartBrix, setActualStartBrix] = useState<number | null>(null);
+  const [actualStartReadingError, setActualStartReadingError] = useState<string | null>(null);
   const [expectedCompletion, setExpectedCompletion] = useState('');
   const [logTarget, setLogTarget] = useState<LogTarget | null>(null);
   const [adminDelete, setAdminDelete] = useState<FermentationRow | null>(null);
@@ -186,6 +188,7 @@ export function Fermentation() {
     setLeftoverGal(0);
     setLeftoverNotes('');
     setActualStartBrix(queryBatch.actual_brix);
+    setActualStartReadingError(null);
     setExpectedCompletion(suggestedExpectedCompletion(queryBatch, true));
     completeEditUnlockedRef.current = null;
     setShowForm(true);
@@ -318,6 +321,7 @@ export function Fermentation() {
     setLeftoverGal(0);
     setLeftoverNotes('');
     setActualStartBrix(batch.actual_brix);
+    setActualStartReadingError(null);
     setExpectedCompletion(suggestedExpectedCompletion(batch, true));
     completeEditUnlockedRef.current = null;
     setShowForm(true);
@@ -338,6 +342,7 @@ export function Fermentation() {
     setLeftoverGal(0);
     setLeftoverNotes('');
     setActualStartBrix(null);
+    setActualStartReadingError(null);
     setExpectedCompletion(suggestedExpectedCompletion(row.batch, false));
     setShowForm(true);
   };
@@ -381,7 +386,7 @@ export function Fermentation() {
     }
     const askStartBrix = formMode === 'start' && washMoveNeedsActualStartBrix(editBatch.status, editBatch.actual_brix);
     if (askStartBrix) {
-      const brixError = actualStartBrixError(actualStartBrix);
+      const brixError = actualStartReadingError || actualStartBrixError(actualStartBrix);
       if (brixError) {
         alert(brixError);
         return;
@@ -784,24 +789,17 @@ export function Fermentation() {
               </p>
             </div>
             {formMode === 'start' && washMoveNeedsActualStartBrix(editBatch.status, editBatch.actual_brix) && (
-              <div className="form-group">
-                <label>Actual Start Brix</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  min={0}
-                  required
-                  value={actualStartBrix ?? ''}
-                  onChange={(e) => {
-                    const next = e.target.value;
-                    setActualStartBrix(next === '' ? null : parseFloat(next));
-                  }}
-                />
-                <p className="field-hint">
-                  Required to move this wash into fermenting.
-                  {editBatch.target_brix != null ? ` Target start Brix is ${editBatch.target_brix}.` : ''}
-                </p>
-              </div>
+              <SugarScaleField
+                key={editBatch.id}
+                inputId="actual-start-brix"
+                label="Actual Start Brix"
+                brix={actualStartBrix}
+                onBrix={setActualStartBrix}
+                onError={setActualStartReadingError}
+                requirePositive
+                required
+                hint={`Required to move this wash into fermenting.${editBatch.target_brix != null ? ` Target start Brix is ${editBatch.target_brix}.` : ''}`}
+              />
             )}
             <div className="form-group">
               <label htmlFor="expected-completion">Expected completion</label>

@@ -1,15 +1,15 @@
 import { useState } from 'react';
 import { StatusDateLog } from './StatusDateLog';
 import { FermentationLogGraph } from './FermentationLogGraph';
+import { SugarScaleField } from './SugarScaleField';
 import { addFermentationLog, getFermentationLogs } from '../db/queries';
 import { formatRecordedAt } from '../lib/date-input';
-import { estimateAbvFromBrix, formatAbvEstimate } from '../lib/fermentation';
+import { brixToSg, estimateAbvFromBrix, formatAbvEstimate } from '../lib/fermentation';
 
-type LogFormState = { temperature_f: string; brix: string; ph: string; notes: string };
+type LogFormState = { temperature_f: string; ph: string; notes: string };
 
 const emptyLogForm = (): LogFormState => ({
   temperature_f: '',
-  brix: '',
   ph: '',
   notes: '',
 });
@@ -37,6 +37,8 @@ export function FermenterLogPanel({
 }) {
   void refreshKey;
   const [logForm, setLogForm] = useState(emptyLogForm());
+  const [logBrix, setLogBrix] = useState<number | null>(null);
+  const [logBrixError, setLogBrixError] = useState<string | null>(null);
   const [showGraph, setShowGraph] = useState(false);
   const logs = getFermentationLogs(mashBatchId, equipmentId);
   const currentBrix = logs.find((l) => l.brix != null)?.brix ?? null;
@@ -45,13 +47,16 @@ export function FermenterLogPanel({
     : null;
 
   const temperature = logForm.temperature_f.trim() ? parseFloat(logForm.temperature_f) : null;
-  const brix = logForm.brix.trim() ? parseFloat(logForm.brix) : null;
   const canAddLog = temperature != null && !Number.isNaN(temperature)
-    && brix != null && !Number.isNaN(brix);
+    && logBrix != null && !logBrixError;
 
   const handleAddLog = () => {
-    if (!canAddLog) {
-      alert('Temperature (°F) and Brix are required for each fermentation log.');
+    if (logBrixError) {
+      alert(logBrixError);
+      return;
+    }
+    if (!canAddLog || logBrix == null) {
+      alert('Temperature (°F) and a Brix or gravity reading are required for each fermentation log.');
       return;
     }
     try {
@@ -60,11 +65,13 @@ export function FermenterLogPanel({
         floor_equipment_id: equipmentId,
         logged_at: new Date().toISOString(),
         temperature_f: temperature,
-        brix,
+        brix: logBrix,
         ph: logForm.ph.trim() ? parseFloat(logForm.ph) : null,
         notes: logForm.notes,
       });
       setLogForm(emptyLogForm());
+      setLogBrix(null);
+      setLogBrixError(null);
       onAdded();
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Could not save fermentation log.');
@@ -77,12 +84,12 @@ export function FermenterLogPanel({
         <h5 className="fermenter-log-title">
           {equipmentName}
           {volumeGal ? ` · ${volumeGal} gal` : ''}
-          {currentBrix != null ? ` · current ${currentBrix}° Brix` : ''}
+          {currentBrix != null ? ` · current ${currentBrix}° Brix (${brixToSg(currentBrix).toFixed(3)} SG)` : ''}
           {currentAbv != null ? ` · est. ${formatAbvEstimate(currentAbv)} ABV` : ''}
         </h5>
       )}
       <p className="form-hint">
-        Estimated ABV uses starting Brix ({startBrix ?? 'set actual start Brix on the wash'}) vs each log’s Brix.
+        Enter Brix or specific gravity. Gravity is saved as Brix. Estimated ABV uses starting Brix ({startBrix ?? 'set actual start Brix on the wash'}) vs each log’s Brix.
       </p>
       {readOnly ? (
         <p className="field-hint" style={{ marginBottom: '1rem' }}>
@@ -103,16 +110,14 @@ export function FermenterLogPanel({
                 required
               />
             </div>
-            <div className="form-group">
-              <label>Brix *</label>
-              <input
-                value={logForm.brix}
-                onChange={(e) => setLogForm({ ...logForm, brix: e.target.value })}
-                placeholder="10.5"
-                inputMode="decimal"
-                required
-              />
-            </div>
+            <SugarScaleField
+              inputId={`ferment-log-sugar-${equipmentId ?? 'batch'}`}
+              label="Brix or gravity"
+              brix={logBrix}
+              onBrix={setLogBrix}
+              onError={setLogBrixError}
+              required
+            />
             <div className="form-group">
               <label>pH</label>
               <input value={logForm.ph} onChange={(e) => setLogForm({ ...logForm, ph: e.target.value })} placeholder="4.2" />
@@ -146,14 +151,15 @@ export function FermenterLogPanel({
           <div className="table-wrap" style={{ marginTop: '1rem' }}>
             <table>
               <thead>
-                <tr><th>Date</th><th className="num">Temp (°F)</th><th className="num">Brix</th><th className="num">Est. ABV</th><th className="num">pH</th><th>Notes</th></tr>
+                <tr><th>Date</th><th className="num">Temp (°F)</th><th className="num">Brix</th><th className="num">Gravity</th><th className="num">Est. ABV</th><th className="num">pH</th><th>Notes</th></tr>
               </thead>
               <tbody>
                 {logs.map((l) => (
                   <tr key={l.id}>
                     <td style={{ whiteSpace: 'nowrap' }}>{formatRecordedAt(l.logged_at)}</td>
                     <td className="num">{l.temperature_f ?? '—'}°F</td>
-                    <td className="num">{l.brix ?? '—'}°</td>
+                    <td className="num">{l.brix != null ? `${l.brix.toFixed(1)}°` : '—'}</td>
+                    <td className="num">{l.brix != null ? brixToSg(l.brix).toFixed(3) : '—'}</td>
                     <td className="num">
                       {startBrix != null && l.brix != null
                         ? formatAbvEstimate(estimateAbvFromBrix(startBrix, l.brix))

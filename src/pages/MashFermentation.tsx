@@ -25,6 +25,7 @@ import { RecentCompletedNote } from '../components/RecentCompletedNote';
 import { StatusBadge } from '../components/StatusBadge';
 import { StatusDateLog } from '../components/StatusDateLog';
 import { estimateSugarWash } from '../lib/fermentation';
+import { SugarScaleField } from '../components/SugarScaleField';
 import type { MashBatchNutrientInput } from '../types';
 import {
   emptyMashBatchNutrient,
@@ -115,9 +116,12 @@ export function MashFermentation() {
     setForm({ ...form, status, start_date });
   };
 
+  const sugarErrors = useRef({ target: null as string | null, actual: null as string | null, final: null as string | null });
+
   const openNew = (planDate?: string) => {
     setEditId(undefined);
     setPlannedScheduleDate(null);
+    sugarErrors.current = { target: null, actual: null, final: null };
     setForm({
       ...emptyBatch(),
       ...defaultAssignee(user),
@@ -140,6 +144,7 @@ export function MashFermentation() {
     setEditId(batch.id);
     setPlannedScheduleDate(null);
     setForm({ ...batch, yeast_lbs: batch.yeast_lbs ?? 0 });
+    sugarErrors.current = { target: null, actual: null, final: null };
     setBatchNutrients(
       getMashBatchNutrients(batch.id).map((n) => ({ name: n.name, amount: n.amount, unit: n.unit })),
     );
@@ -165,6 +170,11 @@ export function MashFermentation() {
   const performSave = () => {
     if (!form.assigned_user_id) {
       alert('Select the employee assigned to this wash batch.');
+      return;
+    }
+    const sugarError = sugarErrors.current.target || sugarErrors.current.actual || sugarErrors.current.final;
+    if (sugarError) {
+      alert(sugarError);
       return;
     }
     if (form.status === 'fermenting' || form.status === 'complete') {
@@ -602,18 +612,27 @@ export function MashFermentation() {
               )}
             </div>
 
-            <div className="form-group">
-              <label>Target Start Brix</label>
-              <input type="number" step="0.1" value={form.target_brix ?? ''} onChange={(e) => setForm({ ...form, target_brix: e.target.value ? parseFloat(e.target.value) : null })} />
-            </div>
-            <div className="form-group">
-              <label>Actual Start Brix</label>
-              <input type="number" step="0.1" value={form.actual_brix ?? ''} onChange={(e) => setForm({ ...form, actual_brix: e.target.value ? parseFloat(e.target.value) : null })} />
-            </div>
-            <div className="form-group">
-              <label>Target Final Brix</label>
-              <input type="number" step="0.1" value={form.target_final_brix ?? ''} onChange={(e) => setForm({ ...form, target_final_brix: e.target.value ? parseFloat(e.target.value) : null })} />
-            </div>
+            <SugarScaleField
+              inputId="target-start-brix"
+              label="Target Start Brix"
+              brix={form.target_brix}
+              onBrix={(target_brix) => setForm((current) => ({ ...current, target_brix }))}
+              onError={(target) => { sugarErrors.current.target = target; }}
+            />
+            <SugarScaleField
+              inputId="actual-start-brix"
+              label="Actual Start Brix"
+              brix={form.actual_brix}
+              onBrix={(actual_brix) => setForm((current) => ({ ...current, actual_brix }))}
+              onError={(actual) => { sugarErrors.current.actual = actual; }}
+            />
+            <SugarScaleField
+              inputId="target-final-brix"
+              label="Target Final Brix"
+              brix={form.target_final_brix}
+              onBrix={(target_final_brix) => setForm((current) => ({ ...current, target_final_brix }))}
+              onError={(final) => { sugarErrors.current.final = final; }}
+            />
             <div className="form-group full-width">
               <label>Notes</label>
               <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
