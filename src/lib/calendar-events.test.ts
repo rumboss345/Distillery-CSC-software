@@ -18,6 +18,7 @@ import {
   eventOccursOnDate,
   calendarEventPath,
   calendarProgress,
+  calendarProgressRank,
   filterCalendarEvents,
   filterEventsByKind,
   filterEventsByStatusCategory,
@@ -446,6 +447,23 @@ describe('layoutCalendarWeek', () => {
     expect(byId.overlap).toBe(1);
     expect(byId.later).toBe(0);
   });
+
+  it('places a planned process below a running one on the same days', () => {
+    const planned = {
+      ...event('planned', '2026-03-01', '2026-03-07'),
+      status: 'planned',
+      statusCategory: 'planned' as const,
+    };
+    const running = {
+      ...event('running', '2026-03-03', '2026-03-04'),
+      status: 'running',
+      statusCategory: 'in_progress' as const,
+    };
+    const spans = layoutCalendarWeek(days, [planned, running]);
+    const byId = Object.fromEntries(spans.map((span) => [span.event.id, span.lane]));
+    expect(byId.running).toBe(0);
+    expect(byId.planned).toBe(1);
+  });
 });
 
 describe('enumerateEventDates', () => {
@@ -510,6 +528,8 @@ describe('filters', () => {
     expect(calendarProgress('complete')).toBe('done');
     expect(calendarProgress('cancelled')).toBe('done');
     expect(calendarProgress('other')).toBe('done');
+    expect(calendarProgressRank('in_progress')).toBeLessThan(calendarProgressRank('planned'));
+    expect(calendarProgressRank('planned')).toBeLessThan(calendarProgressRank('complete'));
   });
 
   it('applies kind and progress filters together', () => {

@@ -44,7 +44,8 @@ import { WASH_PAGE_STATUSES, washPageListsBatch } from '../lib/wash-stage';
 import type { MashBatch, MashStatus } from '../types';
 
 const WASH_STATUSES: MashStatus[] = WASH_PAGE_STATUSES;
-const WASH_LIST_STATUSES: MashStatus[] = ['planned', 'mashing', 'fermenting', 'complete', 'discarded'];
+/** Washing and fermenting stay above planned cooks. Finished washes stay last. */
+const WASH_LIST_STATUSES: MashStatus[] = ['mashing', 'fermenting', 'planned', 'complete', 'discarded'];
 
 const STATUS_LABELS: Record<MashStatus, string> = {
   planned: 'planned',

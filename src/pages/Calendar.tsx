@@ -45,7 +45,7 @@ import {
   CALENDAR_PLAN_PERMISSION,
   calendarPlanPath,
 } from '../lib/calendar-planning';
-import { groupEventsByStaff } from '../lib/today-staff-sheet';
+import { compareDayEvents, groupEventsByStaff } from '../lib/today-staff-sheet';
 
 type CalendarViewMode = 'month' | 'week' | 'day';
 
@@ -309,7 +309,7 @@ export function Calendar() {
             <p className="text-muted">No activities on this date.</p>
           ) : (
             <ul className="calendar-detail-list">
-              {selectedEvents.map((event) => (
+              {[...selectedEvents].sort(compareDayEvents).map((event) => (
                 <CalendarDetailItem key={event.id} event={event} />
               ))}
             </ul>

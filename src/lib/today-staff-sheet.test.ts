@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { CalendarEvent } from './calendar-events';
 import { groupEventsByStaff, UNASSIGNED_STAFF_LABEL } from './today-staff-sheet';
 
-function event(partial: Pick<CalendarEvent, 'id' | 'title' | 'kind'> & { assignee?: string }): CalendarEvent {
+function event(partial: Pick<CalendarEvent, 'id' | 'title' | 'kind'> & Partial<CalendarEvent>): CalendarEvent {
   return {
     startDate: '2026-10-10',
     allDay: true,
@@ -29,5 +29,33 @@ describe('groupEventsByStaff', () => {
 
   it('returns no groups when the day is empty', () => {
     expect(groupEventsByStaff([])).toEqual([]);
+  });
+
+  it('lists running processes above planned ones, and finished work last', () => {
+    const groups = groupEventsByStaff([
+      event({ id: '1', assignee: 'Sam', title: 'Planned wash', kind: 'wash' }),
+      event({
+        id: '2',
+        assignee: 'Sam',
+        title: 'Running still',
+        kind: 'distillation',
+        status: 'running',
+        statusCategory: 'in_progress',
+      }),
+      event({
+        id: '3',
+        assignee: 'Sam',
+        title: 'Finished wash',
+        kind: 'wash',
+        status: 'complete',
+        statusCategory: 'complete',
+      }),
+    ]);
+
+    expect(groups[0].events.map((item) => item.title)).toEqual([
+      'Running still',
+      'Planned wash',
+      'Finished wash',
+    ]);
   });
 });

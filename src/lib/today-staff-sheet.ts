@@ -1,4 +1,4 @@
-import type { CalendarActivityKind, CalendarEvent } from './calendar-events';
+import { calendarProgressRank, type CalendarActivityKind, type CalendarEvent } from './calendar-events';
 
 export const UNASSIGNED_STAFF_LABEL = 'Unassigned';
 
@@ -26,6 +26,15 @@ function kindRank(kind: CalendarActivityKind): number {
   return index === -1 ? KIND_ORDER.length : index;
 }
 
+/** Running processes first, then planned, then finished. Kind and title break ties. */
+export function compareDayEvents(a: CalendarEvent, b: CalendarEvent): number {
+  const byProgress = calendarProgressRank(a.statusCategory) - calendarProgressRank(b.statusCategory);
+  if (byProgress !== 0) return byProgress;
+  const byKind = kindRank(a.kind) - kindRank(b.kind);
+  if (byKind !== 0) return byKind;
+  return a.title.localeCompare(b.title);
+}
+
 /** One day's work, grouped by the person assigned to it. Unassigned work is last. */
 export function groupEventsByStaff(events: CalendarEvent[]): StaffDayGroup[] {
   const groups = new Map<string, CalendarEvent[]>();
@@ -44,10 +53,6 @@ export function groupEventsByStaff(events: CalendarEvent[]): StaffDayGroup[] {
     })
     .map(([name, items]) => ({
       name,
-      events: [...items].sort((a, b) => {
-        const byKind = kindRank(a.kind) - kindRank(b.kind);
-        if (byKind !== 0) return byKind;
-        return a.title.localeCompare(b.title);
-      }),
+      events: [...items].sort(compareDayEvents),
     }));
 }
