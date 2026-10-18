@@ -93,7 +93,7 @@ export function SugarScaleField({
           aria-pressed={scale === 'gravity'}
           onClick={() => switchScale('gravity')}
         >
-          Gravity
+          Specific Gravity
         </button>
       </div>
       {(error || conversion || hint) && (
