@@ -46,7 +46,7 @@ function cleaningEvent(
     allDay: true,
     kind: 'cleaning',
     title: row.equipmentName,
-    status: done ? 'complete' : 'upcoming',
+    status: done ? 'done' : 'upcoming',
     statusCategory: done ? 'complete' : 'planned',
     assignee: done && recordedBy ? recordedBy : undefined,
     detail: done ? `${typeLabel} · Cleaned` : `${typeLabel} · Needs cleaning`,
@@ -56,7 +56,8 @@ function cleaningEvent(
 /**
  * Tank cleaning for one staff-sheet day.
  * A tank that still needs cleaning stays on the sheet from the day it was emptied through today, with status Upcoming.
- * A tank cleaned on this day is listed as complete for the person who cleaned it.
+ * A tank marked cleaned on this day is Done for the person who cleaned it.
+ * Cleaning is never In progress.
  */
 export function tankCleaningStaffEvents(
   rows: TankCleaningLogRow[],

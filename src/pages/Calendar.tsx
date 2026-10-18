@@ -30,6 +30,7 @@ import {
   CALENDAR_KIND_LABELS,
   CALENDAR_PROGRESS_LABELS,
   calendarEventPath,
+  calendarProgress,
   eventEndDate,
   eventOccursOnDate,
   filterCalendarEvents,
@@ -95,8 +96,9 @@ export function Calendar() {
   );
 
   const tankCleaningEvents = useMemo(
-    () => tankCleaningStaffEvents(getTankCleaningLog(), selectedDate, localIsoDate()),
-    [selectedDate],
+    () => tankCleaningStaffEvents(getTankCleaningLog(), selectedDate, localIsoDate())
+      .filter((event) => enabledProgress.has(calendarProgress(event.statusCategory))),
+    [selectedDate, enabledProgress],
   );
   const selectedEvents = useMemo(
     () => [

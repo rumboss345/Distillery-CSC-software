@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { calendarProgress } from './calendar-events';
 import { groupEventsByStaff, UNASSIGNED_STAFF_LABEL } from './today-staff-sheet';
 import {
   tankCleaningStaffEvents,
@@ -65,8 +66,9 @@ describe('tankCleaningStaffEvents', () => {
 
     const cleaned = tankCleaningStaffEvents(logs, '2026-10-15', today);
     expect(cleaned).toMatchObject([
-      { status: 'complete', assignee: 'Sam', detail: 'Collection Vessels · Cleaned' },
+      { status: 'done', assignee: 'Sam', detail: 'Collection Vessels · Cleaned' },
     ]);
+    expect(calendarProgress(cleaned[0]!.statusCategory)).toBe('done');
     expect(groupEventsByStaff(cleaned).map((group) => group.name)).toEqual(['Sam']);
   });
 
@@ -83,7 +85,16 @@ describe('tankCleaningStaffEvents', () => {
     ];
     const events = tankCleaningStaffEvents(logs, '2026-10-15', today);
     expect(events).toHaveLength(1);
-    expect(events[0]?.status).toBe('complete');
+    expect(events[0]?.status).toBe('done');
+    expect(calendarProgress(events[0]!.statusCategory)).toBe('done');
+  });
+
+  it('keeps dirty equipment on Upcoming and never treats cleaning as in progress', () => {
+    const dirty = tankCleaningStaffEvents([
+      row({ id: 1, eventType: 'needs_cleaning', createdAt: '2026-10-15T08:00:00', status: 'cleaning' }),
+    ], today, today);
+    expect(dirty[0]?.status).toBe('upcoming');
+    expect(calendarProgress(dirty[0]!.statusCategory)).toBe('upcoming');
   });
 
   it('includes every tank type and skips stills and fermenters', () => {
