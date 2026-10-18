@@ -18,6 +18,7 @@ import {
   getChargeableHoldingTanksForBlend,
   getHoldingTankContents,
   getHoldingTanks,
+  getSpiritTransferVessels,
   getInventoryItems,
   saveBlendFormula,
   deleteBlendProduct,
@@ -31,6 +32,8 @@ import {
   spiritLabelForBarrel,
 } from '../lib/barrel-blending';
 import { TankContentsLookup } from '../components/TankContentsLookup';
+import { distillationSourceTypeChoices, tanksOfEquipmentType } from '../lib/distillation-source-tanks';
+import { equipmentTypeLabel } from '../lib/equipment';
 import { formatTankMenuLabel, tankContentsPhrase, tankDropdownLabel } from '../lib/tank-menu-label';
 import { AbvTemperatureInput, correctedAbvFromInputs } from '../components/AbvTemperatureInput';
 import { BlendAbvConfirmation } from '../components/BlendAbvConfirmation';
@@ -147,7 +150,7 @@ const WIZARD_STEPS = [
 
 const STEP_HINTS: Record<number, string> = {
   1: 'Pick a saved blend recipe, then choose any batch size in gallons or liters. Recipes with sugar can also be sized in 50 lb bags.',
-  2: 'Choose holding tanks and how much spirit to pull — by the gallon (recommended) or by weight on a scale.',
+  2: 'Choose the equipment type, then a tank that holds spirit, and how much to pull — by the gallon (recommended) or by weight on a scale.',
   3: 'Add sweetener, flavorings, or color before proofing water. Skip this step for straight spirits.',
   4: 'Set the proof you want to bottle at. Water is calculated with the sugar, flavor, and color already in the batch.',
   5: 'Confirm the calculated proof matches your expectations before saving or running a lab trial.',
@@ -195,6 +198,8 @@ function blendIngredientFromRecord(
 }
 
 interface SpiritSourceRow extends BlendSpiritSourceInput {
+  /** Chosen before the tank list. Not stored on the blend. */
+  equipment_type: string;
   amount: number;
   unit: string;
   recipe_abv: number;
@@ -209,6 +214,7 @@ interface SpiritSourceRow extends BlendSpiritSourceInput {
 }
 
 const emptySpiritSource = (): SpiritSourceRow => ({
+  equipment_type: '',
   holding_tank_equipment_id: 0,
   barrel_id: null,
   volume_gal: 0,
@@ -223,11 +229,17 @@ const emptySpiritSource = (): SpiritSourceRow => ({
   extra_pull: false,
 });
 
+function spiritTankEquipmentType(tankId: number): string {
+  if (!(tankId > 0)) return '';
+  return getSpiritTransferVessels().find((tank) => tank.id === tankId)?.equipment_type ?? '';
+}
+
 function spiritRowWithObservedAbv(
-  row: Omit<SpiritSourceRow, 'observed_abv' | 'sample_temp_f' | 'spirit_label' | 'follows_recipe_index' | 'extra_pull'>
-    & Partial<Pick<SpiritSourceRow, 'spirit_label' | 'follows_recipe_index' | 'extra_pull'>>,
+  row: Omit<SpiritSourceRow, 'observed_abv' | 'sample_temp_f' | 'spirit_label' | 'follows_recipe_index' | 'extra_pull' | 'equipment_type'>
+    & Partial<Pick<SpiritSourceRow, 'spirit_label' | 'follows_recipe_index' | 'extra_pull' | 'equipment_type'>>,
 ): SpiritSourceRow {
   return {
+    equipment_type: '',
     spirit_label: '',
     follows_recipe_index: null,
     extra_pull: false,
@@ -703,6 +715,8 @@ export function Blending() {
         : amountFromSpiritVolumeGal(volumeGal, unit, actualAbv);
       return spiritRowWithObservedAbv({
         ...row,
+        equipment_type: prevRow?.equipment_type
+          || spiritTankEquipmentType(row.holding_tank_equipment_id),
         barrel_id: prevRow?.barrel_id ?? row.barrel_id,
         abv: actualAbv,
         unit,
@@ -782,6 +796,7 @@ export function Blending() {
       const contents = getHoldingTankContents(tankId);
       preservedSources[0] = {
         ...emptySpiritSource(),
+        equipment_type: spiritTankEquipmentType(tankId),
         holding_tank_equipment_id: tankId,
         abv: contents.abv > 0 ? contents.abv : 0,
       };
@@ -868,6 +883,7 @@ export function Blending() {
         resetWizardForNewBatch();
         setSpiritSources([{
           ...emptySpiritSource(),
+          equipment_type: spiritTankEquipmentType(tankId),
           holding_tank_equipment_id: tankId,
           volume_gal: contents.volume_gal,
           amount: contents.volume_gal,
@@ -1019,6 +1035,7 @@ export function Blending() {
     setSpiritSources(
       sources.length > 0
         ? sources.map((s, index) => spiritRowWithObservedAbv({
+          equipment_type: spiritTankEquipmentType(s.holding_tank_equipment_id),
           holding_tank_equipment_id: s.holding_tank_equipment_id,
           barrel_id: s.barrel_id ?? templateSources?.[index]?.barrel_id ?? null,
           volume_gal: s.volume_gal,
@@ -1030,6 +1047,7 @@ export function Blending() {
           follows_recipe_index: templateSources?.[index] ? index : null,
         }))
         : [spiritRowWithObservedAbv({
+          equipment_type: spiritTankEquipmentType(blend.source_holding_tank_equipment_id),
           holding_tank_equipment_id: blend.source_holding_tank_equipment_id,
           volume_gal: blend.base_spirit_volume_gal,
           abv: blend.base_spirit_abv,
@@ -1060,7 +1078,7 @@ export function Blending() {
   const tankOptionsFor = (tankId: number) => {
     if (!tankId) return chargeableTanks;
     if (chargeableTanks.some((t) => t.id === tankId)) return chargeableTanks;
-    const saved = getHoldingTanks().find((t) => t.id === tankId);
+    const saved = getSpiritTransferVessels().find((t) => t.id === tankId);
     if (!saved) return chargeableTanks;
     const contents = getHoldingTankContents(tankId, undefined, editId);
     return [...chargeableTanks, { ...saved, available_gal: contents.volume_gal, available_abv: contents.abv }];
@@ -1072,11 +1090,16 @@ export function Blending() {
       let next = { ...src, ...patch, recipe_abv: patch.recipe_abv ?? src.recipe_abv };
       if (patch.holding_tank_equipment_id) {
         const chargeable = chargeableTanks.find((t) => t.id === patch.holding_tank_equipment_id);
+        if (chargeable) next.equipment_type = chargeable.equipment_type;
         const tankAbv = chargeable
           ? chargeable.available_abv
           : getHoldingTankContents(patch.holding_tank_equipment_id, undefined, editId).abv;
         next.abv = tankAbv;
         next.observed_abv = tankAbv > 0 ? tankAbv.toString() : '';
+        next.sample_temp_f = '60';
+      } else if (patch.equipment_type !== undefined && src.recipe_abv > 0) {
+        next.abv = src.recipe_abv;
+        next.observed_abv = src.recipe_abv.toString();
         next.sample_temp_f = '60';
       }
       if (patch.observed_abv !== undefined || patch.sample_temp_f !== undefined) {
@@ -1089,7 +1112,7 @@ export function Blending() {
       }
       const userEditedAmount = patch.amount !== undefined;
       const abvChanged = Math.abs((next.abv || 0) - (src.abv || 0)) > 0.001;
-      const sourceChosen = patch.holding_tank_equipment_id != null || patch.barrel_id !== undefined;
+      const sourceChosen = (patch.holding_tank_equipment_id ?? 0) > 0 || (patch.barrel_id != null && patch.barrel_id > 0);
       if (!userEditedAmount && !src.extra_pull && next.abv > 0 && (abvChanged || sourceChosen)) {
         const recipeLine = recipeTemplate?.spirit_sources[src.follows_recipe_index ?? index];
         const recipeAbv = recipeLine?.abv ?? next.recipe_abv;
@@ -1184,6 +1207,7 @@ export function Blending() {
       }
       const extra = spiritRowWithObservedAbv({
         ...emptySpiritSource(),
+        equipment_type: src.equipment_type,
         spirit_label: label,
         follows_recipe_index: recipeIndex,
         extra_pull: true,
@@ -1243,7 +1267,7 @@ export function Blending() {
     if (spirits.length === 0) {
       alert(isBarrelBlendWizard
         ? 'Select aging barrels and enter pull volumes on step 2 before calculating water.'
-        : 'Select holding tanks and enter pull volumes on step 2 before calculating water.');
+        : 'Select a source tank and enter pull volumes on step 2 before calculating water.');
       return;
     }
     const preview = previewProofingWaterAdjustment(
@@ -1635,7 +1659,7 @@ export function Blending() {
   const renderProductionWorksheet = (outputTankName: string | null) => {
     const yieldGal = formulation.reconciliation.effective.volumeGal ?? formulation.theoretical.volumeGal ?? 0;
     const worksheetSpiritLines = activeSources.map((s, index) => {
-      const tank = getHoldingTanks().find((t) => t.id === s.holding_tank_equipment_id);
+      const tank = getSpiritTransferVessels().find((t) => t.id === s.holding_tank_equipment_id);
       return {
         label: s.spirit_label.trim()
           || recipeTemplate?.spirit_sources[s.follows_recipe_index ?? index]?.spirit_label
@@ -1888,7 +1912,11 @@ export function Blending() {
           </>
         );
 
-      case 2:
+      case 2: {
+        const spiritTypeOptions = distillationSourceTypeChoices([
+          ...chargeableTanks.map((tank) => tank.equipment_type),
+          ...spiritSources.map((source) => source.equipment_type),
+        ]);
         return (
           <>
             {spiritAbvMismatch.length > 0 && form.target_abv != null && (
@@ -1951,23 +1979,55 @@ export function Blending() {
                       </>
                     ) : (
                       <>
-                        <label>Holding tank — {spiritLabel}</label>
+                        <label htmlFor={`blend-spirit-type-${index}`}>Equipment type — {spiritLabel}</label>
                         <select
-                          value={src.holding_tank_equipment_id || ''}
-                          onChange={(e) => updateSpiritSource(index, { holding_tank_equipment_id: parseInt(e.target.value) })}
+                          id={`blend-spirit-type-${index}`}
+                          data-testid={`blend-spirit-type-${index}`}
+                          value={src.equipment_type}
+                          onChange={(e) => updateSpiritSource(index, {
+                            equipment_type: e.target.value,
+                            holding_tank_equipment_id: 0,
+                          })}
                         >
-                          <option value="">— Choose a tank —</option>
-                          {tankOptionsFor(src.holding_tank_equipment_id).map((t) => (
-                            <option key={t.id} value={t.id}>
-                              {formatTankMenuLabel(
-                                t.name,
-                                tankContentsPhrase(t.id) ?? 'Spirit',
-                                t.available_abv,
-                                t.available_gal,
-                              )}
-                            </option>
+                          <option value="">— Select equipment type —</option>
+                          {spiritTypeOptions.map((type) => (
+                            <option key={type} value={type}>{equipmentTypeLabel(type)}</option>
                           ))}
                         </select>
+                        {src.equipment_type && (
+                          <>
+                            <label htmlFor={`blend-spirit-tank-${index}`}>Tank</label>
+                            <select
+                              id={`blend-spirit-tank-${index}`}
+                              data-testid={`blend-spirit-tank-${index}`}
+                              value={src.holding_tank_equipment_id || ''}
+                              onChange={(e) => updateSpiritSource(index, {
+                                holding_tank_equipment_id: parseInt(e.target.value, 10) || 0,
+                              })}
+                            >
+                              <option value="">— Choose a tank —</option>
+                              {tanksOfEquipmentType(
+                                tankOptionsFor(src.holding_tank_equipment_id),
+                                src.equipment_type,
+                              ).map((t) => (
+                                <option key={t.id} value={t.id}>
+                                  {formatTankMenuLabel(
+                                    t.name,
+                                    tankContentsPhrase(t.id) ?? 'Spirit',
+                                    t.available_abv,
+                                    t.available_gal,
+                                  )}
+                                </option>
+                              ))}
+                            </select>
+                          </>
+                        )}
+                        {spiritTypeOptions.length === 0 && (
+                          <p className="field-hint">No tanks have spirit to blend yet.</p>
+                        )}
+                        {src.equipment_type && tanksOfEquipmentType(chargeableTanks, src.equipment_type).length === 0 && !src.holding_tank_equipment_id && (
+                          <p className="field-hint">No tanks of this type have spirit to blend.</p>
+                        )}
                         {selectedTank && (
                           <div className="tank-contents-card" data-testid={`spirit-tank-contents-${index}`}>
                             <div className="tank-contents-kicker">In this tank</div>
@@ -2084,6 +2144,7 @@ export function Blending() {
             </button>
           </>
         );
+      }
 
       case 4:
         return (
@@ -2312,7 +2373,7 @@ export function Blending() {
         );
         const reviewLines = [
           ...activeSources.map((source) => {
-            const tank = getHoldingTanks().find((t) => t.id === source.holding_tank_equipment_id);
+            const tank = getSpiritTransferVessels().find((t) => t.id === source.holding_tank_equipment_id);
             const barrel = source.barrel_id
               ? barrelInventory.find((b) => b.id === source.barrel_id)
               : undefined;
@@ -2497,7 +2558,7 @@ export function Blending() {
             <ul className="wizard-produce-checklist">
               <li>{yieldGal.toFixed(1)} gal expected yield @ {(formulation.reconciliation.effective.abv ?? formulation.theoretical.abv ?? 0).toFixed(1)}% ABV</li>
               {activeSources.map((s, i) => {
-                const tank = getHoldingTanks().find((t) => t.id === s.holding_tank_equipment_id);
+                const tank = getSpiritTransferVessels().find((t) => t.id === s.holding_tank_equipment_id);
                 const barrel = s.barrel_id
                   ? barrelInventory.find((item) => item.id === s.barrel_id)
                   : undefined;
