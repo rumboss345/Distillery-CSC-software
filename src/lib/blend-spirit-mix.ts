@@ -15,7 +15,7 @@ export function distinctSpiritNames(lines: readonly SpiritMixLine[]): string[] {
 }
 
 /**
- * Confirmation when a blend pulls more than one kind of spirit.
+ * Confirmation when more than one kind of spirit would be combined.
  * The same spirit from two tanks does not need a warning.
  */
 export function mixedSpiritConfirmMessage(lines: readonly SpiritMixLine[]): string | null {
@@ -29,5 +29,5 @@ export function mixedSpiritConfirmMessage(lines: readonly SpiritMixLine[]): stri
     })
     .filter(Boolean)
     .join('\n');
-  return `These spirits are not the same:\n\n${list}\n\nAre you sure you want to blend these together?`;
+  return `These spirits are not the same:\n\n${list}\n\nAre you sure you want to mix these together?`;
 }

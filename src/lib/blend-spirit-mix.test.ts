@@ -11,7 +11,7 @@ describe('mixedSpiritConfirmMessage', () => {
     expect(message).toContain('Spirit Run · Hearts — High proof cane 2');
     expect(message).toContain('Low Wine Run · Hearts — Low wines storage');
     expect(message).toContain('Spirit Run · Tails — Tails tank');
-    expect(message).toContain('Are you sure you want to blend these together?');
+    expect(message).toContain('Are you sure you want to mix these together?');
   });
 
   it('stays quiet when every pull is the same spirit', () => {
