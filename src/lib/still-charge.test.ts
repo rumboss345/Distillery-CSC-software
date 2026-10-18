@@ -7,6 +7,8 @@ import {
   stillAlreadyOccupiedMessage,
   stillChargeCapacityMessage,
   stillRunOccupiesEquipment,
+  distillationRunAllowsCutChanges,
+  distillationRunShowsCuts,
 } from './still-charge';
 
 describe('still-charge', () => {
@@ -32,6 +34,15 @@ describe('still-charge', () => {
     expect(runConsumesSource('planned')).toBe(false);
     expect(runConsumesSource('running')).toBe(true);
     expect(runConsumesSource('complete')).toBe(true);
+  });
+
+  it('keeps cuts off a planned distillation', () => {
+    expect(distillationRunAllowsCutChanges('planned')).toBe(false);
+    expect(distillationRunShowsCuts('planned')).toBe(false);
+    expect(distillationRunAllowsCutChanges('running')).toBe(true);
+    expect(distillationRunShowsCuts('running')).toBe(true);
+    expect(distillationRunAllowsCutChanges('complete')).toBe(false);
+    expect(distillationRunShowsCuts('complete')).toBe(true);
   });
 
   it('lets a charged fermenter stay dirty while the distillation is completed', () => {

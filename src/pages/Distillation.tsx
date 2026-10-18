@@ -87,6 +87,7 @@ import { eventDateWhenLeavingPlanned, localIsoDate, localIsoDateTime } from '../
 import { plannedFermenterDistillationMessage } from '../lib/planned-fermenter-distillation';
 import {
   chargeExceedsStillCapacity,
+  distillationRunShowsCuts,
   plannedRecordSkipsEquipmentStatus,
   stillAlreadyOccupiedMessage,
   stillRunOccupiesEquipment,
@@ -207,7 +208,8 @@ export function Distillation() {
     setAppliedCutsRunId(0);
   } else if (cutsRunId && appliedCutsRunId !== cutsRunId && runs.some((run) => run.id === cutsRunId)) {
     setAppliedCutsRunId(cutsRunId);
-    setSelectedRunId(cutsRunId);
+    const linked = runs.find((run) => run.id === cutsRunId);
+    if (linked && distillationRunShowsCuts(linked.status)) setSelectedRunId(cutsRunId);
   }
 
   void key;
@@ -1190,9 +1192,11 @@ export function Distillation() {
                             )}
                           </td>
                           <td className="td-actions">
-                            <button className="btn btn-sm btn-secondary" onClick={() => setSelectedRunId(r.id)}>
-                              {r.status === 'complete' ? 'View cuts' : 'Cuts'}
-                            </button>
+                            {distillationRunShowsCuts(r.status) && (
+                              <button className="btn btn-sm btn-secondary" onClick={() => setSelectedRunId(r.id)}>
+                                {r.status === 'complete' ? 'View cuts' : 'Cuts'}
+                              </button>
+                            )}
                             <button className="btn btn-sm btn-ghost" onClick={() => openEditRun(r)}>Edit</button>
                             <button
                               type="button"
@@ -1214,7 +1218,7 @@ export function Distillation() {
         </div>
       )}
 
-      {selectedRunId && (
+      {selectedRunId && distillationRunShowsCuts(selectedRun?.status) && (
         <Modal
           wide
           title={`${selectedRunIsComplete ? 'View cuts' : 'Cuts'} — ${runs.find((r) => r.id === selectedRunId)?.batch_number ?? ''}${selectedRun ? ` · ${formatDateDisplay(selectedRun.run_date)}` : ''}`}

@@ -16,6 +16,16 @@ export function runConsumesSource(status: string): boolean {
   return status === 'running' || status === 'complete';
 }
 
+/** Cuts can be recorded only while the run is distilling. A planned run has no cuts. */
+export function distillationRunAllowsCutChanges(status: string | null | undefined): boolean {
+  return status === 'running';
+}
+
+/** The cuts list opens for a running run and stays available to view after the run is complete. */
+export function distillationRunShowsCuts(status: string | null | undefined): boolean {
+  return status === 'running' || status === 'complete';
+}
+
 /**
  * A running or completed charge already emptied this fermenter.
  * Finishing or editing that run must not wait for the fermenter to be cleaned.
