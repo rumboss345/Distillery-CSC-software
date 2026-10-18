@@ -1633,12 +1633,13 @@ export function getCutDestinationsForRun(
   return [...vessels, ...holding.filter((h) => !seen.has(h.id))];
 }
 
-/** Spirit-ledger tanks that still hold liquid. Fermenters are not included. */
+/** Holding tanks and collection vessels that still hold liquid. Stillage tanks are not a blend source. */
 export function getChargeableHoldingTanksForBlend(excludeBlendId?: number): (FloorEquipment & {
   available_gal: number;
   available_abv: number;
 })[] {
   return getSpiritTransferVessels()
+    .filter((tank) => tank.equipment_type !== 'stillage_tank')
     .map((tank) => {
       const contents = getHoldingTankContents(tank.id, undefined, excludeBlendId);
       return {
