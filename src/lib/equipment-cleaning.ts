@@ -1,5 +1,19 @@
 import type { FloorEquipment } from '../types';
 
+/**
+ * Equipment that stays on the calendar while it needs cleaning:
+ * tanks, collection vessels, fermenters, and stills.
+ */
+export const CALENDAR_CLEANING_EQUIPMENT_TYPES = [
+  'mash_tun',
+  'holding_tank',
+  'stillage_tank',
+  'collection_vessel',
+  'fermenter',
+  'pot_still',
+  'column_still',
+] as const;
+
 /** Equipment emptied after use — must be marked clean before the next batch. */
 export function equipmentNeedsCleaning(item: Pick<FloorEquipment, 'status'>): boolean {
   return item.status === 'cleaning';

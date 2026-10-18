@@ -1,17 +1,12 @@
 import type { CalendarEvent } from './calendar-events';
 import { localCalendarDayKey } from './date-input';
 import { equipmentTypeLabel } from './equipment';
+import { CALENDAR_CLEANING_EQUIPMENT_TYPES } from './equipment-cleaning';
 
-/** Wash tanks, holding tanks, stillage tanks, and collection vessels. */
-const TANK_EQUIPMENT_TYPES = new Set([
-  'mash_tun',
-  'holding_tank',
-  'stillage_tank',
-  'collection_vessel',
-]);
+const CALENDAR_CLEANING_EQUIPMENT_TYPE_SET = new Set<string>(CALENDAR_CLEANING_EQUIPMENT_TYPES);
 
-export function isTankEquipmentType(type: string): boolean {
-  return TANK_EQUIPMENT_TYPES.has(type);
+export function showsCleaningOnCalendar(type: string): boolean {
+  return CALENDAR_CLEANING_EQUIPMENT_TYPE_SET.has(type);
 }
 
 export interface TankCleaningLogRow {
@@ -54,10 +49,10 @@ function cleaningEvent(
 }
 
 /**
- * Tank cleaning for one staff-sheet day.
- * A tank that still needs cleaning stays on the sheet from the day it was emptied through today, with status Upcoming.
- * A tank marked cleaned on this day is Done for the person who cleaned it.
- * Cleaning is never In progress.
+ * Cleaning for one staff-sheet day.
+ * Equipment that still needs cleaning stays on the sheet from the day it was emptied through today, with status Upcoming.
+ * Equipment marked cleaned on this day is Done for the person who cleaned it.
+ * Cleaning is never In progress. Tanks, collection vessels, fermenters, and stills are included.
  */
 export function tankCleaningStaffEvents(
   rows: TankCleaningLogRow[],
@@ -65,7 +60,7 @@ export function tankCleaningStaffEvents(
   today: string,
 ): CalendarEvent[] {
   if (!day) return [];
-  const tanks = rows.filter((row) => isTankEquipmentType(row.equipmentType));
+  const tanks = rows.filter((row) => showsCleaningOnCalendar(row.equipmentType));
   const byTank = new Map<number, TankCleaningLogRow[]>();
   for (const row of tanks) {
     const list = byTank.get(row.equipmentId) ?? [];

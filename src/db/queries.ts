@@ -37,7 +37,7 @@ import {
   equipmentUnavailableForProduction,
   maintenanceStatusLabel,
 } from '../lib/equipment-maintenance';
-import { equipmentCleaningStatusLabel, equipmentNeedsCleaning, equipmentStatusWhenReturningToPlanned } from '../lib/equipment-cleaning';
+import { CALENDAR_CLEANING_EQUIPMENT_TYPES, equipmentCleaningStatusLabel, equipmentNeedsCleaning, equipmentStatusWhenReturningToPlanned } from '../lib/equipment-cleaning';
 import { assertEnteredAbv } from '../lib/abv-limits';
 import { planTankProofDown } from '../lib/tank-proof-down';
 import { roundThousandths, tankReadingChanged, tankVolumeVarianceGal, volumeChangeReasonError } from '../lib/tank-volume-variance';
@@ -6355,7 +6355,7 @@ export function getEquipmentMaintenanceReportLog(): EquipmentMaintenanceLogView[
   return queryAll(EQUIPMENT_MAINTENANCE_LOG_SELECT);
 }
 
-/** Tank cleaning log rows for the daily staff sheet. */
+/** Cleaning log rows for the daily staff sheet: tanks, fermenters, and stills. */
 export function getTankCleaningLog(): {
   id: number;
   equipmentId: number;
@@ -6382,9 +6382,9 @@ export function getTankCleaningLog(): {
     FROM equipment_maintenance_log l
     JOIN floor_equipment fe ON fe.id = l.floor_equipment_id
     WHERE l.event_type IN ('needs_cleaning', 'marked_cleaned')
-      AND fe.equipment_type IN ('mash_tun', 'holding_tank', 'stillage_tank', 'collection_vessel')
+      AND fe.equipment_type IN (${CALENDAR_CLEANING_EQUIPMENT_TYPES.map(() => '?').join(', ')})
     ORDER BY l.created_at, l.id
-  `).map((row) => ({
+  `, [...CALENDAR_CLEANING_EQUIPMENT_TYPES]).map((row) => ({
     id: row.id,
     equipmentId: row.equipment_id,
     equipmentName: row.equipment_name,
