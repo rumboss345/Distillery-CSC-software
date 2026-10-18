@@ -1,4 +1,4 @@
-export type ProductivityMetric = 'heartsGal' | 'pureAlcoholGal' | 'bottles' | 'runs';
+export type ProductivityMetric = 'heartsGal' | 'pureAlcoholGal' | 'bottles' | 'runs' | 'fermentations';
 
 export interface MonthlyProduction {
   /** YYYY-MM */
@@ -7,6 +7,7 @@ export interface MonthlyProduction {
   pureAlcoholGal: number;
   bottles: number;
   runs: number;
+  fermentations: number;
 }
 
 export interface ProductivityMonthBar {
@@ -45,6 +46,11 @@ export const PRODUCTIVITY_METRICS: { id: ProductivityMetric; label: string; hint
     id: 'runs',
     label: 'Completed runs',
     hint: 'Distillation runs marked complete, dated by the run date.',
+  },
+  {
+    id: 'fermentations',
+    label: '# of fermentations',
+    hint: 'Fermentations started, one per fermenter. Dated by the day fermentation starts.',
   },
 ];
 
@@ -134,7 +140,7 @@ export function productivitySummary(comparison: Omit<ProductivityComparison, 'su
 }
 
 export function formatProductivityAmount(metric: ProductivityMetric, value: number): string {
-  if (metric === 'bottles' || metric === 'runs') {
+  if (metric === 'bottles' || metric === 'runs' || metric === 'fermentations') {
     return Math.round(value).toLocaleString('en-US');
   }
   const digits = metric === 'pureAlcoholGal' ? 2 : 1;
@@ -169,7 +175,7 @@ export function formatAxisTick(value: number): string {
 }
 
 function rowHasProduction(row: MonthlyProduction): boolean {
-  return row.heartsGal > 0 || row.pureAlcoholGal > 0 || row.bottles > 0 || row.runs > 0;
+  return row.heartsGal > 0 || row.pureAlcoholGal > 0 || row.bottles > 0 || row.runs > 0 || row.fermentations > 0;
 }
 
 function monthTotal(rows: MonthlyProduction[], month: string, metric: ProductivityMetric): number {
@@ -182,6 +188,7 @@ function metricNoun(metric: ProductivityMetric): string {
     case 'pureAlcoholGal': return 'pure alcohol';
     case 'bottles': return 'bottles';
     case 'runs': return 'completed runs';
+    case 'fermentations': return 'fermentations';
   }
 }
 
@@ -189,6 +196,7 @@ function differencePhrase(metric: ProductivityMetric, value: number): string {
   const amount = formatProductivityAmount(metric, value);
   if (metric === 'heartsGal' || metric === 'pureAlcoholGal') return `${amount} gal`;
   if (metric === 'bottles') return counted(value, amount, 'bottle', 'bottles');
+  if (metric === 'fermentations') return counted(value, amount, 'fermentation', 'fermentations');
   return counted(value, amount, 'run', 'runs');
 }
 
@@ -199,6 +207,7 @@ function amountPhrase(metric: ProductivityMetric, value: number): string {
     case 'pureAlcoholGal': return `${amount} gal of pure alcohol`;
     case 'bottles': return counted(value, amount, 'bottle', 'bottles');
     case 'runs': return counted(value, amount, 'completed run', 'completed runs');
+    case 'fermentations': return counted(value, amount, 'fermentation', 'fermentations');
   }
 }
 
@@ -207,7 +216,7 @@ function counted(value: number, amount: string, singular: string, plural: string
 }
 
 function sameAmount(metric: ProductivityMetric, delta: number): boolean {
-  return metric === 'bottles' || metric === 'runs'
+  return metric === 'bottles' || metric === 'runs' || metric === 'fermentations'
     ? Math.abs(delta) < 0.5
     : Math.abs(delta) < 0.05;
 }

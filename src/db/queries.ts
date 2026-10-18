@@ -5982,6 +5982,40 @@ export function getMonthlyProduction(): MonthlyProduction[] {
     GROUP BY month
   `);
 
+  const fermentations = queryAll<{ month: string | null; fermentations: number }>(`
+    SELECT month, COUNT(*) as fermentations
+    FROM (
+      SELECT strftime('%Y-%m', COALESCE(NULLIF(TRIM(m.fermentation_start_date), ''), m.start_date)) as month
+      FROM mash_fermenter_assignments a
+      JOIN mash_batches m ON m.id = a.mash_batch_id
+      UNION ALL
+      SELECT strftime('%Y-%m', COALESCE(NULLIF(TRIM(m.fermentation_start_date), ''), m.start_date)) as month
+      FROM distillation_runs r
+      JOIN mash_batches m ON m.id = r.source_mash_batch_id
+      WHERE r.run_type IN ('wash', 'heavy_rum')
+        AND r.source_fermenter_equipment_id IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM mash_fermenter_assignments a
+          WHERE a.mash_batch_id = r.source_mash_batch_id
+            AND a.floor_equipment_id = r.source_fermenter_equipment_id
+        )
+      GROUP BY m.id, r.source_fermenter_equipment_id
+      UNION ALL
+      SELECT strftime('%Y-%m', COALESCE(NULLIF(TRIM(m.fermentation_start_date), ''), m.start_date)) as month
+      FROM mash_batches m
+      WHERE m.status IN ('fermenting', 'complete', 'discarded')
+        AND NOT EXISTS (
+          SELECT 1 FROM mash_fermenter_assignments a WHERE a.mash_batch_id = m.id
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM distillation_runs r
+          WHERE r.source_mash_batch_id = m.id
+            AND r.source_fermenter_equipment_id IS NOT NULL
+        )
+    )
+    GROUP BY month
+  `);
+
   const byMonth = new Map<string, MonthlyProduction>();
   const bucket = (month: string | null): MonthlyProduction | null => {
     if (!month || !/^\d{4}-\d{2}$/.test(month)) return null;
@@ -5993,6 +6027,7 @@ export function getMonthlyProduction(): MonthlyProduction[] {
       pureAlcoholGal: 0,
       bottles: 0,
       runs: 0,
+      fermentations: 0,
     };
     byMonth.set(month, created);
     return created;
@@ -6013,6 +6048,11 @@ export function getMonthlyProduction(): MonthlyProduction[] {
     const month = bucket(row.month);
     if (!month) continue;
     month.bottles += row.bottles;
+  }
+  for (const row of fermentations) {
+    const month = bucket(row.month);
+    if (!month) continue;
+    month.fermentations += row.fermentations;
   }
 
   return [...byMonth.values()].sort((a, b) => a.month.localeCompare(b.month));
