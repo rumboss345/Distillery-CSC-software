@@ -8,11 +8,11 @@ import {
 } from './productivity';
 
 const rows: MonthlyProduction[] = [
-  { month: '2025-06', heartsGal: 25.1, pureAlcoholGal: 17.068, bottles: 0, runs: 1 },
-  { month: '2025-06', heartsGal: 10, pureAlcoholGal: 4, bottles: 0, runs: 1 },
-  { month: '2026-06', heartsGal: 40, pureAlcoholGal: 20, bottles: 120, runs: 2 },
-  { month: '2025-05', heartsGal: 0, pureAlcoholGal: 0, bottles: 480, runs: 0 },
-  { month: '2024-01', heartsGal: 5, pureAlcoholGal: 3, bottles: 0, runs: 1 },
+  { month: '2025-06', heartsGal: 25.1, pureAlcoholGal: 17.068, bottles: 0, runs: 1, fermentations: 2 },
+  { month: '2025-06', heartsGal: 10, pureAlcoholGal: 4, bottles: 0, runs: 1, fermentations: 0 },
+  { month: '2026-06', heartsGal: 40, pureAlcoholGal: 20, bottles: 120, runs: 2, fermentations: 1 },
+  { month: '2025-05', heartsGal: 0, pureAlcoholGal: 0, bottles: 480, runs: 0, fermentations: 0 },
+  { month: '2024-01', heartsGal: 5, pureAlcoholGal: 3, bottles: 0, runs: 1, fermentations: 0 },
 ];
 
 describe('productivity comparison', () => {
@@ -38,14 +38,23 @@ describe('productivity comparison', () => {
 
   it('uses a singular count and keeps a near-total drop under 100 percent', () => {
     const sparse: MonthlyProduction[] = [
-      { month: '2026-10', heartsGal: 0, pureAlcoholGal: 0, bottles: 1, runs: 0 },
-      { month: '2025-05', heartsGal: 0, pureAlcoholGal: 0, bottles: 480, runs: 1 },
+      { month: '2026-10', heartsGal: 0, pureAlcoholGal: 0, bottles: 1, runs: 0, fermentations: 1 },
+      { month: '2025-05', heartsGal: 0, pureAlcoholGal: 0, bottles: 480, runs: 1, fermentations: 0 },
     ];
     expect(compareProductivityYears(sparse, 2026, 'bottles').summary).toBe(
       '1 bottle in 2026, compared with 480 bottles in 2025 (479 bottles less, 99.8%).',
     );
     expect(compareProductivityYears(sparse, 2026, 'runs').summary).toBe(
       'No completed runs recorded in 2026. 2025 had 1 completed run.',
+    );
+  });
+
+  it('counts fermentations beside the same month a year earlier', () => {
+    const comparison = compareProductivityYears(rows, 2026, 'fermentations');
+    expect(comparison.months[4]).toEqual({ label: 'May', current: 0, previous: 0 });
+    expect(comparison.months[5]).toEqual({ label: 'Jun', current: 1, previous: 2 });
+    expect(comparison.summary).toBe(
+      '1 fermentation in 2026, compared with 2 fermentations in 2025 (1 fermentation less, 50%).',
     );
   });
 
