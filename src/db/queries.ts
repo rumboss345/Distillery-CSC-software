@@ -6045,17 +6045,22 @@ export function getEquipmentVolumeReport(): EquipmentVolumeReport[] {
   return equipment.map((eq) => {
     if (isSpiritLedgerEquipmentType(eq.equipment_type)) {
       const contents = getHoldingTankContents(eq.id);
-      const blendName = holdingTankProductName(eq.id, contents.volume_gal)?.trim() || '';
-      const distilled = blendName
+      const hasLiquid = contents.volume_gal > 0.05;
+      const blendName = hasLiquid
+        ? (holdingTankProductName(eq.id, contents.volume_gal)?.trim() || '')
+        : '';
+      const distilled = hasLiquid && !blendName
+        ? (holdingTankDistillationContents(eq.id, contents.volume_gal)?.trim() || '')
+        : '';
+      const detail = !hasLiquid
         ? ''
-        : (holdingTankDistillationContents(eq.id, contents.volume_gal)?.trim() || '');
-      const detail = blendName
-        || distilled
-        || (eq.equipment_type === 'collection_vessel'
-          ? collectionVesselContentsDetail(eq.id, contents.volume_gal)
-          : contents.run_count > 0
-            ? `${contents.run_count} distillation run${contents.run_count === 1 ? '' : 's'} · ${contents.cut_count} cut${contents.cut_count === 1 ? '' : 's'}`
-            : '');
+        : blendName
+          || distilled
+          || (eq.equipment_type === 'collection_vessel'
+            ? collectionVesselContentsDetail(eq.id, contents.volume_gal)
+            : contents.run_count > 0
+              ? `${contents.run_count} distillation run${contents.run_count === 1 ? '' : 's'} · ${contents.cut_count} cut${contents.cut_count === 1 ? '' : 's'}`
+              : '');
       return {
         id: eq.id,
         name: eq.name,
