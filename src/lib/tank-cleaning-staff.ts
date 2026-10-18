@@ -1,4 +1,4 @@
-import type { CalendarEvent } from './calendar-events';
+import { eventOccursOnDate, type CalendarEvent } from './calendar-events';
 import { localCalendarDayKey } from './date-input';
 import { equipmentTypeLabel } from './equipment';
 import { CALENDAR_CLEANING_EQUIPMENT_TYPES } from './equipment-cleaning';
@@ -27,6 +27,15 @@ function byTime(a: TankCleaningLogRow, b: TankCleaningLogRow): number {
   return a.id - b.id;
 }
 
+function previousIsoDay(day: string): string {
+  const [year, month, date] = day.split('-').map(Number);
+  const value = new Date(year, (month || 1) - 1, date || 1);
+  value.setDate(value.getDate() - 1);
+  const mm = String(value.getMonth() + 1).padStart(2, '0');
+  const dd = String(value.getDate()).padStart(2, '0');
+  return `${value.getFullYear()}-${mm}-${dd}`;
+}
+
 function cleaningEvent(
   row: TankCleaningLogRow,
   day: string,
@@ -49,17 +58,12 @@ function cleaningEvent(
 }
 
 /**
- * Cleaning for one staff-sheet day.
- * Equipment that still needs cleaning stays on the sheet from the day it was emptied through today, with status Upcoming.
- * Equipment marked cleaned on this day is Done for the person who cleaned it.
+ * Cleaning spans for the calendar.
+ * Equipment that still needs cleaning stays Upcoming on every day from the day it was emptied until it is cleaned.
+ * The day it is cleaned is Done for the person who cleaned it.
  * Cleaning is never In progress. Tanks, collection vessels, fermenters, and stills are included.
  */
-export function tankCleaningStaffEvents(
-  rows: TankCleaningLogRow[],
-  day: string,
-  today: string,
-): CalendarEvent[] {
-  if (!day) return [];
+export function tankCleaningCalendarEvents(rows: TankCleaningLogRow[]): CalendarEvent[] {
   const tanks = rows.filter((row) => showsCleaningOnCalendar(row.equipmentType));
   const byTank = new Map<number, TankCleaningLogRow[]>();
   for (const row of tanks) {
@@ -82,22 +86,41 @@ export function tankCleaningStaffEvents(
       // A clean log does not finish the job while the tank is still dirty.
       const stillDirty = log.status === 'cleaning' && !cleanedAgainLater;
       const cleanDay = localCalendarDayKey(log.createdAt);
-      if (!stillDirty && cleanDay === day) events.push(cleaningEvent(log, day, true));
-      if (open && !stillDirty) {
+      if (stillDirty || !cleanDay) continue;
+      events.push(cleaningEvent(log, cleanDay, true));
+      if (open) {
         const start = localCalendarDayKey(open.createdAt);
-        if (start && cleanDay && start <= day && day < cleanDay) {
-          events.push(cleaningEvent(open, day, false));
+        if (start && start < cleanDay) {
+          const end = previousIsoDay(cleanDay);
+          events.push({
+            ...cleaningEvent(open, start, false),
+            endDate: end === start ? undefined : end,
+          });
         }
         open = null;
       }
     }
     if (open && open.status === 'cleaning') {
       const start = localCalendarDayKey(open.createdAt);
-      if (start && start <= day && day <= today) {
-        events.push(cleaningEvent(open, day, false));
+      if (start) {
+        events.push({
+          ...cleaningEvent(open, start, false),
+          continuesUntilCleaned: true,
+        });
       }
     }
   }
 
-  return events.sort((a, b) => a.title.localeCompare(b.title));
+  return events.sort((a, b) => a.title.localeCompare(b.title) || a.startDate.localeCompare(b.startDate));
+}
+
+/** Cleaning rows for one calendar day. Dirty equipment stays Upcoming on later days until it is cleaned. */
+export function tankCleaningStaffEvents(
+  rows: TankCleaningLogRow[],
+  day: string,
+): CalendarEvent[] {
+  if (!day) return [];
+  return tankCleaningCalendarEvents(rows)
+    .filter((event) => eventOccursOnDate(event, day))
+    .sort((a, b) => a.title.localeCompare(b.title));
 }
