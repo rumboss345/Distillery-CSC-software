@@ -23,6 +23,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import { StatusDateLog } from '../components/StatusDateLog';
 import { holdingTankIntakeKey } from '../db/queries';
 import { EquipmentIconPicker } from '../components/equipment/EquipmentIconPicker';
+import { useAuth } from '../context/AuthContext';
 import {
   EQUIPMENT_STATUSES,
   equipmentTypeDefaults,
@@ -61,6 +62,8 @@ const emptyEquipment = (planId: number, type = 'fermenter'): Omit<FloorEquipment
 };
 
 export function FloorPlanPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const { key, refresh } = useRefreshKey();
   const plans = getFloorPlans();
   const [activePlanId, setActivePlanId] = useState(plans[0]?.id ?? 1);
@@ -121,6 +124,7 @@ export function FloorPlanPage() {
   };
 
   const openEdit = (item: FloorEquipment) => {
+    if (!isAdmin) return;
     setEditId(item.id);
     setForm({
       ...item,
@@ -178,6 +182,7 @@ export function FloorPlanPage() {
   };
 
   const handleSave = () => {
+    if (editId != null && !isAdmin) return;
     saveFloorEquipment(form, editId);
     setShowForm(false);
     refresh();
@@ -329,7 +334,7 @@ export function FloorPlanPage() {
             onSelect={selectEquipment}
             refreshKey={key}
             onLayoutChange={refresh}
-            onEditEquipment={selected ? () => openEdit(selected) : undefined}
+            onEditEquipment={isAdmin && selected ? () => openEdit(selected) : undefined}
             onRemoveEquipment={selected ? () => handleDelete(selected.id) : undefined}
           />
         </>
@@ -441,7 +446,9 @@ export function FloorPlanPage() {
                 />
               )}
               <div className="floor-sidebar-actions">
-                <button className="btn btn-sm btn-secondary" onClick={() => openEdit(selected)}>Edit</button>
+                {isAdmin && (
+                  <button className="btn btn-sm btn-secondary" onClick={() => openEdit(selected)}>Edit</button>
+                )}
                 <button className="btn btn-sm btn-danger" onClick={() => handleDelete(selected.id)}>Remove</button>
               </div>
             </div>
@@ -476,7 +483,7 @@ export function FloorPlanPage() {
       </>
       )}
 
-      {showForm && (
+      {showForm && (editId == null || isAdmin) && (
         <Modal title={editId ? 'Edit Equipment' : 'Add Equipment'} onClose={() => setShowForm(false)} wide>
           <div className="form-grid">
             <div className="form-group">
