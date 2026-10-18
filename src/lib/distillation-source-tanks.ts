@@ -4,10 +4,15 @@ import { roundAbv, roundVolume } from './reporting/alcohol-units';
 /** Holding tanks, stillage tanks, then collection vessels. */
 const SOURCE_TANK_TYPE_ORDER = ['holding_tank', 'stillage_tank', 'collection_vessel'] as const;
 
-/** Equipment types a spirit run or gin run can charge, in display order. */
+/** Spirit-ledger equipment types that are present, in display order. */
 export function distillationSourceTypeChoices(equipmentTypes: readonly string[]): string[] {
   const present = new Set(equipmentTypes.filter((type) => isSpiritLedgerEquipmentType(type)));
   return SOURCE_TANK_TYPE_ORDER.filter((type) => present.has(type));
+}
+
+/** Types a distillation can charge. Stillage tanks are not a charge source. */
+export function distillationChargeTypeChoices(equipmentTypes: readonly string[]): string[] {
+  return distillationSourceTypeChoices(equipmentTypes).filter((type) => type !== 'stillage_tank');
 }
 
 export function tanksOfEquipmentType<T extends { equipment_type: string }>(
