@@ -33,6 +33,8 @@ import {
   useRefreshKey,
 } from '../db/queries';
 import { isSpiritLedgerEquipmentType } from '../lib/equipment';
+import { mixedSpiritConfirmMessage } from '../lib/blend-spirit-mix';
+import { tankContentsPhrase, tankDropdownLabel } from '../lib/tank-menu-label';
 import { isStillageTankType, STILLAGE_DISCARD_DESTINATION } from '../lib/stillage';
 import { limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
@@ -47,7 +49,6 @@ import {
   volumeChangeReasonError,
 } from '../lib/tank-volume-variance';
 import { DISCARD_DESTINATION, fermenterTransferError } from '../lib/fermenter-transfer';
-import { tankDropdownLabel } from '../lib/tank-menu-label';
 import { planTankProofDown } from '../lib/tank-proof-down';
 const destAcceptsTransferFrom = (sourceId: number, destId: number): boolean => {
   const sourceIsStillage = sourceId > 0 && transferSourceIsStillage(sourceId);
@@ -369,6 +370,20 @@ export function TankTransfer() {
         )) {
           return;
         }
+      }
+      if (transferDestContents.volume_gal > 0.05 && transferForm.source_tank_equipment_id > 0) {
+        const sourceTank = sourceTanksForTransfer.find((tank) => tank.id === transferForm.source_tank_equipment_id);
+        const mixMessage = mixedSpiritConfirmMessage([
+          {
+            spirit: tankContentsPhrase(transferForm.source_tank_equipment_id) || 'Spirit',
+            place: sourceTank?.name ?? 'Source tank',
+          },
+          {
+            spirit: tankContentsPhrase(transferDestTank.id) || 'Spirit',
+            place: transferDestTank.name,
+          },
+        ]);
+        if (mixMessage && !confirm(mixMessage)) return;
       }
     }
     try {

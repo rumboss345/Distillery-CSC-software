@@ -56,6 +56,7 @@ import {
   tanksOfEquipmentType,
   type DistillationTankPull,
 } from '../lib/distillation-source-tanks';
+import { mixedSpiritConfirmMessage } from '../lib/blend-spirit-mix';
 import { equipmentTypeLabel } from '../lib/equipment';
 import { formatTankMenuLabel, tankContentsPhrase, tankDropdownLabel } from '../lib/tank-menu-label';
 import { AbvTemperatureInput, correctedAbvFromInputs } from '../components/AbvTemperatureInput';
@@ -813,6 +814,13 @@ export function Distillation() {
           return;
         }
       }
+      const mixMessage = mixedSpiritConfirmMessage(pullsToSave.filter((pull) => pull.volumeGal > 0).map((pull) => ({
+        spirit: tankContentsPhrase(pull.tankId) || 'Spirit',
+        place: pull.tankName
+          || equipment.find((item) => item.id === pull.tankId)?.name
+          || 'Tank',
+      })));
+      if (mixMessage && !confirm(mixMessage)) return;
       try {
         saveDistillationRun(
           savedRun,
@@ -1028,6 +1036,20 @@ export function Distillation() {
         )) {
           return;
         }
+      }
+      if (baseVolume > 0.05 && selectedRun) {
+        const cutName = cutForm.cut_type.charAt(0).toUpperCase() + cutForm.cut_type.slice(1);
+        const mixMessage = mixedSpiritConfirmMessage([
+          {
+            spirit: `${runTypeLabel(selectedRun.run_type)} · ${cutName}`,
+            place: selectedRun.batch_number,
+          },
+          {
+            spirit: tankContentsPhrase(tankId) || 'Spirit',
+            place: tank?.name ?? 'Tank',
+          },
+        ]);
+        if (mixMessage && !confirm(mixMessage)) return;
       }
     }
     try {

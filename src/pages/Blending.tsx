@@ -35,6 +35,7 @@ import { TankContentsLookup } from '../components/TankContentsLookup';
 import { distillationChargeTypeChoices, tanksOfEquipmentType } from '../lib/distillation-source-tanks';
 import { equipmentTypeLabel } from '../lib/equipment';
 import { formatTankMenuLabel, tankContentsPhrase, tankDropdownLabel } from '../lib/tank-menu-label';
+import { mixedSpiritConfirmMessage, type SpiritMixLine } from '../lib/blend-spirit-mix';
 import { AbvTemperatureInput, correctedAbvFromInputs } from '../components/AbvTemperatureInput';
 import { BlendAbvConfirmation } from '../components/BlendAbvConfirmation';
 import { ProofingWaterConfirm } from '../components/ProofingWaterConfirm';
@@ -487,6 +488,7 @@ export function Blending() {
   const [targetYieldInput, setTargetYieldInput] = useState('');
   const [batchSizeUnit, setBatchSizeUnit] = useState<BatchSizeUnit>('gal');
   const yieldEdited = useRef(false);
+  const confirmedSpiritMix = useRef('');
   const [waterAdjustmentNote, setWaterAdjustmentNote] = useState<string | null>(null);
   const [wizardProofingPreview, setWizardProofingPreview] = useState<ProofingWaterPreview | null>(null);
   const [wizardOriginalWater, setWizardOriginalWater] = useState<BlendIngredientInput[] | null>(null);
@@ -625,6 +627,37 @@ export function Blending() {
   const activeSources = spiritSources
     .map(syncSpiritVolume)
     .filter((s) => s.volume_gal > 0 && (s.holding_tank_equipment_id > 0 || (s.barrel_id != null && s.barrel_id > 0)));
+
+  const spiritMixLines = (): SpiritMixLine[] => activeSources.map((source) => {
+    if (source.holding_tank_equipment_id > 0) {
+      const tank = getSpiritTransferVessels().find((item) => item.id === source.holding_tank_equipment_id);
+      return {
+        spirit: tankContentsPhrase(source.holding_tank_equipment_id)
+          || source.spirit_label.trim()
+          || 'Spirit',
+        place: tank?.name ?? source.spirit_label,
+      };
+    }
+    const product = source.barrel_id ? barrelBlendProductName(source.barrel_id) : null;
+    return {
+      spirit: product || source.spirit_label.trim() || 'Barrel spirit',
+      place: product ? source.spirit_label : undefined,
+    };
+  });
+
+  const confirmMixedSpirits = (): boolean => {
+    const lines = spiritMixLines();
+    const message = mixedSpiritConfirmMessage(lines);
+    if (!message) {
+      confirmedSpiritMix.current = '';
+      return true;
+    }
+    const key = lines.map((line) => `${line.spirit}|${line.place ?? ''}`).join('\n');
+    if (confirmedSpiritMix.current === key) return true;
+    if (!confirm(message)) return false;
+    confirmedSpiritMix.current = key;
+    return true;
+  };
   const formulation = useMemo(
     () => computeBlendFormulation(activeSources.map(toSpiritSourceInput), ingredients, {
       volume_gal: form.actual_volume_gal,
@@ -1399,6 +1432,7 @@ export function Blending() {
 
   const goNext = () => {
     if (!validateStep(wizardStep)) return;
+    if (wizardStep === 2 && !confirmMixedSpirits()) return;
     if (wizardStep === 5) {
       try {
         const id = persistFormula('draft');
@@ -1477,6 +1511,7 @@ export function Blending() {
       return;
     }
     const yieldGal = formulation.reconciliation.effective.volumeGal ?? formulation.theoretical.volumeGal ?? 0;
+    if (!confirmMixedSpirits()) return;
     const destContents = getHoldingTankContents(outputTankId);
     const newTotal = destContents.volume_gal + yieldGal;
     if (outputTank.capacity_gal > 0 && newTotal > outputTank.capacity_gal + 0.01) {
@@ -2821,7 +2856,11 @@ export function Blending() {
                   key={step.id}
                   type="button"
                   className={`blend-wizard-step ${wizardStep === step.id ? 'active' : ''} ${wizardStep > step.id ? 'done' : ''}`}
-                  onClick={() => !isLocked && setWizardStep(step.id)}
+                  onClick={() => {
+                    if (isLocked) return;
+                    if (wizardStep === 2 && step.id > 2 && !confirmMixedSpirits()) return;
+                    setWizardStep(step.id);
+                  }}
                   disabled={isLocked && step.id < 9}
                 >
                   <span className="blend-wizard-step-num">{step.id}</span>
