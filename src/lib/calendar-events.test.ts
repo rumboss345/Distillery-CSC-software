@@ -448,6 +448,26 @@ describe('layoutCalendarWeek', () => {
     expect(byId.later).toBe(0);
   });
 
+  it('keeps dirty equipment on every day of the week until it is cleaned', () => {
+    const dirty = {
+      ...event('latina', '2026-03-03'),
+      kind: 'cleaning' as const,
+      status: 'upcoming',
+      statusCategory: 'planned' as const,
+      continuesUntilCleaned: true,
+    };
+    const [span] = layoutCalendarWeek(days, [dirty]);
+    expect(span).toMatchObject({
+      startCol: 2,
+      endCol: 6,
+      continuesBefore: false,
+      continuesAfter: true,
+    });
+    expect(eventOccursOnDate(dirty, '2026-03-03')).toBe(true);
+    expect(eventOccursOnDate(dirty, '2026-04-01')).toBe(true);
+    expect(eventOccursOnDate(dirty, '2026-03-02')).toBe(false);
+  });
+
   it('places a planned process below a running one on the same days', () => {
     const planned = {
       ...event('planned', '2026-03-01', '2026-03-07'),

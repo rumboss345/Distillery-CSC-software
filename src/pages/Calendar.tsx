@@ -21,8 +21,7 @@ import { DatePicker } from '../components/DatePicker';
 import { StatusBadge } from '../components/StatusBadge';
 import { getTankCleaningLog } from '../db/queries';
 import { isIsoDate } from '../lib/date-input';
-import { localIsoDate } from '../lib/planned-event-date';
-import { tankCleaningStaffEvents } from '../lib/tank-cleaning-staff';
+import { tankCleaningCalendarEvents } from '../lib/tank-cleaning-staff';
 import {
   ALL_CALENDAR_KINDS,
   ALL_CALENDAR_PROGRESS,
@@ -77,9 +76,16 @@ export function Calendar() {
   );
 
   const allEvents = useMemo(() => buildCalendarEvents(), []);
+  const cleaningEvents = useMemo(
+    () => tankCleaningCalendarEvents(getTankCleaningLog()),
+    [selectedDate],
+  );
   const filteredEvents = useMemo(
-    () => filterCalendarEvents(allEvents, enabledKinds, enabledProgress),
-    [allEvents, enabledKinds, enabledProgress],
+    () => [
+      ...filterCalendarEvents(allEvents, enabledKinds, enabledProgress),
+      ...cleaningEvents.filter((event) => enabledProgress.has(calendarProgress(event.statusCategory))),
+    ],
+    [allEvents, cleaningEvents, enabledKinds, enabledProgress],
   );
   const monthStart = startOfMonth(anchorDate);
   const weekStart = startOfWeek(anchorDate, { weekStartsOn: 0 });
@@ -95,17 +101,9 @@ export function Calendar() {
     [weekStart],
   );
 
-  const tankCleaningEvents = useMemo(
-    () => tankCleaningStaffEvents(getTankCleaningLog(), selectedDate, localIsoDate())
-      .filter((event) => enabledProgress.has(calendarProgress(event.statusCategory))),
-    [selectedDate, enabledProgress],
-  );
   const selectedEvents = useMemo(
-    () => [
-      ...filteredEvents.filter((event) => eventOccursOnDate(event, selectedDate)),
-      ...tankCleaningEvents,
-    ],
-    [filteredEvents, selectedDate, tankCleaningEvents],
+    () => filteredEvents.filter((event) => eventOccursOnDate(event, selectedDate)),
+    [filteredEvents, selectedDate],
   );
 
   const weekRange = useMemo(() => {
@@ -127,13 +125,17 @@ export function Calendar() {
     if (viewMode === 'day') return dayEvents.length;
     if (viewMode === 'month') {
       const prefix = format(monthStart, 'yyyy-MM');
-      return filteredEvents.filter(
-        (event) => event.startDate.startsWith(prefix) || eventEndDate(event).startsWith(prefix),
-      ).length;
+      const monthEnd = format(endOfMonth(monthStart), 'yyyy-MM-dd');
+      return filteredEvents.filter((event) => {
+        if (event.continuesUntilCleaned) return event.startDate <= monthEnd;
+        return event.startDate.startsWith(prefix) || eventEndDate(event).startsWith(prefix);
+      }).length;
     }
-    return filteredEvents.filter(
-      (event) => event.startDate <= weekRange.end && eventEndDate(event) >= weekRange.start,
-    ).length;
+    return filteredEvents.filter((event) => (
+      event.continuesUntilCleaned
+        ? event.startDate <= weekRange.end
+        : event.startDate <= weekRange.end && eventEndDate(event) >= weekRange.start
+    )).length;
   }, [viewMode, monthStart, filteredEvents, weekRange, dayEvents.length]);
 
   const planKinds = CALENDAR_PLAN_ACTIVITY_KINDS.filter((kind) => (

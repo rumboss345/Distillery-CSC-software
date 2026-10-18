@@ -134,6 +134,8 @@ export interface CalendarEvent {
   detail?: string;
   /** Fermentation page, rather than the wash page, owns this wash record. */
   washOnFermentation?: boolean;
+  /** Dirty equipment stays on every later day until it is cleaned. */
+  continuesUntilCleaned?: boolean;
 }
 
 export interface CalendarProductionData {
@@ -186,6 +188,13 @@ export function isMultiDayEvent(event: CalendarEvent): boolean {
 
 export function eventEndDate(event: CalendarEvent): string {
   return event.endDate ?? event.startDate;
+}
+
+/** True when this event occupies the given day. Open cleaning has no end date. */
+export function eventOccursOnDate(event: CalendarEvent, date: string): boolean {
+  if (!date) return false;
+  if (event.continuesUntilCleaned) return event.startDate <= date;
+  return event.startDate <= date && date <= eventEndDate(event);
 }
 
 /** Primary sort/display date — preserved for callers that used the legacy `date` field. */
@@ -445,12 +454,6 @@ export function enumerateEventDates(event: CalendarEvent): string[] {
   return eachDayOfInterval({ start, end }).map((day) => format(day, 'yyyy-MM-dd'));
 }
 
-export function eventOccursOnDate(event: CalendarEvent, date: string): boolean {
-  if (!date) return false;
-  const end = eventEndDate(event);
-  return event.startDate <= date && date <= end;
-}
-
 export function filterEventsByKind(
   events: CalendarEvent[],
   enabledKinds: Set<CalendarActivityKind>,
@@ -517,7 +520,8 @@ export function layoutCalendarWeek(dayKeys: string[], events: CalendarEvent[]): 
 
   const segments: CalendarWeekSpan[] = [];
   for (const event of events) {
-    const eventEnd = eventEndDate(event);
+    const open = event.continuesUntilCleaned === true;
+    const eventEnd = open ? weekEnd : eventEndDate(event);
     if (eventEnd < weekStart || event.startDate > weekEnd) continue;
     const visibleStart = event.startDate < weekStart ? weekStart : event.startDate;
     const visibleEnd = eventEnd > weekEnd ? weekEnd : eventEnd;
@@ -530,7 +534,7 @@ export function layoutCalendarWeek(dayKeys: string[], events: CalendarEvent[]): 
       endCol,
       lane: 0,
       continuesBefore: event.startDate < weekStart,
-      continuesAfter: eventEnd > weekEnd,
+      continuesAfter: open || eventEnd > weekEnd,
     });
   }
 
@@ -578,13 +582,15 @@ export function eventsInRange(
   rangeStart: string,
   rangeEnd: string,
 ): CalendarEvent[] {
-  return events.filter(
-    (event) => event.startDate <= rangeEnd && eventEndDate(event) >= rangeStart,
-  );
+  return events.filter((event) => {
+    if (event.continuesUntilCleaned) return event.startDate <= rangeEnd;
+    return event.startDate <= rangeEnd && eventEndDate(event) >= rangeStart;
+  });
 }
 
 export function formatEventDateRange(event: CalendarEvent): string {
   const start = formatDateDisplay(event.startDate);
+  if (event.continuesUntilCleaned) return `${start} until cleaned`;
   if (!isMultiDayEvent(event) || !event.endDate) return start;
   return `${start} – ${formatDateDisplay(event.endDate)}`;
 }
