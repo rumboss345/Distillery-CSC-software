@@ -104,8 +104,12 @@ export function collectionVesselContentsLabel(input: {
   volumeGal: number;
   stored: StoredCutType | null;
   stillageGal: number;
+  /** Distillation type and cut already resolved for the gallons still in the vessel. */
+  distillation?: string | null;
 }): string | null {
   if (!(input.volumeGal > 0.05)) return null;
+  const distillation = input.distillation?.trim();
+  if (distillation) return distillation;
   if (input.stored === 'heads' || input.stored === 'hearts' || input.stored === 'tails') {
     return input.stored.charAt(0).toUpperCase() + input.stored.slice(1);
   }
