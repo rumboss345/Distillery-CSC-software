@@ -110,6 +110,8 @@ import type {
 } from '../types';
 
 const RUN_STATUSES: RunStatus[] = ['planned', 'running', 'complete'];
+/** The list shows what is distilling, then what is planned, then finished runs. */
+const RUN_STATUS_LIST_ORDER: RunStatus[] = ['running', 'planned', 'complete'];
 
 const RUN_STATUS_GROUP_HEADINGS: Record<RunStatus, string> = {
   planned: 'Planned',
@@ -863,12 +865,12 @@ export function Distillation() {
 
   const runsByStatus = useMemo(() => {
     const byStatus = Object.fromEntries(
-      RUN_STATUSES.map((status) => [status, [] as DistillationRunView[]]),
+      RUN_STATUS_LIST_ORDER.map((status) => [status, [] as DistillationRunView[]]),
     ) as Record<RunStatus, DistillationRunView[]>;
     for (const run of runs) {
       byStatus[run.status].push(run);
     }
-    return RUN_STATUSES
+    return RUN_STATUS_LIST_ORDER
       .map((status) => {
         const matching = byStatus[status];
         if (status !== 'complete') {

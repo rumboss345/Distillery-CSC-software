@@ -172,6 +172,14 @@ export function calendarProgress(category: CalendarStatusCategory): CalendarProg
   return 'upcoming';
 }
 
+/** Running work stays above planned work. Finished work stays last. */
+export function calendarProgressRank(category: CalendarStatusCategory): number {
+  const progress = calendarProgress(category);
+  if (progress === 'in_progress') return 0;
+  if (progress === 'upcoming') return 1;
+  return 2;
+}
+
 export function isMultiDayEvent(event: CalendarEvent): boolean {
   return Boolean(event.endDate && event.endDate !== event.startDate);
 }
@@ -527,6 +535,8 @@ export function layoutCalendarWeek(dayKeys: string[], events: CalendarEvent[]): 
   }
 
   segments.sort((a, b) => {
+    const byProgress = calendarProgressRank(a.event.statusCategory) - calendarProgressRank(b.event.statusCategory);
+    if (byProgress !== 0) return byProgress;
     if (a.startCol !== b.startCol) return a.startCol - b.startCol;
     const byLength = (b.endCol - b.startCol) - (a.endCol - a.startCol);
     if (byLength !== 0) return byLength;
