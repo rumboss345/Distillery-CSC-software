@@ -19,7 +19,7 @@ import {
 } from '../lib/collection-vessel-cuts';
 import { distillationAlcoholBalance, washChargeAbvFromBrix, type AlcoholChargeBasis, type DistillationAlcoholBalance } from '../lib/distillation-loss';
 import type { MonthlyProduction } from '../lib/reporting/productivity';
-import { isFermenterSourcedRun, isSpiritStyleRun, isTankSourcedRun } from '../lib/distillation-run-types';
+import { isFermenterSourcedRun, isSpiritStyleRun, isTankSourcedRun, runTypeLabel } from '../lib/distillation-run-types';
 import { activeGinBotanicals, ginBotanicalPlaceError, normalizeBotanicalWeightUnit } from '../lib/gin-botanicals';
 import { preparedIngredientName } from '../lib/quick-ingredient';
 import {
@@ -2046,17 +2046,10 @@ export function getHoldingTankIntakeHistory(
       AND final_volume_gal > 0
   `, [tankId]);
 
-  const runTypeLabels: Record<string, string> = {
-    wash: 'low wine run',
-    low_wines: 'spirit run',
-    gin: 'gin run',
-    heavy_rum: 'heavy rum run',
-  };
-
   const entries: HoldingTankIntakeEntry[] = [
     ...cuts.map((c) => {
       const cutLabel = c.cut_type.charAt(0).toUpperCase() + c.cut_type.slice(1);
-      const runLabel = runTypeLabels[c.run_type] ?? c.run_type;
+      const runLabel = runTypeLabel(c.run_type);
       const detailParts = [c.still_name, c.mash_batch ? `wash ${c.mash_batch}` : null].filter(Boolean);
       return {
         kind: 'cut' as const,
@@ -2065,7 +2058,7 @@ export function getHoldingTankIntakeHistory(
         occurred_at: c.occurred_at,
         volume_gal: c.volume_gal,
         abv: c.abv,
-        summary: `${cutLabel} from ${c.batch_number} (${runLabel})`,
+        summary: `${runLabel} · ${cutLabel} from ${c.batch_number}`,
         detail: detailParts.length > 0 ? detailParts.join(' · ') : undefined,
         notes: c.notes?.trim() || undefined,
       };
@@ -2124,7 +2117,7 @@ export function getHoldingTankIntakeHistory(
       occurred_at: row.occurred_at,
       volume_gal: row.volume_gal,
       abv: 0,
-      summary: `Stillage from ${row.batch_number} (${runTypeLabels[row.run_type] ?? row.run_type})`,
+      summary: `${runTypeLabel(row.run_type)} · Stillage from ${row.batch_number}`,
       detail: row.still_name || undefined,
       notes: row.notes?.trim() || undefined,
     })),
@@ -6031,6 +6024,8 @@ export function getAllFloorEquipmentWithContext(): FloorEquipmentView[] {
 
 function collectionVesselContentsDetail(vesselId: number, volumeGal: number): string {
   if (!(volumeGal > 0.05)) return '';
+  const distilled = holdingTankDistillationContents(vesselId, volumeGal);
+  if (distilled) return distilled;
   const stored = getCollectionVesselStoredCutType(vesselId);
   const stillageGal = queryOne<{ volume: number }>(`
     SELECT COALESCE(SUM(stillage_volume_gal), 0) as volume
@@ -6050,13 +6045,22 @@ export function getEquipmentVolumeReport(): EquipmentVolumeReport[] {
   return equipment.map((eq) => {
     if (isSpiritLedgerEquipmentType(eq.equipment_type)) {
       const contents = getHoldingTankContents(eq.id);
-      const productName = eq.active_liquid_name?.trim() || '';
-      const detail = productName
-        || (eq.equipment_type === 'collection_vessel'
-          ? collectionVesselContentsDetail(eq.id, contents.volume_gal)
-          : contents.run_count > 0
-            ? `${contents.run_count} distillation run${contents.run_count === 1 ? '' : 's'} · ${contents.cut_count} cut${contents.cut_count === 1 ? '' : 's'}`
-            : '');
+      const hasLiquid = contents.volume_gal > 0.05;
+      const blendName = hasLiquid
+        ? (holdingTankProductName(eq.id, contents.volume_gal)?.trim() || '')
+        : '';
+      const distilled = hasLiquid && !blendName
+        ? (holdingTankDistillationContents(eq.id, contents.volume_gal)?.trim() || '')
+        : '';
+      const detail = !hasLiquid
+        ? ''
+        : blendName
+          || distilled
+          || (eq.equipment_type === 'collection_vessel'
+            ? collectionVesselContentsDetail(eq.id, contents.volume_gal)
+            : contents.run_count > 0
+              ? `${contents.run_count} distillation run${contents.run_count === 1 ? '' : 's'} · ${contents.cut_count} cut${contents.cut_count === 1 ? '' : 's'}`
+              : '');
       return {
         id: eq.id,
         name: eq.name,
@@ -6206,12 +6210,15 @@ export function getFloorEquipmentWithContext(planId = 1): FloorEquipmentView[] {
       const contents = getHoldingTankContents(eq.id);
       if (contents.volume_gal <= 0) return eq;
       const productName = holdingTankProductName(eq.id, contents.volume_gal);
+      const distilled = productName
+        ? null
+        : holdingTankDistillationContents(eq.id, contents.volume_gal);
       return {
         ...eq,
         active_volume_gal: contents.volume_gal,
         active_abv: contents.abv,
         active_run_count: contents.run_count,
-        active_liquid_name: productName ?? undefined,
+        active_liquid_name: productName ?? distilled ?? undefined,
       };
     }
     if (eq.equipment_type === 'mash_tun' && eq.linked_mash_batch_id) {

@@ -88,6 +88,12 @@ describe('collection vessel cut type rule', () => {
   it('names the spirit, stillage, or mix currently in a collection vessel', () => {
     expect(collectionVesselContentsLabel({ volumeGal: 0, stored: 'hearts', stillageGal: 0 })).toBeNull();
     expect(collectionVesselContentsLabel({ volumeGal: 8, stored: 'hearts', stillageGal: 0 })).toBe('Hearts');
+    expect(collectionVesselContentsLabel({
+      volumeGal: 8,
+      stored: 'hearts',
+      stillageGal: 0,
+      distillation: 'Low Wine Run · Hearts',
+    })).toBe('Low Wine Run · Hearts');
     expect(collectionVesselContentsLabel({ volumeGal: 3.2, stored: 'heads', stillageGal: 0 })).toBe('Heads');
     expect(collectionVesselContentsLabel({ volumeGal: 12, stored: 'mixed', stillageGal: 12 })).toBe('Stillage');
     expect(collectionVesselContentsLabel({ volumeGal: 20, stored: 'mixed', stillageGal: 8 })).toBe('Mixed');

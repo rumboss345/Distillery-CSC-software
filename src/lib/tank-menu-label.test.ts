@@ -23,8 +23,8 @@ describe('formatTankMenuLabel', () => {
   it('keeps a gauge reading from hiding the liquid already in the tank', () => {
     expect(preferContentsSummary(null, [
       { kind: 'opening', summary: 'On hand' },
-      { kind: 'cut', summary: 'Heads from D-2025-001 (low wine run)' },
-    ], 'heads')).toBe('Heads from D-2025-001 (low wine run)');
+      { kind: 'cut', summary: 'Low Wine Run · Heads from D-2025-001' },
+    ], 'heads')).toBe('Low Wine Run · Heads from D-2025-001');
   });
 
   it('keeps an on-hand reading when that is the only record', () => {
