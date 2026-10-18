@@ -107,11 +107,61 @@ const SUGAR_WASH_SG_FACTOR = 0.386;
 /** Classic wash ABV divisor: ((SG − 1) × 1000) / 7.46 */
 const SUGAR_WASH_ABV_DIVISOR = 7.46;
 
+/** Hydrometer readings a finished ferment can show, down to a little under 1.000. */
+export const FERMENTATION_GRAVITY_MIN = 0.98;
+export const FERMENTATION_GRAVITY_MAX = 1.2;
+/** Brix a fermentation log or wash target can store. */
+export const FERMENTATION_BRIX_MIN = -5;
+export const FERMENTATION_BRIX_MAX = 40;
+
+export type FermentationSugarScale = 'brix' | 'gravity';
+
 /** Convert specific gravity to Brix (ASBC polynomial). */
 export function sgToBrix(sg: number): number {
-  if (!Number.isFinite(sg) || sg <= 1) return 0;
+  if (!Number.isFinite(sg) || sg < FERMENTATION_GRAVITY_MIN) return 0;
   const brix = ((182.4601 * sg - 775.6821) * sg + 1262.7794) * sg - 669.5622;
-  return Math.round(brix * 10) / 10;
+  const rounded = Math.round(brix * 10) / 10;
+  return rounded === 0 ? 0 : rounded;
+}
+
+export function formatFermentationReading(scale: FermentationSugarScale, brix: number): string {
+  if (scale === 'gravity') return brixToSg(brix).toFixed(3);
+  return (Math.round(brix * 10) / 10).toFixed(1);
+}
+
+/**
+ * Brix stored for a fermentation reading. Gravity is converted; Brix is kept.
+ * Returns null when the text is empty or not a reading on that scale.
+ */
+export function brixFromFermentationReading(scale: FermentationSugarScale, raw: string): number | null {
+  const text = raw.trim();
+  if (!text) return null;
+  const value = Number(text);
+  if (!Number.isFinite(value)) return null;
+  if (scale === 'gravity') {
+    if (!/^\d+\.\d+$/.test(text) || value < FERMENTATION_GRAVITY_MIN || value > FERMENTATION_GRAVITY_MAX) return null;
+    return sgToBrix(value);
+  }
+  if (value < FERMENTATION_BRIX_MIN || value > FERMENTATION_BRIX_MAX) return null;
+  return Math.round(value * 10) / 10;
+}
+
+/** Why a typed fermentation reading cannot be saved. Empty is allowed here. */
+export function fermentationReadingError(
+  scale: FermentationSugarScale,
+  raw: string,
+  options?: { requirePositive?: boolean },
+): string | null {
+  const text = raw.trim();
+  if (!text) return null;
+  const brix = brixFromFermentationReading(scale, text);
+  if (brix == null) {
+    return scale === 'gravity'
+      ? 'Enter specific gravity, such as 1.050.'
+      : `Enter Brix between ${FERMENTATION_BRIX_MIN} and ${FERMENTATION_BRIX_MAX}.`;
+  }
+  if (options?.requirePositive) return actualStartBrixError(brix);
+  return null;
 }
 
 export interface SugarWashEstimate {

@@ -3,12 +3,17 @@ import {
   FERMENTATION_READY_MAX_BRIX,
   FERMENTER_LIQUID_GREEN_BELOW_BRIX,
   actualStartBrixError,
+  brixFromFermentationReading,
+  brixToSg,
   defaultExpectedCompletionDate,
   expectedCompletionDateError,
   expectedCompletionForTransfer,
   estimateAbvFromBrix,
+  fermentationReadingError,
   fermenterLiquidBrixPhase,
+  formatFermentationReading,
   isBrixReadyForDistillation,
+  sgToBrix,
   washMoveNeedsActualStartBrix,
 } from './fermentation';
 
@@ -81,5 +86,48 @@ describe('fermenter liquid Brix coloring', () => {
 describe('estimateAbvFromBrix', () => {
   it('returns null for invalid input', () => {
     expect(estimateAbvFromBrix(0, 5)).toBeNull();
+  });
+});
+
+describe('gravity or Brix fermentation readings', () => {
+  it('stores a hydrometer reading as Brix', () => {
+    expect(brixFromFermentationReading('gravity', '1.050')).toBe(sgToBrix(1.05));
+    expect(brixFromFermentationReading('gravity', '1.050')).toBeGreaterThan(10);
+  });
+
+  it('keeps a finished gravity under 1.000', () => {
+    expect(sgToBrix(0.995)).toBeLessThan(0);
+    expect(brixFromFermentationReading('gravity', '0.995')).toBe(sgToBrix(0.995));
+    expect(sgToBrix(1)).toBe(0);
+  });
+
+  it('rejects a Brix number typed on the gravity scale', () => {
+    expect(brixFromFermentationReading('gravity', '12')).toBeNull();
+    expect(brixFromFermentationReading('gravity', '1.')).toBeNull();
+    expect(fermentationReadingError('gravity', '12')).toMatch(/specific gravity/);
+    expect(fermentationReadingError('gravity', '1.050')).toBeNull();
+    expect(brixFromFermentationReading('gravity', '1.0')).toBe(sgToBrix(1));
+  });
+
+  it('keeps a Brix reading and rejects values outside the ferment range', () => {
+    expect(brixFromFermentationReading('brix', '12')).toBe(12);
+    expect(brixFromFermentationReading('brix', '-1.2')).toBe(-1.2);
+    expect(brixFromFermentationReading('brix', '55')).toBeNull();
+    expect(fermentationReadingError('brix', '')).toBeNull();
+  });
+
+  it('still requires a start reading above zero after conversion', () => {
+    expect(fermentationReadingError('gravity', '1.000', { requirePositive: true })).toMatch(/actual start Brix/);
+    expect(fermentationReadingError('brix', '0', { requirePositive: true })).toMatch(/actual start Brix/);
+    expect(fermentationReadingError('gravity', '1.050', { requirePositive: true })).toBeNull();
+  });
+
+  it('formats the stored Brix when the scale changes', () => {
+    const brix = 16.4;
+    const gravity = formatFermentationReading('gravity', brix);
+    const back = brixFromFermentationReading('gravity', gravity);
+    expect(gravity).toBe(brixToSg(brix).toFixed(3));
+    expect(Math.abs((back ?? 0) - brix)).toBeLessThanOrEqual(0.1);
+    expect(formatFermentationReading('brix', brix)).toBe('16.4');
   });
 });
