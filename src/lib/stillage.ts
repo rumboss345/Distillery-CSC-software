@@ -1,8 +1,22 @@
+import { roundVolume } from './reporting/alcohol-units';
 import type { DistillationRunType } from '../types';
 
 /** Low wine and heavy rum runs leave spent wash in the still. */
 export function runAsksForStillage(runType: DistillationRunType | string | null | undefined): boolean {
   return runType === 'wash' || runType === 'heavy_rum';
+}
+
+/**
+ * Gallons left in the still: the charge that went in, minus the gallons collected.
+ * The operator can still type a different measured volume.
+ */
+export function suggestedStillageVolumeGal(
+  chargeVolumeGal: number,
+  collectedVolumeGal: number,
+): number {
+  const charge = Number.isFinite(chargeVolumeGal) ? chargeVolumeGal : 0;
+  const collected = Number.isFinite(collectedVolumeGal) && collectedVolumeGal > 0 ? collectedVolumeGal : 0;
+  return roundVolume(Math.max(0, charge - collected));
 }
 
 /** Distillation stillage can be stored only in equipment of type Stillage Tank. */

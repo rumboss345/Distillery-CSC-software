@@ -98,7 +98,7 @@ import {
   spiritChargeDetail,
   type SpiritProofPlace,
 } from '../lib/spirit-charge-proof';
-import { runAsksForStillage, stillageSaveError, stillageSummary } from '../lib/stillage';
+import { runAsksForStillage, stillageSaveError, stillageSummary, suggestedStillageVolumeGal } from '../lib/stillage';
 import type {
   DistillationCutView,
   DistillationRun,
@@ -417,6 +417,11 @@ export function Distillation() {
     setRunForm((prev) => ({ ...prev, charge_abv: corrected }));
   };
 
+  const collectedCutGal = (runId: number | undefined): number => {
+    if (!runId) return 0;
+    return getDistillationCuts(runId).reduce((sum, cut) => sum + (cut.volume_gal > 0 ? cut.volume_gal : 0), 0);
+  };
+
   const handleRunStatusChange = (status: RunStatus) => {
     let run_date = runForm.run_date;
     if (runForm.status === 'planned' && status !== 'planned') {
@@ -426,7 +431,13 @@ export function Distillation() {
       run_date = plannedScheduleDate;
       setPlannedScheduleDate(null);
     }
-    setRunForm({ ...runForm, status, run_date });
+    const stillageUnset = runForm.stillage_volume_gal == null || Number.isNaN(runForm.stillage_volume_gal);
+    const stillage_volume_gal = status === 'complete'
+      && runAsksForStillage(runForm.run_type)
+      && stillageUnset
+      ? suggestedStillageVolumeGal(runForm.charge_volume_gal, collectedCutGal(editRunId))
+      : runForm.stillage_volume_gal;
+    setRunForm({ ...runForm, status, run_date, stillage_volume_gal });
   };
 
   const handleStillChange = (stillId: number | '') => {
@@ -552,7 +563,11 @@ export function Distillation() {
         : run.dest_holding_tank_equipment_id ?? null,
       charge_volume_gal: proofed ? run.proof_spirit_gal! : run.charge_volume_gal,
       charge_abv: proofed ? (run.proof_spirit_abv ?? run.charge_abv) : run.charge_abv ?? null,
-      stillage_volume_gal: run.stillage_volume_gal ?? null,
+      stillage_volume_gal: run.stillage_volume_gal ?? (
+        run.status === 'complete' && runAsksForStillage(run.run_type)
+          ? suggestedStillageVolumeGal(run.charge_volume_gal, collectedCutGal(run.id))
+          : null
+      ),
       stillage_discarded: run.stillage_discarded ?? 0,
       stillage_holding_tank_equipment_id: run.stillage_holding_tank_equipment_id ?? null,
     });
@@ -1762,6 +1777,7 @@ export function Distillation() {
                 <label>Stillage left in the still</label>
                 <p className="field-hint">
                   Spent wash left after this {runForm.run_type === 'heavy_rum' ? 'heavy rum' : 'low wine'} run.
+                  The volume starts at the charge minus the gallons collected. Change it if you measured a different amount.
                   Enter 0 if none is left. Store the rest in a stillage tank, or discard it.
                 </p>
                 <div className="form-grid">
@@ -1783,6 +1799,13 @@ export function Distillation() {
                       }}
                       placeholder="Gallons"
                     />
+                    <p className="field-hint">
+                      {runForm.charge_volume_gal.toFixed(1)} gal charged
+                      {' − '}
+                      {collectedCutGal(editRunId).toFixed(1)} gal collected
+                      {' = '}
+                      {suggestedStillageVolumeGal(runForm.charge_volume_gal, collectedCutGal(editRunId)).toFixed(1)} gal
+                    </p>
                   </div>
                   {(runForm.stillage_volume_gal ?? 0) > 0.001 && (
                     <div className="form-group">

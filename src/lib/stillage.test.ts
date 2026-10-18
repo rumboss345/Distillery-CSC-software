@@ -7,7 +7,17 @@ import {
   stillageSaveError,
   stillageSummary,
   stillageTransferError,
+  suggestedStillageVolumeGal,
 } from './stillage';
+
+describe('suggested stillage volume', () => {
+  it('starts from the charge minus the gallons collected', () => {
+    expect(suggestedStillageVolumeGal(150, 36.2)).toBe(113.8);
+    expect(suggestedStillageVolumeGal(50, 50)).toBe(0);
+    expect(suggestedStillageVolumeGal(40, 55)).toBe(0);
+    expect(suggestedStillageVolumeGal(80, 0)).toBe(80);
+  });
+});
 
 describe('stillage on completed low wine and heavy rum runs', () => {
   it('treats only the Stillage Tank equipment type as a stillage tank', () => {
