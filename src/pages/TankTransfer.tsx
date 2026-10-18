@@ -845,7 +845,7 @@ export function TankTransfer() {
       <div className="detail-panel">
         <h4>Watered down</h4>
         <p className="field-hint" style={{ marginTop: '-0.5rem' }}>
-          Water added to alcohol that stayed in the same tank. The gauge rise is smaller than the water poured because of contraction.
+          Water blended into alcohol that stayed in the same tank. The alcohol is not lost. The gauge rise is smaller than the water poured because of contraction.
         </p>
         <RecentCompletedNote
           hiddenCount={recentDilutions.hiddenCount}
@@ -1301,7 +1301,7 @@ export function TankTransfer() {
               style={waterDownPlan.ok ? undefined : { color: 'var(--danger)' }}
             >
               {waterDownPlan.ok
-                ? `Add ${waterDownPlan.waterGal.toFixed(2)} gal of water. The tank goes from ${waterDownPlan.spiritGal.toFixed(1)} gal at ${waterDownPlan.spiritAbvPercent.toFixed(1)}% ABV to ${waterDownPlan.finishedGal.toFixed(1)} gal at ${waterDownPlan.finishedAbvPercent.toFixed(1)}% ABV. Contraction is ${waterDownPlan.contractionGal.toFixed(2)} gal.`
+                ? `Blend ${waterDownPlan.waterGal.toFixed(2)} gal of water into the spirit. Alcohol stays ${((waterDownPlan.spiritGal * waterDownPlan.spiritAbvPercent) / 100).toFixed(2)} gal. The tank goes from ${waterDownPlan.spiritGal.toFixed(1)} gal at ${waterDownPlan.spiritAbvPercent.toFixed(1)}% ABV to ${waterDownPlan.finishedGal.toFixed(1)} gal at ${waterDownPlan.finishedAbvPercent.toFixed(1)}% ABV. Contraction is ${waterDownPlan.contractionGal.toFixed(2)} gal of volume, not a loss of alcohol.`
                 : waterDownPlan.message}
             </p>
           )}

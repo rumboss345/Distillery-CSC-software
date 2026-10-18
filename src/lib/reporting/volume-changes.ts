@@ -3,6 +3,7 @@ import { getBlendProducts, getBottlingRuns, getHoldingTankVolumeVariances } from
 import { compareStoredDatesDesc } from '../date-input';
 import { reportedBottlingVarianceGal } from '../bottling-lines';
 import { formatDistillationAlcoholResult, stillageResidualAbv } from '../distillation-loss';
+import { roundAlcohol } from './alcohol-units';
 import { formatTankVolumeVariance, tankReadingChanged } from '../tank-volume-variance';
 import { buildBlendReportRows } from './blend-rows';
 import { buildDistillationReportRows } from './distillation-rows';
@@ -64,6 +65,26 @@ export interface VolumeChangeGroup {
 function shown(value: string | null | undefined): string {
   const trimmed = value?.trim();
   return trimmed || '—';
+}
+
+/**
+ * Water blended into spirit that stays in the tank.
+ * The alcohol gallons do not change, so this is not an alcohol loss.
+ */
+export function describeWateredDownChange(input: {
+  spirit_volume_gal: number;
+  spirit_abv: number;
+  water_gal: number;
+  finished_volume_gal: number;
+  finished_abv: number;
+}): { change: string; why: string; gallons: number } {
+  const alcoholGal = roundAlcohol(input.spirit_volume_gal * input.spirit_abv / 100);
+  const added = input.finished_volume_gal - input.spirit_volume_gal;
+  return {
+    change: `Blended ${input.water_gal.toFixed(2)} gal water into ${input.spirit_volume_gal.toFixed(2)} gal at ${input.spirit_abv.toFixed(1)}% ABV. Alcohol stays ${alcoholGal.toFixed(2)} gal. Tank finishes at ${input.finished_volume_gal.toFixed(2)} gal at ${input.finished_abv.toFixed(1)}% ABV.`,
+    why: 'Water blended into the spirit already in the tank. Alcohol is not lost.',
+    gallons: Math.round(added * 1000) / 1000,
+  };
 }
 
 export function buildVolumeChangeRows(range: ReportDateRange): VolumeChangeRow[] {
@@ -240,17 +261,17 @@ export function buildVolumeChangeRows(range: ReportDateRange): VolumeChangeRow[]
   `);
   for (const row of dilutions) {
     if (!eventInReportRange(row.recorded_at, range)) continue;
-    const added = row.finished_volume_gal - row.spirit_volume_gal;
+    const described = describeWateredDownChange(row);
     rows.push({
       key: `dilution:${row.id}`,
       occurred_at: row.recorded_at,
       kind: VOLUME_CHANGE_KINDS.wateredDown,
       place: row.tank_name,
-      change: `${row.spirit_volume_gal.toFixed(2)} gal at ${row.spirit_abv.toFixed(1)}% ABV to ${row.finished_volume_gal.toFixed(2)} gal at ${row.finished_abv.toFixed(1)}% ABV with ${row.water_gal.toFixed(2)} gal water`,
-      why: shown(row.notes) === '—' ? 'Water added in the tank' : shown(row.notes),
+      change: described.change,
+      why: shown(row.notes) === '—' ? described.why : shown(row.notes),
       who: shown(row.changed_by),
-      gallons: Math.round(added * 1000) / 1000,
-      abvPoints: Math.round((row.finished_abv - row.spirit_abv) * 1000) / 1000,
+      gallons: described.gallons,
+      abvPoints: null,
     });
   }
 

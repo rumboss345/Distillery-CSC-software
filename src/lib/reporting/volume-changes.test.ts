@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { formatTankVolumeVariance } from '../tank-volume-variance';
 import {
   VOLUME_CHANGE_KINDS,
+  describeWateredDownChange,
   formatVolumeVarianceAbv,
   groupVolumeChanges,
   totalVolumeVarianceAbv,
@@ -21,6 +22,33 @@ function row(partial: Partial<VolumeChangeRow> & Pick<VolumeChangeRow, 'key' | '
     ...partial,
   };
 }
+
+describe('watering down', () => {
+  it('keeps the alcohol and records the water as a blend, not a loss', () => {
+    const described = describeWateredDownChange({
+      spirit_volume_gal: 10,
+      spirit_abv: 80,
+      water_gal: 12,
+      finished_volume_gal: 20,
+      finished_abv: 40,
+    });
+    expect(described.change).toContain('Alcohol stays 8.00 gal');
+    expect(described.change).toContain('Blended 12.00 gal water');
+    expect(described.why).toMatch(/not lost/);
+    expect(described.gallons).toBe(10);
+    const rows = [
+      row({
+        key: 'water',
+        kind: VOLUME_CHANGE_KINDS.wateredDown,
+        gallons: described.gallons,
+        abvPoints: null,
+      }),
+      row({ key: 'loss', kind: VOLUME_CHANGE_KINDS.distillation, gallons: -1.5, abvPoints: -8 }),
+    ];
+    expect(totalVolumeVarianceGal(rows)).toBe(-1.5);
+    expect(totalVolumeVarianceAbv(rows)).toBe(-8);
+  });
+});
 
 describe('volume change groups', () => {
   it('groups by kind in a fixed order and totals the gallons', () => {
