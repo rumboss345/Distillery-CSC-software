@@ -32,7 +32,7 @@ import {
   spiritLabelForBarrel,
 } from '../lib/barrel-blending';
 import { TankContentsLookup } from '../components/TankContentsLookup';
-import { distillationSourceTypeChoices, tanksOfEquipmentType } from '../lib/distillation-source-tanks';
+import { distillationChargeTypeChoices, tanksOfEquipmentType } from '../lib/distillation-source-tanks';
 import { equipmentTypeLabel } from '../lib/equipment';
 import { formatTankMenuLabel, tankContentsPhrase, tankDropdownLabel } from '../lib/tank-menu-label';
 import { AbvTemperatureInput, correctedAbvFromInputs } from '../components/AbvTemperatureInput';
@@ -791,7 +791,7 @@ export function Blending() {
       notes: snapshot?.notes || recipe.notes,
     });
     const preservedSources: SpiritSourceRow[] = [];
-    if (prefilledTankId.current) {
+    if (prefilledTankId.current && spiritTankEquipmentType(prefilledTankId.current) !== 'stillage_tank') {
       const tankId = prefilledTankId.current;
       const contents = getHoldingTankContents(tankId);
       preservedSources[0] = {
@@ -872,10 +872,14 @@ export function Blending() {
     const tankId = parseInt(searchParams.get('tank') ?? '', 10);
     if (tankId > 0) {
       deepLinkHandled.current = true;
-      prefilledTankId.current = tankId;
+      const stillageTank = spiritTankEquipmentType(tankId) === 'stillage_tank';
+      if (!stillageTank) prefilledTankId.current = tankId;
       const tankRecipes = blendRecipes.filter((recipe) => (recipe.source_type ?? 'tank') !== 'barrel');
       if (tankRecipes.length === 0) {
         alert('Create a tank blend recipe on the Recipes page before starting a batch.');
+      } else if (stillageTank) {
+        setWizardSpiritSource('tank');
+        resetWizardForNewBatch();
       } else {
         const contents = getHoldingTankContents(tankId);
         const abv = contents.abv > 0 ? contents.abv : 0;
@@ -1913,7 +1917,7 @@ export function Blending() {
         );
 
       case 2: {
-        const spiritTypeOptions = distillationSourceTypeChoices([
+        const spiritTypeOptions = distillationChargeTypeChoices([
           ...chargeableTanks.map((tank) => tank.equipment_type),
           ...spiritSources.map((source) => source.equipment_type),
         ]);
@@ -1990,7 +1994,10 @@ export function Blending() {
                           })}
                         >
                           <option value="">— Select equipment type —</option>
-                          {spiritTypeOptions.map((type) => (
+                          {(src.equipment_type === 'stillage_tank'
+                            ? ['stillage_tank', ...spiritTypeOptions]
+                            : spiritTypeOptions
+                          ).map((type) => (
                             <option key={type} value={type}>{equipmentTypeLabel(type)}</option>
                           ))}
                         </select>
