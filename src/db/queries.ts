@@ -1633,11 +1633,12 @@ export function getCutDestinationsForRun(
   return [...vessels, ...holding.filter((h) => !seen.has(h.id))];
 }
 
+/** Spirit-ledger tanks that still hold liquid. Fermenters are not included. */
 export function getChargeableHoldingTanksForBlend(excludeBlendId?: number): (FloorEquipment & {
   available_gal: number;
   available_abv: number;
 })[] {
-  return getHoldingTanks()
+  return getSpiritTransferVessels()
     .map((tank) => {
       const contents = getHoldingTankContents(tank.id, undefined, excludeBlendId);
       return {
@@ -1646,7 +1647,8 @@ export function getChargeableHoldingTanksForBlend(excludeBlendId?: number): (Flo
         available_abv: contents.abv,
       };
     })
-    .filter((tank) => tank.available_gal > 0);
+    .filter((tank) => tank.available_gal > 0)
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
 }
 
 export function getChargeableHoldingTanksForBottling(excludeBottlingRunId?: number): (FloorEquipment & {
