@@ -49,8 +49,8 @@ import {
 import { AbvVolumeTemperatureFields } from '../components/AbvVolumeTemperatureFields';
 import {
   blendDistillationTankPulls,
+  distillationChargeTypeChoices,
   distillationSourceSummary,
-  distillationSourceTypeChoices,
   distillationTankPullError,
   fitDistillationTankPulls,
   tanksOfEquipmentType,
@@ -254,10 +254,14 @@ export function Distillation() {
     key,
   ]);
 
-  const chargeableSourceTanks = isTankSourcedRun(runForm.run_type)
+  const chargeableSourceTanks = (isTankSourcedRun(runForm.run_type)
     ? getChargeableSourceTanks(editRunId, equipmentListOptions)
-    : [];
-  const sourceTypeOptions = distillationSourceTypeChoices([
+    : []
+  ).filter((tank) => (
+    tank.equipment_type !== 'stillage_tank'
+    || sourceLines.some((line) => line.tankId === tank.id)
+  ));
+  const sourceTypeOptions = distillationChargeTypeChoices([
     ...chargeableSourceTanks.map((tank) => tank.equipment_type),
     ...sourceLines.map((line) => line.equipmentType),
   ]);
@@ -487,22 +491,23 @@ export function Distillation() {
       setShowRunForm(true);
     } else if (fromTank) {
       const tank = getChargeableSourceTanks().find((t) => t.id === tankId);
+      const sourceTank = tank && tank.equipment_type !== 'stillage_tank' ? tank : undefined;
       setEditRunId(undefined);
       setPlannedScheduleDate(null);
-      setSourceLines([freshSourceLine(tank ? {
-        equipmentType: tank.equipment_type,
-        tankId: tank.id,
-        volumeGal: roundVolume(tank.available_gal),
+      setSourceLines([freshSourceLine(sourceTank ? {
+        equipmentType: sourceTank.equipment_type,
+        tankId: sourceTank.id,
+        volumeGal: roundVolume(sourceTank.available_gal),
       } : {})]);
       setRunForm({
         ...emptyRun('low_wines'),
         ...defaultAssignee(user),
-        source_holding_tank_equipment_id: tank ? tankId : null,
-        charge_volume_gal: tank ? roundVolume(tank.available_gal) : 0,
-        charge_abv: tank ? roundAbv(tank.available_abv) : null,
+        source_holding_tank_equipment_id: sourceTank ? tankId : null,
+        charge_volume_gal: sourceTank ? roundVolume(sourceTank.available_gal) : 0,
+        charge_abv: sourceTank ? roundAbv(sourceTank.available_abv) : null,
         dest_holding_tank_equipment_id: null,
       });
-      setChargeAbvObserved(tank && tank.available_abv > 0 ? String(roundAbv(tank.available_abv)) : '');
+      setChargeAbvObserved(sourceTank && sourceTank.available_abv > 0 ? String(roundAbv(sourceTank.available_abv)) : '');
       setChargeTempF('60');
       clearChargeProof();
       setShowRunForm(true);
@@ -1340,6 +1345,9 @@ export function Distillation() {
               <div className="form-group full-width" data-testid="source-tank-lines">
                 <label>Source tanks</label>
                 {sourceLines.map((line, index) => {
+                  const lineTypeOptions = line.equipmentType === 'stillage_tank'
+                    ? ['stillage_tank', ...sourceTypeOptions.filter((type) => type !== 'stillage_tank')]
+                    : sourceTypeOptions;
                   const lineTanks = tanksOfEquipmentType(chargeableSourceTanks, line.equipmentType)
                     .filter((tank) => tank.id === line.tankId || !chosenSourceTankIds.has(tank.id));
                   const selectedTank = chargeableSourceTanks.find((tank) => tank.id === line.tankId);
@@ -1361,7 +1369,7 @@ export function Distillation() {
                             })}
                           >
                             <option value="">— Select equipment type —</option>
-                            {sourceTypeOptions.map((type) => (
+                            {lineTypeOptions.map((type) => (
                               <option key={type} value={type}>{equipmentTypeLabel(type)}</option>
                             ))}
                           </select>

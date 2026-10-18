@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   blendDistillationTankPulls,
+  distillationChargeTypeChoices,
   distillationSourceSummary,
   distillationSourceTypeChoices,
   distillationTankPullError,
@@ -17,6 +18,15 @@ describe('distillation source tanks', () => {
       'pot_still',
       'stillage_tank',
     ])).toEqual(['holding_tank', 'stillage_tank', 'collection_vessel']);
+  });
+
+  it('leaves stillage tanks out of a distillation charge', () => {
+    expect(distillationChargeTypeChoices([
+      'holding_tank',
+      'stillage_tank',
+      'collection_vessel',
+      'fermenter',
+    ])).toEqual(['holding_tank', 'collection_vessel']);
   });
 
   it('omits types that are not on the spirit ledger', () => {
