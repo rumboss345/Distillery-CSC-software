@@ -268,6 +268,7 @@ export function Bottling() {
       setForm({
         ...emptyRun(),
         source_holding_tank_equipment_id: tankId,
+        product_name: tankContentsPhrase(tankId) ?? '',
         final_abv: roundAbv(contents.abv),
       });
       setLines([emptyLine()]);
@@ -383,6 +384,7 @@ export function Bottling() {
       ...form,
       source_holding_tank_equipment_id: tankId,
       source_barrel_id: null,
+      product_name: tankId ? (tankContentsPhrase(tankId) ?? '') : form.product_name,
       final_abv: roundAbv(contents?.abv ?? tank?.available_abv ?? form.final_abv),
     });
     setReturnLines([]);
@@ -647,7 +649,14 @@ export function Bottling() {
             </div>
             <div className="form-group full-width">
               <label>Product Name</label>
-              <input value={form.product_name} onChange={(e) => setForm({ ...form, product_name: e.target.value })} />
+              <input
+                data-testid="bottling-product-name"
+                value={form.product_name}
+                onChange={(e) => setForm({ ...form, product_name: e.target.value })}
+              />
+              {sourceType === 'tank' && selectedTankContents && form.product_name.trim() === selectedTankContents.trim() && (
+                <span className="field-hint">Taken from what is in the source holding tank.</span>
+              )}
               {isRumBottling ? (
                 <span className="field-hint">
                   Rum product — pick bottle styles from the list, set size (ml), and enter counts. Matching packaging inventory is reduced when you save.
