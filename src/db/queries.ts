@@ -30,6 +30,7 @@ import {
   stillAlreadyOccupiedMessage,
   stillChargeCapacityMessage,
   stillRunOccupiesEquipment,
+  distillationRunAllowsCutChanges,
 } from '../lib/still-charge';
 import {
   equipmentBlocksProduction,
@@ -4397,8 +4398,12 @@ export function saveDistillationCut(cut: Omit<DistillationCut, 'id'>, id?: numbe
     'SELECT status FROM distillation_runs WHERE id = ?',
     [cut.distillation_run_id],
   );
-  if (run?.status === 'complete') {
-    throw new Error('Cannot add or change cuts on a completed distillation run.');
+  if (run && !distillationRunAllowsCutChanges(run.status)) {
+    throw new Error(
+      run.status === 'complete'
+        ? 'Cannot add or change cuts on a completed distillation run.'
+        : 'Cuts cannot be recorded while this distillation is still planned.',
+    );
   }
   if (cut.cut_type === 'heads') {
     const existingHeads = queryOne<{ id: number }>(
@@ -4482,8 +4487,12 @@ export function deleteDistillationCut(id: number): void {
       'SELECT status FROM distillation_runs WHERE id = ?',
       [cut.distillation_run_id],
     );
-    if (run?.status === 'complete') {
-      throw new Error('Cannot add or change cuts on a completed distillation run.');
+    if (run && !distillationRunAllowsCutChanges(run.status)) {
+      throw new Error(
+        run.status === 'complete'
+          ? 'Cannot add or change cuts on a completed distillation run.'
+          : 'Cuts cannot be recorded while this distillation is still planned.',
+      );
     }
   }
   runQuery('DELETE FROM distillation_cuts WHERE id = ?', [id]);
