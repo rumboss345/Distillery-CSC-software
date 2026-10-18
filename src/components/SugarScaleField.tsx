@@ -56,24 +56,26 @@ export function SugarScaleField({
 
   return (
     <div className="form-group">
-      <label htmlFor={inputId}>{label}{required ? ' *' : ''}</label>
-      <div className="measure-mode-buttons" style={{ marginBottom: '0.5rem' }}>
-        <button
-          type="button"
-          className={`btn btn-sm ${scale === 'brix' ? 'btn-primary' : 'btn-secondary'}`}
-          aria-pressed={scale === 'brix'}
-          onClick={() => switchScale('brix')}
-        >
-          Brix
-        </button>
-        <button
-          type="button"
-          className={`btn btn-sm ${scale === 'gravity' ? 'btn-primary' : 'btn-secondary'}`}
-          aria-pressed={scale === 'gravity'}
-          onClick={() => switchScale('gravity')}
-        >
-          Gravity
-        </button>
+      <div className="sugar-scale-label">
+        <label htmlFor={inputId}>{label}{required ? ' *' : ''}</label>
+        <div className="measure-mode-buttons">
+          <button
+            type="button"
+            className={`btn btn-sm ${scale === 'brix' ? 'btn-primary' : 'btn-secondary'}`}
+            aria-pressed={scale === 'brix'}
+            onClick={() => switchScale('brix')}
+          >
+            Brix
+          </button>
+          <button
+            type="button"
+            className={`btn btn-sm ${scale === 'gravity' ? 'btn-primary' : 'btn-secondary'}`}
+            aria-pressed={scale === 'gravity'}
+            onClick={() => switchScale('gravity')}
+          >
+            Gravity
+          </button>
+        </div>
       </div>
       <input
         id={inputId}

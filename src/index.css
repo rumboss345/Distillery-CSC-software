@@ -2396,6 +2396,18 @@ tr.volume-change-kind:hover td {
   position: relative;
 }
 
+.sugar-scale-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem 0.5rem;
+}
+
+.sugar-scale-label .measure-mode-buttons {
+  margin-bottom: 0;
+}
+
 .unit-converter-results {
   display: grid;
   grid-template-columns: minmax(10rem, 16rem) 1fr;

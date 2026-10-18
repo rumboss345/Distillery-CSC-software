@@ -110,9 +110,12 @@ const SUGAR_WASH_ABV_DIVISOR = 7.46;
 /** Hydrometer readings a finished ferment can show, down to a little under 1.000. */
 export const FERMENTATION_GRAVITY_MIN = 0.98;
 export const FERMENTATION_GRAVITY_MAX = 1.2;
-/** Brix a fermentation log or wash target can store. */
-export const FERMENTATION_BRIX_MIN = -5;
-export const FERMENTATION_BRIX_MAX = 40;
+/**
+ * Brix a fermentation log or wash target can store.
+ * The low end covers a 0.980 hydrometer reading. The high end covers a heavy sugar wash.
+ */
+export const FERMENTATION_BRIX_MIN = -6;
+export const FERMENTATION_BRIX_MAX = 80;
 
 export type FermentationSugarScale = 'brix' | 'gravity';
 

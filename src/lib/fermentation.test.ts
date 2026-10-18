@@ -112,8 +112,11 @@ describe('gravity or Brix fermentation readings', () => {
   it('keeps a Brix reading and rejects values outside the ferment range', () => {
     expect(brixFromFermentationReading('brix', '12')).toBe(12);
     expect(brixFromFermentationReading('brix', '-1.2')).toBe(-1.2);
-    expect(brixFromFermentationReading('brix', '55')).toBeNull();
+    expect(brixFromFermentationReading('brix', '41.2')).toBe(41.2);
+    expect(brixFromFermentationReading('brix', '90')).toBeNull();
     expect(fermentationReadingError('brix', '')).toBeNull();
+    const finished = brixFromFermentationReading('gravity', '0.980');
+    expect(fermentationReadingError('brix', String(finished))).toBeNull();
   });
 
   it('still requires a start reading above zero after conversion', () => {
