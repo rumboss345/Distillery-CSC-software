@@ -97,19 +97,36 @@ describe('tankCleaningStaffEvents', () => {
     expect(calendarProgress(dirty[0]!.statusCategory)).toBe('upcoming');
   });
 
-  it('includes every tank type and skips stills and fermenters', () => {
+  it('includes tanks, fermenters, and stills that need cleaning', () => {
     const logs: TankCleaningLogRow[] = [
       row({ id: 1, equipmentId: 1, equipmentName: 'Wash tank', equipmentType: 'mash_tun', eventType: 'needs_cleaning', createdAt: '2026-10-15T08:00:00' }),
       row({ id: 2, equipmentId: 2, equipmentName: 'Heads tank', equipmentType: 'holding_tank', eventType: 'needs_cleaning', createdAt: '2026-10-15T08:00:00' }),
       row({ id: 3, equipmentId: 3, equipmentName: 'Stillage Storage tank', equipmentType: 'stillage_tank', eventType: 'needs_cleaning', createdAt: '2026-10-15T08:00:00' }),
       row({ id: 4, equipmentId: 4, equipmentName: 'Vendome', equipmentType: 'pot_still', eventType: 'needs_cleaning', createdAt: '2026-10-15T08:00:00' }),
       row({ id: 5, equipmentId: 5, equipmentName: 'Fermentation 1', equipmentType: 'fermenter', eventType: 'needs_cleaning', createdAt: '2026-10-15T08:00:00' }),
+      row({ id: 6, equipmentId: 6, equipmentName: 'Carl column still', equipmentType: 'column_still', eventType: 'needs_cleaning', createdAt: '2026-10-15T08:00:00' }),
+      row({ id: 7, equipmentId: 7, equipmentName: 'Pump', equipmentType: 'pump', eventType: 'needs_cleaning', createdAt: '2026-10-15T08:00:00' }),
     ];
-    expect(tankCleaningStaffEvents(logs, today, today).map((event) => event.title)).toEqual([
+    const events = tankCleaningStaffEvents(logs, today, today);
+    expect(events.map((event) => event.title)).toEqual([
+      'Carl column still',
+      'Fermentation 1',
       'Heads tank',
       'Stillage Storage tank',
+      'Vendome',
       'Wash tank',
     ]);
+    expect(events.find((event) => event.title === 'Fermentation 1')).toMatchObject({
+      status: 'upcoming',
+      detail: 'Fermenter · Needs cleaning',
+    });
+    expect(events.find((event) => event.title === 'Vendome')).toMatchObject({
+      status: 'upcoming',
+      detail: 'Pot Still · Needs cleaning',
+    });
+    expect(events.find((event) => event.title === 'Carl column still')).toMatchObject({
+      detail: 'Column Still · Needs cleaning',
+    });
   });
 
   it('puts unassigned tank cleaning after named staff on the sheet', () => {
