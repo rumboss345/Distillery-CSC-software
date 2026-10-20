@@ -174,7 +174,7 @@ export function ProcessEquipmentDetailPanel({
         <div className="process-equipment-cleaning-banner" role="status">
           <strong>{equipmentCleaningStatusLabel()}</strong>
           <p className="field-hint" style={{ margin: '0.35rem 0 0' }}>
-            Mark clean before the next batch. Full maintenance history lives on{' '}
+            Mark clean before the next batch, here or on{' '}
             <Link to="/equipment-maintenance">Equipment Maintenance</Link>.
           </p>
         </div>

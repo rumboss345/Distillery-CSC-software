@@ -239,7 +239,7 @@ function assertEquipmentUsableForProduction(equipmentId: number, role = 'Equipme
   if (!eq) throw new Error(`${role} not found.`);
   if (equipmentNeedsCleaning(eq)) {
     throw new Error(
-      `${eq.name} is ${equipmentCleaningStatusLabel().toLowerCase()} and cannot be used until marked clean on the process view.`,
+      `${eq.name} is ${equipmentCleaningStatusLabel().toLowerCase()} and cannot be used until marked clean.`,
     );
   }
   if (equipmentBlocksProduction(eq)) {
