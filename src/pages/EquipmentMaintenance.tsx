@@ -5,6 +5,7 @@ import {
   getAllFloorEquipment,
   getEquipmentMaintenanceLog,
   getFloorPlans,
+  markEquipmentCleaned,
   updateEquipmentMaintenance,
   useRefreshKey,
 } from '../db/queries';
@@ -62,6 +63,9 @@ export function EquipmentMaintenance() {
   const [returnItem, setReturnItem] = useState<FloorEquipment | null>(null);
   const [returnRecordedBy, setReturnRecordedBy] = useState<AssignedEmployee>(emptyAssignee());
 
+  const [cleanItem, setCleanItem] = useState<FloorEquipment | null>(null);
+  const [cleanedBy, setCleanedBy] = useState<AssignedEmployee>(emptyAssignee());
+
   const [historyItem, setHistoryItem] = useState<FloorEquipment | null>(null);
   const historyEntries = historyItem ? getEquipmentMaintenanceLog(historyItem.id, 200) : [];
 
@@ -95,6 +99,24 @@ export function EquipmentMaintenance() {
     }
   };
 
+  const handleMarkCleaned = () => {
+    if (!cleanItem || !cleanedBy.assigned_user_id) {
+      alert('Select who cleaned this equipment.');
+      return;
+    }
+    try {
+      markEquipmentCleaned(
+        cleanItem.id,
+        cleanedBy.assigned_user_id,
+        cleanedBy.assigned_user_name ?? '',
+      );
+      setCleanItem(null);
+      refresh();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Could not mark equipment clean.');
+    }
+  };
+
   const handleReturnToService = () => {
     if (!returnItem || !returnRecordedBy.assigned_user_id) {
       alert('Select who returned this equipment to service.');
@@ -121,7 +143,7 @@ export function EquipmentMaintenance() {
         <h2>Equipment Maintenance</h2>
         <p>
           Mark equipment broken or under maintenance to block production use and show a red X on the process view.
-          After use, emptied equipment shows a mop on the process view until someone marks it cleaned.
+          After use, emptied equipment shows a mop on the process view until someone marks it cleaned here or on the process view.
           The log below keeps the latest 10 events. The full history is on{' '}
           <Link to="/reports/maintenance">Reports</Link>.
         </p>
@@ -178,6 +200,19 @@ export function EquipmentMaintenance() {
                     >
                       History
                     </button>
+                    {dirty && (
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-secondary"
+                        data-testid={`mark-clean-${item.id}`}
+                        onClick={() => {
+                          setCleanItem(item);
+                          setCleanedBy(emptyAssignee());
+                        }}
+                      >
+                        Mark clean
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="btn btn-sm btn-secondary"
@@ -255,6 +290,31 @@ export function EquipmentMaintenance() {
             </button>
             <button type="button" className="btn btn-primary" onClick={handleSave}>
               Save
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {cleanItem && (
+        <Modal title={`Mark clean — ${cleanItem.name}`} onClose={() => setCleanItem(null)}>
+          <p className="field-hint">
+            {cleanItem.name} needs cleaning. Recording who cleaned it returns the equipment to empty and takes it off the calendar.
+          </p>
+          <div className="form-group full-width">
+            <label>Cleaned by</label>
+            <AssigneeSelect value={cleanedBy} onChange={setCleanedBy} required />
+          </div>
+          <div className="form-actions">
+            <button type="button" className="btn btn-secondary" onClick={() => setCleanItem(null)}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              data-testid="mark-clean-save"
+              onClick={handleMarkCleaned}
+            >
+              Mark as cleaned
             </button>
           </div>
         </Modal>
