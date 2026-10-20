@@ -14,7 +14,7 @@ export type FermentationAssignmentStatus = 'fermenting' | 'complete' | 'discarde
 
 export type RunStatus = 'planned' | 'running' | 'complete';
 
-export type DistillationRunType = 'wash' | 'low_wines' | 'heavy_rum' | 'gin';
+export type DistillationRunType = 'wash' | 'low_wines' | 'vodka' | 'heavy_rum' | 'gin';
 
 /** Where spirit-run proofing water is mixed. */
 export type SpiritProofPlace = 'before_still' | 'in_still';

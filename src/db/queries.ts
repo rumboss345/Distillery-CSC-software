@@ -19,7 +19,7 @@ import {
 } from '../lib/collection-vessel-cuts';
 import { distillationAlcoholBalance, washChargeAbvFromBrix, type AlcoholChargeBasis, type DistillationAlcoholBalance } from '../lib/distillation-loss';
 import type { MonthlyProduction } from '../lib/reporting/productivity';
-import { isFermenterSourcedRun, isSpiritStyleRun, isTankSourcedRun, runTypeLabel } from '../lib/distillation-run-types';
+import { isFermenterSourcedRun, isSpiritStyleRun, isTankSourcedRun, runTypeLabel, stillChargeSourcePhrase } from '../lib/distillation-run-types';
 import { activeGinBotanicals, ginBotanicalPlaceError, normalizeBotanicalWeightUnit } from '../lib/gin-botanicals';
 import { preparedIngredientName } from '../lib/quick-ingredient';
 import {
@@ -1721,7 +1721,7 @@ export function defaultDestTankIdForRunType(
   runType: string,
   excludeTankId?: number | null,
 ): number | null {
-  if (runType === 'low_wines') return defaultLowWinesTankId(excludeTankId);
+  if (runType === 'low_wines' || runType === 'vodka') return defaultLowWinesTankId(excludeTankId);
   return null;
 }
 
@@ -6164,7 +6164,7 @@ export function getEquipmentVolumeReport(): EquipmentVolumeReport[] {
           [run.source_holding_tank_equipment_id],
         )?.name;
         if (tankName) {
-          const prefix = run.run_type === 'gin' ? 'Gin from' : 'Spirit from';
+          const prefix = stillChargeSourcePhrase(run.run_type);
           detail = `${prefix} ${tankName} · ${detail}`;
         }
       }
