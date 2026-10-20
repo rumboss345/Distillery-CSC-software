@@ -1118,13 +1118,16 @@ export function Distillation() {
     <div>
       <div className="page-header">
         <h2>Distillation</h2>
-        <p>Low wine and heavy rum runs charge fermenters · Spirit runs and gin runs can charge more than one tank · Brix below {FERMENTATION_READY_MAX_BRIX}° recommended before charging</p>
+        <p>Low wine and heavy rum runs charge fermenters · Rum runs, vodka runs, and gin runs can charge more than one tank · Brix below {FERMENTATION_READY_MAX_BRIX}° recommended before charging</p>
         <div className="page-actions">
           <button type="button" className="btn btn-primary" onClick={() => openNewRun('wash')}>
             {RUN_TYPE_BUTTON_LABELS.wash}
           </button>
-          <button type="button" className="btn btn-secondary" onClick={() => openNewRun('low_wines')}>
+          <button type="button" className="btn btn-secondary" data-testid="new-rum-run" onClick={() => openNewRun('low_wines')}>
             {RUN_TYPE_BUTTON_LABELS.low_wines}
+          </button>
+          <button type="button" className="btn btn-secondary" data-testid="new-vodka-run" onClick={() => openNewRun('vodka')}>
+            {RUN_TYPE_BUTTON_LABELS.vodka}
           </button>
           <button type="button" className="btn btn-secondary" onClick={() => openNewRun('heavy_rum')}>
             {RUN_TYPE_BUTTON_LABELS.heavy_rum}
@@ -1995,11 +1998,11 @@ export function Distillation() {
             </div>
           </div>
           <p className="form-hint">
-            Any collection vessel can take cuts from a low wine run, spirit run, or heavy rum run.
+            Any collection vessel can take cuts from a low wine run, rum run, vodka run, or heavy rum run.
             A vessel can hold only one cut at a time — heads, hearts, or tails — including from later runs of the same cut.
             Empty it before switching cuts.
             {isSpiritStyleRun(selectedRun?.run_type) && (
-              <> Hearts and tails on a {selectedRun?.run_type === 'gin' ? 'gin' : 'spirit'} run may also go to <strong>High Wines Storage Tank</strong>.</>
+              <> Hearts and tails on a {runTypeLabel(selectedRun?.run_type).replace(/ run$/i, '').toLowerCase()} run may also go to <strong>High Wines Storage Tank</strong>.</>
             )}
             {' '}Heads may be discarded with no vessel. Transfer from collection vessels to holding tanks when ready.
           </p>

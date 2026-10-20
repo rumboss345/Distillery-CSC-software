@@ -145,7 +145,10 @@ describe('distillationLabelsFromLots', () => {
     ])).toBe('Low Wine Run · Tails');
     expect(distillationLabelsFromLots([
       distilled('hearts', 'low_wines', '2026-02-01 10:00:00'),
-    ])).toBe('Spirit Run · Hearts');
+    ])).toBe('Rum Run · Hearts');
+    expect(distillationLabelsFromLots([
+      distilled('hearts', 'vodka', '2026-02-02 10:00:00'),
+    ])).toBe('Vodka Run · Hearts');
   });
 
   it('leaves a blend name off the distillation line', () => {
@@ -159,7 +162,7 @@ describe('distillationLabelsFromLots', () => {
     expect(distillationLabelsFromLots([
       distilled('tails', 'wash', '2026-01-01 10:00:00'),
       distilled('hearts', 'low_wines', '2026-04-01 10:00:00'),
-    ])).toBe('Spirit Run · Hearts, Low Wine Run · Tails');
+    ])).toBe('Rum Run · Hearts, Low Wine Run · Tails');
   });
 });
 

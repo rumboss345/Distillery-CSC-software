@@ -29,7 +29,7 @@ export function DistillationReport() {
   return (
     <ReportTableShell
       title="Distillation runs"
-      description="Runs are grouped by type: Low Wine Run, Spirit Run, Heavy Rum, and Gin Run. Each row includes cut totals, hearts LAA, and alcohol loss or gain. The difference is the alcohol charged minus the alcohol collected. When more alcohol is collected than was charged, the result is recorded as a gain. The Distillation page keeps the latest 10 completed runs."
+      description="Runs are grouped by type: Low Wine Run, Rum Run, Vodka Run, Heavy Rum, and Gin Run. Each row includes cut totals, hearts LAA, and alcohol loss or gain. The difference is the alcohol charged minus the alcohol collected. When more alcohol is collected than was charged, the result is recorded as a gain. The Distillation page keeps the latest 10 completed runs."
       periodLabel={range.label}
       csvFilename={`distillation-${range.from ?? 'all'}`}
       csvHeaders={csvHeaders}

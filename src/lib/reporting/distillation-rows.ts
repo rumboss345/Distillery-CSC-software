@@ -13,7 +13,7 @@ export interface DistillationReportRow {
   still_name: string;
   /** Stored run type, such as wash or low_wines. */
   run_type_key: string;
-  /** Display name, such as Low Wine Run or Spirit Run. */
+  /** Display name, such as Low Wine Run or Rum Run. */
   run_type: string;
   status: string;
   source_label: string;
@@ -216,7 +216,7 @@ export interface DistillationTypeGroup<T extends { run_type_key: string }> {
   rows: T[];
 }
 
-/** Low Wine Run, Spirit Run, Heavy Rum, then Gin Run. Unknown types follow as Other. */
+/** Low Wine Run, Rum Run, Vodka Run, Heavy Rum, then Gin Run. Unknown types follow as Other. */
 export function groupDistillationReportRows<T extends { run_type_key: string }>(
   rows: readonly T[],
 ): DistillationTypeGroup<T>[] {
