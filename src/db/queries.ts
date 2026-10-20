@@ -58,7 +58,7 @@ import {
   type TankLot,
   type TankWithdrawal,
 } from '../lib/tank-product-name';
-import { defaultExpectedCompletionDate, expectedCompletionDateError } from '../lib/fermentation';
+import { ACTUAL_START_BRIX_LOG_NOTE, defaultExpectedCompletionDate, expectedCompletionDateError, fermentersForStartBrixLog } from '../lib/fermentation';
 import { eventDateWhenLeavingPlanned, localIsoDate } from '../lib/planned-event-date';
 import { choosePlannedFermenterRun } from '../lib/planned-fermenter-distillation';
 import { deleteStatusDateLog, recordStatusDateLog } from './status-logs';
@@ -3346,6 +3346,11 @@ export function saveFermentationSet(
       [moveLogs.toEquipmentId, mashBatchId, moveLogs.fromEquipmentId],
     );
   }
+
+  const startBrix = actualStartBrix != null && Number.isFinite(actualStartBrix)
+    ? actualStartBrix
+    : batch.actual_brix;
+  recordActualStartBrixLogs(mashBatchId, assignments, startBrix);
 }
 
 /** Record gallons from one fermenter that cannot be used. The fermentation itself stays. */
@@ -3786,6 +3791,29 @@ export function getFermentationLogs(
      ORDER BY fl.logged_at DESC`,
     [mashBatchId, floorEquipmentId, floorEquipmentId],
   );
+}
+
+/** Write Actual Start Brix as the first log on fermenters that were just set to ferment. */
+function recordActualStartBrixLogs(
+  mashBatchId: number,
+  assignments: FermenterAssignmentInput[],
+  startBrix: number | null | undefined,
+): void {
+  if (startBrix == null || !Number.isFinite(startBrix) || startBrix <= 0) return;
+  const withLogs = new Set(
+    assignments
+      .filter((assignment) => fermenterHasFermentationLogs(mashBatchId, assignment.equipmentId))
+      .map((assignment) => assignment.equipmentId),
+  );
+  const targets = fermentersForStartBrixLog(assignments, withLogs);
+  if (targets.length === 0) return;
+  const loggedAt = new Date().toISOString();
+  for (const equipmentId of targets) {
+    insertRow(
+      `INSERT INTO fermentation_logs (mash_batch_id, floor_equipment_id, logged_at, temperature_f, brix, ph, notes) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [mashBatchId, equipmentId, loggedAt, null, startBrix, null, ACTUAL_START_BRIX_LOG_NOTE],
+    );
+  }
 }
 
 export function addFermentationLog(log: Omit<FermentationLog, 'id'>): void {

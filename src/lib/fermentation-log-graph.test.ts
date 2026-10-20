@@ -23,6 +23,18 @@ describe('fermentation log graph', () => {
     expect(fermentationGraphSummary(points, 'brix')).toMatch(/16\.8° Brix on .+ to 11\.6° Brix on /);
   });
 
+  it('plots Actual Start Brix as the first point when it is the first log', () => {
+    const points = fermentationGraphPoints([
+      { logged_at: '2026-10-20T18:05:00.000Z', temperature_f: 76, brix: 14.2, ph: 4.2 },
+      { logged_at: '2026-10-20T18:00:00.000Z', temperature_f: null, brix: 16.4, ph: null },
+    ], 16.4);
+    expect(points.map((point) => point.brix)).toEqual([16.4, 14.2]);
+    expect(points[0].abv).toBe(0);
+    expect(points[0].temperature).toBeNull();
+    expect(availableFermentationMeasures(points)).toContain('brix');
+    expect(fermentationGraphSummary(points, 'brix')).toMatch(/16\.4° Brix on .+ to 14\.2° Brix on /);
+  });
+
   it('leaves out estimated ABV and pH when those readings are missing', () => {
     const points = fermentationGraphPoints([
       { logged_at: '2025-06-15T08:00:00', temperature_f: 72, brix: 16.8, ph: null },

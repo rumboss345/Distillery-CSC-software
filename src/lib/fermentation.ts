@@ -55,6 +55,27 @@ export function actualStartBrixError(value: number | null | undefined): string |
   return null;
 }
 
+/** Note stored on the log created from Actual Start Brix. */
+export const ACTUAL_START_BRIX_LOG_NOTE = 'Actual start Brix';
+
+/**
+ * Fermenters that are just set to ferment and do not already have a log.
+ * Each one gets the Actual Start Brix as its first reading.
+ */
+export function fermentersForStartBrixLog(
+  assignments: readonly { equipmentId: number; status?: string | null }[],
+  fermentersWithLogs: ReadonlySet<number>,
+): number[] {
+  const ids: number[] = [];
+  for (const assignment of assignments) {
+    if (assignment.status === 'complete' || assignment.status === 'discarded') continue;
+    if (!(assignment.equipmentId > 0)) continue;
+    if (fermentersWithLogs.has(assignment.equipmentId)) continue;
+    ids.push(assignment.equipmentId);
+  }
+  return ids;
+}
+
 /** Fermentations must reach this Brix before charging a fermenter to the still. */
 export const FERMENTATION_READY_MAX_BRIX = 10;
 

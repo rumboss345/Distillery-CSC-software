@@ -3,6 +3,7 @@ import {
   FERMENTATION_READY_MAX_BRIX,
   FERMENTER_LIQUID_GREEN_BELOW_BRIX,
   actualStartBrixError,
+  fermentersForStartBrixLog,
   brixFromFermentationReading,
   brixToSg,
   defaultExpectedCompletionDate,
@@ -32,6 +33,18 @@ describe('actual start Brix when a wash moves to fermenting', () => {
     expect(actualStartBrixError(null)).toMatch(/actual start Brix/);
     expect(actualStartBrixError(0)).toMatch(/actual start Brix/);
     expect(actualStartBrixError(16.4)).toBeNull();
+  });
+
+  it('records Actual Start Brix as the first log on each new fermenter', () => {
+    expect(fermentersForStartBrixLog([
+      { equipmentId: 1, status: 'fermenting' },
+      { equipmentId: 2, status: 'fermenting' },
+      { equipmentId: 3, status: 'complete' },
+      { equipmentId: 4, status: 'fermenting' },
+    ], new Set([4]))).toEqual([1, 2]);
+    expect(fermentersForStartBrixLog([
+      { equipmentId: 1, status: 'discarded' },
+    ], new Set())).toEqual([]);
   });
 });
 
