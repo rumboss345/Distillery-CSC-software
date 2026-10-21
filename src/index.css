@@ -4705,7 +4705,7 @@ tr.calendar-record-focus td {
   }
 }
 
-.badge-overdue { background: var(--danger-bg); color: var(--danger); }
-tr.row-overdue > td { background: var(--danger-bg); }
+.badge-overdue { background: var(--danger-bg); color: var(--danger); white-space: nowrap; }
+tr.row-overdue { background: var(--danger-bg); }
 tr.row-overdue > td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
 .stat-card-alert { color: var(--danger); font-weight: 600; }
