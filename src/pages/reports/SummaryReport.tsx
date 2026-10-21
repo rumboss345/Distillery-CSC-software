@@ -20,6 +20,7 @@ import {
   totalVolumeVarianceGal,
 } from '../../lib/reporting/volume-changes';
 import { formatTankVolumeVariance } from '../../lib/tank-volume-variance';
+import { sugarUses, totalSugarProcessedLbs } from '../../lib/reporting/sugar-processed';
 import { useReportContext } from './report-context';
 import { ProductivityChart } from './ProductivityChart';
 
@@ -65,7 +66,7 @@ export function SummaryReport() {
     ? yields.reduce((s, y) => s + y.yieldPercent, 0) / yields.length
     : 0;
   const totalGpa = yields.reduce((s, y) => s + y.gpa, 0);
-  const totalGrain = yields.reduce((s, y) => s + y.grainLbs, 0);
+  const totalSugarProcessed = totalSugarProcessedLbs(sugarUses(), range);
 
   const totalHeartsGal = monthParam
     ? summary.totalHeartsGal
@@ -102,9 +103,10 @@ export function SummaryReport() {
           <div className="label">Total GPA Produced</div>
           <div className="value">{totalGpa.toFixed(1)} gal</div>
         </div>
-        <div className="stat-card">
+        <div className="stat-card" data-testid="total-sugar-processed">
           <div className="label">Total Sugar Processed</div>
-          <div className="value">{totalGrain.toFixed(0)} lbs</div>
+          <div className="value">{totalSugarProcessed.toFixed(0)} lbs</div>
+          <div className="sub">Sugar used on washes and in blends</div>
         </div>
         <div className="stat-card">
           <div className="label">Barrels / Bottlings</div>
