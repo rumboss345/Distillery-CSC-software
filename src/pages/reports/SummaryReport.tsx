@@ -106,7 +106,7 @@ export function SummaryReport() {
         <div className="stat-card" data-testid="total-sugar-processed">
           <div className="label">Total Sugar Processed</div>
           <div className="value">{totalSugarProcessed.toFixed(0)} lbs</div>
-          <div className="sub">Sugar used on washes and in blends</div>
+          <div className="sub">Sugar used to make washes</div>
         </div>
         <div className="stat-card">
           <div className="label">Barrels / Bottlings</div>
