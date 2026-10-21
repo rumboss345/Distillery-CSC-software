@@ -4709,3 +4709,35 @@ tr.calendar-record-focus td {
 tr.row-overdue { background: var(--danger-bg); }
 tr.row-overdue > td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
 .stat-card-alert { color: var(--danger); font-weight: 600; }
+
+.collapsible-section-heading { margin: 0; }
+.collapsible-section-toggle {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.25rem 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.collapsible-section-toggle:hover .collapsible-section-title { color: var(--accent); }
+.collapsible-section-chevron {
+  flex: 0 0 auto;
+  width: 1rem;
+  color: var(--text-muted);
+}
+.collapsible-section-summary {
+  margin-left: auto;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.collapsible-section-summary--alert { color: var(--danger); font-weight: 600; }
+.collapsible-section:not(.collapsible-section--open) > .collapsible-section-heading { margin-bottom: 0; }
+.collapsible-section--open > .collapsible-section-heading { margin-bottom: 0.75rem; }

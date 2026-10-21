@@ -23,6 +23,7 @@ import { formatTankVolumeVariance } from '../../lib/tank-volume-variance';
 import { sugarUses, totalSugarProcessedLbs } from '../../lib/reporting/sugar-processed';
 import { useReportContext } from './report-context';
 import { ProductivityChart } from './ProductivityChart';
+import { CollapsibleSection } from '../../components/CollapsibleSection';
 
 export function SummaryReport() {
   const { range } = useReportContext();
@@ -49,6 +50,7 @@ export function SummaryReport() {
 
   const summary = getProductionSummary(monthParam);
   const equipmentReport = getEquipmentVolumeReport();
+  const equipmentWithLiquid = equipmentReport.filter((eq) => eq.volume_gal > 0).length;
   const barrels = getBarrels();
   const bottlings = getBottlingRuns();
 
@@ -116,8 +118,14 @@ export function SummaryReport() {
 
       <ProductivityChart />
 
-      <div className="section">
-        <h3 className="section-title">Equipment & Current Volumes</h3>
+      <CollapsibleSection
+        className="section"
+        headingClassName="section-title"
+        title="Equipment & Current Volumes"
+        summary={`${equipmentWithLiquid} holding liquid`}
+        defaultOpen={false}
+        storageKey="report-summary-equipment"
+      >
         <p className="report-section-desc">
           Live snapshot of floor equipment (always current — not filtered by report period).
         </p>
@@ -161,10 +169,15 @@ export function SummaryReport() {
             </table>
           </div>
         )}
-      </div>
+      </CollapsibleSection>
 
-      <div className="section">
-        <h3 className="section-title">Yield by Wash Batch</h3>
+      <CollapsibleSection
+        className="section"
+        headingClassName="section-title"
+        title="Yield by Wash Batch"
+        summary={yields.length}
+        storageKey="report-summary-yield"
+      >
         <p className="report-section-desc">
           GPA = Gallons of Pure Alcohol. Yield % = GPA ÷ sugar (lbs) × 100.
         </p>
@@ -202,10 +215,15 @@ export function SummaryReport() {
             </table>
           </div>
         )}
-      </div>
+      </CollapsibleSection>
 
-      <div className="section">
-        <h3 className="section-title">Bottling</h3>
+      <CollapsibleSection
+        className="section"
+        headingClassName="section-title"
+        title="Bottling"
+        summary={filteredBottlings.length}
+        storageKey="report-summary-bottling"
+      >
         <p className="report-section-desc">
           Tank bottling empties the source tank on save. Gallons sent to a tank are not a loss. Variance is bottled gallons plus gallons sent to tanks, minus the tank draw.
         </p>
@@ -256,10 +274,14 @@ export function SummaryReport() {
             </table>
           </div>
         )}
-      </div>
+      </CollapsibleSection>
 
-      <div className="section">
-        <h3 className="section-title">Production Pipeline Summary</h3>
+      <CollapsibleSection
+        className="section"
+        headingClassName="section-title"
+        title="Production Pipeline Summary"
+        storageKey="report-summary-pipeline"
+      >
         <div className="card report-pipeline-summary">
           <div>Wash Batches:     {filteredMashes.length} started{monthParam ? '' : ` (${summary.activeMashes} active)`}</div>
           <div>Distillation:     {filteredRuns.length} runs{monthParam ? '' : ` (${summary.activeRuns} active)`}</div>
@@ -268,7 +290,7 @@ export function SummaryReport() {
           <div>Bottled:          {bottlesInRange} bottles</div>
           <div>Low Stock Items:  {summary.lowStockItems} (current)</div>
         </div>
-      </div>
+      </CollapsibleSection>
     </>
   );
 }

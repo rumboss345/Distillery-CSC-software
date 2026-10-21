@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useEquipmentReturn } from '../lib/equipment-return';
+import { CollapsibleSection } from '../components/CollapsibleSection';
 import { useAuth } from '../context/AuthContext';
 import { DatePicker } from '../components/DatePicker';
 import { AbvVolumeTemperatureFields } from '../components/AbvVolumeTemperatureFields';
@@ -114,6 +115,10 @@ export function TankTransfer() {
       ...tank,
       ...getHoldingTankContents(tank.id),
     }));
+  const [showEmptyTanks, setShowEmptyTanks] = useState(false);
+  const tanksHoldingSpirit = tanksWithContents.filter((tank) => tank.volume_gal > 0.001);
+  const emptyTankCount = tanksWithContents.length - tanksHoldingSpirit.length;
+  const visibleTanks = showEmptyTanks ? tanksWithContents : tanksHoldingSpirit;
   const tankTransfers = getHoldingTankTransfers();
   const tankDilutions = getHoldingTankDilutions();
   const volumeVariances = getHoldingTankVolumeVariances();
@@ -640,8 +645,13 @@ export function TankTransfer() {
         </div>
       </div>
 
-      <div className="detail-panel">
-        <h4>Fermenters</h4>
+      <CollapsibleSection
+        className="detail-panel"
+        headingLevel="h4"
+        title="Fermenters"
+        summary={`${fermentersWithWash.length} with wash`}
+        storageKey="tank-transfer-fermenters"
+      >
         <p className="field-hint" style={{ marginTop: '-0.5rem' }}>
           Select a fermenter with wash to move some of it to another fermenter, or record leftovers that cannot be used.
         </p>
@@ -699,10 +709,16 @@ export function TankTransfer() {
             </table>
           </div>
         )}
-      </div>
+      </CollapsibleSection>
 
-      <div className="detail-panel">
-        <h4>Fermenter leftovers</h4>
+      <CollapsibleSection
+        className="detail-panel"
+        headingLevel="h4"
+        title="Fermenter leftovers"
+        summary={recentLeftovers.total}
+        defaultOpen={false}
+        storageKey="tank-transfer-leftovers"
+      >
         <RecentCompletedNote
           hiddenCount={recentLeftovers.hiddenCount}
           to="/reports/volume-changes"
@@ -744,10 +760,15 @@ export function TankTransfer() {
             </table>
           </div>
         )}
-      </div>
+      </CollapsibleSection>
 
-      <div className="detail-panel">
-        <h4>Tanks</h4>
+      <CollapsibleSection
+        className="detail-panel"
+        headingLevel="h4"
+        title="Tanks"
+        summary={`${tanksHoldingSpirit.length} holding liquid`}
+        storageKey="tank-transfer-tanks"
+      >
         <p className="field-hint" style={{ marginTop: '-0.5rem' }}>
           {isAdmin
             ? 'Water down lowers the proof of alcohol already in a tank. Set volume records the gallons and ABV actually in the tank. If a transfer or a recording error left the tank off from the record, the difference is saved as a variance. Later transfers and production add to or take from the volume you set.'
@@ -770,7 +791,7 @@ export function TankTransfer() {
                 </tr>
               </thead>
               <tbody>
-                {tanksWithContents.map((tank) => {
+                {visibleTanks.map((tank) => {
                   const canTransfer = tank.volume_gal > 0.001;
                   const canWaterDown = tankCanWaterDown(tank);
                   const latestVariance = latestVarianceByTank.get(tank.id);
@@ -844,12 +865,32 @@ export function TankTransfer() {
                 })}
               </tbody>
             </table>
+            {visibleTanks.length === 0 && (
+              <p style={{ color: 'var(--text-muted)', margin: '0.75rem 0 0' }}>No tanks hold liquid right now.</p>
+            )}
           </div>
         )}
-      </div>
+        {emptyTankCount > 0 && (
+          <button
+            type="button"
+            className="btn btn-sm btn-ghost"
+            style={{ marginTop: '0.5rem' }}
+            data-testid="toggle-empty-tanks"
+            onClick={() => setShowEmptyTanks((show) => !show)}
+          >
+            {showEmptyTanks ? 'Hide empty tanks' : `Show ${emptyTankCount} empty tank${emptyTankCount === 1 ? '' : 's'}`}
+          </button>
+        )}
+      </CollapsibleSection>
 
-      <div className="detail-panel">
-        <h4>Watered down</h4>
+      <CollapsibleSection
+        className="detail-panel"
+        headingLevel="h4"
+        title="Watered down"
+        summary={recentDilutions.total}
+        defaultOpen={false}
+        storageKey="tank-transfer-watered-down"
+      >
         <p className="field-hint" style={{ marginTop: '-0.5rem' }}>
           Water blended into alcohol that stayed in the same tank. The alcohol is not lost. The gauge rise is smaller than the water poured because of contraction.
         </p>
@@ -894,10 +935,16 @@ export function TankTransfer() {
             </table>
           </div>
         )}
-      </div>
+      </CollapsibleSection>
 
-      <div className="detail-panel">
-        <h4>Volume variances</h4>
+      <CollapsibleSection
+        className="detail-panel"
+        headingLevel="h4"
+        title="Volume variances"
+        summary={recentVariances.total}
+        defaultOpen={false}
+        storageKey="tank-transfer-variances"
+      >
         <p className="field-hint" style={{ marginTop: '-0.5rem' }}>
           Each time a tank volume is set, the difference from the gallons already on the record is kept here.
           A negative variance means the tank was short. A positive variance means it held more than the record.
@@ -940,10 +987,17 @@ export function TankTransfer() {
             </table>
           </div>
         )}
-      </div>
+      </CollapsibleSection>
 
-      <div className="detail-panel">
-        <h4>Transfers</h4>
+      <CollapsibleSection
+        className="detail-panel"
+        headingLevel="h4"
+        title="Transfers"
+        summary={recentTransfers.total}
+        defaultOpen={false}
+        forceOpen={focusTransferId > 0}
+        storageKey="tank-transfer-transfers"
+      >
         <RecentCompletedNote
           hiddenCount={recentTransfers.hiddenCount}
           to="/reports/movements"
@@ -985,7 +1039,7 @@ export function TankTransfer() {
             </table>
           </div>
         )}
-      </div>
+      </CollapsibleSection>
 
       {showTransferForm && (
         <Modal title="Tank Transfer" onClose={() => finishForm(setShowTransferForm)}>

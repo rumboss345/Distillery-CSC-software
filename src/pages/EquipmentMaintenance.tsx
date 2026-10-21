@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useEquipmentReturn } from '../lib/equipment-return';
+import { CollapsibleSection } from '../components/CollapsibleSection';
 import {
   getAllEquipmentMaintenanceLog,
   getAllFloorEquipment,
@@ -57,6 +58,7 @@ export function EquipmentMaintenance() {
     [key],
   );
 
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set());
   const [editItem, setEditItem] = useState<FloorEquipment | null>(null);
   const [status, setStatus] = useState<EquipmentMaintenanceStatus>('broken');
   const [notes, setNotes] = useState('');
@@ -154,11 +156,30 @@ export function EquipmentMaintenance() {
         </p>
       </div>
 
-      {groups.map((group) => (
-        <section key={group.type} className="card equipment-maintenance-section">
-          <h3 className="equipment-maintenance-category">{group.label}</h3>
+      {groups.map((group) => {
+        const needsAttention = (item: FloorEquipment) => Boolean(item.maintenance_status) || equipmentNeedsCleaning(item);
+        const attention = group.items.filter(needsAttention).length;
+        const showAll = attention === 0 || expandedGroups.has(group.type);
+        const shownItems = showAll
+          ? group.items
+          : group.items.filter((item) => needsAttention(item) || item.id === focusEquipmentId);
+        const hiddenCount = group.items.length - shownItems.length;
+        return (
+        <CollapsibleSection
+          key={group.type}
+          className="card equipment-maintenance-section"
+          headingClassName="equipment-maintenance-category"
+          title={group.label}
+          summary={attention > 0 ? (
+            <span className="collapsible-section-summary--alert">
+              {attention} need{attention === 1 ? 's' : ''} attention · {group.items.length}
+            </span>
+          ) : `${group.items.length}`}
+          defaultOpen={attention > 0}
+          forceOpen={group.items.some((item) => item.id === focusEquipmentId)}
+        >
           <ul className="equipment-maintenance-list">
-            {group.items.map((item) => {
+            {shownItems.map((item) => {
               const blocked = equipmentBlocksProduction(item);
               const dirty = equipmentNeedsCleaning(item);
               const statusLabel = dirty
@@ -242,11 +263,32 @@ export function EquipmentMaintenance() {
               );
             })}
           </ul>
-        </section>
-      ))}
+          {(hiddenCount > 0 || (attention > 0 && expandedGroups.has(group.type))) && (
+            <button
+              type="button"
+              className="btn btn-sm btn-ghost"
+              data-testid={`maintenance-show-all-${group.type}`}
+              onClick={() => setExpandedGroups((prev) => {
+                const next = new Set(prev);
+                if (next.has(group.type)) next.delete(group.type);
+                else next.add(group.type);
+                return next;
+              })}
+            >
+              {hiddenCount > 0 ? `Show all ${group.items.length}` : 'Show only items needing attention'}
+            </button>
+          )}
+        </CollapsibleSection>
+        );
+      })}
 
-      <section className="card" style={{ marginTop: '1.5rem' }}>
-        <h3>Maintenance &amp; cleaning log</h3>
+      <CollapsibleSection
+        className="card"
+        title="Maintenance & cleaning log"
+        summary={recentLog.total}
+        defaultOpen={false}
+        storageKey="equipment-maintenance-log"
+      >
         <p className="field-hint" style={{ marginTop: 0 }}>
           Newest first — includes automatic “needs cleaning” after production use and manual clean / repair entries.
         </p>
@@ -256,7 +298,7 @@ export function EquipmentMaintenance() {
           label="events"
         />
         <EquipmentMaintenanceLogTable entries={recentLog.shown} showEquipment />
-      </section>
+      </CollapsibleSection>
 
       {editItem && (
         <Modal title={`Maintenance — ${editItem.name}`} onClose={closeEdit}>

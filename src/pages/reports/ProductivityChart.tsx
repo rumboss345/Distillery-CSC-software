@@ -11,6 +11,7 @@ import {
   productivityYearOptions,
   type ProductivityMetric,
 } from '../../lib/reporting/productivity';
+import { CollapsibleSection } from '../../components/CollapsibleSection';
 
 const CHART_WIDTH = 760;
 const CHART_HEIGHT = 280;
@@ -59,16 +60,17 @@ export function ProductivityChart() {
   };
 
   return (
-    <section className="section productivity-chart" data-testid="productivity-chart">
-      <div className="report-section-header">
-        <div>
-          <h3 className="section-title">Productivity</h3>
-          <p className="report-section-desc">
-            Month to month, and each month beside the same month a year earlier.
-            This graph uses every recorded month, separate from the report period above.
-          </p>
-        </div>
-      </div>
+    <CollapsibleSection
+      className="section productivity-chart"
+      headingClassName="section-title"
+      title="Productivity"
+      storageKey="report-summary-productivity"
+    >
+      <div data-testid="productivity-chart">
+      <p className="report-section-desc">
+        Month to month, and each month beside the same month a year earlier.
+        This graph uses every recorded month, separate from the report period above.
+      </p>
 
       <div className="productivity-toolbar">
         <div className="form-group">
@@ -202,7 +204,8 @@ export function ProductivityChart() {
           <p>Choose another measure or year to see recorded production.</p>
         </div>
       )}
-    </section>
+      </div>
+    </CollapsibleSection>
   );
 }
 
