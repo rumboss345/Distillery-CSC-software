@@ -1590,7 +1590,7 @@ export function Distillation() {
                 <p className="field-hint">
                   {selectedStill.name} holds {selectedStill.capacity_gal} gal
                   {spiritProofPlan?.maxSpiritGal != null
-                    ? `. At this target proof, charge at most ${spiritProofPlan.maxSpiritGal.toFixed(1)} gal of tails.`
+                    ? `. At this target proof, charge at most ${spiritProofPlan.maxSpiritGal.toFixed(1)} gal.`
                     : '.'}
                 </p>
               )}
@@ -1621,7 +1621,7 @@ export function Distillation() {
             {isTankSourcedRun(runForm.run_type) && (
               <div className="form-group full-width">
                 <AbvTemperatureInput
-                  abvLabel="Tails ABV (% at sample temp)"
+                  abvLabel="Charge ABV (% at sample temp)"
                   abvValue={chargeAbvObserved}
                   temperatureValue={chargeTempF}
                   onAbvChange={(value) => syncChargeAbvFromObservation(value, chargeTempF)}
@@ -1735,7 +1735,7 @@ export function Distillation() {
                       className="btn btn-sm btn-secondary"
                       onClick={() => setPrimarySpiritPull(spiritProofPlan.maxSpiritGal ?? 0)}
                     >
-                      Use {spiritProofPlan.maxSpiritGal.toFixed(1)} gal of tails
+                      Use {spiritProofPlan.maxSpiritGal.toFixed(1)} gal
                     </button>
                   )}
                 </div>
@@ -1892,8 +1892,8 @@ export function Distillation() {
               </>
             ) : (
               <>
-                Charging draws tails from the source tank. Proof them before the run if they are too hot:
-                blend the water in the tank first, or add it after the tails are in the still.
+                Charging draws spirit from the source tank. Proof it before the run if it is too hot:
+                blend the water in the tank first, or add it after the charge is in the still.
                 The proofed volume cannot exceed the still. Choose
                 {' '}<strong>High Wines Storage Tank</strong> (or a collection vessel) when you record cuts.
               </>

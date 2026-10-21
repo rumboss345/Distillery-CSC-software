@@ -36,7 +36,7 @@ describe('planSpiritChargeProof', () => {
     expect(plan.stillGal).toBeGreaterThan(150);
     expect(plan.maxSpiritGal).toBeCloseTo(75, 0);
     expect(plan.message).toMatch(/Vendome holds 150/);
-    expect(plan.message).toMatch(/75\.0 gal of tails/);
+    expect(plan.message).toMatch(/Charge at most 75\.0 gal/);
   });
 
   it('refuses blending before the still when the tails tank has no room for the water', () => {
@@ -74,7 +74,7 @@ describe('planSpiritChargeProof', () => {
       place: 'in_still',
     });
     expect(plan.ok).toBe(false);
-    expect(plan.message).toMatch(/lower than the tails/);
+    expect(plan.message).toMatch(/lower than the charge/);
   });
 });
 
@@ -159,6 +159,6 @@ describe('spiritChargeDetail', () => {
       proof_spirit_gal: 80,
       proof_spirit_abv: 70,
       proof_place: 'before_still',
-    })).toBe('80.0 gal tails @ 70.0% + 62.0 gal water, blended before the still');
+    })).toBe('80.0 gal charge @ 70.0% + 62.0 gal water, blended before the still');
   });
 });

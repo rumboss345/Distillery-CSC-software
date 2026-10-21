@@ -4155,7 +4155,7 @@ export function saveDistillationRun(
   tankSources?: DistillationTankSourceInput[],
 ): number {
   assertEnteredAbv(run.charge_abv, 'Charge ABV');
-  assertEnteredAbv(run.proof_spirit_abv, 'Tails ABV');
+  assertEnteredAbv(run.proof_spirit_abv, 'Charge ABV');
   const runType = (run.run_type ?? 'wash') as DistillationRunType;
   const chargeAbvToStore = isTankSourcedRun(runType) ? run.charge_abv : fermenterChargeAbvForSave(run);
   const planOnly = plannedRecordSkipsEquipmentStatus(run.status);
