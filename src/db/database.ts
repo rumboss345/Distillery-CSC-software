@@ -2,6 +2,7 @@ import initSqlJs, { Database, SqlValue } from 'sql.js/dist/sql-wasm.js';
 import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 import { buildBlendRecipeSnapshot } from '../lib/blend-recipe-version';
 import { isSqliteFile, missingBackupTablesError } from '../lib/database-backup';
+import { toStoredTimestamp } from '../lib/date-input';
 import { buildCscFloorEquipmentRows, CSC_FLOOR_PLAN_SIZE } from '../lib/csc-floor-equipment';
 import { PACKAGING_BOTTLES } from '../lib/packaging-bottles';
 import type { BlendIngredientInput } from '../types';
@@ -1436,6 +1437,23 @@ function migrateAdvancedBlending(): void {
   migrateDistillationAlcoholLossColumns();
   migrateBottlingReturnTankColumns();
   migrateBottlingRunReturns();
+  migrateFermentationLogTimes();
+}
+
+/** Older and seeded logs used local wall-clock times. Store every log time in UTC. */
+function migrateFermentationLogTimes(): void {
+  if (!db) return;
+  const rows = queryAll<{ id: number; logged_at: string }>(
+    "SELECT id, logged_at FROM fermentation_logs WHERE logged_at NOT LIKE '%Z'",
+  );
+  let changed = false;
+  for (const row of rows) {
+    const stored = toStoredTimestamp(row.logged_at);
+    if (stored === row.logged_at) continue;
+    db.run('UPDATE fermentation_logs SET logged_at = ? WHERE id = ?', [stored, row.id]);
+    changed = true;
+  }
+  if (changed) persistDb();
 }
 
 /** Product left after bottling can be sent to another tank. Existing runs stay blank. */
@@ -1570,6 +1588,7 @@ export async function initDatabase(): Promise<Database> {
     db.run(SEED_DATA);
     seedCscFloorEquipment({ assignSequentialIds: true, demoStatusForFirstTwo: true });
     clearAllBlendRecipesOnce();
+    migrateFermentationLogTimes();
     persistDb();
   }
 

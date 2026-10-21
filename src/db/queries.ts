@@ -44,7 +44,7 @@ import { roundThousandths, tankReadingChanged, tankVolumeVarianceGal, volumeChan
 import { EQUIPMENT_TYPES, isSpiritLedgerEquipmentType, resolveEquipmentIcon } from '../lib/equipment';
 import { equipmentTypeDeleteError, equipmentTypeNameError, normalizeEquipmentTypeName } from '../lib/equipment-type';
 import { countActiveFermentations, fermenterShowsAssignedWash } from '../lib/mash-fermenter-fill';
-import { compareStoredDatesDesc } from '../lib/date-input';
+import { compareStoredDatesDesc, toStoredTimestamp } from '../lib/date-input';
 import {
   applyTankWithdrawals,
   consumeOldestLots,
@@ -3834,7 +3834,7 @@ function recordActualStartBrixLogs(
   );
   const targets = fermentersForStartBrixLog(assignments, withLogs);
   if (targets.length === 0) return;
-  const loggedAt = new Date().toISOString();
+  const loggedAt = toStoredTimestamp();
   for (const equipmentId of targets) {
     insertRow(
       `INSERT INTO fermentation_logs (mash_batch_id, floor_equipment_id, logged_at, temperature_f, brix, ph, notes) VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -3872,7 +3872,7 @@ export function addFermentationLog(log: Omit<FermentationLog, 'id'>): void {
     [
       log.mash_batch_id,
       log.floor_equipment_id,
-      log.logged_at,
+      toStoredTimestamp(log.logged_at || new Date()),
       log.temperature_f,
       log.brix,
       log.ph,
