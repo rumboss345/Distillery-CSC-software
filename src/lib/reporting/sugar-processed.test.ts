@@ -25,7 +25,7 @@ const uses: SugarUse[] = [
 ];
 
 describe('total sugar processed', () => {
-  it('counts sugar used on washes and in blends, including a wash that has not made hearts', () => {
+  it('counts sugar used to make washes, including a wash that has not made hearts', () => {
     expect(totalSugarProcessedLbs(uses, june)).toBe(1200);
     expect(totalSugarProcessedLbs(uses, allTime)).toBe(1400);
   });
