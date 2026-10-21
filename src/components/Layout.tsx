@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import type { PermissionKey } from '../lib/permissions';
@@ -71,6 +71,7 @@ export function Layout() {
   const { user, logout, hasPermission } = useAuth();
   const location = useLocation();
   const [navOpen, setNavOpen] = useState(false);
+  const mainRef = useRef<HTMLElement>(null);
 
   const visibleGroups = navGroups
     .map((group) => ({
@@ -83,6 +84,11 @@ export function Layout() {
 
   useEffect(() => {
     setNavOpen(false);
+  }, [location.pathname]);
+
+  useLayoutEffect(() => {
+    mainRef.current?.scrollTo({ top: 0, left: 0 });
+    window.scrollTo({ top: 0, left: 0 });
   }, [location.pathname]);
 
   useEffect(() => {
@@ -170,7 +176,7 @@ export function Layout() {
           </button>
         </div>
       </aside>
-      <main className="main-content">
+      <main ref={mainRef} className="main-content">
         <Outlet />
       </main>
     </div>
