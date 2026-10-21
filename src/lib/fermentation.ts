@@ -77,7 +77,7 @@ export function fermentersForStartBrixLog(
 }
 
 /** Fermentations must reach this Brix before charging a fermenter to the still. */
-export const FERMENTATION_READY_MAX_BRIX = 10;
+export const FERMENTATION_READY_MAX_BRIX = 5;
 
 /** Floor / process view: green liquid below this Brix (logs or starting gravity). */
 export const FERMENTER_LIQUID_GREEN_BELOW_BRIX = 6;

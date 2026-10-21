@@ -72,14 +72,14 @@ describe('expected fermentation completion', () => {
 
 describe('fermentation readiness', () => {
   it('requires brix below the ready threshold', () => {
-    expect(isBrixReadyForDistillation(9.9)).toBe(true);
-    expect(isBrixReadyForDistillation(10)).toBe(false);
-    expect(isBrixReadyForDistillation(12)).toBe(false);
+    expect(isBrixReadyForDistillation(4.9)).toBe(true);
+    expect(isBrixReadyForDistillation(5)).toBe(false);
+    expect(isBrixReadyForDistillation(9.9)).toBe(false);
     expect(isBrixReadyForDistillation(null)).toBe(false);
   });
 
-  it('uses 10 as the ready threshold', () => {
-    expect(FERMENTATION_READY_MAX_BRIX).toBe(10);
+  it('uses 5 as the ready threshold', () => {
+    expect(FERMENTATION_READY_MAX_BRIX).toBe(5);
   });
 });
 
