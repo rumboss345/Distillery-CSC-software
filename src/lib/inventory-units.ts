@@ -41,3 +41,12 @@ export function inventoryQuantityDelta(
 
   return null;
 }
+
+/** Display name for a stored inventory category, e.g. "raw sugar" → "Raw Sugar". */
+export function inventoryCategoryLabel(category: string): string {
+  return category
+    .trim()
+    .split(/\s+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
