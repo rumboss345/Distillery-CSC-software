@@ -136,19 +136,19 @@ export function planSpiritChargeProof(input: SpiritChargeProofInput): SpiritChar
     maxSpiritGal: null as number | null,
   };
   const stillName = input.stillName?.trim() || 'The still';
-  const tankName = input.tankName?.trim() || 'The tails tank';
+  const tankName = input.tankName?.trim() || 'The source tank';
 
   if (!(input.spiritGal > 0)) {
     return { ...base, ok: false, message: 'Enter the charge volume in gallons.' };
   }
   if (!(input.spiritAbvPercent > 0)) {
-    return { ...base, ok: false, message: 'Enter the tails ABV before proofing.' };
+    return { ...base, ok: false, message: 'Enter the charge ABV before proofing.' };
   }
   if (!(input.targetAbvPercent > 0) || input.targetAbvPercent >= input.spiritAbvPercent) {
     return {
       ...base,
       ok: false,
-      message: `Target ABV must be lower than the tails (${input.spiritAbvPercent.toFixed(1)}% ABV). Water only brings the proof down.`,
+      message: `Target ABV must be lower than the charge (${input.spiritAbvPercent.toFixed(1)}% ABV). Water only brings the proof down.`,
     };
   }
 
@@ -182,24 +182,24 @@ export function planSpiritChargeProof(input: SpiritChargeProofInput): SpiritChar
   if (!stillOk) {
     const cap = input.stillCapacityGal ?? 0;
     const maxNote = maxSpiritGal != null
-      ? ` Charge at most ${maxSpiritGal.toFixed(1)} gal of tails.`
+      ? ` Charge at most ${maxSpiritGal.toFixed(1)} gal.`
       : '';
     return {
       ...plan,
       ok: false,
-      message: `${stillName} holds ${cap.toFixed(1)} gal. Proofing ${input.spiritGal.toFixed(1)} gal of tails from ${input.spiritAbvPercent.toFixed(1)}% to ${input.targetAbvPercent.toFixed(1)}% ABV makes ${plan.stillGal.toFixed(1)} gal in the still.${maxNote}`,
+      message: `${stillName} holds ${cap.toFixed(1)} gal. Proofing ${input.spiritGal.toFixed(1)} gal of charge from ${input.spiritAbvPercent.toFixed(1)}% to ${input.targetAbvPercent.toFixed(1)}% ABV makes ${plan.stillGal.toFixed(1)} gal in the still.${maxNote}`,
     };
   }
 
   if (!tankOk) {
     const free = input.sourceTankFreeGal ?? 0;
     const maxNote = maxSpiritGal != null
-      ? ` Charge at most ${maxSpiritGal.toFixed(1)} gal of tails, or blend the water in the still.`
+      ? ` Charge at most ${maxSpiritGal.toFixed(1)} gal, or blend the water in the still.`
       : ' Blend the water in the still instead.';
     return {
       ...plan,
       ok: false,
-      message: `${tankName} only has ${free.toFixed(1)} gal free, and blending these tails before the still needs ${plan.waterGal.toFixed(1)} gal of water.${maxNote}`,
+      message: `${tankName} only has ${free.toFixed(1)} gal free, and blending this charge before the still needs ${plan.waterGal.toFixed(1)} gal of water.${maxNote}`,
     };
   }
 
@@ -356,5 +356,5 @@ export function spiritChargeDetail(run: {
   if (!(water > 0) || spirit == null) return null;
   const where = run.proof_place === 'before_still' ? 'blended before the still' : 'blended in the still';
   const tailsAbv = run.proof_spirit_abv != null ? ` @ ${run.proof_spirit_abv.toFixed(1)}%` : '';
-  return `${spirit.toFixed(1)} gal tails${tailsAbv} + ${water.toFixed(1)} gal water, ${where}`;
+  return `${spirit.toFixed(1)} gal charge${tailsAbv} + ${water.toFixed(1)} gal water, ${where}`;
 }
