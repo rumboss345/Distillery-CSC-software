@@ -117,6 +117,8 @@ export interface FloorEquipmentView extends FloorEquipment {
   active_latest_brix?: number | null;
   /** Wash starting gravity (actual or target Brix) for est. ABV on process view. */
   active_start_brix?: number | null;
+  /** Expected done date of the wash in this fermenter. */
+  active_expected_completion_date?: string | null;
 }
 
 export interface InventoryItem {

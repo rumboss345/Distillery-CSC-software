@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react';
 import { format } from 'date-fns';
-import { getProductionSummary, getMashBatches, getDistillationRuns, getBarrels, getInventoryItems, barrelBlendProductName } from '../db/queries';
+import { Link } from 'react-router-dom';
+import { getProductionSummary, getMashBatches, getDistillationRuns, getBarrels, getInventoryItems, barrelBlendProductName, getAllMashFermenterAssignments } from '../db/queries';
 import { StatusBadge } from '../components/StatusBadge';
 import { useAuth } from '../context/AuthContext';
 import { inventoryCategoryLabel } from '../lib/inventory-units';
 import { formatDateDisplay } from '../lib/date-input';
+import { fermentationDaysOverdue, formatDaysOverdue, listOverdueFermentations } from '../lib/fermentation';
+import { localIsoDate } from '../lib/planned-event-date';
 import { PROCESS_STAGE_LABELS } from '../lib/permissions';
 
 export function Dashboard() {
@@ -12,7 +15,10 @@ export function Dashboard() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   const summary = getProductionSummary(undefined, format(new Date(), 'yyyy-MM'));
-  const recentMashes = getMashBatches().slice(0, 3);
+  const today = localIsoDate();
+  const mashes = getMashBatches();
+  const recentMashes = mashes.slice(0, 3);
+  const overdueFermentations = listOverdueFermentations(getAllMashFermenterAssignments(), mashes, today);
   const recentRuns = getDistillationRuns().slice(0, 3);
   const agingBarrels = getBarrels().filter((b) => b.status === 'aging').slice(0, 3);
   const lowStock = getInventoryItems().filter((i) => i.quantity <= i.reorder_level);
@@ -39,7 +45,14 @@ export function Dashboard() {
         <div className="stat-card">
           <div className="label">Active Fermentations</div>
           <div className="value accent">{summary.activeFermentations}</div>
-          <div className="sub">One per fermenter</div>
+          <div className="sub">
+            One per fermenter
+            {overdueFermentations.length > 0 && (
+              <span className="stat-card-alert" data-testid="dashboard-overdue-count">
+                {' '}· {overdueFermentations.length} overdue
+              </span>
+            )}
+          </div>
         </div>
         <div className="stat-card">
           <div className="label">Distillation Runs</div>
@@ -70,6 +83,40 @@ export function Dashboard() {
         </div>
       </div>
 
+      {overdueFermentations.length > 0 && (
+        <div className="section" data-testid="dashboard-overdue-fermentations">
+          <h3 className="section-title">Overdue Fermentations</h3>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Wash batch</th>
+                  <th>Fermenter</th>
+                  <th>Expected done</th>
+                  <th>Overdue</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {overdueFermentations.map((row) => (
+                  <tr key={`${row.batchId}-${row.equipmentId}`} className="row-overdue">
+                    <td><strong>{row.batchNumber}</strong></td>
+                    <td>{row.equipmentName}</td>
+                    <td>{formatDateDisplay(row.expectedCompletionDate)}</td>
+                    <td><span className="badge badge-overdue">{formatDaysOverdue(row.daysOverdue)}</span></td>
+                    <td className="td-actions">
+                      <Link className="btn btn-sm btn-secondary" to={`/fermentation?logsEquipment=${row.equipmentId}`}>
+                        Logs
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       <div className="section">
         <h3 className="section-title">Recent Wash Batches</h3>
         {recentMashes.length === 0 ? (
@@ -87,15 +134,21 @@ export function Dashboard() {
                 </tr>
               </thead>
               <tbody>
-                {recentMashes.map((m) => (
-                  <tr key={m.id}>
-                    <td><strong>{m.batch_number}</strong></td>
-                    <td>{m.recipe_name}</td>
-                    <td className="num">{m.grain_lbs} lbs · {m.grain_type}</td>
-                    <td>{formatDateDisplay(m.start_date)}</td>
-                    <td><StatusBadge status={m.status} /></td>
-                  </tr>
-                ))}
+                {recentMashes.map((m) => {
+                  const daysOverdue = fermentationDaysOverdue(m.status, m.expected_completion_date, today);
+                  return (
+                    <tr key={m.id} className={daysOverdue > 0 ? 'row-overdue' : undefined}>
+                      <td><strong>{m.batch_number}</strong></td>
+                      <td>{m.recipe_name}</td>
+                      <td className="num">{m.grain_lbs} lbs · {m.grain_type}</td>
+                      <td>{formatDateDisplay(m.start_date)}</td>
+                      <td>
+                        <StatusBadge status={m.status} />
+                        {daysOverdue > 0 && <> <span className="badge badge-overdue">{formatDaysOverdue(daysOverdue)}</span></>}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

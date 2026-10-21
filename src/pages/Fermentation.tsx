@@ -25,7 +25,7 @@ import {
 import { formatDateDisplay } from '../lib/date-input';
 import { useEquipmentReturn } from '../lib/equipment-return';
 import { latestCompleted } from '../lib/recent-completed';
-import { actualStartBrixError, estimateAbvFromBrix, expectedCompletionDateError, expectedCompletionForTransfer, formatAbvEstimate, washMoveNeedsActualStartBrix } from '../lib/fermentation';
+import { actualStartBrixError, estimateAbvFromBrix, expectedCompletionDateError, expectedCompletionForTransfer, fermentationDaysOverdue, formatAbvEstimate, formatDaysOverdue, washMoveNeedsActualStartBrix } from '../lib/fermentation';
 import { SugarScaleField } from '../components/SugarScaleField';
 import { localIsoDate } from '../lib/planned-event-date';
 import { volumeChangeReasonError } from '../lib/tank-volume-variance';
@@ -196,6 +196,7 @@ export function Fermentation() {
     setShowForm(true);
   }
 
+  const today = localIsoDate();
   const leftovers = getDiscardedFermentations();
   const recentLeftovers = latestCompleted(
     leftovers,
@@ -612,8 +613,11 @@ export function Fermentation() {
                       const estAbv = row.startBrix != null && row.currentBrix != null
                         ? estimateAbvFromBrix(row.startBrix, row.currentBrix)
                         : null;
+                      const daysOverdue = row.distilled
+                        ? 0
+                        : fermentationDaysOverdue(row.status, row.batch.expected_completion_date, today);
                       return (
-                        <tr key={row.key}>
+                        <tr key={row.key} className={daysOverdue > 0 ? 'row-overdue' : undefined}>
                           <td><strong>{row.batch.batch_number}</strong></td>
                           <td>
                             {row.label ? (
@@ -628,7 +632,12 @@ export function Fermentation() {
                           <td className="num">{row.startBrix ?? '—'} → {row.currentBrix ?? '—'}</td>
                           <td className="num">{formatAbvEstimate(estAbv)}</td>
                           <td>{formatDateDisplay(row.batch.fermentation_start_date || row.batch.start_date)}</td>
-                          <td>{row.batch.expected_completion_date ? formatDateDisplay(row.batch.expected_completion_date) : '—'}</td>
+                          <td>
+                            {row.batch.expected_completion_date ? formatDateDisplay(row.batch.expected_completion_date) : '—'}
+                            {daysOverdue > 0 && (
+                              <div><span className="badge badge-overdue" data-testid="fermentation-overdue">{formatDaysOverdue(daysOverdue)}</span></div>
+                            )}
+                          </td>
                           <td><AssigneeCell name={row.batch.assigned_user_name} /></td>
                           <td className="td-actions">
                             <button className="btn btn-sm btn-secondary" onClick={() => openLogs(row)}>
