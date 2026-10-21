@@ -1,6 +1,7 @@
 import initSqlJs, { Database, SqlValue } from 'sql.js/dist/sql-wasm.js';
 import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 import { buildBlendRecipeSnapshot } from '../lib/blend-recipe-version';
+import { isSqliteFile, missingBackupTablesError } from '../lib/database-backup';
 import { buildCscFloorEquipmentRows, CSC_FLOOR_PLAN_SIZE } from '../lib/csc-floor-equipment';
 import { PACKAGING_BOTTLES } from '../lib/packaging-bottles';
 import type { BlendIngredientInput } from '../types';
@@ -1616,7 +1617,28 @@ export function exportDatabase(): Uint8Array {
 }
 
 export function importDatabase(data: Uint8Array): void {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = null;
+  localStorage.setItem(DB_STORAGE_KEY, toBase64(data));
   if (db) db.close();
   db = null;
-  localStorage.setItem(DB_STORAGE_KEY, toBase64(data));
+}
+
+/** Error message when `data` is not a distillery backup, or null when it can be restored. */
+export async function backupFileError(data: Uint8Array): Promise<string | null> {
+  if (!isSqliteFile(data)) return 'This file is not a distillery backup.';
+  const SQL = await initSqlJs({ locateFile: () => wasmUrl });
+  let candidate: Database | null = null;
+  try {
+    candidate = new SQL.Database(data);
+    const stmt = candidate.prepare("SELECT name FROM sqlite_master WHERE type = 'table'");
+    const tables: string[] = [];
+    while (stmt.step()) tables.push(String(stmt.get()[0]));
+    stmt.free();
+    return missingBackupTablesError(tables);
+  } catch {
+    return 'This backup file could not be read.';
+  } finally {
+    candidate?.close();
+  }
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import {
   approveUser,
@@ -10,7 +10,13 @@ import {
   updateAdminUser,
   type AuthUser,
 } from '../lib/auth-api';
-import { emptyAllHoldingTanks, getHoldingTanksWithContents, resetAllData } from '../db/queries';
+import {
+  downloadDatabaseBackup,
+  emptyAllHoldingTanks,
+  getHoldingTanksWithContents,
+  resetAllData,
+  restoreDatabaseBackup,
+} from '../db/queries';
 import { useAuth } from '../context/AuthContext';
 import { formatRecordedAt } from '../lib/date-input';
 import {
@@ -40,6 +46,9 @@ export function AdminUsers() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [restoring, setRestoring] = useState(false);
+  const [backupNote, setBackupNote] = useState('');
+  const restoreInputRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState(emptyForm);
   const [editUser, setEditUser] = useState<AuthUser | null>(null);
   const [editPermissions, setEditPermissions] = useState<PermissionKey[]>([]);
@@ -211,6 +220,30 @@ export function AdminUsers() {
       return;
     }
     void resetAllData();
+  }
+
+  function handleDownloadBackup() {
+    const fileName = downloadDatabaseBackup();
+    setBackupNote(`Backup downloaded as ${fileName}.`);
+  }
+
+  async function handleRestoreFile(file: File | undefined) {
+    if (restoreInputRef.current) restoreInputRef.current.value = '';
+    if (!file) return;
+    if (!confirm(
+      `Restore from ${file.name}?\n\n`
+      + 'This replaces ALL distillery data in this browser with the backup. '
+      + 'A backup of the current data downloads first so you can undo this.',
+    )) {
+      return;
+    }
+    setRestoring(true);
+    downloadDatabaseBackup('csc-distillery-before-restore');
+    const restoreError = await restoreDatabaseBackup(file);
+    if (restoreError) {
+      setRestoring(false);
+      alert(restoreError);
+    }
   }
 
   function handleEmptyAllTanks() {
@@ -408,6 +441,36 @@ export function AdminUsers() {
 
       <div className="card admin-section" data-testid="admin-data-management">
         <h2 className="admin-section-title">Data Management</h2>
+        <h3 className="admin-subtitle">Backup</h3>
+        <p className="admin-hint">
+          Distillery records are kept in this browser only. Download a backup often and keep it somewhere safe.
+          Restoring replaces everything in this browser with the backup file.
+        </p>
+        <div className="admin-data-actions">
+          <button type="button" className="btn btn-primary" onClick={handleDownloadBackup} data-testid="download-backup">
+            Download backup
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            disabled={restoring}
+            onClick={() => restoreInputRef.current?.click()}
+            data-testid="restore-backup"
+          >
+            {restoring ? 'Restoring…' : 'Restore backup'}
+          </button>
+          <input
+            ref={restoreInputRef}
+            type="file"
+            accept=".sqlite,.db,application/vnd.sqlite3,application/x-sqlite3"
+            hidden
+            data-testid="restore-backup-file"
+            onChange={(e) => void handleRestoreFile(e.target.files?.[0])}
+          />
+        </div>
+        {backupNote && <p className="admin-hint" data-testid="backup-note">{backupNote}</p>}
+
+        <h3 className="admin-subtitle">Reset</h3>
         <p className="admin-hint">
           Reset the app to fresh sample data, or empty every holding tank and leave the other records in place.
         </p>

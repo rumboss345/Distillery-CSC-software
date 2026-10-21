@@ -87,7 +87,8 @@ import type {
   EquipmentMaintenanceLogView,
   EquipmentMaintenanceStatus,
 } from '../types';
-import { initDatabase, clearAllData } from './database';
+import { initDatabase, clearAllData, backupFileError, exportDatabase, importDatabase } from './database';
+import { backupFileName, downloadBytes } from '../lib/database-backup';
 import type {
   Barrel,
   BarrelFill,
@@ -382,6 +383,27 @@ export function useRefreshKey() {
 export async function resetAllData(): Promise<void> {
   await clearAllData();
   window.location.reload();
+}
+
+/** Saves every distillery record in this browser to a file. */
+export function downloadDatabaseBackup(prefix?: string): string {
+  const fileName = backupFileName(new Date(), prefix);
+  downloadBytes(exportDatabase(), fileName);
+  return fileName;
+}
+
+/** Replaces every record in this browser with a backup file. Returns an error message, or reloads. */
+export async function restoreDatabaseBackup(file: Blob): Promise<string | null> {
+  const data = new Uint8Array(await file.arrayBuffer());
+  const error = await backupFileError(data);
+  if (error) return error;
+  try {
+    importDatabase(data);
+  } catch {
+    return 'The backup is too large to store in this browser. Nothing was changed.';
+  }
+  window.location.reload();
+  return null;
 }
 
 // ── Inventory ──────────────────────────────────────────────
