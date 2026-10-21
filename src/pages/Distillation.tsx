@@ -1559,7 +1559,7 @@ export function Distillation() {
               />
             </div>
             <div className="form-group">
-              <label>{isTankSourcedRun(runForm.run_type) ? 'Tails to charge (gal)' : 'Charge Volume (gal)'}</label>
+              <label>Charge volume (gal)</label>
               <input
                 type="number"
                 step="0.1"

@@ -139,7 +139,7 @@ export function planSpiritChargeProof(input: SpiritChargeProofInput): SpiritChar
   const tankName = input.tankName?.trim() || 'The tails tank';
 
   if (!(input.spiritGal > 0)) {
-    return { ...base, ok: false, message: 'Enter how many gallons of tails to charge.' };
+    return { ...base, ok: false, message: 'Enter the charge volume in gallons.' };
   }
   if (!(input.spiritAbvPercent > 0)) {
     return { ...base, ok: false, message: 'Enter the tails ABV before proofing.' };
