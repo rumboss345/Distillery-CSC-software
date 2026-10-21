@@ -392,6 +392,11 @@ export function downloadDatabaseBackup(prefix?: string): string {
   return fileName;
 }
 
+/** Error message when the file cannot be restored, or null when it is a distillery backup. */
+export async function checkDatabaseBackup(file: Blob): Promise<string | null> {
+  return backupFileError(new Uint8Array(await file.arrayBuffer()));
+}
+
 /** Replaces every record in this browser with a backup file. Returns an error message, or reloads. */
 export async function restoreDatabaseBackup(file: Blob): Promise<string | null> {
   const data = new Uint8Array(await file.arrayBuffer());

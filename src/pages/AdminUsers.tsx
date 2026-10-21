@@ -11,6 +11,7 @@ import {
   type AuthUser,
 } from '../lib/auth-api';
 import {
+  checkDatabaseBackup,
   downloadDatabaseBackup,
   emptyAllHoldingTanks,
   getHoldingTanksWithContents,
@@ -230,6 +231,11 @@ export function AdminUsers() {
   async function handleRestoreFile(file: File | undefined) {
     if (restoreInputRef.current) restoreInputRef.current.value = '';
     if (!file) return;
+    const fileError = await checkDatabaseBackup(file);
+    if (fileError) {
+      alert(fileError);
+      return;
+    }
     if (!confirm(
       `Restore from ${file.name}?\n\n`
       + 'This replaces ALL distillery data in this browser with the backup. '
