@@ -7,6 +7,7 @@ import { limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
 import { defaultAssignee } from '../lib/assignee';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
 import { formatDateDisplay, formatRecordedAt } from '../lib/date-input';
+import { useEquipmentReturn } from '../lib/equipment-return';
 import { roundAbv, roundVolume } from '../lib/reporting/alcohol-units';
 import { formatDistillationAlcoholResult, formatDistillationLossSummary } from '../lib/distillation-loss';
 import { latestCompleted } from '../lib/recent-completed';
@@ -151,6 +152,7 @@ interface SourceTankLine {
 export function Distillation() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { returnToEquipment } = useEquipmentReturn();
   const calendarPlanHandled = useRef(false);
   const { key, refresh } = useRefreshKey();
   const runs = getDistillationRuns();
@@ -764,7 +766,7 @@ export function Distillation() {
       }
       try {
         saveDistillationRun(runForm, editRunId);
-        setShowRunForm(false);
+        closeRunForm();
         refresh();
       } catch (error) {
         alert(error instanceof Error ? error.message : 'Could not save distillation run.');
@@ -847,7 +849,7 @@ export function Distillation() {
           savedRun.run_type === 'gin' ? botanicals : undefined,
           tankSources,
         );
-        setShowRunForm(false);
+        closeRunForm();
         refresh();
       } catch (error) {
         alert(error instanceof Error ? error.message : 'Could not save distillation run.');
@@ -916,6 +918,11 @@ export function Distillation() {
 
   const suggestCutTank = (cutType: CutType, run?: DistillationRun, runCuts = cuts) =>
     defaultTankForCutType(cutType, { run, existingCuts: runCuts, excludeCutId: editCutId });
+
+  const closeRunForm = () => {
+    setShowRunForm(false);
+    returnToEquipment();
+  };
 
   const closeCutForm = () => {
     setShowCutForm(false);
@@ -1088,6 +1095,7 @@ export function Distillation() {
     }
     closeCutForm();
     refresh();
+    returnToEquipment();
   };
 
   const tankOptionLabel = (tank: { id: number; name: string }) => tankDropdownLabel(tank.name, tank.id);
@@ -1249,6 +1257,7 @@ export function Distillation() {
               next.delete('cutsRun');
               setSearchParams(next, { replace: true });
             }
+            returnToEquipment();
           }}
         >
           <div className="cuts-modal-toolbar">
@@ -1330,7 +1339,7 @@ export function Distillation() {
       {showRunForm && (
         <Modal
           title={editRunId ? 'Edit Run' : runFormTitle(runForm.run_type)}
-          onClose={() => setShowRunForm(false)}
+          onClose={closeRunForm}
         >
           <div className="form-grid">
             <div className="form-group">
@@ -1892,7 +1901,7 @@ export function Distillation() {
             {' '}A <strong>planned</strong> run is view-only and does not lock the still, fermenter, or tanks. Setting status to <strong>running</strong> marks the still as in use.
           </p>
           <div className="form-actions">
-            <button className="btn btn-secondary" onClick={() => setShowRunForm(false)}>Cancel</button>
+            <button className="btn btn-secondary" onClick={closeRunForm}>Cancel</button>
             <button className="btn btn-primary" onClick={handleSaveRun}>Save Run</button>
           </div>
         </Modal>

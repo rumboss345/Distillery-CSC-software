@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   getFloorPlans,
   getFloorPlan,
@@ -66,11 +67,16 @@ export function FloorPlanPage() {
   const isAdmin = user?.role === 'admin';
   const { key, refresh } = useRefreshKey();
   const plans = getFloorPlans();
-  const [activePlanId, setActivePlanId] = useState(plans[0]?.id ?? 1);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [returnedEquipment] = useState(() => {
+    const id = Number(searchParams.get('equipment')) || 0;
+    return id ? getAllFloorEquipmentWithContext().find((e) => e.id === id) ?? null : null;
+  });
+  const [activePlanId, setActivePlanId] = useState(returnedEquipment?.floor_plan_id ?? plans[0]?.id ?? 1);
   const plan = getFloorPlan(activePlanId);
   const equipment = getFloorEquipmentWithContext(activePlanId);
 
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(returnedEquipment?.id ?? null);
   const [showForm, setShowForm] = useState(false);
   const [showPageForm, setShowPageForm] = useState(false);
   const [editId, setEditId] = useState<number | undefined>();
@@ -95,6 +101,13 @@ export function FloorPlanPage() {
     setSelectedId(id);
     setSelectedIntakeKey(null);
   };
+
+  useEffect(() => {
+    if (!searchParams.has('equipment')) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete('equipment');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   useEffect(() => {
     if (!draggingEquipmentId) {

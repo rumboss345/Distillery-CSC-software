@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { useEquipmentReturn } from '../lib/equipment-return';
 import {
   getAllEquipmentMaintenanceLog,
   getAllFloorEquipment,
@@ -32,6 +33,7 @@ const emptyAssignee = (): AssignedEmployee => ({
 
 export function EquipmentMaintenance() {
   const [searchParams] = useSearchParams();
+  const { returnToEquipment } = useEquipmentReturn();
   const focusEquipmentId = Number(searchParams.get('equipment')) || 0;
   const { key, refresh } = useRefreshKey();
   const equipment = getAllFloorEquipment();
@@ -94,6 +96,7 @@ export function EquipmentMaintenance() {
       );
       closeEdit();
       refresh();
+      returnToEquipment();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Could not save maintenance.');
     }
@@ -112,6 +115,7 @@ export function EquipmentMaintenance() {
       );
       setCleanItem(null);
       refresh();
+      returnToEquipment();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Could not mark equipment clean.');
     }
@@ -132,6 +136,7 @@ export function EquipmentMaintenance() {
       );
       setReturnItem(null);
       refresh();
+      returnToEquipment();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Could not return to service.');
     }

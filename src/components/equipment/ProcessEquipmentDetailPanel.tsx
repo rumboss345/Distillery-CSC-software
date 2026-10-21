@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
+import { equipmentReturnState } from '../../lib/equipment-return';
 import { HoldingTankIntakeHistory } from '../HoldingTankIntakeHistory';
 import { Modal } from '../Modal';
 import { StatusBadge } from '../StatusBadge';
@@ -175,7 +176,7 @@ export function ProcessEquipmentDetailPanel({
           <strong>{equipmentCleaningStatusLabel()}</strong>
           <p className="field-hint" style={{ margin: '0.35rem 0 0' }}>
             Mark clean before the next batch, here or on{' '}
-            <Link to="/equipment-maintenance">Equipment Maintenance</Link>.
+            <Link to={`/equipment-maintenance?equipment=${equipment.id}`} state={equipmentReturnState(equipment.id)}>Equipment Maintenance</Link>.
           </p>
         </div>
       )}
@@ -302,7 +303,12 @@ export function ProcessEquipmentDetailPanel({
           )}
           <div className="process-next-actions-row">
             {nextMenu.next.map((action) => (
-              <Link key={action.key} className="btn btn-sm btn-secondary" to={action.to}>
+              <Link
+                key={action.key}
+                className="btn btn-sm btn-secondary"
+                to={action.to}
+                state={equipmentReturnState(equipment.id)}
+              >
                 {action.label}
               </Link>
             ))}
@@ -375,6 +381,7 @@ export function ProcessEquipmentDetailPanel({
               <Link
                 className="btn btn-sm btn-primary"
                 to={`/distillation?cutsRun=${viewedIntake.distillationRunId}`}
+                state={equipmentReturnState(equipment.id)}
                 onClick={() => setViewedIntake(null)}
               >
                 {viewedIntake.kind === 'stillage' ? 'View run' : 'View cuts'}

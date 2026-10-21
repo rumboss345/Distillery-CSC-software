@@ -23,6 +23,7 @@ import {
   useRefreshKey,
 } from '../db/queries';
 import { formatDateDisplay } from '../lib/date-input';
+import { useEquipmentReturn } from '../lib/equipment-return';
 import { latestCompleted } from '../lib/recent-completed';
 import { actualStartBrixError, estimateAbvFromBrix, expectedCompletionDateError, expectedCompletionForTransfer, formatAbvEstimate, washMoveNeedsActualStartBrix } from '../lib/fermentation';
 import { SugarScaleField } from '../components/SugarScaleField';
@@ -109,6 +110,7 @@ export function Fermentation() {
   const { user } = useAuth();
   const changedBy = user?.name?.trim() || user?.email || 'Unknown';
   const [searchParams, setSearchParams] = useSearchParams();
+  const { returnToEquipment } = useEquipmentReturn();
   const { key, refresh } = useRefreshKey();
   const batches = getMashBatches();
   const allAssignments = getAllMashFermenterAssignments();
@@ -302,6 +304,7 @@ export function Fermentation() {
       next.delete('wash');
       setSearchParams(next, { replace: true });
     }
+    returnToEquipment();
   };
 
   const openNew = (batch: MashBatch) => {
@@ -526,6 +529,7 @@ export function Fermentation() {
       next.delete('logsEquipment');
       setSearchParams(next, { replace: true });
     }
+    returnToEquipment();
   };
 
   const deleteMessage = (row: FermentationRow) => {
@@ -749,7 +753,10 @@ export function Fermentation() {
             volumeGal={logTarget.volumeGal}
             startBrix={logTarget.startBrix}
             refreshKey={key}
-            onAdded={refresh}
+            onAdded={() => {
+              refresh();
+              returnToEquipment();
+            }}
             readOnly={logTarget.readOnly}
             distilled={logTarget.distilled}
           />
