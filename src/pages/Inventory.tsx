@@ -9,6 +9,7 @@ import {
   useRefreshKey,
 } from '../db/queries';
 import { Modal } from '../components/Modal';
+import { inventoryCategoryLabel } from '../lib/inventory-units';
 import { packagingItemSizeMl } from '../lib/packaging-bottles';
 import type { InventoryCategory, InventoryItem } from '../types';
 
@@ -165,14 +166,14 @@ export function Inventory() {
             className={`inventory-category${filter === c ? ' active' : ''}`}
             onClick={() => setFilter(c)}
           >
-            {c}
+            {inventoryCategoryLabel(c)}
           </button>
         ))}
       </div>
 
       {filtered.length === 0 ? (
         <div className="empty-state">
-          <p>No inventory items{filter !== 'all' ? ` in category "${filter}"` : ''}.</p>
+          <p>No inventory items{filter !== 'all' ? ` in category "${inventoryCategoryLabel(filter)}"` : ''}.</p>
         </div>
       ) : (
         <div className="table-wrap">
@@ -200,7 +201,7 @@ export function Inventory() {
                         <div className="field-hint">{Math.round(i.package_size_ml)} ml</div>
                       )}
                     </td>
-                    <td>{i.category}</td>
+                    <td>{inventoryCategoryLabel(i.category)}</td>
                     <td className={low ? 'num low-stock' : 'num'}>{i.quantity} {i.unit}</td>
                     <td className="num">{i.reorder_level} {i.unit}</td>
                     <td>
@@ -244,7 +245,7 @@ export function Inventory() {
                   });
                 }}
               >
-                {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+                {categories.map((c) => <option key={c} value={c}>{inventoryCategoryLabel(c)}</option>)}
               </select>
             </div>
             {form.category === 'packaging' && (

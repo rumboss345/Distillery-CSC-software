@@ -3,6 +3,7 @@ import { format } from 'date-fns';
 import { getProductionSummary, getMashBatches, getDistillationRuns, getBarrels, getInventoryItems, barrelBlendProductName } from '../db/queries';
 import { StatusBadge } from '../components/StatusBadge';
 import { useAuth } from '../context/AuthContext';
+import { inventoryCategoryLabel } from '../lib/inventory-units';
 import { formatDateDisplay } from '../lib/date-input';
 import { PROCESS_STAGE_LABELS } from '../lib/permissions';
 
@@ -180,7 +181,7 @@ export function Dashboard() {
                 {lowStock.map((i) => (
                   <tr key={i.id}>
                     <td><strong>{i.name}</strong></td>
-                    <td>{i.category}</td>
+                    <td>{inventoryCategoryLabel(i.category)}</td>
                     <td className="low-stock num">{i.quantity} {i.unit}</td>
                     <td className="num">{i.reorder_level} {i.unit}</td>
                   </tr>

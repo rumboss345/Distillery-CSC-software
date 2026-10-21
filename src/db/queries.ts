@@ -80,7 +80,7 @@ import {
   buildBlendRecipeSnapshot,
   parseBlendRecipeSnapshot,
 } from '../lib/blend-recipe-version';
-import { inventoryQuantityDelta } from '../lib/inventory-units';
+import { inventoryCategoryLabel, inventoryQuantityDelta } from '../lib/inventory-units';
 import { mashStatusFromFermentations } from '../lib/wash-stage';
 import type {
   EquipmentMaintenanceLogEventType,
@@ -560,7 +560,7 @@ export function addInventoryCategory(name: string): string {
     [normalized],
   );
   if (existing) {
-    throw new Error(`Category "${existing.name}" already exists.`);
+    throw new Error(`Category "${inventoryCategoryLabel(existing.name)}" already exists.`);
   }
 
   insertRow('INSERT INTO inventory_categories (name) VALUES (?)', [normalized]);
