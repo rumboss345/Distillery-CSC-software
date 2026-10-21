@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { useEquipmentReturn } from '../lib/equipment-return';
 import { useAuth } from '../context/AuthContext';
 import { DatePicker } from '../components/DatePicker';
 import { AbvVolumeTemperatureFields } from '../components/AbvVolumeTemperatureFields';
@@ -99,6 +100,11 @@ export function TankTransfer() {
   const isAdmin = user?.role === 'admin';
   const changedBy = user?.name?.trim() || user?.email || 'Unknown';
   const [searchParams, setSearchParams] = useSearchParams();
+  const { returnToEquipment } = useEquipmentReturn();
+  const finishForm = (hide: (show: boolean) => void) => {
+    hide(false);
+    returnToEquipment();
+  };
   const calendarPlanHandled = useRef(false);
   const { key, refresh } = useRefreshKey();
   const spiritTransferVessels = getSpiritTransferVessels();
@@ -395,7 +401,7 @@ export function TankTransfer() {
         transfer_date: transferForm.transfer_date,
         notes: transferForm.notes,
       });
-      setShowTransferForm(false);
+      finishForm(setShowTransferForm);
       refresh();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Could not save transfer.');
@@ -446,7 +452,7 @@ export function TankTransfer() {
         notes: waterDownForm.notes,
         changedBy,
       });
-      setShowWaterDown(false);
+      finishForm(setShowWaterDown);
       refresh();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Could not water down this tank.');
@@ -523,7 +529,7 @@ export function TankTransfer() {
         notes: fermenterForm.notes,
         changedBy,
       });
-      setShowFermenterForm(false);
+      finishForm(setShowFermenterForm);
       refresh();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Could not transfer fermenter wash.');
@@ -982,7 +988,7 @@ export function TankTransfer() {
       </div>
 
       {showTransferForm && (
-        <Modal title="Tank Transfer" onClose={() => setShowTransferForm(false)}>
+        <Modal title="Tank Transfer" onClose={() => finishForm(setShowTransferForm)}>
           <div className="form-grid">
             <div className="form-group">
               <label>Transfer Date</label>
@@ -1085,7 +1091,7 @@ export function TankTransfer() {
             </div>
           </div>
           <div className="form-actions">
-            <button type="button" className="btn btn-secondary" onClick={() => setShowTransferForm(false)}>Cancel</button>
+            <button type="button" className="btn btn-secondary" onClick={() => finishForm(setShowTransferForm)}>Cancel</button>
             <button type="button" className="btn btn-primary" onClick={handleSaveTransfer}>
               {transferForm.dest_tank_equipment_id === STILLAGE_DISCARD_DESTINATION ? 'Discard' : 'Transfer'}
             </button>
@@ -1094,7 +1100,7 @@ export function TankTransfer() {
       )}
 
       {showFermenterForm && (
-        <Modal title="Transfer fermenter wash" onClose={() => setShowFermenterForm(false)}>
+        <Modal title="Transfer fermenter wash" onClose={() => finishForm(setShowFermenterForm)}>
           <div className="form-grid">
             <div className="form-group">
               <label>Transfer Date</label>
@@ -1188,7 +1194,7 @@ export function TankTransfer() {
             </div>
           </div>
           <div className="form-actions">
-            <button type="button" className="btn btn-secondary" onClick={() => setShowFermenterForm(false)}>Cancel</button>
+            <button type="button" className="btn btn-secondary" onClick={() => finishForm(setShowFermenterForm)}>Cancel</button>
             <button type="button" className="btn btn-primary" onClick={handleSaveFermenterTransfer}>
               {fermenterForm.dest_equipment_id === DISCARD_DESTINATION ? 'Record leftovers' : 'Transfer'}
             </button>
@@ -1197,7 +1203,7 @@ export function TankTransfer() {
       )}
 
       {showWaterDown && (
-        <Modal title="Water down in the tank" onClose={() => setShowWaterDown(false)}>
+        <Modal title="Water down in the tank" onClose={() => finishForm(setShowWaterDown)}>
           <p className="field-hint" style={{ marginTop: 0 }}>
             Add water to the alcohol already in this tank. The spirit stays here.
             The finished gallons include contraction, so the tank rises by less than the water added.
@@ -1306,7 +1312,7 @@ export function TankTransfer() {
             </p>
           )}
           <div className="form-actions">
-            <button type="button" className="btn btn-secondary" onClick={() => setShowWaterDown(false)}>Cancel</button>
+            <button type="button" className="btn btn-secondary" onClick={() => finishForm(setShowWaterDown)}>Cancel</button>
             <button type="button" className="btn btn-primary" data-testid="water-down-save" onClick={handleSaveWaterDown}>
               Water down
             </button>

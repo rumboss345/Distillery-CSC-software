@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useEquipmentReturn } from '../lib/equipment-return';
 import { RecentCompletedNote } from '../components/RecentCompletedNote';
 import {
   computeBlendFormulation,
@@ -453,6 +454,7 @@ function buildSavePayload(
 export function Blending() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { returnToEquipment } = useEquipmentReturn();
   const { key, refresh } = useRefreshKey();
   const blends = getBlendProducts();
   const blendRecipes = getBlendRecipes();
@@ -908,8 +910,10 @@ export function Blending() {
       const stillageTank = spiritTankEquipmentType(tankId) === 'stillage_tank';
       if (!stillageTank) prefilledTankId.current = tankId;
       const tankRecipes = blendRecipes.filter((recipe) => (recipe.source_type ?? 'tank') !== 'barrel');
+      let noRecipes = false;
       if (tankRecipes.length === 0) {
         alert('Create a tank blend recipe on the Recipes page before starting a batch.');
+        noRecipes = true;
       } else if (stillageTank) {
         setWizardSpiritSource('tank');
         resetWizardForNewBatch();
@@ -931,6 +935,7 @@ export function Blending() {
       const next = new URLSearchParams(searchParams);
       next.delete('tank');
       setSearchParams(next, { replace: true });
+      if (noRecipes) returnToEquipment();
       return;
     }
     const plan = readCalendarPlanQuery(searchParams);
@@ -961,7 +966,7 @@ export function Blending() {
       setWizardStep(2);
       setShowWizard(true);
     }
-  }, [searchParams, setSearchParams, blendRecipes, user]);
+  }, [searchParams, setSearchParams, blendRecipes, user, returnToEquipment]);
 
   const calendarRecordHandled = useRef(false);
   useEffect(() => {
@@ -2753,6 +2758,10 @@ export function Blending() {
   );
   const listedBlends = [...inProgressBlends, ...completedBlends.shown];
   const currentStep = WIZARD_STEPS[wizardStep - 1];
+  const closeWizard = () => {
+    setShowWizard(false);
+    returnToEquipment();
+  };
   const isLocked = form.status === 'executed' || form.status === 'bottled';
 
   return (
@@ -2848,7 +2857,7 @@ export function Blending() {
       )}
 
       {showWizard && (
-        <Modal title={isLocked ? 'Produced batch' : currentStep.title} onClose={() => setShowWizard(false)} wide={wizardStep === 5}>
+        <Modal title={isLocked ? 'Produced batch' : currentStep.title} onClose={closeWizard} wide={wizardStep === 5}>
           <div className="blend-wizard">
             <nav className="blend-wizard-steps" aria-label="Batch progress">
               {WIZARD_STEPS.map((step) => (
@@ -2896,7 +2905,7 @@ export function Blending() {
                 <button type="button" className="btn btn-secondary" onClick={goBack}>Back to lab test</button>
               )}
               {(wizardStep === 8 || wizardStep === 9) && (
-                <button type="button" className="btn btn-secondary" onClick={() => setShowWizard(false)}>Close</button>
+                <button type="button" className="btn btn-secondary" onClick={closeWizard}>Close</button>
               )}
             </div>
           </div>

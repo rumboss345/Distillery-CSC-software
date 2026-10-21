@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useEquipmentReturn } from '../lib/equipment-return';
 import { useAuth } from '../context/AuthContext';
 import { RecentCompletedNote } from '../components/RecentCompletedNote';
 import {
@@ -115,6 +116,11 @@ export function Bottling() {
   const { user } = useAuth();
   const changedBy = user?.name?.trim() || user?.email || 'Unknown';
   const [searchParams, setSearchParams] = useSearchParams();
+  const { returnToEquipment } = useEquipmentReturn();
+  const closeForm = () => {
+    setShowForm(false);
+    returnToEquipment();
+  };
   const calendarPlanHandled = useRef(false);
   const { key, refresh } = useRefreshKey();
   const runs = getBottlingRuns();
@@ -507,7 +513,7 @@ export function Bottling() {
       alert(err instanceof Error ? err.message : 'Could not save bottling run.');
       return;
     }
-    setShowForm(false);
+    closeForm();
     refresh();
   };
 
@@ -641,7 +647,7 @@ export function Bottling() {
       )}
 
       {showForm && (
-        <Modal title={editId ? 'Edit Bottling Run' : 'New Bottling Run'} onClose={() => setShowForm(false)}>
+        <Modal title={editId ? 'Edit Bottling Run' : 'New Bottling Run'} onClose={closeForm}>
           <div className="form-grid">
             <div className="form-group">
               <label>Batch Number</label>
@@ -951,7 +957,7 @@ export function Bottling() {
             </div>
           </div>
           <div className="form-actions">
-            <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+            <button type="button" className="btn btn-secondary" onClick={closeForm}>Cancel</button>
             <button type="button" className="btn btn-primary" onClick={handleSave}>Save</button>
           </div>
         </Modal>
