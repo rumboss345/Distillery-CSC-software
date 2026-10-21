@@ -214,3 +214,67 @@ export function estimateSugarWash(sugarLbs: number, totalVolumeGal: number): Sug
     potentialAbv: Math.round(potentialAbv * 10) / 10,
   };
 }
+
+/** Whole days a fermenting wash is past its expected done date, or 0 when it is not overdue. */
+export function fermentationDaysOverdue(
+  status: string | null | undefined,
+  expectedCompletionDate: string | null | undefined,
+  today: string,
+): number {
+  if (status !== 'fermenting') return 0;
+  const expected = expectedCompletionDate?.trim().slice(0, 10) ?? '';
+  if (!isIsoDate(expected) || !isIsoDate(today) || today <= expected) return 0;
+  const [ey, em, ed] = expected.split('-').map(Number);
+  const [ty, tm, td] = today.split('-').map(Number);
+  return Math.round((Date.UTC(ty, tm - 1, td) - Date.UTC(ey, em - 1, ed)) / 86_400_000);
+}
+
+export function formatDaysOverdue(days: number): string {
+  return `Overdue ${days} day${days === 1 ? '' : 's'}`;
+}
+
+export interface OverdueFermentation {
+  batchId: number;
+  batchNumber: string;
+  equipmentId: number;
+  equipmentName: string;
+  expectedCompletionDate: string;
+  daysOverdue: number;
+}
+
+/** Fermenters still fermenting past their wash's expected done date, most overdue first. */
+export function listOverdueFermentations(
+  assignments: readonly {
+    mash_batch_id: number;
+    floor_equipment_id: number;
+    equipment_name: string;
+    volume_gal: number;
+    status?: string | null;
+  }[],
+  batches: readonly {
+    id: number;
+    batch_number: string;
+    status: string;
+    expected_completion_date: string | null;
+  }[],
+  today: string,
+): OverdueFermentation[] {
+  const batchById = new Map(batches.map((batch) => [batch.id, batch]));
+  const overdue: OverdueFermentation[] = [];
+  for (const assignment of assignments) {
+    const batch = batchById.get(assignment.mash_batch_id);
+    if (!batch || !(assignment.volume_gal > 0.01)) continue;
+    if (assignment.status === 'complete' || assignment.status === 'discarded') continue;
+    const daysOverdue = fermentationDaysOverdue(batch.status, batch.expected_completion_date, today);
+    if (daysOverdue <= 0) continue;
+    overdue.push({
+      batchId: batch.id,
+      batchNumber: batch.batch_number,
+      equipmentId: assignment.floor_equipment_id,
+      equipmentName: assignment.equipment_name,
+      expectedCompletionDate: batch.expected_completion_date ?? '',
+      daysOverdue,
+    });
+  }
+  return overdue.sort((a, b) => b.daysOverdue - a.daysOverdue || a.equipmentName.localeCompare(b.equipmentName));
+}

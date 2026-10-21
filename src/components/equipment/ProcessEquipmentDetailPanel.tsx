@@ -25,8 +25,9 @@ import {
   equipmentBlocksProduction,
   maintenanceStatusLabel,
 } from '../../lib/equipment-maintenance';
-import { formatRecordedAt } from '../../lib/date-input';
-import { FERMENTATION_READY_MAX_BRIX, isBrixReadyForDistillation } from '../../lib/fermentation';
+import { formatDateDisplay, formatRecordedAt } from '../../lib/date-input';
+import { FERMENTATION_READY_MAX_BRIX, fermentationDaysOverdue, formatDaysOverdue, isBrixReadyForDistillation } from '../../lib/fermentation';
+import { localIsoDate } from '../../lib/planned-event-date';
 import type { AssignedEmployee } from '../../lib/assignee';
 
 const INTAKE_KIND_LABELS: Record<HoldingTankIntakeEntry['kind'], string> = {
@@ -102,6 +103,9 @@ export function ProcessEquipmentDetailPanel({
   const isStill = equipment.equipment_type === 'pot_still' || equipment.equipment_type === 'column_still';
   const stillRun = isStill ? getDistillationRunForCuts(equipment.name) ?? null : null;
   const fermenting = equipment.equipment_type === 'fermenter' && equipment.active_mash_status === 'fermenting';
+  const daysOverdue = equipment.equipment_type === 'fermenter'
+    ? fermentationDaysOverdue(equipment.active_mash_status, equipment.active_expected_completion_date, localIsoDate())
+    : 0;
   const distilling = stillRun?.status === 'running';
   const nextMenu = buildProcessEquipmentContextMenu({
     id: equipment.id,
@@ -235,6 +239,18 @@ export function ProcessEquipmentDetailPanel({
               {equipment.active_batch_number}
               {equipment.active_volume_gal ? ` · ${equipment.active_volume_gal} gal` : ''}
               {equipment.active_latest_brix != null ? ` · ${equipment.active_latest_brix.toFixed(1)}° Brix` : ''}
+            </dd>
+          </>
+        )}
+
+        {equipment.equipment_type === 'fermenter' && equipment.active_batch_number && equipment.active_expected_completion_date && (
+          <>
+            <dt>Expected done</dt>
+            <dd>
+              {formatDateDisplay(equipment.active_expected_completion_date)}
+              {daysOverdue > 0 && (
+                <> <span className="badge badge-overdue" data-testid="panel-overdue">{formatDaysOverdue(daysOverdue)}</span></>
+              )}
             </dd>
           </>
         )}

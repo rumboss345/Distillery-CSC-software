@@ -1311,3 +1311,24 @@
     padding: 0.45rem 0.55rem;
   }
 }
+
+.process-equipment-overdue-badge {
+  position: absolute;
+  right: 2px;
+  top: 2px;
+  z-index: 4;
+  padding: 0.1rem 0.35rem;
+  background: rgba(185, 28, 28, 0.92);
+  border: 1px solid #fca5a5;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.process-equipment-node--overdue .process-equipment-overdue-badge {
+  box-shadow: 0 0 0 2px rgba(185, 28, 28, 0.25);
+}

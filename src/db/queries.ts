@@ -6347,9 +6347,11 @@ export function getFloorEquipmentWithContext(planId = 1): FloorEquipmentView[] {
       status: string;
       actual_brix: number | null;
       target_brix: number | null;
+      expected_completion_date: string | null;
     }>(`
       SELECT m.id AS mash_batch_id, m.batch_number, a.volume_gal,
-             COALESCE(a.status, m.status) as status, m.actual_brix, m.target_brix
+             COALESCE(a.status, m.status) as status, m.actual_brix, m.target_brix,
+             m.expected_completion_date
       FROM mash_fermenter_assignments a
       JOIN mash_batches m ON m.id = a.mash_batch_id
       WHERE a.floor_equipment_id = ? AND a.volume_gal > 0.01
@@ -6367,6 +6369,7 @@ export function getFloorEquipmentWithContext(planId = 1): FloorEquipmentView[] {
       active_mash_status: info.status as FloorEquipmentView['active_mash_status'],
       active_start_brix,
       active_latest_brix,
+      active_expected_completion_date: info.expected_completion_date,
     };
   });
 }

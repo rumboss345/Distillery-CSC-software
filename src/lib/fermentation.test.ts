@@ -16,6 +16,9 @@ import {
   isBrixReadyForDistillation,
   sgToBrix,
   washMoveNeedsActualStartBrix,
+  fermentationDaysOverdue,
+  formatDaysOverdue,
+  listOverdueFermentations,
 } from './fermentation';
 
 describe('actual start Brix when a wash moves to fermenting', () => {
@@ -145,5 +148,48 @@ describe('gravity or Brix fermentation readings', () => {
     expect(gravity).toBe(brixToSg(brix).toFixed(3));
     expect(Math.abs((back ?? 0) - brix)).toBeLessThanOrEqual(0.1);
     expect(formatFermentationReading('brix', brix)).toBe('16.4');
+  });
+});
+
+describe('fermentationDaysOverdue', () => {
+  it('counts days past expected done while still fermenting', () => {
+    expect(fermentationDaysOverdue('fermenting', '2026-10-16', '2026-10-21')).toBe(5);
+    expect(fermentationDaysOverdue('fermenting', '2026-10-20', '2026-10-21')).toBe(1);
+    expect(formatDaysOverdue(1)).toBe('Overdue 1 day');
+    expect(formatDaysOverdue(5)).toBe('Overdue 5 days');
+  });
+
+  it('is not overdue on or before the expected day, when finished, or without a date', () => {
+    expect(fermentationDaysOverdue('fermenting', '2026-10-21', '2026-10-21')).toBe(0);
+    expect(fermentationDaysOverdue('fermenting', '2026-10-25', '2026-10-21')).toBe(0);
+    expect(fermentationDaysOverdue('complete', '2026-10-16', '2026-10-21')).toBe(0);
+    expect(fermentationDaysOverdue('fermenting', null, '2026-10-21')).toBe(0);
+    expect(fermentationDaysOverdue('fermenting', '', '2026-10-21')).toBe(0);
+  });
+});
+
+describe('listOverdueFermentations', () => {
+  const batches = [
+    { id: 1, batch_number: 'M-1', status: 'fermenting', expected_completion_date: '2026-10-16' },
+    { id: 2, batch_number: 'M-2', status: 'fermenting', expected_completion_date: '2026-10-25' },
+    { id: 3, batch_number: 'M-3', status: 'complete', expected_completion_date: '2026-09-01' },
+  ];
+
+  it('lists only fermenters still fermenting past expected done', () => {
+    const overdue = listOverdueFermentations([
+      { mash_batch_id: 1, floor_equipment_id: 1, equipment_name: 'Fermentation 1', volume_gal: 110, status: 'complete' },
+      { mash_batch_id: 1, floor_equipment_id: 2, equipment_name: 'Fermentation 2', volume_gal: 112, status: 'fermenting' },
+      { mash_batch_id: 2, floor_equipment_id: 3, equipment_name: 'Fermentation 3', volume_gal: 500, status: 'fermenting' },
+      { mash_batch_id: 3, floor_equipment_id: 4, equipment_name: 'Fermentation 4', volume_gal: 500, status: null },
+      { mash_batch_id: 1, floor_equipment_id: 5, equipment_name: 'Fermentation 6', volume_gal: 0, status: 'fermenting' },
+    ], batches, '2026-10-21');
+    expect(overdue).toEqual([{
+      batchId: 1,
+      batchNumber: 'M-1',
+      equipmentId: 2,
+      equipmentName: 'Fermentation 2',
+      expectedCompletionDate: '2026-10-16',
+      daysOverdue: 5,
+    }]);
   });
 });
