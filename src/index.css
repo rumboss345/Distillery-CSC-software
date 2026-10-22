@@ -288,6 +288,14 @@ body.nav-open {
   margin: 0.35rem 0 0;
 }
 
+.report-cut-abv {
+  display: block;
+  margin-top: 0.1rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
 .report-pipeline-summary {
   font-family: monospace;
   font-size: 0.85rem;

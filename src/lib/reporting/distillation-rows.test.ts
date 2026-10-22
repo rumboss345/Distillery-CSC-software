@@ -1,5 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { groupDistillationReportRows } from './distillation-rows';
+import { cutAbv, groupDistillationReportRows } from './distillation-rows';
+
+describe('cutAbv', () => {
+  it('keeps the alcohol percent of a single cut', () => {
+    expect(cutAbv({ vol: 25.1, abv: 68 })).toBe(68);
+  });
+
+  it('uses the volume-weighted percent when a cut type was collected more than once', () => {
+    const volume = 2.1 + 3.2;
+    const weighted = (2.1 * 82 + 3.2 * 78) / volume;
+    expect(cutAbv({ vol: volume, abv: weighted })).toBe(79.58);
+  });
+
+  it('leaves the percent blank when that cut was not taken', () => {
+    expect(cutAbv(undefined)).toBeNull();
+    expect(cutAbv({ vol: 0, abv: 80 })).toBeNull();
+  });
+});
 
 describe('groupDistillationReportRows', () => {
   it('keeps the distillation types in production order', () => {
