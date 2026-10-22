@@ -1,4 +1,5 @@
 import { formatDateDisplay } from '../../lib/date-input';
+import { formatAbvEstimate } from '../../lib/fermentation';
 import {
   buildFermentationHistoryRows,
   buildFermentationLeftoverRows,
@@ -12,7 +13,7 @@ export function FermentationReport() {
   const leftovers = buildFermentationLeftoverRows(range);
 
   const csvHeaders = [
-    'Wash batch', 'Recipe', 'Fermenter', 'Volume gal', 'Started', 'Start Brix', 'Status', 'Operator',
+    'Wash batch', 'Recipe', 'Fermenter', 'Volume gal', 'Started', 'Start Brix', 'Finishing Brix', 'Alc %', 'Status', 'Operator',
   ];
   const csvRows = rows.map((row) => [
     row.batch_number,
@@ -21,6 +22,8 @@ export function FermentationReport() {
     row.volume_gal ?? '',
     row.start_date,
     row.start_brix ?? '',
+    row.finish_brix ?? '',
+    row.alcohol_pct ?? '',
     row.status,
     row.operator,
   ]);
@@ -40,7 +43,7 @@ export function FermentationReport() {
     <>
     <ReportTableShell
       title="Fermentation history"
-      description="Completed and discarded fermentations. The Fermentation page keeps the latest 10 of each. Use the period above to look up older ones."
+      description="Completed and discarded fermentations. Finishing Brix is the last reading on that fermenter. Alc % is estimated from the start and finishing Brix. The Fermentation page keeps the latest 10 of each. Use the period above to look up older ones."
       periodLabel={range.label}
       csvFilename={`fermentation-${range.from ?? 'all'}`}
       csvHeaders={csvHeaders}
@@ -57,6 +60,8 @@ export function FermentationReport() {
             <th className="num">Volume</th>
             <th>Started</th>
             <th className="num">Start Brix</th>
+            <th className="num">Finishing Brix</th>
+            <th className="num">Alc %</th>
             <th>Status</th>
             <th>Operator</th>
           </tr>
@@ -70,6 +75,8 @@ export function FermentationReport() {
               <td className="num">{row.volume_gal != null ? `${row.volume_gal.toFixed(1)} gal` : '—'}</td>
               <td>{formatDateDisplay(row.start_date)}</td>
               <td className="num">{row.start_brix ?? '—'}</td>
+              <td className="num">{row.finish_brix ?? '—'}</td>
+              <td className="num">{formatAbvEstimate(row.alcohol_pct)}</td>
               <td>{row.status}</td>
               <td>{row.operator}</td>
             </tr>

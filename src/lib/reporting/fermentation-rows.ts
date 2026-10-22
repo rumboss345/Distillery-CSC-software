@@ -1,5 +1,6 @@
 import { queryAll } from '../../db/database';
 import { completeFermentationsSelectedForDistillation } from '../../db/queries';
+import { estimateAbvFromBrix } from '../fermentation';
 import { eventInReportRange, type ReportDateRange } from './period';
 
 export interface FermentationHistoryRow {
@@ -10,8 +11,56 @@ export interface FermentationHistoryRow {
   volume_gal: number | null;
   start_date: string;
   start_brix: number | null;
+  finish_brix: number | null;
+  alcohol_pct: number | null;
   status: string;
   operator: string;
+}
+
+/**
+ * Finishing Brix is the last reading logged on that fermenter.
+ * A wash with no logs uses the finishing Brix stored on the batch.
+ * Alc % is estimated from the measured start Brix and that finishing Brix.
+ */
+export function fermentationFinishReading(
+  startBrix: number | null,
+  fermenterBrix: number | null,
+  mashLatestBrix: number | null,
+  actualFinalBrix: number | null,
+  fermenterId: number | null,
+): { finish_brix: number | null; alcohol_pct: number | null } {
+  const finish = fermenterId != null
+    ? (fermenterBrix ?? (mashLatestBrix == null ? actualFinalBrix : null))
+    : (mashLatestBrix ?? actualFinalBrix);
+  return {
+    finish_brix: finish,
+    alcohol_pct: startBrix != null && finish != null
+      ? estimateAbvFromBrix(startBrix, finish)
+      : null,
+  };
+}
+
+function loadLatestFermentationBrix(): Map<string, number> {
+  const latest = new Map<string, number>();
+  const logs = queryAll<{
+    mash_batch_id: number;
+    floor_equipment_id: number | null;
+    brix: number;
+  }>(`
+    SELECT mash_batch_id, floor_equipment_id, brix
+    FROM fermentation_logs
+    WHERE brix IS NOT NULL
+    ORDER BY logged_at DESC, id DESC
+  `);
+  for (const log of logs) {
+    if (log.floor_equipment_id != null) {
+      const key = `${log.mash_batch_id}:${log.floor_equipment_id}`;
+      if (!latest.has(key)) latest.set(key, log.brix);
+    }
+    const mashKey = `${log.mash_batch_id}:`;
+    if (!latest.has(mashKey)) latest.set(mashKey, log.brix);
+  }
+  return latest;
 }
 
 export function buildFermentationHistoryRows(range: ReportDateRange): FermentationHistoryRow[] {
@@ -26,11 +75,12 @@ export function buildFermentationHistoryRows(range: ReportDateRange): Fermentati
     volume_gal: number | null;
     start_date: string;
     actual_brix: number | null;
+    actual_final_brix: number | null;
     row_status: string;
     assigned_user_name: string | null;
   }>(`
     SELECT m.id as mash_id, a.id as assignment_id, a.floor_equipment_id, m.batch_number, m.recipe_name,
-           fe.name as fermenter_name, a.volume_gal, m.start_date, m.actual_brix,
+           fe.name as fermenter_name, a.volume_gal, m.start_date, m.actual_brix, m.actual_final_brix,
            COALESCE(a.status, m.status) as row_status, m.assigned_user_name
     FROM mash_batches m
     LEFT JOIN mash_fermenter_assignments a ON a.mash_batch_id = m.id
@@ -61,13 +111,14 @@ export function buildFermentationHistoryRows(range: ReportDateRange): Fermentati
     volume_gal: number | null;
     start_date: string;
     actual_brix: number | null;
+    actual_final_brix: number | null;
     assigned_user_name: string | null;
     run_date: string;
   }>(`
     SELECT m.id as mash_id, fe.id as fermenter_id, m.batch_number, m.recipe_name,
            fe.name as fermenter_name,
            SUM(r.charge_volume_gal) as volume_gal,
-           m.start_date, m.actual_brix, m.assigned_user_name,
+           m.start_date, m.actual_brix, m.actual_final_brix, m.assigned_user_name,
            MAX(r.run_date) as run_date
     FROM distillation_runs r
     JOIN mash_batches m ON m.id = r.source_mash_batch_id
@@ -105,6 +156,20 @@ export function buildFermentationHistoryRows(range: ReportDateRange): Fermentati
     eventInReportRange(startDate, range) || datesFor(mashId, fermenterId).some((date) => eventInReportRange(date, range))
   );
 
+  const latestBrix = loadLatestFermentationBrix();
+  const finishFor = (
+    mashId: number,
+    fermenterId: number | null,
+    startBrix: number | null,
+    actualFinalBrix: number | null,
+  ) => fermentationFinishReading(
+    startBrix,
+    fermenterId != null ? latestBrix.get(`${mashId}:${fermenterId}`) ?? null : null,
+    latestBrix.has(`${mashId}:`) ? latestBrix.get(`${mashId}:`) ?? null : null,
+    actualFinalBrix,
+    fermenterId,
+  );
+
   const listed = rows
     .filter((row) => !(row.assignment_id == null && releasedMashIds.has(row.mash_id)))
     .filter((row) => listedInPeriod(row.start_date, row.mash_id, row.floor_equipment_id))
@@ -116,6 +181,7 @@ export function buildFermentationHistoryRows(range: ReportDateRange): Fermentati
       volume_gal: row.volume_gal,
       start_date: row.start_date,
       start_brix: row.actual_brix,
+      ...finishFor(row.mash_id, row.floor_equipment_id, row.actual_brix, row.actual_final_brix),
       status: row.row_status,
       operator: row.assigned_user_name?.trim() || '—',
     }));
@@ -130,6 +196,7 @@ export function buildFermentationHistoryRows(range: ReportDateRange): Fermentati
       volume_gal: row.volume_gal,
       start_date: row.start_date,
       start_brix: row.actual_brix,
+      ...finishFor(row.mash_id, row.fermenter_id, row.actual_brix, row.actual_final_brix),
       status: 'complete',
       operator: row.assigned_user_name?.trim() || '—',
     }));
