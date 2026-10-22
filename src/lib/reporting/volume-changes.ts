@@ -326,6 +326,30 @@ export function totalVolumeVarianceGal(rows: VolumeChangeRow[]): number {
   return Math.round(total * 1000) / 1000;
 }
 
+/**
+ * Hearts GPA after distillation alcohol loss and gain.
+ * A distillation shortfall is subtracted. Alcohol collected above the charge is added.
+ */
+export function gpaAfterLossOrGain(producedGpa: number, rows: VolumeChangeRow[]): number {
+  return roundAlcohol(producedGpa + distillationAlcoholChangeGal(rows));
+}
+
+/** Signed pure-alcohol gallons from distillation. Negative is a loss, positive is a gain. */
+export function distillationAlcoholChangeGal(rows: VolumeChangeRow[]): number {
+  let total = 0;
+  for (const row of rows) {
+    if (row.kind !== VOLUME_CHANGE_KINDS.distillation || row.gallons == null) continue;
+    total += row.gallons;
+  }
+  return roundAlcohol(total);
+}
+
+export function formatGpaAfterLossOrGainNote(rows: VolumeChangeRow[]): string {
+  const change = distillationAlcoholChangeGal(rows);
+  if (Math.abs(change) < 0.01) return 'No distillation loss or gain';
+  return formatDistillationAlcoholResult(-change);
+}
+
 /** Net ABV percentage points from set volume, blend rows, and stillage left after distillation. Bottling to a tank is not included. */
 export function totalVolumeVarianceAbv(rows: VolumeChangeRow[]): number {
   let total = 0;

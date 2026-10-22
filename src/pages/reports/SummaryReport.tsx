@@ -15,7 +15,9 @@ import { queryAll } from '../../db/database';
 import { eventInReportRange } from '../../lib/reporting/period';
 import {
   buildVolumeChangeRows,
+  formatGpaAfterLossOrGainNote,
   formatVolumeVarianceAbv,
+  gpaAfterLossOrGain,
   totalVolumeVarianceAbv,
   totalVolumeVarianceGal,
 } from '../../lib/reporting/volume-changes';
@@ -68,6 +70,7 @@ export function SummaryReport() {
     ? yields.reduce((s, y) => s + y.yieldPercent, 0) / yields.length
     : 0;
   const totalGpa = yields.reduce((s, y) => s + y.gpa, 0);
+  const gpaAfterChange = gpaAfterLossOrGain(totalGpa, volumeChanges);
   const totalSugarProcessed = totalSugarProcessedLbs(sugarUses(), range);
 
   const totalHeartsGal = monthParam
@@ -104,6 +107,11 @@ export function SummaryReport() {
         <div className="stat-card">
           <div className="label">Total GPA Produced</div>
           <div className="value">{totalGpa.toFixed(1)} gal</div>
+        </div>
+        <div className="stat-card" data-testid="summary-gpa-after-loss">
+          <div className="label">GPA after loss or gain</div>
+          <div className="value">{gpaAfterChange.toFixed(1)} gal</div>
+          <div className="sub" data-testid="summary-gpa-after-loss-note">{formatGpaAfterLossOrGainNote(volumeChanges)}</div>
         </div>
         <div className="stat-card" data-testid="total-sugar-processed">
           <div className="label">Total Sugar Processed</div>

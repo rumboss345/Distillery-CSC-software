@@ -3,7 +3,10 @@ import { formatTankVolumeVariance } from '../tank-volume-variance';
 import {
   VOLUME_CHANGE_KINDS,
   describeWateredDownChange,
+  distillationAlcoholChangeGal,
+  formatGpaAfterLossOrGainNote,
   formatVolumeVarianceAbv,
+  gpaAfterLossOrGain,
   groupVolumeChanges,
   totalVolumeVarianceAbv,
   totalVolumeVarianceGal,
@@ -47,6 +50,27 @@ describe('watering down', () => {
     ];
     expect(totalVolumeVarianceGal(rows)).toBe(-1.5);
     expect(totalVolumeVarianceAbv(rows)).toBe(-8);
+  });
+});
+
+describe('GPA after distillation loss or gain', () => {
+  it('subtracts a loss and adds a gain to the produced GPA', () => {
+    const rows = [
+      row({ key: 'loss', kind: VOLUME_CHANGE_KINDS.distillation, gallons: -1.5 }),
+      row({ key: 'gain', kind: VOLUME_CHANGE_KINDS.distillation, gallons: 0.4 }),
+      row({ key: 'set', kind: VOLUME_CHANGE_KINDS.setVolume, gallons: -8 }),
+    ];
+    expect(distillationAlcoholChangeGal(rows)).toBe(-1.1);
+    expect(gpaAfterLossOrGain(17.07, rows)).toBe(15.97);
+    expect(formatGpaAfterLossOrGainNote(rows)).toBe('Loss 1.10 gal');
+  });
+
+  it('leaves the produced GPA unchanged when the period has no distillation loss or gain', () => {
+    const rows = [
+      row({ key: 'set', kind: VOLUME_CHANGE_KINDS.setVolume, gallons: -2 }),
+    ];
+    expect(gpaAfterLossOrGain(17.07, rows)).toBe(17.07);
+    expect(formatGpaAfterLossOrGainNote(rows)).toBe('No distillation loss or gain');
   });
 });
 
