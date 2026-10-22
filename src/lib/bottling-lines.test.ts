@@ -6,6 +6,8 @@ import {
   bottlingReturnsTotalGal,
   bottlingVolumeVarianceGal,
   reportedBottlingVarianceGal,
+  bottleSizeCounts,
+  formatBottleSizes,
   formatLinesSummary,
   isRumBottlingProduct,
   lineVolumeGal,
@@ -174,6 +176,23 @@ describe('bottling-lines', () => {
       destVolumeGal: 90,
       destCapacityGal: 100,
     })).toBeNull();
+  });
+
+  it('groups bottles by size, largest first', () => {
+    expect(bottleSizeCounts([
+      { bottle_count: 40, bottle_size_ml: 50 },
+      { packaging_bottle: '750mL 7F', bottle_count: 100, bottle_size_ml: 750 },
+      { packaging_bottle: '750mL Gin', bottle_count: 20, bottle_size_ml: 750 },
+      { bottle_count: 0, bottle_size_ml: 200 },
+    ])).toEqual([
+      { sizeMl: 750, count: 120 },
+      { sizeMl: 50, count: 40 },
+    ]);
+    expect(formatBottleSizes([
+      { bottle_count: 100, bottle_size_ml: 750 },
+      { bottle_count: 48, bottle_size_ml: 375 },
+    ])).toBe('100 × 750 ml, 48 × 375 ml');
+    expect(formatBottleSizes([])).toBe('—');
   });
 
   it('formats line summary', () => {
