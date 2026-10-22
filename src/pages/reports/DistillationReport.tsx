@@ -15,12 +15,13 @@ export function DistillationReport() {
 
   const csvHeaders = [
     'Run ID', 'Batch', 'Date', 'Still', 'Type', 'Status', 'Source', 'Charge gal', 'Charge ABV',
-    'Heads gal', 'Hearts gal', 'Tails gal', 'Other gal', 'Total cuts gal', 'Hearts LAA gal',
+    'Heads gal', 'Heads ABV', 'Hearts gal', 'Hearts ABV', 'Tails gal', 'Tails ABV', 'Other gal', 'Total cuts gal', 'Hearts LAA gal',
     'Alcohol charged gal', 'Alcohol collected gal', 'Alcohol loss gal', 'Operator', 'Notes',
   ];
   const csvRows = rows.map((r) => [
     r.run_id, r.batch_number, r.run_date, r.still_name, r.run_type, r.status, r.source_label,
-    r.charge_volume_gal, r.charge_abv ?? '', r.heads_gal, r.hearts_gal, r.tails_gal, r.other_gal,
+    r.charge_volume_gal, r.charge_abv ?? '',
+    r.heads_gal, r.heads_abv ?? '', r.hearts_gal, r.hearts_abv ?? '', r.tails_gal, r.tails_abv ?? '', r.other_gal,
     r.total_cut_gal, r.hearts_laa_gal,
     r.alcohol_charged_gal ?? '', r.alcohol_collected_gal ?? '', r.alcohol_loss_gal ?? '',
     r.operator, r.notes,
@@ -29,7 +30,7 @@ export function DistillationReport() {
   return (
     <ReportTableShell
       title="Distillation runs"
-      description="Runs are grouped by type: Low Wine Run, Rum Run, Vodka Run, Heavy Rum, and Gin Run. Each row includes cut totals, hearts LAA, and alcohol loss or gain. The difference is the alcohol charged minus the alcohol collected. When more alcohol is collected than was charged, the result is recorded as a gain. The Distillation page keeps the latest 10 completed runs."
+      description="Runs are grouped by type: Low Wine Run, Rum Run, Vodka Run, Heavy Rum, and Gin Run. Heads, hearts, and tails show gallons and the alcohol percent of that cut. Each row also includes hearts LAA and alcohol loss or gain. The difference is the alcohol charged minus the alcohol collected. When more alcohol is collected than was charged, the result is recorded as a gain. The Distillation page keeps the latest 10 completed runs."
       periodLabel={range.label}
       csvFilename={`distillation-${range.from ?? 'all'}`}
       csvHeaders={csvHeaders}
@@ -56,6 +57,17 @@ export function DistillationReport() {
         ))}
       </div>
     </ReportTableShell>
+  );
+}
+
+function CutVolume({ volumeGal, abv }: { volumeGal: number; abv: number | null }) {
+  return (
+    <>
+      {volumeGal.toFixed(1)}
+      {volumeGal > 0 && abv != null && (
+        <span className="report-cut-abv">{abv.toFixed(1)}%</span>
+      )}
+    </>
   );
 }
 
@@ -93,9 +105,9 @@ function DistillationRunTable({ rows }: { rows: DistillationReportRow[] }) {
                 {r.charge_volume_gal.toFixed(1)} gal
                 {r.charge_abv != null ? ` @ ${r.charge_abv.toFixed(1)}%` : ''}
               </td>
-              <td className="num">{r.heads_gal.toFixed(1)}</td>
-              <td className="num">{r.hearts_gal.toFixed(1)}</td>
-              <td className="num">{r.tails_gal.toFixed(1)}</td>
+              <td className="num"><CutVolume volumeGal={r.heads_gal} abv={r.heads_abv} /></td>
+              <td className="num"><CutVolume volumeGal={r.hearts_gal} abv={r.hearts_abv} /></td>
+              <td className="num"><CutVolume volumeGal={r.tails_gal} abv={r.tails_abv} /></td>
               <td className="num">{r.hearts_laa_gal.toFixed(2)}</td>
               <td className="num">{r.alcohol_charged_gal != null ? `${r.alcohol_charged_gal.toFixed(2)} gal` : '—'}</td>
               <td className="num">{r.alcohol_collected_gal != null ? `${r.alcohol_collected_gal.toFixed(2)} gal` : '—'}</td>

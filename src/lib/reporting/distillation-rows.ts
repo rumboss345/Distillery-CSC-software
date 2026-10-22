@@ -3,7 +3,7 @@ import { distillationAlcoholBalance, washChargeAbvFromBrix, type AlcoholChargeBa
 import { distillationSourceSummary } from '../distillation-source-tanks';
 import { ALL_RUN_TYPES, runTypeLabel } from '../distillation-run-types';
 import type { DistillationRunType } from '../../types';
-import { laaGalFromVolumeAbv, roundVolume } from './alcohol-units';
+import { laaGalFromVolumeAbv, roundAbv, roundVolume } from './alcohol-units';
 import { eventInReportRange, type ReportDateRange } from './period';
 
 export interface DistillationReportRow {
@@ -20,8 +20,11 @@ export interface DistillationReportRow {
   charge_volume_gal: number;
   charge_abv: number | null;
   heads_gal: number;
+  heads_abv: number | null;
   hearts_gal: number;
+  hearts_abv: number | null;
   tails_gal: number;
+  tails_abv: number | null;
   other_gal: number;
   total_cut_gal: number;
   hearts_laa_gal: number;
@@ -116,14 +119,16 @@ export function buildDistillationReportRows(range: ReportDateRange): Distillatio
     distillation_run_id: number;
     cut_type: string;
     volume_gal: number;
-    abv: number;
+    abv: number | null;
   }>(`
-    SELECT distillation_run_id, cut_type, SUM(volume_gal) as volume_gal, AVG(abv) as abv
+    SELECT distillation_run_id, cut_type,
+           SUM(volume_gal) as volume_gal,
+           CASE WHEN SUM(volume_gal) > 0 THEN SUM(volume_gal * abv) / SUM(volume_gal) ELSE NULL END as abv
     FROM distillation_cuts
     GROUP BY distillation_run_id, cut_type
   `);
 
-  const cutsByRun = new Map<number, Map<string, { vol: number; abv: number }>>();
+  const cutsByRun = new Map<number, Map<string, { vol: number; abv: number | null }>>();
   for (const c of cutTotals) {
     let byType = cutsByRun.get(c.distillation_run_id);
     if (!byType) {
@@ -147,7 +152,9 @@ export function buildDistillationReportRows(range: ReportDateRange): Distillatio
         other += v.vol;
       }
     }
-    const heartsAbv = byType.get('hearts')?.abv ?? 0;
+    const headsAbv = cutAbv(byType.get('heads'));
+    const heartsAbv = cutAbv(byType.get('hearts'));
+    const tailsAbv = cutAbv(byType.get('tails'));
     const totalCut = heads + hearts + tails + other;
     const hasCuts = collectedByRun.has(r.id);
     const recorded = hasCuts && (r.alcohol_charged_gal != null || r.alcohol_loss_gal != null);
@@ -193,11 +200,14 @@ export function buildDistillationReportRows(range: ReportDateRange): Distillatio
       charge_volume_gal: r.charge_volume_gal,
       charge_abv: r.charge_abv,
       heads_gal: roundVolume(heads),
+      heads_abv: headsAbv,
       hearts_gal: roundVolume(hearts),
+      hearts_abv: heartsAbv,
       tails_gal: roundVolume(tails),
+      tails_abv: tailsAbv,
       other_gal: roundVolume(other),
       total_cut_gal: roundVolume(totalCut),
-      hearts_laa_gal: laaGalFromVolumeAbv(hearts, heartsAbv),
+      hearts_laa_gal: laaGalFromVolumeAbv(hearts, heartsAbv ?? 0),
       alcohol_charged_gal: alcoholCharged,
       alcohol_collected_gal: alcoholCollected,
       alcohol_loss_gal: alcoholLoss,
@@ -208,6 +218,12 @@ export function buildDistillationReportRows(range: ReportDateRange): Distillatio
     });
   }
   return rows;
+}
+
+/** Volume-weighted alcohol percent for one cut type. Null when that cut was not taken. */
+export function cutAbv(cut: { vol: number; abv: number | null } | undefined): number | null {
+  if (!cut || !(cut.vol > 0) || cut.abv == null || !Number.isFinite(cut.abv)) return null;
+  return roundAbv(cut.abv);
 }
 
 export interface DistillationTypeGroup<T extends { run_type_key: string }> {
