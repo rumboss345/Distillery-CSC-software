@@ -1,4 +1,5 @@
 import { formatDateDisplay } from '../../lib/date-input';
+import { bottleSizeCounts } from '../../lib/bottling-lines';
 import { buildBottlingReportRows } from '../../lib/reporting/bottling-rows';
 import { useReportContext } from './report-context';
 import { ReportTableShell } from './ReportTableShell';
@@ -6,10 +7,13 @@ import { ReportTableShell } from './ReportTableShell';
 export function BottlingReportPage() {
   const { range } = useReportContext();
   const rows = buildBottlingReportRows(range);
+  const sizeTotals = bottleSizeCounts(rows.flatMap((row) => (
+    row.bottle_sizes.map((size) => ({ bottle_count: size.count, bottle_size_ml: size.sizeMl }))
+  )));
 
   const csvHeaders = [
     'Batch', 'Product', 'Date', 'Lot', 'Source type', 'Tank draw gal', 'Bottled gal', 'ABV',
-    'Bottled LAA gal', 'Bottles', 'Packaging', 'Variance gal', 'Why', 'Who',
+    'Bottled LAA gal', 'Bottles', 'Bottle sizes', 'Variance gal', 'Why', 'Who',
   ];
   const csvRows = rows.map((r) => [
     r.batch_number, r.product_name, r.bottling_date, r.lot_number, r.source_type,
@@ -20,14 +24,26 @@ export function BottlingReportPage() {
   return (
     <ReportTableShell
       title="Packaging & bottling"
-      description="Bottling runs with tank draw, bottled volume, LAA, and variance. Gallons sent to a tank are not a loss. The Bottling page keeps the latest 10 runs."
+      description="Bottling runs with tank draw, bottled volume, LAA, variance, and each bottle size. Gallons sent to a tank are not a loss. The Bottling page keeps the latest 10 runs."
       periodLabel={range.label}
       csvFilename={`bottling-${range.from ?? 'all'}`}
       csvHeaders={csvHeaders}
       csvRows={csvRows}
       isEmpty={rows.length === 0}
       emptyMessage="No bottling runs in this period."
+      tableWrap={false}
     >
+      {sizeTotals.length > 0 && (
+        <div className="card-grid bottling-size-grid" data-testid="bottling-size-totals">
+          {sizeTotals.map((size) => (
+            <div key={size.sizeMl} className="stat-card" data-testid={`bottle-size-${size.sizeMl}`}>
+              <div className="label">{size.sizeMl} ml</div>
+              <div className="value">{size.count.toLocaleString()}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="table-wrap">
       <table>
         <thead>
           <tr>
@@ -38,6 +54,7 @@ export function BottlingReportPage() {
             <th className="num">ABV</th>
             <th className="num">LAA</th>
             <th className="num">Bottles</th>
+            <th>Bottle sizes</th>
             <th className="num">Tank draw</th>
             <th className="num">Variance</th>
             <th>Why</th>
@@ -53,7 +70,12 @@ export function BottlingReportPage() {
               <td className="num">{r.bottled_gal.toFixed(2)} gal</td>
               <td className="num">{r.final_abv.toFixed(1)}%</td>
               <td className="num">{r.bottled_laa_gal.toFixed(2)}</td>
-              <td className="num">{r.bottle_count}</td>
+              <td className="num">{r.bottle_count.toLocaleString()}</td>
+              <td>
+                {r.bottle_sizes.length === 0 ? '—' : r.bottle_sizes.map((size) => (
+                  <div key={size.sizeMl}>{size.count.toLocaleString()} × {size.sizeMl} ml</div>
+                ))}
+              </td>
               <td className="num">{r.tank_draw_gal != null ? r.tank_draw_gal.toFixed(2) : '—'}</td>
               <td className="num">
                 {r.volume_variance_gal != null && Math.abs(r.volume_variance_gal) >= 0.01
@@ -66,6 +88,7 @@ export function BottlingReportPage() {
           ))}
         </tbody>
       </table>
+      </div>
     </ReportTableShell>
   );
 }

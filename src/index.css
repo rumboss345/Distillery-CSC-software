@@ -475,6 +475,11 @@ body.nav-open {
   margin-bottom: 2rem;
 }
 
+.bottling-size-grid {
+  grid-template-columns: repeat(auto-fill, minmax(140px, 180px));
+  margin-bottom: 1rem;
+}
+
 .stat-card {
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);

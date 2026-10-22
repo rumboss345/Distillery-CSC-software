@@ -10,7 +10,7 @@ import {
 } from '../../db/queries';
 import { StatusBadge } from '../../components/StatusBadge';
 import { equipmentTypeLabel } from '../../lib/equipment';
-import { bottlingSentToTankGal, reportedBottlingVarianceGal, totalVolumeGal } from '../../lib/bottling-lines';
+import { bottlingSentToTankGal, formatBottleSizes, reportedBottlingVarianceGal, totalVolumeGal } from '../../lib/bottling-lines';
 import { queryAll } from '../../db/database';
 import { eventInReportRange } from '../../lib/reporting/period';
 import {
@@ -240,6 +240,7 @@ export function SummaryReport() {
                   <th>Product</th>
                   <th>Date</th>
                   <th className="num">Bottled (gal)</th>
+                  <th>Bottle sizes</th>
                   <th className="num">To tank (gal)</th>
                   <th className="num">Tank draw (gal)</th>
                   <th className="num">Variance</th>
@@ -256,6 +257,7 @@ export function SummaryReport() {
                       <td>{run.product_name}</td>
                       <td>{formatDateDisplay(run.bottling_date)}</td>
                       <td className="num">{bottled.toFixed(2)}</td>
+                      <td>{formatBottleSizes(run.lines)}</td>
                       <td className="num">{sentGal >= 0.01 ? sentGal.toFixed(2) : '—'}</td>
                       <td className="num">
                         {run.source_holding_tank_equipment_id && run.source_volume_gal != null

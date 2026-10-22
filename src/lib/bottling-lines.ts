@@ -65,6 +65,29 @@ export function totalBottleCount(lines: BottlingLineAmount[]): number {
   return lines.reduce((sum, line) => sum + (line.bottle_count > 0 ? line.bottle_count : 0), 0);
 }
 
+export interface BottleSizeCount {
+  sizeMl: number;
+  count: number;
+}
+
+/** Bottle counts grouped by size, largest size first. */
+export function bottleSizeCounts(lines: BottlingLineAmount[]): BottleSizeCount[] {
+  const bySize = new Map<number, number>();
+  for (const line of lines) {
+    if (line.bottle_count <= 0 || line.bottle_size_ml <= 0) continue;
+    bySize.set(line.bottle_size_ml, (bySize.get(line.bottle_size_ml) ?? 0) + line.bottle_count);
+  }
+  return [...bySize.entries()]
+    .sort((a, b) => b[0] - a[0])
+    .map(([sizeMl, count]) => ({ sizeMl, count }));
+}
+
+export function formatBottleSizes(lines: BottlingLineAmount[]): string {
+  const sizes = bottleSizeCounts(lines);
+  if (sizes.length === 0) return '—';
+  return sizes.map((size) => `${size.count.toLocaleString()} × ${size.sizeMl} ml`).join(', ');
+}
+
 /** Bottled gallons plus gallons sent to another tank, minus the gallons drawn from the source. */
 export function bottlingVolumeVarianceGal(sourceGal: number, bottledGal: number, returnGal: number): number {
   const returned = Number.isFinite(returnGal) && returnGal > 0 ? returnGal : 0;
