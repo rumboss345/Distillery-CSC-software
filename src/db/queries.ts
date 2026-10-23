@@ -88,7 +88,7 @@ import type {
   EquipmentMaintenanceLogView,
   EquipmentMaintenanceStatus,
 } from '../types';
-import { initDatabase, clearAllData, backupFileError, exportDatabase, importDatabase } from './database';
+import { initDatabase, resetSharedDatabase, subscribeSharedRefresh, backupFileError, exportDatabase, replaceSharedDatabase } from './database';
 import { backupFileName, downloadBytes } from '../lib/database-backup';
 import type {
   Barrel,
@@ -378,11 +378,12 @@ export function useDatabaseReady() {
 export function useRefreshKey() {
   const [key, setKey] = useState(0);
   const refresh = useCallback(() => setKey((k) => k + 1), []);
+  useEffect(() => subscribeSharedRefresh(refresh), [refresh]);
   return { key, refresh };
 }
 
 export async function resetAllData(): Promise<void> {
-  await clearAllData();
+  await resetSharedDatabase();
   window.location.reload();
 }
 
@@ -398,15 +399,15 @@ export async function checkDatabaseBackup(file: Blob): Promise<string | null> {
   return backupFileError(new Uint8Array(await file.arrayBuffer()));
 }
 
-/** Replaces every record in this browser with a backup file. Returns an error message, or reloads. */
+/** Replaces the shared distillery record with a backup file. Returns an error message, or reloads. */
 export async function restoreDatabaseBackup(file: Blob): Promise<string | null> {
   const data = new Uint8Array(await file.arrayBuffer());
   const error = await backupFileError(data);
   if (error) return error;
   try {
-    importDatabase(data);
-  } catch {
-    return 'The backup is too large to store in this browser. Nothing was changed.';
+    await replaceSharedDatabase(data);
+  } catch (err) {
+    return err instanceof Error ? err.message : 'The backup could not be saved to the shared record.';
   }
   window.location.reload();
   return null;

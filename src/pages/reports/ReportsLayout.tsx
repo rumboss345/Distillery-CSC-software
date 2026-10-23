@@ -1,4 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom';
+import { useRefreshKey } from '../../db/queries';
 import { ReportFilters } from '../../components/ReportFilters';
 import { ReportProvider, useReportContext } from './report-context';
 
@@ -18,6 +19,7 @@ const TABS = [
 ];
 
 function ReportsLayoutInner() {
+  const { key: sharedKey } = useRefreshKey();
   const {
     preset,
     customFrom,
@@ -65,7 +67,7 @@ function ReportsLayoutInner() {
         ))}
       </nav>
 
-      <Outlet />
+      <Outlet key={sharedKey} />
     </div>
   );
 }

@@ -14,7 +14,8 @@ import {
 } from './permissions.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const DB_PATH = join(__dirname, 'data', 'auth.db');
+const DATA_DIR = process.env.DATA_DIR ?? join(__dirname, 'data');
+const DB_PATH = join(DATA_DIR, 'auth.db');
 
 export type UserRole = 'admin' | 'user';
 export type UserStatus = 'pending' | 'approved' | 'rejected';

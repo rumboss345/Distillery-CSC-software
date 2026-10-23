@@ -12,11 +12,17 @@ services:
     buildCommand: npm ci && npm rebuild better-sqlite3 && npm run build
     startCommand: npm start
     healthCheckPath: /api/health
+    disk:
+      name: csc-data
+      mountPath: /var/data
+      sizeGB: 1
     envVars:
       - key: NODE_VERSION
         value: "20"
       - key: NODE_ENV
         value: production
+      - key: DATA_DIR
+        value: /var/data
       - key: JWT_SECRET
         sync: false
       - key: ADMIN_EMAIL

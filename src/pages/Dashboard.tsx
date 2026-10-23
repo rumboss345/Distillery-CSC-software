@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { format } from 'date-fns';
 import { Link } from 'react-router-dom';
-import { getProductionSummary, getMashBatches, getDistillationRuns, getBarrels, getInventoryItems, barrelBlendProductName, getAllMashFermenterAssignments } from '../db/queries';
+import { getProductionSummary, getMashBatches, getDistillationRuns, getBarrels, getInventoryItems, barrelBlendProductName, getAllMashFermenterAssignments, useRefreshKey } from '../db/queries';
 import { StatusBadge } from '../components/StatusBadge';
 import { useAuth } from '../context/AuthContext';
 import { inventoryCategoryLabel } from '../lib/inventory-units';
@@ -12,6 +12,7 @@ import { PROCESS_STAGE_LABELS } from '../lib/permissions';
 
 export function Dashboard() {
   const { user } = useAuth();
+  const { key: sharedKey } = useRefreshKey();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   const month = format(new Date(), 'yyyy-MM');
@@ -25,7 +26,7 @@ export function Dashboard() {
   const lowStock = getInventoryItems().filter((i) => i.quantity <= i.reorder_level);
 
   return (
-    <div>
+    <div data-shared-refresh={sharedKey}>
       <div className="page-header">
         <h2>Production Dashboard</h2>
         <p>Overview of your distillery operations</p>

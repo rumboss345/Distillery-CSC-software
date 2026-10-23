@@ -214,13 +214,15 @@ export function AdminUsers() {
   }
 
   function handleClearAllData() {
-    if (!confirm('Clear ALL distillery data? This removes washes, runs, blends, barrels, bottling, inventory, and floor plan records.')) {
+    if (!confirm('Clear the shared distillery record for everyone? This removes washes, runs, blends, barrels, bottling, inventory, and floor plan records.')) {
       return;
     }
-    if (!confirm('This cannot be undone. Clear everything and reset to sample data?')) {
+    if (!confirm('This cannot be undone. Clear the shared record and reset it to sample data?')) {
       return;
     }
-    void resetAllData();
+    void resetAllData().catch((error: unknown) => {
+      window.alert(error instanceof Error ? error.message : 'Could not clear the shared distillery record.');
+    });
   }
 
   function handleDownloadBackup() {
@@ -238,7 +240,7 @@ export function AdminUsers() {
     }
     if (!confirm(
       `Restore from ${file.name}?\n\n`
-      + 'This replaces ALL distillery data in this browser with the backup. '
+      + 'This replaces the shared distillery record for everyone signed in. '
       + 'A backup of the current data downloads first so you can undo this.',
     )) {
       return;
@@ -449,8 +451,8 @@ export function AdminUsers() {
         <h2 className="admin-section-title">Data Management</h2>
         <h3 className="admin-subtitle">Backup</h3>
         <p className="admin-hint">
-          Distillery records are kept in this browser only. Download a backup often and keep it somewhere safe.
-          Restoring replaces everything in this browser with the backup file.
+          Washes, runs, tanks, and logs are one shared record for everyone signed in.
+          Download a backup often. Restoring replaces that shared record for every browser.
         </p>
         <div className="admin-data-actions">
           <button type="button" className="btn btn-primary" onClick={handleDownloadBackup} data-testid="download-backup">
@@ -478,7 +480,7 @@ export function AdminUsers() {
 
         <h3 className="admin-subtitle">Reset</h3>
         <p className="admin-hint">
-          Reset the app to fresh sample data, or empty every holding tank and leave the other records in place.
+          Clear the shared record for everyone and start from sample data, or empty every holding tank and leave the other records in place.
         </p>
         <div className="admin-data-actions">
           <button type="button" className="btn btn-secondary" onClick={handleClearAllData}>

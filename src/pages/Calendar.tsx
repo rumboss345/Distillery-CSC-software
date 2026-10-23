@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useRefreshKey } from '../db/queries';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -63,6 +64,7 @@ function dateKey(date: Date): string {
 
 export function Calendar() {
   const { hasPermission } = useAuth();
+  const { key: sharedKey } = useRefreshKey();
   const planRef = useRef<HTMLDivElement>(null);
   const [viewMode, setViewMode] = useState<CalendarViewMode>('day');
   const [anchorDate, setAnchorDate] = useState(() => new Date());
@@ -75,10 +77,10 @@ export function Calendar() {
     () => new Set(ALL_CALENDAR_PROGRESS),
   );
 
-  const allEvents = useMemo(() => buildCalendarEvents(), []);
+  const allEvents = useMemo(() => buildCalendarEvents(), [sharedKey]);
   const cleaningEvents = useMemo(
     () => tankCleaningCalendarEvents(getTankCleaningLog()),
-    [selectedDate],
+    [selectedDate, sharedKey],
   );
   const filteredEvents = useMemo(
     () => [
