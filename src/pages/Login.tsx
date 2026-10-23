@@ -64,6 +64,10 @@ export function Login() {
             />
           </div>
 
+          <div className="auth-field-footer">
+            <Link to="/forgot-password">Forgot password?</Link>
+          </div>
+
           <button type="submit" className="btn btn-primary auth-submit" disabled={submitting}>
             {submitting ? 'Signing in…' : 'Sign in'}
           </button>

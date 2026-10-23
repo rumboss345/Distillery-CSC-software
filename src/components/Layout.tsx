@@ -173,6 +173,9 @@ export function Layout() {
             <span className="sidebar-user-email">{user?.email}</span>
             {user?.role === 'admin' && <span className="sidebar-user-role">Admin</span>}
           </div>
+          <NavLink to="/account/password" className="btn btn-ghost btn-sm sidebar-logout">
+            Change password
+          </NavLink>
           <button type="button" className="btn btn-ghost btn-sm sidebar-logout" onClick={logout}>
             Sign out
           </button>

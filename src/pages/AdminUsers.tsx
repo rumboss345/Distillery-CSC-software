@@ -60,6 +60,7 @@ export function AdminUsers() {
   const [editPermissions, setEditPermissions] = useState<PermissionKey[]>([]);
   const [editProcessAssignments, setEditProcessAssignments] = useState<ProcessStageKey[]>([]);
   const [editName, setEditName] = useState('');
+  const [editPassword, setEditPassword] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -120,6 +121,7 @@ export function AdminUsers() {
   function openEdit(u: AuthUser) {
     setEditUser(u);
     setEditName(u.name ?? '');
+    setEditPassword('');
     setEditPermissions([...u.permissions]);
     setEditProcessAssignments([...u.processAssignments]);
   }
@@ -128,11 +130,16 @@ export function AdminUsers() {
     if (!editUser) return;
     setMessage('');
     setError('');
+    if (editPassword && editPassword.length < 8) {
+      setError('Password must be at least 8 characters');
+      return;
+    }
     try {
       const result = await updateAdminUser(editUser.id, {
         name: editName || null,
         permissions: editPermissions,
         processAssignments: editProcessAssignments,
+        password: editPassword || undefined,
       });
       setMessage(result.message);
       setEditUser(null);
@@ -549,6 +556,18 @@ export function AdminUsers() {
               Name
               <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} />
             </label>
+            <label>
+              New password
+              <input
+                type="password"
+                autoComplete="new-password"
+                minLength={8}
+                value={editPassword}
+                placeholder="Leave blank to keep the current password"
+                onChange={(e) => setEditPassword(e.target.value)}
+              />
+            </label>
+            <p className="admin-hint">Use this when an employee needs a new password and cannot sign in.</p>
 
             <h3 className="admin-subtitle">Page access</h3>
             {renderPermissionChecks(editPermissions, setEditPermissions)}

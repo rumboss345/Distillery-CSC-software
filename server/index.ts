@@ -44,12 +44,15 @@ import {
   publicUser,
   rejectUserById,
   getUserPermissions,
+  changePassword,
+  createPasswordResetToken,
+  resetPasswordWithToken,
   syncAdminFromEnv,
   updateUserByAdmin,
   type User,
 } from './db.js';
 import { sanitizePermissions, sanitizeProcessStages } from './permissions.js';
-import { sendAdminApprovalEmail } from './email.js';
+import { sendAdminApprovalEmail, sendPasswordResetEmail } from './email.js';
 import {
   clearDistilleryRecord,
   isSqliteDatabase,
@@ -307,6 +310,67 @@ app.post('/api/auth/verify-admin', authMiddleware, async (req, res) => {
   res.json({ ok: true, email: user.email });
 });
 
+app.post('/api/auth/forgot-password', async (req, res) => {
+  const email = String(req.body.email ?? '').trim().toLowerCase();
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    res.status(400).json({ error: 'Enter a valid email address' });
+    return;
+  }
+
+  const token = await createPasswordResetToken(email);
+  if (token) {
+    try {
+      await sendPasswordResetEmail({ to: email, token });
+    } catch {
+      console.error('Failed to send password reset email');
+    }
+  }
+
+  res.json({
+    message: 'If that email belongs to an approved account, a reset link is on its way. It expires in one hour.',
+  });
+});
+
+app.post('/api/auth/reset-password', async (req, res) => {
+  const token = String(req.body.token ?? '').trim();
+  const password = String(req.body.password ?? '');
+  if (!token) {
+    res.status(400).json({ error: 'This reset link is invalid or has expired.' });
+    return;
+  }
+  if (password.length < 8) {
+    res.status(400).json({ error: 'Password must be at least 8 characters' });
+    return;
+  }
+
+  const updated = await resetPasswordWithToken(token, password);
+  if (!updated) {
+    res.status(400).json({ error: 'This reset link is invalid or has expired.' });
+    return;
+  }
+  res.json({ message: 'Password updated. You can sign in with the new password.' });
+});
+
+app.post('/api/auth/change-password', authMiddleware, async (req, res) => {
+  const currentPassword = String(req.body.currentPassword ?? '');
+  const newPassword = String(req.body.newPassword ?? '');
+  if (!currentPassword || !newPassword) {
+    res.status(400).json({ error: 'Current password and new password are required' });
+    return;
+  }
+  if (newPassword.length < 8) {
+    res.status(400).json({ error: 'Password must be at least 8 characters' });
+    return;
+  }
+
+  const result = await changePassword(req.user!.id, currentPassword, newPassword);
+  if (!result.ok) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+  res.json({ message: 'Password updated.' });
+});
+
 app.post('/api/auth/approve', async (req, res) => {
   const token = String(req.body.token ?? req.query.token ?? '').trim();
   if (!token) {
@@ -414,13 +478,26 @@ app.patch('/api/admin/users/:id', authMiddleware, adminMiddleware, async (req, r
             : [],
         )
       : undefined;
+  const password = typeof req.body.password === 'string' ? req.body.password : '';
+  if (password && password.length < 8) {
+    res.status(400).json({ error: 'Password must be at least 8 characters' });
+    return;
+  }
 
-  const user = await updateUserByAdmin(id, { name, permissions, processAssignments });
+  const user = await updateUserByAdmin(id, {
+    name,
+    permissions,
+    processAssignments,
+    password: password || undefined,
+  });
   if (!user) {
     res.status(404).json({ error: 'User not found or cannot be modified' });
     return;
   }
-  res.json({ message: 'User updated', user: await publicUser(user) });
+  res.json({
+    message: password ? `Password updated for ${user.email}` : 'User updated',
+    user: await publicUser(user),
+  });
 });
 
 app.delete('/api/admin/users/:id', authMiddleware, adminMiddleware, async (req, res) => {
