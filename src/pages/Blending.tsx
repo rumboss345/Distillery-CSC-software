@@ -120,6 +120,7 @@ import {
   adjacentSugarBagLbs,
   batchSizeUnitForRecipe,
   formatBatchSizeAmount,
+  formatBlendVolume,
   gallonsFromBatchSizeAmount,
   roundScaledAmount,
   scaledRecipeWaterGallons,
@@ -1905,13 +1906,9 @@ export function Blending() {
                 )}
                 {baseYieldGal > 0 && (
                   <p className="field-hint" data-testid="batch-size-summary">
-                    Saved recipe: {batchSizeUnit === 'l'
-                      ? `${formatBatchSizeAmount(baseYieldGal, 'l')} L (${baseYieldGal.toFixed(2)} gal)`
-                      : `${baseYieldGal.toFixed(2)} gal`}
+                    Saved recipe: {formatBlendVolume(baseYieldGal)}
                     {' → '}
-                    this batch: {batchSizeUnit === 'l'
-                      ? `${formatBatchSizeAmount(scaledYieldGal, 'l')} L (${scaledYieldGal.toFixed(2)} gal)`
-                      : `${scaledYieldGal.toFixed(2)} gal`}
+                    this batch: {formatBlendVolume(scaledYieldGal)}
                     {form.target_abv != null ? ` at ${form.target_abv}%` : ''}
                     {baseSugarLbs > 0
                       ? ` · ${onWholeSugarBags
@@ -2603,7 +2600,7 @@ export function Blending() {
           <div className="wizard-produce-card">
             <p>You are about to produce batch <strong>{form.batch_number}</strong> — {form.product_name}.</p>
             <ul className="wizard-produce-checklist">
-              <li>{yieldGal.toFixed(1)} gal expected yield @ {(formulation.reconciliation.effective.abv ?? formulation.theoretical.abv ?? 0).toFixed(1)}% ABV</li>
+              <li>{formatBlendVolume(yieldGal)} expected yield @ {(formulation.reconciliation.effective.abv ?? formulation.theoretical.abv ?? 0).toFixed(1)}% ABV</li>
               {activeSources.map((s, i) => {
                 const tank = getSpiritTransferVessels().find((t) => t.id === s.holding_tank_equipment_id);
                 const barrel = s.barrel_id
@@ -2710,7 +2707,7 @@ export function Blending() {
             {hasFinalMeasurements ? (
               <ul className="wizard-produce-checklist">
                 {form.actual_abv != null && <li>Final proof: {form.actual_abv.toFixed(1)}% ABV</li>}
-                {form.actual_volume_gal != null && <li>Final volume: {form.actual_volume_gal.toFixed(1)} gal</li>}
+                {form.actual_volume_gal != null && <li>Final volume: {formatBlendVolume(form.actual_volume_gal)}</li>}
                 {form.actual_weight_lbs != null && <li>Final weight: {form.actual_weight_lbs.toFixed(2)} lbs</li>}
                 {form.actual_brix != null && <li>Final Brix: {form.actual_brix}</li>}
               </ul>
@@ -2795,7 +2792,7 @@ export function Blending() {
                 <th>Batch</th>
                 <th>Product</th>
                 <th>Recipe</th>
-                <th className="num">Size</th>
+                <th className="num">Volume</th>
                 <th className="num">Target proof</th>
                 <th>Assigned to</th>
                 <th>Progress</th>
@@ -2812,7 +2809,13 @@ export function Blending() {
                     {b.blend_recipe_name ?? '—'}
                     {b.blend_recipe_version_number != null ? ` V${b.blend_recipe_version_number}` : ''}
                   </td>
-                  <td className="num">{b.scale_factor.toFixed(2)}×</td>
+                  <td className="num">
+                    {formatBlendVolume(
+                      [b.actual_volume_gal, b.theoretical_volume_gal, b.final_volume_gal]
+                        .find((volume) => volume != null && volume > 0) ?? 0,
+                    )}
+                    {b.scale_factor !== 1 && <div>{b.scale_factor.toFixed(2)}×</div>}
+                  </td>
                   <td className="num">{b.target_abv != null ? `${b.target_abv}%` : '—'}</td>
                   <td><AssigneeCell name={b.assigned_user_name} /></td>
                   <td>{stepLabel(b.status, b.target_abv)}</td>

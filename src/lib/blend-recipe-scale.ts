@@ -86,6 +86,12 @@ export function formatBatchSizeAmount(gallons: number, unit: BatchSizeUnit): str
   return amount.toFixed(2);
 }
 
+/** Finished blend volume in wine gallons and liters, two decimal places each. */
+export function formatBlendVolume(gallons: number): string {
+  if (!(gallons > 0) || !Number.isFinite(gallons)) return '—';
+  return `${gallons.toFixed(2)} gal · ${gallonsToUnit(gallons, 'l').toFixed(2)} L`;
+}
+
 export function gallonsFromBatchSizeAmount(amount: number, unit: BatchSizeUnit): number {
   if (!(amount > 0)) return 0;
   return unit === 'l' ? toGallonsFromVolumeUnit(amount, 'l') : amount;
