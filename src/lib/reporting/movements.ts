@@ -284,9 +284,10 @@ export function buildLiquidMovements(range: ReportDateRange): LiquidMovementRow[
     source_volume_gal: number | null;
     final_abv: number;
     tank_name: string | null;
+    variance_changed_by: string | null;
   }>(`
     SELECT br.id, br.bottling_date, br.batch_number, br.product_name,
-           br.source_volume_gal, br.final_abv, fe.name as tank_name
+           br.source_volume_gal, br.final_abv, fe.name as tank_name, br.variance_changed_by
     FROM bottling_runs br
     LEFT JOIN floor_equipment fe ON fe.id = br.source_holding_tank_equipment_id
     WHERE br.source_holding_tank_equipment_id IS NOT NULL AND br.source_volume_gal > 0
@@ -305,7 +306,7 @@ export function buildLiquidMovements(range: ReportDateRange): LiquidMovementRow[
       volume_gal: vol,
       abv: b.final_abv,
       laa_gal: laaGalFromVolumeAbv(vol, b.final_abv),
-      user_label: '—',
+      user_label: b.variance_changed_by?.trim() || '—',
       reference: `Bottling ${b.id}`,
       notes: '',
     });

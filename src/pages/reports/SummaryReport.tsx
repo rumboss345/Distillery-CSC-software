@@ -13,6 +13,7 @@ import { equipmentTypeLabel } from '../../lib/equipment';
 import { bottlingSentToTankGal, formatBottleSizes, formatBottlingAlcoholVariance, reportedBottlingAlcoholVarianceGal, reportedBottlingVarianceGal, totalVolumeGal } from '../../lib/bottling-lines';
 import { queryAll } from '../../db/database';
 import { eventInReportRange } from '../../lib/reporting/period';
+import { filterRowsByPerson, reportPersonMatches } from '../../lib/reporting/person';
 import {
   buildVolumeChangeRows,
   formatGpaAfterLossOrGainNote,
@@ -28,7 +29,7 @@ import { ProductivityChart } from './ProductivityChart';
 import { CollapsibleSection } from '../../components/CollapsibleSection';
 
 export function SummaryReport() {
-  const { range } = useReportContext();
+  const { range, employee } = useReportContext();
 
   const monthParam =
     range.from?.slice(0, 7) === range.to?.slice(0, 7) && range.from
@@ -40,15 +41,18 @@ export function SummaryReport() {
   const mashes = getMashBatches();
   const mashIdsInRange = new Set(
     runs
-      .filter((r) => eventInReportRange(r.run_date, range) && r.source_mash_batch_id)
+      .filter((r) => (
+        eventInReportRange(r.run_date, range)
+        && r.source_mash_batch_id
+        && reportPersonMatches(r.assigned_user_name, employee, r.assigned_user_id)
+      ))
       .map((r) => r.source_mash_batch_id as number),
   );
   const mashBatchNumbersInRange = new Set(
     mashes.filter((m) => mashIdsInRange.has(m.id)).map((m) => m.batch_number),
   );
-  const yields = monthParam
-    ? yieldsAll
-    : yieldsAll.filter((y) => mashBatchNumbersInRange.has(y.mashBatchNumber));
+  const yields = (monthParam ? yieldsAll : yieldsAll.filter((y) => mashBatchNumbersInRange.has(y.mashBatchNumber)))
+    .filter((y) => !employee || mashBatchNumbersInRange.has(y.mashBatchNumber));
 
   const summary = getProductionSummary(monthParam);
   const equipmentReport = getEquipmentVolumeReport();
@@ -56,13 +60,24 @@ export function SummaryReport() {
   const barrels = getBarrels();
   const bottlings = getBottlingRuns();
 
-  const filteredMashes = mashes.filter((m) => eventInReportRange(m.start_date, range));
-  const filteredRuns = runs.filter((r) => eventInReportRange(r.run_date, range));
-  const filteredBarrels = barrels.filter((b) => eventInReportRange(b.fill_date, range));
-  const filteredBottlings = bottlings.filter((b) => eventInReportRange(b.bottling_date, range));
+  const filteredMashes = mashes.filter((m) => (
+    eventInReportRange(m.start_date, range)
+    && reportPersonMatches(m.assigned_user_name, employee, m.assigned_user_id)
+  ));
+  const filteredRuns = runs.filter((r) => (
+    eventInReportRange(r.run_date, range)
+    && reportPersonMatches(r.assigned_user_name, employee, r.assigned_user_id)
+  ));
+  const filteredBarrels = employee
+    ? []
+    : barrels.filter((b) => eventInReportRange(b.fill_date, range));
+  const filteredBottlings = bottlings.filter((b) => (
+    eventInReportRange(b.bottling_date, range)
+    && reportPersonMatches(b.variance_changed_by, employee)
+  ));
 
   const completedMashes = filteredMashes.filter((m) => m.status === 'complete').length;
-  const volumeChanges = buildVolumeChangeRows(range);
+  const volumeChanges = filterRowsByPerson(buildVolumeChangeRows(range), (row) => row.who, employee);
   const volumeVarianceGal = totalVolumeVarianceGal(volumeChanges);
   const volumeVarianceAbv = totalVolumeVarianceAbv(volumeChanges);
   const completedRuns = filteredRuns.filter((r) => r.status === 'complete').length;
@@ -71,13 +86,16 @@ export function SummaryReport() {
     : 0;
   const totalGpa = yields.reduce((s, y) => s + y.gpa, 0);
   const gpaAfterChange = gpaAfterLossOrGain(totalGpa, volumeChanges);
-  const totalSugarProcessed = totalSugarProcessedLbs(sugarUses(), range);
+  const totalSugarProcessed = totalSugarProcessedLbs(
+    sugarUses().filter((use) => reportPersonMatches(use.operator, employee, use.operatorId)),
+    range,
+  );
 
-  const totalHeartsGal = monthParam
+  const totalHeartsGal = monthParam && !employee
     ? summary.totalHeartsGal
     : queryHeartsInRange(filteredRuns.map((r) => r.id));
 
-  const bottlesInRange = monthParam
+  const bottlesInRange = monthParam && !employee
     ? summary.bottlesThisMonth
     : filteredBottlings.reduce(
       (s, b) => s + (b.lines.reduce((n, l) => n + l.bottle_count, 0) || b.bottle_count),
@@ -120,7 +138,8 @@ export function SummaryReport() {
         </div>
         <div className="stat-card">
           <div className="label">Barrels / Bottlings</div>
-          <div className="value">{filteredBarrels.length} / {filteredBottlings.length}</div>
+          <div className="value">{employee ? '—' : filteredBarrels.length} / {filteredBottlings.length}</div>
+          {employee && <div className="sub">Barrel fills are stored without an employee</div>}
         </div>
       </div>
 
@@ -130,14 +149,16 @@ export function SummaryReport() {
         className="section"
         headingClassName="section-title"
         title="Equipment & Current Volumes"
-        summary={`${equipmentWithLiquid} holding liquid`}
+        summary={employee ? 'Shared floor' : `${equipmentWithLiquid} holding liquid`}
         defaultOpen={false}
         storageKey="report-summary-equipment"
       >
         <p className="report-section-desc">
-          Live snapshot of floor equipment (always current — not filtered by report period).
+          {employee
+            ? `Choose All employees to see the live floor. Tank levels are shared across the distillery.`
+            : 'Live snapshot of floor equipment (always current — not filtered by report period).'}
         </p>
-        {equipmentReport.length === 0 ? (
+        {employee ? null : equipmentReport.length === 0 ? (
           <div className="empty-state">
             <p>No floor equipment configured. Add equipment on the Floor Plan page.</p>
           </div>
@@ -191,7 +212,11 @@ export function SummaryReport() {
         </p>
         {yields.length === 0 ? (
           <div className="empty-state">
-            <p>No yield data for this period. Record distillation hearts cuts or widen the date range.</p>
+            <p>
+              {employee
+                ? `No yield data for ${employee.label} in this period. Record distillation hearts cuts or widen the date range.`
+                : 'No yield data for this period. Record distillation hearts cuts or widen the date range.'}
+            </p>
           </div>
         ) : (
           <div className="table-wrap">
@@ -237,7 +262,7 @@ export function SummaryReport() {
         </p>
         {filteredBottlings.length === 0 ? (
           <div className="empty-state">
-            <p>No bottling runs for this period.</p>
+            <p>{employee ? `No bottling runs for ${employee.label} in this period.` : 'No bottling runs for this period.'}</p>
           </div>
         ) : (
           <div className="table-wrap">
@@ -299,9 +324,9 @@ export function SummaryReport() {
         storageKey="report-summary-pipeline"
       >
         <div className="card report-pipeline-summary">
-          <div>Wash Batches:     {filteredMashes.length} started{monthParam ? '' : ` (${summary.activeMashes} active)`}</div>
-          <div>Distillation:     {filteredRuns.length} runs{monthParam ? '' : ` (${summary.activeRuns} active)`}</div>
-          <div>Barrels Filled:   {filteredBarrels.length}{monthParam ? '' : ` (${summary.barrelsAging} aging total)`}</div>
+          <div>Wash Batches:     {filteredMashes.length} started{monthParam || employee ? '' : ` (${summary.activeMashes} active)`}</div>
+          <div>Distillation:     {filteredRuns.length} runs{monthParam || employee ? '' : ` (${summary.activeRuns} active)`}</div>
+          <div>Barrels Filled:   {employee ? 'barrel fills are stored without an employee' : `${filteredBarrels.length}${monthParam ? '' : ` (${summary.barrelsAging} aging total)`}`}</div>
           <div>Hearts Collected: {totalHeartsGal.toFixed(1)} gal</div>
           <div>Bottled:          {bottlesInRange} bottles</div>
           <div>Low Stock Items:  {summary.lowStockItems} (current)</div>

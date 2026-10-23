@@ -6,14 +6,19 @@ import {
   groupMaintenanceReportRows,
 } from '../../lib/equipment-maintenance-log';
 import { eventInReportRange } from '../../lib/reporting/period';
+import { emptyForEmployee, filterRowsByPerson, reportPeriodLabel } from '../../lib/reporting/person';
 import type { EquipmentMaintenanceLogView } from '../../types';
 import { useReportContext } from './report-context';
 import { ReportTableShell } from './ReportTableShell';
 
 export function MaintenanceReport() {
-  const { range } = useReportContext();
-  const rows = getEquipmentMaintenanceReportLog().filter((entry) =>
-    eventInReportRange(entry.created_at, range),
+  const { range, employee } = useReportContext();
+  const periodLabel = reportPeriodLabel(range.label, employee);
+  const rows = filterRowsByPerson(
+    getEquipmentMaintenanceReportLog().filter((entry) => eventInReportRange(entry.created_at, range)),
+    (entry) => entry.recorded_by_user_name,
+    employee,
+    (entry) => entry.recorded_by_user_id,
   );
   const groups = groupMaintenanceReportRows(rows);
 
@@ -32,12 +37,12 @@ export function MaintenanceReport() {
     <ReportTableShell
       title="Maintenance & cleaning"
       description="Events are grouped by status: Needs cleaning, Marked cleaned, Broken, Under maintenance, Repair note, and Returned to service. The Equipment Maintenance page keeps the latest 10."
-      periodLabel={range.label}
+      periodLabel={periodLabel}
       csvFilename={`maintenance-${range.from ?? 'all'}`}
       csvHeaders={csvHeaders}
       csvRows={csvRows}
       isEmpty={rows.length === 0}
-      emptyMessage="No maintenance or cleaning events in this period."
+      emptyMessage={emptyForEmployee('No maintenance or cleaning events in this period.', employee)}
       tableWrap={false}
     >
       <div className="wash-status-groups">
@@ -50,7 +55,7 @@ export function MaintenanceReport() {
               </span>
             </header>
             {group.rows.length === 0 ? (
-              <p className="text-muted">No events in this period.</p>
+              <p className="text-muted">{emptyForEmployee('No events in this period.', employee)}</p>
             ) : (
               <MaintenanceEventTable rows={group.rows} />
             )}

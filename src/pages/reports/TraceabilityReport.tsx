@@ -1,22 +1,27 @@
 import { useState } from 'react';
 import { formatRecordedAt } from '../../lib/date-input';
+import { filterRowsByPerson } from '../../lib/reporting/person';
 import {
   getTraceabilityPath,
   searchTraceability,
   type TraceabilityHit,
 } from '../../lib/reporting/traceability';
+import { useReportContext } from './report-context';
 
 function hitKey(hit: TraceabilityHit): string {
   return `${hit.kind}:${hit.id}`;
 }
 
 export function TraceabilityReport() {
+  const { employee } = useReportContext();
   const [query, setQuery] = useState('');
   const [submitted, setSubmitted] = useState('');
   const [pickedKey, setPickedKey] = useState<string | null>(null);
   const [pickedFor, setPickedFor] = useState('');
 
-  const hits = submitted.length >= 2 ? searchTraceability(submitted) : [];
+  const hits = submitted.length >= 2
+    ? filterRowsByPerson(searchTraceability(submitted), (hit) => hit.operator, employee)
+    : [];
   const selectedKey = pickedFor === submitted
     ? pickedKey
     : hits.length === 1
@@ -36,6 +41,7 @@ export function TraceabilityReport() {
       <p className="report-section-desc">
         Look up a wash, distillation, blend, barrel, or bottling batch and follow where it came from
         and where it went, from wash through bottling. Each step shows when it was done and where.
+        {employee ? ` Matches are limited to batches recorded by ${employee.label}.` : ''}
       </p>
       <form
         className="traceability-search"
@@ -57,7 +63,7 @@ export function TraceabilityReport() {
       </form>
       {submitted.length >= 2 && hits.length === 0 && (
         <div className="empty-state">
-          <p>No matches for “{submitted}”.</p>
+          <p>No matches for “{submitted}”{employee ? ` recorded by ${employee.label}` : ''}.</p>
         </div>
       )}
       {hits.length > 0 && (

@@ -1,12 +1,18 @@
 import { Fragment } from 'react';
 import { formatCalendarDay } from '../../lib/date-input';
+import { emptyForEmployee, filterRowsByPerson, reportPeriodLabel } from '../../lib/reporting/person';
 import { buildVolumeChangeRows, groupVolumeChanges } from '../../lib/reporting/volume-changes';
 import { useReportContext } from './report-context';
 import { ReportTableShell } from './ReportTableShell';
 
 export function VolumeChangesReport() {
-  const { range } = useReportContext();
-  const groups = groupVolumeChanges(buildVolumeChangeRows(range));
+  const { range, employee } = useReportContext();
+  const periodLabel = reportPeriodLabel(range.label, employee);
+  const groups = groupVolumeChanges(filterRowsByPerson(
+    buildVolumeChangeRows(range),
+    (row) => row.who,
+    employee,
+  ));
 
   const csvHeaders = ['Date', 'Kind', 'Place', 'Change', 'Why', 'Who'];
   const csvRows = groups.flatMap((group) => [
@@ -20,12 +26,12 @@ export function VolumeChangesReport() {
     <ReportTableShell
       title="Volume changes"
       description="Grouped by kind. Fermenter leftovers, set tank volumes and ABV, water blended into alcohol already in a tank, bottling variances, blend differences, and distillation alcohol loss or gain. Watering down is a blend of water into the spirit: the alcohol stays in the tank. The summary Volume variances box totals the gallons and the ABV changes. Gallons sent to a tank, and water blended in on purpose, stay out of that total. A distillation result is the alcohol charged minus the alcohol collected. When more alcohol is collected than was charged, it is recorded as a gain. Alcohol left in the stillage is part of a loss, and its ABV is included in the summary."
-      periodLabel={range.label}
+      periodLabel={periodLabel}
       csvFilename={`volume-changes-${range.from ?? 'all'}`}
       csvHeaders={csvHeaders}
       csvRows={csvRows}
       isEmpty={groups.length === 0}
-      emptyMessage="No volume or ABV changes in this period."
+      emptyMessage={emptyForEmployee('No volume or ABV changes in this period.', employee)}
     >
       <table>
         <thead>

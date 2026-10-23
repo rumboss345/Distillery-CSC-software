@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import { getMonthlyProduction } from '../../db/queries';
 import { downloadCsv, rowsToCsv } from '../../lib/reporting/csv';
+import { monthlyProductionForEmployee } from '../../lib/reporting/monthly-production';
 import {
   PRODUCTIVITY_METRICS,
   chartAxis,
@@ -12,6 +12,7 @@ import {
   type ProductivityMetric,
 } from '../../lib/reporting/productivity';
 import { CollapsibleSection } from '../../components/CollapsibleSection';
+import { useReportContext } from './report-context';
 
 const CHART_WIDTH = 760;
 const CHART_HEIGHT = 280;
@@ -21,10 +22,17 @@ const PAD_TOP = 14;
 const PAD_BOTTOM = 32;
 
 export function ProductivityChart() {
-  const rows = getMonthlyProduction();
+  const { employee } = useReportContext();
+  const employeeKey = employee?.key ?? '';
+  const rows = useMemo(() => monthlyProductionForEmployee(employee), [employee]);
   const todayYear = new Date().getFullYear();
   const years = productivityYearOptions(rows, todayYear);
+  const [trackedEmployee, setTrackedEmployee] = useState(employeeKey);
   const [year, setYear] = useState(() => defaultProductivityYear(rows, todayYear));
+  if (trackedEmployee !== employeeKey) {
+    setTrackedEmployee(employeeKey);
+    setYear(defaultProductivityYear(rows, todayYear));
+  }
   const [metric, setMetric] = useState<ProductivityMetric>('heartsGal');
 
   const selectedYear = years.includes(year) ? year : years[0] ?? todayYear;
@@ -69,7 +77,7 @@ export function ProductivityChart() {
       <div data-testid="productivity-chart">
       <p className="report-section-desc">
         Month to month, and each month beside the same month a year earlier.
-        This graph uses every recorded month, separate from the report period above.
+        This graph uses every recorded month{employee ? ` for ${employee.label}` : ''}, separate from the report period above.
       </p>
 
       <div className="productivity-toolbar">

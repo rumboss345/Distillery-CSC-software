@@ -5,12 +5,14 @@ import {
   groupDistillationReportRows,
   type DistillationReportRow,
 } from '../../lib/reporting/distillation-rows';
+import { emptyForEmployee, filterRowsByPerson, reportPeriodLabel } from '../../lib/reporting/person';
 import { useReportContext } from './report-context';
 import { ReportTableShell } from './ReportTableShell';
 
 export function DistillationReport() {
-  const { range } = useReportContext();
-  const rows = buildDistillationReportRows(range);
+  const { range, employee } = useReportContext();
+  const periodLabel = reportPeriodLabel(range.label, employee);
+  const rows = filterRowsByPerson(buildDistillationReportRows(range), (row) => row.operator, employee);
   const groups = groupDistillationReportRows(rows);
 
   const csvHeaders = [
@@ -31,12 +33,12 @@ export function DistillationReport() {
     <ReportTableShell
       title="Distillation runs"
       description="Runs are grouped by type: Low Wine Run, Rum Run, Vodka Run, Heavy Rum, and Gin Run. Heads, hearts, and tails show gallons and the alcohol percent of that cut. Each row also includes hearts LAA and alcohol loss or gain. The difference is the alcohol charged minus the alcohol collected. When more alcohol is collected than was charged, the result is recorded as a gain. The Distillation page keeps the latest 10 completed runs."
-      periodLabel={range.label}
+      periodLabel={periodLabel}
       csvFilename={`distillation-${range.from ?? 'all'}`}
       csvHeaders={csvHeaders}
       csvRows={csvRows}
       isEmpty={rows.length === 0}
-      emptyMessage="No distillation runs in this period."
+      emptyMessage={emptyForEmployee('No distillation runs in this period.', employee)}
       tableWrap={false}
     >
       <div className="wash-status-groups">

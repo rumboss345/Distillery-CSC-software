@@ -4,13 +4,15 @@ import {
   buildFermentationHistoryRows,
   buildFermentationLeftoverRows,
 } from '../../lib/reporting/fermentation-rows';
+import { emptyForEmployee, filterRowsByPerson, reportPeriodLabel } from '../../lib/reporting/person';
 import { useReportContext } from './report-context';
 import { ReportTableShell } from './ReportTableShell';
 
 export function FermentationReport() {
-  const { range } = useReportContext();
-  const rows = buildFermentationHistoryRows(range);
-  const leftovers = buildFermentationLeftoverRows(range);
+  const { range, employee } = useReportContext();
+  const periodLabel = reportPeriodLabel(range.label, employee);
+  const rows = filterRowsByPerson(buildFermentationHistoryRows(range), (row) => row.operator, employee);
+  const leftovers = filterRowsByPerson(buildFermentationLeftoverRows(range), (row) => row.who, employee);
 
   const csvHeaders = [
     'Wash batch', 'Recipe', 'Fermenter', 'Volume gal', 'Started', 'Start Brix', 'Finishing Brix', 'Alc %', 'Status', 'Operator',
@@ -44,12 +46,12 @@ export function FermentationReport() {
     <ReportTableShell
       title="Fermentation history"
       description="Completed and discarded fermentations. Finishing Brix is the last reading on that fermenter. Alc % is estimated from the start and finishing Brix. The Fermentation page keeps the latest 10 of each. Use the period above to look up older ones."
-      periodLabel={range.label}
+      periodLabel={periodLabel}
       csvFilename={`fermentation-${range.from ?? 'all'}`}
       csvHeaders={csvHeaders}
       csvRows={csvRows}
       isEmpty={rows.length === 0}
-      emptyMessage="No completed or discarded fermentations in this period."
+      emptyMessage={emptyForEmployee('No completed or discarded fermentations in this period.', employee)}
     >
       <table>
         <thead>
@@ -87,12 +89,12 @@ export function FermentationReport() {
     <ReportTableShell
       title="Fermentation leftovers"
       description="Gallons that could not be used. The Fermentation page keeps the latest 10 leftover records."
-      periodLabel={range.label}
+      periodLabel={periodLabel}
       csvFilename={`fermentation-leftovers-${range.from ?? 'all'}`}
       csvHeaders={leftoverHeaders}
       csvRows={leftoverCsv}
       isEmpty={leftovers.length === 0}
-      emptyMessage="No leftovers in this period."
+      emptyMessage={emptyForEmployee('No leftovers in this period.', employee)}
     >
       <table>
         <thead>

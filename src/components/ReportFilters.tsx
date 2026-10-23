@@ -1,3 +1,4 @@
+import { ALL_EMPLOYEES_KEY, type ReportEmployee } from '../lib/reporting/person';
 import type { ReportPeriodPreset } from '../lib/reporting/period';
 
 export interface ReportFiltersProps {
@@ -7,6 +8,9 @@ export interface ReportFiltersProps {
   onPresetChange: (preset: ReportPeriodPreset) => void;
   onCustomFromChange: (value: string) => void;
   onCustomToChange: (value: string) => void;
+  employeeKey: string;
+  employees: ReportEmployee[];
+  onEmployeeChange: (key: string) => void;
 }
 
 const PRESETS: { value: ReportPeriodPreset; label: string }[] = [
@@ -26,9 +30,27 @@ export function ReportFilters({
   onPresetChange,
   onCustomFromChange,
   onCustomToChange,
+  employeeKey,
+  employees,
+  onEmployeeChange,
 }: ReportFiltersProps) {
   return (
     <div className="report-filters-panel">
+      <div className="form-group report-employee-filter">
+        <label htmlFor="report-employee">Employee</label>
+        <select
+          id="report-employee"
+          value={employeeKey}
+          onChange={(e) => onEmployeeChange(e.target.value)}
+        >
+          <option value={ALL_EMPLOYEES_KEY}>All employees</option>
+          {employees.map((employee) => (
+            <option key={employee.key} value={employee.key}>
+              {employee.label}
+            </option>
+          ))}
+        </select>
+      </div>
       <div className="form-group report-period-preset">
         <label htmlFor="report-period-preset">Period</label>
         <select

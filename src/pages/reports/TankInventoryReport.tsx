@@ -1,31 +1,42 @@
 import { formatCalendarDay } from '../../lib/date-input';
+import { filterRowsByPerson, reportPeriodLabel } from '../../lib/reporting/person';
 import { buildTankInventoryReportRows } from '../../lib/reporting/tank-rows';
 import { useReportContext } from './report-context';
 import { ReportTableShell } from './ReportTableShell';
 
 export function TankInventoryReport() {
-  const { range } = useReportContext();
-  const rows = buildTankInventoryReportRows(range);
+  const { range, employee } = useReportContext();
+  const periodLabel = reportPeriodLabel('Current', employee);
+  const rows = filterRowsByPerson(
+    buildTankInventoryReportRows(range),
+    (row) => row.last_movement_user,
+    employee,
+  );
 
   const csvHeaders = [
     'Tank', 'Type', 'Status', 'Capacity gal', 'Volume gal', 'ABV', 'LAA gal', 'Fill %', 'Detail',
-    'Last movement', 'Last movement type',
+    'Last movement', 'Last movement type', 'Last movement by',
   ];
   const csvRows = rows.map((r) => [
     r.name, r.equipment_type, r.status, r.capacity_gal, r.volume_gal, r.abv ?? '',
     r.laa_gal, r.fill_pct ?? '', r.detail, r.last_movement_at ?? '', r.last_movement_type ?? '',
+    r.last_movement_user ?? '',
   ]);
 
   return (
     <ReportTableShell
       title="Tank inventory"
-      description="Current holding and collection vessel levels (snapshot). Last movement is derived from liquid movement history."
-      periodLabel="Current"
+      description={employee
+        ? `Current holding and collection vessel levels whose latest movement was recorded by ${employee.label}.`
+        : 'Current holding and collection vessel levels (snapshot). Last movement is derived from liquid movement history.'}
+      periodLabel={periodLabel}
       csvFilename="tank-inventory"
       csvHeaders={csvHeaders}
       csvRows={csvRows}
       isEmpty={rows.length === 0}
-      emptyMessage="No holding or collection tanks configured."
+      emptyMessage={employee
+        ? `No tanks whose latest movement was recorded by ${employee.label}.`
+        : 'No holding or collection tanks configured.'}
     >
       <table>
         <thead>
@@ -39,6 +50,7 @@ export function TankInventoryReport() {
             <th className="num">LAA</th>
             <th className="num">Fill</th>
             <th>Last movement</th>
+            <th>By</th>
           </tr>
         </thead>
         <tbody>
@@ -57,6 +69,7 @@ export function TankInventoryReport() {
                   ? `${formatCalendarDay(r.last_movement_at)} (${r.last_movement_type?.replace(/_/g, ' ')})`
                   : '—'}
               </td>
+              <td>{r.last_movement_user?.trim() || '—'}</td>
             </tr>
           ))}
         </tbody>

@@ -276,6 +276,10 @@ body.nav-open {
   min-width: 10rem;
 }
 
+.report-employee-filter select {
+  min-width: 14rem;
+}
+
 .reports-subnav {
   display: flex;
   flex-wrap: wrap;

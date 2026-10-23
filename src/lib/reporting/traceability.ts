@@ -23,6 +23,8 @@ export interface TraceabilityHit {
   batch_or_ref: string;
   date: string;
   summary: string;
+  /** Employee recorded on this batch. Null when the record has no person. */
+  operator: string | null;
 }
 
 export interface TraceStep {
@@ -130,8 +132,14 @@ export function searchTraceability(query: string, limit = 50): TraceabilityHit[]
   const like = `%${q}%`;
   const hits: TraceabilityHit[] = [];
 
-  const mashes = queryAll<{ id: number; batch_number: string; start_date: string; status: string }>(
-    `SELECT id, batch_number, start_date, status FROM mash_batches
+  const mashes = queryAll<{
+    id: number;
+    batch_number: string;
+    start_date: string;
+    status: string;
+    assigned_user_name: string | null;
+  }>(
+    `SELECT id, batch_number, start_date, status, assigned_user_name FROM mash_batches
      WHERE LOWER(batch_number) LIKE ? OR CAST(id AS TEXT) = ?
      LIMIT ?`,
     [like, q, limit],
@@ -144,6 +152,7 @@ export function searchTraceability(query: string, limit = 50): TraceabilityHit[]
       batch_or_ref: m.batch_number,
       date: m.start_date,
       summary: `Wash batch · ${m.status}`,
+      operator: m.assigned_user_name?.trim() || null,
     });
   }
 
@@ -153,8 +162,9 @@ export function searchTraceability(query: string, limit = 50): TraceabilityHit[]
     run_date: string;
     still_name: string;
     status: string;
+    assigned_user_name: string | null;
   }>(
-    `SELECT id, batch_number, run_date, still_name, status FROM distillation_runs
+    `SELECT id, batch_number, run_date, still_name, status, assigned_user_name FROM distillation_runs
      WHERE LOWER(batch_number) LIKE ? OR CAST(id AS TEXT) = ?
      LIMIT ?`,
     [like, q, limit],
@@ -167,6 +177,7 @@ export function searchTraceability(query: string, limit = 50): TraceabilityHit[]
       batch_or_ref: r.batch_number,
       date: r.run_date,
       summary: `${r.still_name} · ${r.status}`,
+      operator: r.assigned_user_name?.trim() || null,
     });
   }
 
@@ -176,8 +187,9 @@ export function searchTraceability(query: string, limit = 50): TraceabilityHit[]
     blend_date: string;
     product_name: string;
     status: string;
+    assigned_user_name: string | null;
   }>(
-    `SELECT id, batch_number, blend_date, product_name, status FROM blend_products
+    `SELECT id, batch_number, blend_date, product_name, status, assigned_user_name FROM blend_products
      WHERE LOWER(batch_number) LIKE ? OR LOWER(product_name) LIKE ? OR CAST(id AS TEXT) = ?
      LIMIT ?`,
     [like, like, q, limit],
@@ -190,6 +202,7 @@ export function searchTraceability(query: string, limit = 50): TraceabilityHit[]
       batch_or_ref: b.batch_number,
       date: b.blend_date,
       summary: `${b.product_name} · ${b.status}`,
+      operator: b.assigned_user_name?.trim() || null,
     });
   }
 
@@ -199,8 +212,9 @@ export function searchTraceability(query: string, limit = 50): TraceabilityHit[]
     bottling_date: string;
     product_name: string;
     lot_number: string;
+    variance_changed_by: string | null;
   }>(
-    `SELECT id, batch_number, bottling_date, product_name, lot_number FROM bottling_runs
+    `SELECT id, batch_number, bottling_date, product_name, lot_number, variance_changed_by FROM bottling_runs
      WHERE LOWER(batch_number) LIKE ? OR LOWER(lot_number) LIKE ? OR LOWER(product_name) LIKE ?
        OR CAST(id AS TEXT) = ?
      LIMIT ?`,
@@ -214,6 +228,7 @@ export function searchTraceability(query: string, limit = 50): TraceabilityHit[]
       batch_or_ref: b.batch_number,
       date: b.bottling_date,
       summary: `${b.product_name}${b.lot_number ? ` · lot ${b.lot_number}` : ''}`,
+      operator: b.variance_changed_by?.trim() || null,
     });
   }
 
@@ -237,6 +252,7 @@ export function searchTraceability(query: string, limit = 50): TraceabilityHit[]
       batch_or_ref: b.barrel_number,
       date: b.fill_date,
       summary: `${(barrelBlendProductName(b.id) || b.spirit_type).replace(/_/g, ' ')} · ${b.status}`,
+      operator: null,
     });
   }
 

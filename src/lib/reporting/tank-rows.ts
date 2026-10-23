@@ -17,18 +17,23 @@ export interface TankInventoryReportRow {
   detail: string;
   last_movement_at: string | null;
   last_movement_type: string | null;
+  last_movement_user: string | null;
 }
 
 export function lastMovementForTankName(
   tankName: string,
   movements: LiquidMovementRow[],
-): Pick<TankInventoryReportRow, 'last_movement_at' | 'last_movement_type'> {
+): Pick<TankInventoryReportRow, 'last_movement_at' | 'last_movement_type' | 'last_movement_user'> {
   for (const m of movements) {
     if (m.source_label === tankName || m.dest_label === tankName) {
-      return { last_movement_at: m.occurred_at, last_movement_type: m.movement_type };
+      return {
+        last_movement_at: m.occurred_at,
+        last_movement_type: m.movement_type,
+        last_movement_user: m.user_label,
+      };
     }
   }
-  return { last_movement_at: null, last_movement_type: null };
+  return { last_movement_at: null, last_movement_type: null, last_movement_user: null };
 }
 
 export function buildTankInventoryReportRows(
@@ -63,6 +68,7 @@ export function buildTankInventoryReportRows(
       detail: eq.detail || '',
       last_movement_at: last.last_movement_at,
       last_movement_type: last.last_movement_type,
+      last_movement_user: last.last_movement_user,
     };
   }).sort((a, b) => b.volume_gal - a.volume_gal);
 }

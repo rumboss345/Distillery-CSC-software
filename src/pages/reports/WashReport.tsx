@@ -1,12 +1,14 @@
 import { formatDateDisplay } from '../../lib/date-input';
+import { emptyForEmployee, filterRowsByPerson, reportPeriodLabel } from '../../lib/reporting/person';
 import { buildWashHistoryRows } from '../../lib/reporting/wash-rows';
 import { washStatusLabel } from '../../lib/wash-stage';
 import { useReportContext } from './report-context';
 import { ReportTableShell } from './ReportTableShell';
 
 export function WashReport() {
-  const { range } = useReportContext();
-  const rows = buildWashHistoryRows(range);
+  const { range, employee } = useReportContext();
+  const rows = filterRowsByPerson(buildWashHistoryRows(range), (row) => row.operator, employee);
+  const periodLabel = reportPeriodLabel(range.label, employee);
 
   const csvHeaders = [
     'Wash batch', 'Recipe', 'Sugar lbs', 'Batch size gal', 'Started', 'Status', 'Operator',
@@ -25,12 +27,12 @@ export function WashReport() {
     <ReportTableShell
       title="Wash history"
       description="Every wash cook, including batches that moved on to fermentation. The Wash page keeps active washes and the latest 10 completed or discarded batches. Use the period above to look up older ones."
-      periodLabel={range.label}
+      periodLabel={periodLabel}
       csvFilename={`wash-${range.from ?? 'all'}`}
       csvHeaders={csvHeaders}
       csvRows={csvRows}
       isEmpty={rows.length === 0}
-      emptyMessage="No wash batches in this period."
+      emptyMessage={emptyForEmployee('No wash batches in this period.', employee)}
     >
       <table>
         <thead>
