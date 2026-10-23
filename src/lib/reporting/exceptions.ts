@@ -1,7 +1,7 @@
 import { queryAll } from '../../db/database';
 import { getBottlingRuns, getEquipmentVolumeReport, getHoldingTankVolumeVariances } from '../../db/queries';
 import { formatTankVolumeVariance } from '../tank-volume-variance';
-import { reportedBottlingVarianceGal, totalVolumeGal } from '../bottling-lines';
+import { formatBottlingAlcoholVariance, reportedBottlingAlcoholVarianceGal, reportedBottlingVarianceGal, totalVolumeGal } from '../bottling-lines';
 import { buildBlendReportRows } from './blend-rows';
 import { compareStoredDatesDesc } from '../date-input';
 import { localIsoDate } from '../planned-event-date';
@@ -28,16 +28,26 @@ export function buildProductionExceptions(range: ReportDateRange): ProductionExc
   for (const run of getBottlingRuns()) {
     if (!eventInReportRange(run.bottling_date, range)) continue;
     const variance = reportedBottlingVarianceGal(run);
-    if (variance != null && Math.abs(variance) >= VARIANCE_GAL_THRESHOLD) {
+    const alcoholVariance = reportedBottlingAlcoholVarianceGal(run);
+    const volumeNotable = variance != null && Math.abs(variance) >= VARIANCE_GAL_THRESHOLD;
+    const alcoholNotable = alcoholVariance != null && Math.abs(alcoholVariance) >= VARIANCE_GAL_THRESHOLD;
+    if (volumeNotable || alcoholNotable) {
       const why = run.variance_reason?.trim();
       const who = run.variance_changed_by?.trim();
+      const parts: string[] = [];
+      if (volumeNotable && variance != null) {
+        parts.push(`${variance > 0 ? '+' : ''}${variance.toFixed(2)} gal after gallons sent to a tank`);
+      }
+      if (alcoholNotable && alcoholVariance != null) {
+        parts.push(formatBottlingAlcoholVariance(alcoholVariance));
+      }
       rows.push({
         row_key: `bottling_var:${run.id}`,
         severity: 'warning',
         category: 'Bottling variance',
         occurred_at: run.bottling_date,
         reference: run.batch_number,
-        message: `Bottling variance is ${variance > 0 ? '+' : ''}${variance.toFixed(2)} gal after gallons sent to a tank (${run.product_name})${why ? `. ${why}` : ''}${who ? ` Changed by ${who}.` : '.'}`,
+        message: `Bottling variance is ${parts.join(', ')} (${run.product_name})${why ? `. ${why}` : ''}${who ? ` Changed by ${who}.` : '.'}`,
       });
     }
   }

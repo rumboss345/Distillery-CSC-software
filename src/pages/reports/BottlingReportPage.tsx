@@ -1,5 +1,5 @@
 import { formatDateDisplay } from '../../lib/date-input';
-import { bottleSizeCounts } from '../../lib/bottling-lines';
+import { bottleSizeCounts, formatBottlingAlcoholVariance } from '../../lib/bottling-lines';
 import { buildBottlingReportRows } from '../../lib/reporting/bottling-rows';
 import { useReportContext } from './report-context';
 import { ReportTableShell } from './ReportTableShell';
@@ -13,18 +13,18 @@ export function BottlingReportPage() {
 
   const csvHeaders = [
     'Batch', 'Product', 'Date', 'Lot', 'Source type', 'Tank draw gal', 'Bottled gal', 'ABV',
-    'Bottled LAA gal', 'Bottles', 'Bottle sizes', 'Variance gal', 'Why', 'Who',
+    'Bottled LAA gal', 'Bottles', 'Bottle sizes', 'Variance gal', 'Alcohol variance gal', 'Why', 'Who',
   ];
   const csvRows = rows.map((r) => [
     r.batch_number, r.product_name, r.bottling_date, r.lot_number, r.source_type,
     r.tank_draw_gal ?? '', r.bottled_gal, r.final_abv, r.bottled_laa_gal, r.bottle_count,
-    r.packaging_summary, r.volume_variance_gal ?? '', r.variance_reason ?? '', r.variance_changed_by ?? '',
+    r.packaging_summary, r.volume_variance_gal ?? '', r.alcohol_variance_gal ?? '', r.variance_reason ?? '', r.variance_changed_by ?? '',
   ]);
 
   return (
     <ReportTableShell
       title="Packaging & bottling"
-      description="Bottling runs with tank draw, bottled volume, LAA, variance, and each bottle size. Gallons sent to a tank are not a loss. The Bottling page keeps the latest 10 runs."
+      description="Bottling runs with tank draw, bottled volume, LAA, gallon variance, alcohol gained or lost, and each bottle size. Gallons sent to a tank are not a loss. The Bottling page keeps the latest 10 runs."
       periodLabel={range.label}
       csvFilename={`bottling-${range.from ?? 'all'}`}
       csvHeaders={csvHeaders}
@@ -78,9 +78,14 @@ export function BottlingReportPage() {
               </td>
               <td className="num">{r.tank_draw_gal != null ? r.tank_draw_gal.toFixed(2) : '—'}</td>
               <td className="num">
-                {r.volume_variance_gal != null && Math.abs(r.volume_variance_gal) >= 0.01
-                  ? `${r.volume_variance_gal > 0 ? '+' : ''}${r.volume_variance_gal.toFixed(2)}`
-                  : '—'}
+                <div>
+                  {r.volume_variance_gal != null && Math.abs(r.volume_variance_gal) >= 0.01
+                    ? `${r.volume_variance_gal > 0 ? '+' : ''}${r.volume_variance_gal.toFixed(2)}`
+                    : '—'}
+                </div>
+                {r.alcohol_variance_gal != null && Math.abs(r.alcohol_variance_gal) >= 0.01 && (
+                  <div data-testid="bottling-report-alcohol">{formatBottlingAlcoholVariance(r.alcohol_variance_gal)}</div>
+                )}
               </td>
               <td>{r.variance_reason || '—'}</td>
               <td>{r.variance_changed_by || '—'}</td>

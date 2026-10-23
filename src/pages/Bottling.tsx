@@ -25,12 +25,16 @@ import { latestCompleted } from '../lib/recent-completed';
 import { localIsoDate } from '../lib/planned-event-date';
 import { Modal } from '../components/Modal';
 import {
+  bottlingAlcoholVarianceGal,
   bottlingReturnsError,
   bottlingVolumeVarianceGal,
+  formatBottlingAlcoholVariance,
   formatLinesSummary,
   isRumBottlingProduct,
   lineVolumeGal,
   maxBottlesFromGallons,
+  reportedBottlingAlcoholVarianceGal,
+  reportedBottlingVarianceGal,
   totalBottleCount,
   totalVolumeGal,
 } from '../lib/bottling-lines';
@@ -82,8 +86,10 @@ const emptyRun = (): RunHeaderForm => ({
   source_barrel_id: null,
   source_holding_tank_equipment_id: null,
   source_volume_gal: null,
+  source_abv: null,
   bottled_volume_gal: null,
   volume_variance_gal: null,
+  alcohol_variance_gal: null,
   source_run_id: null,
   bottling_date: localIsoDate(),
   packaging_bottle: '',
@@ -181,6 +187,17 @@ export function Bottling() {
   const bottlingVarianceGal = tankVolumeGal != null && plannedDrawGal > 0
     ? bottlingVolumeVarianceGal(tankVolumeGal, plannedDrawGal, returnGal)
     : null;
+  const bottlingAlcoholGal = tankVolumeGal != null && plannedDrawGal > 0
+    ? bottlingAlcoholVarianceGal({
+      sourceGal: tankVolumeGal,
+      sourceAbv: selectedTankAvailable?.abv,
+      bottledGal: plannedDrawGal,
+      bottledAbv: form.final_abv,
+      returnGal,
+    })
+    : null;
+  const volumeNeedsReason = bottlingVarianceGal != null && Math.abs(bottlingVarianceGal) >= 0.01;
+  const alcoholNeedsReason = bottlingAlcoholGal != null && Math.abs(bottlingAlcoholGal) >= 0.01;
   const unbottledInTankGal = tankVolumeGal != null
     ? Math.max(0, tankVolumeGal - plannedDrawGal)
     : null;
@@ -309,8 +326,10 @@ export function Bottling() {
       source_barrel_id: run.source_barrel_id,
       source_holding_tank_equipment_id: run.source_holding_tank_equipment_id,
       source_volume_gal: run.source_volume_gal,
+      source_abv: run.source_abv,
       bottled_volume_gal: run.bottled_volume_gal,
       volume_variance_gal: run.volume_variance_gal,
+      alcohol_variance_gal: run.alcohol_variance_gal,
       source_run_id: run.source_run_id,
       bottling_date: run.bottling_date,
       packaging_bottle: run.packaging_bottle,
@@ -441,9 +460,7 @@ export function Bottling() {
       alert('Select the holding tank to bottle from.');
       return;
     }
-    const varianceNeedsReason = sourceType === 'tank'
-      && bottlingVarianceGal != null
-      && Math.abs(bottlingVarianceGal) >= 0.01;
+    const varianceNeedsReason = sourceType === 'tank' && (volumeNeedsReason || alcoholNeedsReason);
     if (sourceType === 'tank' && form.source_holding_tank_equipment_id && selectedTankAvailable && plannedDrawGal > 0) {
       const returnError = bottlingReturnsError({
         returns: returnLines.map((line) => {
@@ -478,7 +495,7 @@ export function Bottling() {
       sourceType === 'tank'
       && selectedTankAvailable
       && plannedDrawGal > 0
-      && (sentReturns.length > 0 || (bottlingVarianceGal != null && Math.abs(bottlingVarianceGal) >= 0.01))
+      && (sentReturns.length > 0 || varianceNeedsReason)
     ) {
       const notes: string[] = [
         `The source tank will be emptied (${selectedTankAvailable.volume_gal.toFixed(1)} gal drawn).`,
@@ -488,11 +505,14 @@ export function Bottling() {
         const name = returnDestinations.find((tank) => tank.id === line.holding_tank_equipment_id)?.name ?? 'tank';
         notes.push(`${(line.volume_gal ?? 0).toFixed(2)} gal goes to ${name}.`);
       }
-      if (bottlingVarianceGal != null && Math.abs(bottlingVarianceGal) >= 0.01) {
+      if (volumeNeedsReason && bottlingVarianceGal != null) {
         const varianceNote = bottlingVarianceGal > 0
           ? `${bottlingVarianceGal.toFixed(2)} gal over the tank`
           : `${Math.abs(bottlingVarianceGal).toFixed(2)} gal still unaccounted (recorded as variance)`;
         notes.push(varianceNote);
+      }
+      if (alcoholNeedsReason && bottlingAlcoholGal != null) {
+        notes.push(`${formatBottlingAlcoholVariance(bottlingAlcoholGal)}.`);
       }
       if (!confirm(`${notes.join(' ')} Continue?`)) {
         return;
@@ -528,6 +548,12 @@ export function Bottling() {
     if (variance == null || Math.abs(variance) < 0.01) return '—';
     const sign = variance > 0 ? '+' : '';
     return `${sign}${variance.toFixed(2)} gal`;
+  };
+
+  const alcoholVarianceLine = (run: BottlingRunView) => {
+    const alcohol = reportedBottlingAlcoholVarianceGal(run);
+    if (alcohol == null || Math.abs(alcohol) < 0.01) return null;
+    return <div>{formatBottlingAlcoholVariance(alcohol)}</div>;
   };
 
   const tankName = (id: number | null | undefined) => {
@@ -629,7 +655,10 @@ export function Bottling() {
                       : '—'}
                   </td>
                   <td>{returnLabel(r)}</td>
-                  <td className="num">{formatVariance(r.volume_variance_gal)}</td>
+                  <td className="num">
+                    <div>{formatVariance(reportedBottlingVarianceGal(r))}</div>
+                    {alcoholVarianceLine(r)}
+                  </td>
                   <td>{r.variance_reason?.trim() || '—'}</td>
                   <td>{r.variance_changed_by?.trim() || '—'}</td>
                   <td className="num">{formatBottlingAbv(r.final_abv)}%</td>
@@ -745,8 +774,14 @@ export function Bottling() {
                     {plannedDrawGal > 0 && (
                       <> Bottled total: {plannedDrawGal.toFixed(2)} gal.</>
                     )}
-                    {bottlingVarianceGal != null && Math.abs(bottlingVarianceGal) >= 0.01 && (
-                      <> Variance vs tank: {formatVariance(bottlingVarianceGal)}. This is listed on Reports → Volume changes.</>
+                    {volumeNeedsReason && (
+                      <> Variance vs tank: {formatVariance(bottlingVarianceGal)}.</>
+                    )}
+                    {alcoholNeedsReason && bottlingAlcoholGal != null && (
+                      <> <span data-testid="bottling-alcohol-variance">{formatBottlingAlcoholVariance(bottlingAlcoholGal)}</span>.</>
+                    )}
+                    {(volumeNeedsReason || alcoholNeedsReason) && (
+                      <> Listed on Reports → Volume changes.</>
                     )}
                   </p>
                 )}
@@ -938,9 +973,9 @@ export function Bottling() {
                 }}
               />
             </div>
-            {sourceType === 'tank' && bottlingVarianceGal != null && Math.abs(bottlingVarianceGal) >= 0.01 && (
+            {sourceType === 'tank' && (volumeNeedsReason || alcoholNeedsReason) && (
               <div className="form-group full-width">
-                <label htmlFor="bottling-variance-why">Why the bottled volume differs from the tank</label>
+                <label htmlFor="bottling-variance-why">Why the volume or alcohol differs from the tank</label>
                 <input
                   id="bottling-variance-why"
                   value={varianceReason}

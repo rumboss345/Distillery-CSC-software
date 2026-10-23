@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { gallonsRestoredToEmptiedBarrel } from '../lib/barrel-blending';
 import { BARREL_STOCK_CATEGORY, BARREL_STOCK_ITEM_NAME } from '../lib/barrel-inventory';
 import {
+  bottlingAlcoholVarianceGal,
   bottlingReturnsError,
   bottlingVolumeVarianceGal,
   packagingBottleCountsBySku,
@@ -4910,10 +4911,13 @@ export function saveBottlingRun(
     ? activeLines.reduce((sum, line) => sum + mlToGallons(line.bottle_count * line.bottle_size_ml), 0)
     : null;
   let sourceVolumeGal: number | null = null;
+  let sourceAbv: number | null = null;
   let volumeVarianceGal: number | null = null;
+  let alcoholVarianceGal: number | null = null;
   if (fromTank && sourceTankId && bottledVolumeGal != null && bottledVolumeGal > 0) {
     const available = getHoldingTankContents(sourceTankId, undefined, undefined, id);
     sourceVolumeGal = available.volume_gal;
+    sourceAbv = available.abv;
     volumeVarianceGal = bottledVolumeGal - sourceVolumeGal;
   }
   const packagingSummary = activeLines.length === 1
@@ -4976,6 +4980,13 @@ export function saveBottlingRun(
     if (returnError) throw new Error(returnError);
     const returnGal = checkedReturns.reduce((sum, line) => sum + (line.gallons > 0 ? line.gallons : 0), 0);
     volumeVarianceGal = bottlingVolumeVarianceGal(sourceVolumeGal ?? 0, bottledVolumeGal, returnGal);
+    alcoholVarianceGal = bottlingAlcoholVarianceGal({
+      sourceGal: sourceVolumeGal ?? 0,
+      sourceAbv,
+      bottledGal: bottledVolumeGal,
+      bottledAbv: run.final_abv,
+      returnGal,
+    });
   }
   const storedReturns = checkedReturns.filter(
     (line): line is { tankId: number; gallons: number; name?: string; destVolumeGal?: number; destCapacityGal?: number } =>
@@ -4984,11 +4995,12 @@ export function saveBottlingRun(
   const storedReturnTankId = storedReturns.length === 1 ? storedReturns[0].tankId : null;
   const storedReturnGal = storedReturns.length === 1 ? storedReturns[0].gallons : null;
   const varianceReason = run.variance_reason?.trim() ?? '';
-  const recordsWho = fromTank && (
-    (volumeVarianceGal != null && Math.abs(volumeVarianceGal) >= 0.01)
-    || storedReturns.some((line) => line.gallons > 0.001)
-  );
-  if (fromTank && volumeVarianceGal != null && Math.abs(volumeVarianceGal) >= 0.01) {
+  const volumeNeedsReason = fromTank && volumeVarianceGal != null && Math.abs(volumeVarianceGal) >= 0.01;
+  const alcoholNeedsReason = fromTank && alcoholVarianceGal != null && Math.abs(alcoholVarianceGal) >= 0.01;
+  const recordsWho = volumeNeedsReason
+    || alcoholNeedsReason
+    || (fromTank && storedReturns.some((line) => line.gallons > 0.001));
+  if (volumeNeedsReason || alcoholNeedsReason) {
     const reasonError = volumeChangeReasonError(varianceReason);
     if (reasonError) throw new Error(reasonError);
   }
@@ -4998,9 +5010,11 @@ export function saveBottlingRun(
     bottle_size_ml: headerSizeMl,
     bottle_count: totalCount,
     source_volume_gal: sourceVolumeGal,
+    source_abv: fromTank ? sourceAbv : null,
     bottled_volume_gal: fromTank ? bottledVolumeGal : null,
     volume_variance_gal: fromTank ? volumeVarianceGal : null,
-    variance_reason: fromTank && volumeVarianceGal != null && Math.abs(volumeVarianceGal) >= 0.01
+    alcohol_variance_gal: fromTank ? alcoholVarianceGal : null,
+    variance_reason: volumeNeedsReason || alcoholNeedsReason
       ? varianceReason
       : null,
     variance_changed_by: recordsWho
@@ -5013,15 +5027,15 @@ export function saveBottlingRun(
   let runId = id;
   if (runId) {
     runQuery(
-      `UPDATE bottling_runs SET batch_number=?, source_barrel_id=?, source_holding_tank_equipment_id=?, source_volume_gal=?, bottled_volume_gal=?, volume_variance_gal=?, variance_reason=?, variance_changed_by=?, return_holding_tank_equipment_id=?, return_volume_gal=?, source_run_id=?, bottling_date=?, packaging_bottle=?, bottle_size_ml=?, bottle_count=?, final_abv=?, product_name=?, lot_number=?, notes=? WHERE id=?`,
-      [header.batch_number, sourceBarrelId, sourceTankId, header.source_volume_gal, header.bottled_volume_gal, header.volume_variance_gal, header.variance_reason, header.variance_changed_by, header.return_holding_tank_equipment_id, header.return_volume_gal, header.source_run_id, header.bottling_date, header.packaging_bottle, header.bottle_size_ml, header.bottle_count, header.final_abv, header.product_name, header.lot_number, header.notes, runId],
+      `UPDATE bottling_runs SET batch_number=?, source_barrel_id=?, source_holding_tank_equipment_id=?, source_volume_gal=?, source_abv=?, bottled_volume_gal=?, volume_variance_gal=?, alcohol_variance_gal=?, variance_reason=?, variance_changed_by=?, return_holding_tank_equipment_id=?, return_volume_gal=?, source_run_id=?, bottling_date=?, packaging_bottle=?, bottle_size_ml=?, bottle_count=?, final_abv=?, product_name=?, lot_number=?, notes=? WHERE id=?`,
+      [header.batch_number, sourceBarrelId, sourceTankId, header.source_volume_gal, header.source_abv, header.bottled_volume_gal, header.volume_variance_gal, header.alcohol_variance_gal, header.variance_reason, header.variance_changed_by, header.return_holding_tank_equipment_id, header.return_volume_gal, header.source_run_id, header.bottling_date, header.packaging_bottle, header.bottle_size_ml, header.bottle_count, header.final_abv, header.product_name, header.lot_number, header.notes, runId],
     );
     persistBottlingRunLines(runId, activeLines);
     persistBottlingRunReturns(runId, storedReturns);
   } else {
     runId = insertRow(
-      `INSERT INTO bottling_runs (batch_number, source_barrel_id, source_holding_tank_equipment_id, source_volume_gal, bottled_volume_gal, volume_variance_gal, variance_reason, variance_changed_by, return_holding_tank_equipment_id, return_volume_gal, source_run_id, bottling_date, packaging_bottle, bottle_size_ml, bottle_count, final_abv, product_name, lot_number, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [header.batch_number, sourceBarrelId, sourceTankId, header.source_volume_gal, header.bottled_volume_gal, header.volume_variance_gal, header.variance_reason, header.variance_changed_by, header.return_holding_tank_equipment_id, header.return_volume_gal, header.source_run_id, header.bottling_date, header.packaging_bottle, header.bottle_size_ml, header.bottle_count, header.final_abv, header.product_name, header.lot_number, header.notes],
+      `INSERT INTO bottling_runs (batch_number, source_barrel_id, source_holding_tank_equipment_id, source_volume_gal, source_abv, bottled_volume_gal, volume_variance_gal, alcohol_variance_gal, variance_reason, variance_changed_by, return_holding_tank_equipment_id, return_volume_gal, source_run_id, bottling_date, packaging_bottle, bottle_size_ml, bottle_count, final_abv, product_name, lot_number, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [header.batch_number, sourceBarrelId, sourceTankId, header.source_volume_gal, header.source_abv, header.bottled_volume_gal, header.volume_variance_gal, header.alcohol_variance_gal, header.variance_reason, header.variance_changed_by, header.return_holding_tank_equipment_id, header.return_volume_gal, header.source_run_id, header.bottling_date, header.packaging_bottle, header.bottle_size_ml, header.bottle_count, header.final_abv, header.product_name, header.lot_number, header.notes],
     );
     persistBottlingRunLines(runId, activeLines);
     persistBottlingRunReturns(runId, storedReturns);

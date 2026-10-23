@@ -4,7 +4,11 @@ import {
   bottlingReturnError,
   bottlingReturnsError,
   bottlingReturnsTotalGal,
+  bottlingAlcoholVarianceGal,
   bottlingVolumeVarianceGal,
+  describeBottlingVarianceChange,
+  formatBottlingAlcoholVariance,
+  reportedBottlingAlcoholVarianceGal,
   reportedBottlingVarianceGal,
   bottleSizeCounts,
   formatBottleSizes,
@@ -74,6 +78,80 @@ describe('bottling-lines', () => {
       bottled_volume_gal: 10,
       volume_variance_gal: -15,
     })).toBeCloseTo(-15, 5);
+  });
+
+  it('counts alcohol gained or lost against the alcohol drawn', () => {
+    expect(bottlingAlcoholVarianceGal({
+      sourceGal: 100,
+      sourceAbv: 40,
+      bottledGal: 100,
+      bottledAbv: 38,
+      returnGal: 0,
+    })).toBeCloseTo(-2, 5);
+    expect(bottlingAlcoholVarianceGal({
+      sourceGal: 25,
+      sourceAbv: 40,
+      bottledGal: 10,
+      bottledAbv: 40,
+      returnGal: 15,
+    })).toBeCloseTo(0, 5);
+    expect(bottlingAlcoholVarianceGal({
+      sourceGal: 25,
+      sourceAbv: 40,
+      bottledGal: 10,
+      bottledAbv: 40,
+      returnGal: 0,
+    })).toBeCloseTo(-6, 5);
+    expect(bottlingAlcoholVarianceGal({
+      sourceGal: 10,
+      sourceAbv: 40,
+      bottledGal: 10,
+      bottledAbv: 42,
+      returnGal: 0,
+    })).toBeCloseTo(0.2, 5);
+    expect(bottlingAlcoholVarianceGal({
+      sourceGal: 25,
+      sourceAbv: null,
+      bottledGal: 10,
+      bottledAbv: 40,
+      returnGal: 0,
+    })).toBeNull();
+    expect(bottlingAlcoholVarianceGal({
+      sourceGal: 25,
+      sourceAbv: 40,
+      bottledGal: 10,
+      bottledAbv: 0,
+      returnGal: 0,
+    })).toBeNull();
+    expect(formatBottlingAlcoholVariance(-2)).toBe('Loss 2.00 gal alcohol');
+    expect(formatBottlingAlcoholVariance(0.2)).toBe('Gain 0.20 gal alcohol');
+    expect(describeBottlingVarianceChange({
+      volumeVarianceGal: 0,
+      alcoholVarianceGal: -2,
+      productName: 'Dark Rum',
+    })).toBe('Loss 2.00 gal alcohol (Dark Rum)');
+    expect(describeBottlingVarianceChange({
+      volumeVarianceGal: -15,
+      alcoholVarianceGal: -6,
+      productName: 'Dark Rum',
+    })).toBe('-15.00 gal vs the tank. Loss 6.00 gal alcohol (Dark Rum)');
+    expect(reportedBottlingAlcoholVarianceGal({
+      source_volume_gal: 100,
+      source_abv: 40,
+      bottled_volume_gal: 100,
+      final_abv: 38,
+      alcohol_variance_gal: 0,
+      return_volume_gal: 0,
+    })).toBeCloseTo(-2, 5);
+    expect(reportedBottlingAlcoholVarianceGal({
+      source_volume_gal: 100,
+      bottled_volume_gal: 100,
+      final_abv: 38,
+      alcohol_variance_gal: null,
+    })).toBeNull();
+    expect(reportedBottlingAlcoholVarianceGal({
+      alcohol_variance_gal: -1.5,
+    })).toBeCloseTo(-1.5, 5);
   });
 
   it('counts bottled gallons and gallons sent to a tank against the source', () => {
