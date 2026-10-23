@@ -26,7 +26,7 @@ function loadEnvFile() {
 }
 
 loadEnvFile();
-initializeAuthDatabase();
+await initializeAuthDatabase();
 
 const [email, password, name = ''] = process.argv.slice(2);
 
@@ -35,12 +35,12 @@ if (!email || !password) {
   process.exit(1);
 }
 
-if (getUserByEmail(email)) {
+if (await getUserByEmail(email)) {
   console.error(`User already exists: ${email.toLowerCase()}`);
   process.exit(1);
 }
 
-const user = createUserByAdmin(
+const user = await createUserByAdmin(
   email,
   password,
   name.trim() || null,

@@ -1,4 +1,4 @@
-import { insertRow, queryAll, runQuery } from './database';
+import { insertRow, queryAll, runQuery } from './sql-session';
 import { statusChangeToLog, type StatusDateLogKind } from '../lib/status-date-log';
 
 export interface StatusDateLogEntry {

@@ -13,10 +13,14 @@ import {
 import {
   checkDatabaseBackup,
   downloadDatabaseBackup,
-  emptyAllHoldingTanks,
-  getHoldingTanksWithContents,
+  fetchAuditEvents,
   resetAllData,
   restoreDatabaseBackup,
+} from '../db/client-actions';
+import { isPostgresMode } from '../db/database';
+import {
+  emptyAllHoldingTanks,
+  getHoldingTanksWithContents,
 } from '../db/queries';
 import { useAuth } from '../context/AuthContext';
 import { formatRecordedAt } from '../lib/date-input';
@@ -49,6 +53,7 @@ export function AdminUsers() {
   const [message, setMessage] = useState('');
   const [restoring, setRestoring] = useState(false);
   const [backupNote, setBackupNote] = useState('');
+  const [auditEvents, setAuditEvents] = useState<{ id: number; email: string; action: string; summary: string; created_at: string }[]>([]);
   const restoreInputRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState(emptyForm);
   const [editUser, setEditUser] = useState<AuthUser | null>(null);
@@ -73,6 +78,11 @@ export function AdminUsers() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (!isPostgresMode()) return;
+    void fetchAuditEvents().then(setAuditEvents);
+  }, [message, backupNote]);
 
   if (user?.role !== 'admin') {
     return <Navigate to="/" replace />;
@@ -214,10 +224,10 @@ export function AdminUsers() {
   }
 
   function handleClearAllData() {
-    if (!confirm('Clear the shared distillery record for everyone? This removes washes, runs, blends, barrels, bottling, inventory, and floor plan records.')) {
+    if (!confirm('Clear production records for everyone? Washes, runs, blends, barrels, bottling, and inventory are removed. Employee logins stay.')) {
       return;
     }
-    if (!confirm('This cannot be undone. Clear the shared record and reset it to sample data?')) {
+    if (!confirm('This cannot be undone. Clear production records without loading sample batches?')) {
       return;
     }
     void resetAllData().catch((error: unknown) => {
@@ -225,9 +235,13 @@ export function AdminUsers() {
     });
   }
 
-  function handleDownloadBackup() {
-    const fileName = downloadDatabaseBackup();
-    setBackupNote(`Backup downloaded as ${fileName}.`);
+  async function handleDownloadBackup() {
+    try {
+      const fileName = await downloadDatabaseBackup();
+      setBackupNote(`Backup downloaded as ${fileName}.`);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'The backup could not be downloaded.');
+    }
   }
 
   async function handleRestoreFile(file: File | undefined) {
@@ -246,7 +260,7 @@ export function AdminUsers() {
       return;
     }
     setRestoring(true);
-    downloadDatabaseBackup('csc-distillery-before-restore');
+    await downloadDatabaseBackup('csc-distillery-before-restore');
     const restoreError = await restoreDatabaseBackup(file);
     if (restoreError) {
       setRestoring(false);
@@ -451,8 +465,9 @@ export function AdminUsers() {
         <h2 className="admin-section-title">Data Management</h2>
         <h3 className="admin-subtitle">Backup</h3>
         <p className="admin-hint">
-          Washes, runs, tanks, and logs are one shared record for everyone signed in.
-          Download a backup often. Restoring replaces that shared record for every browser.
+          {isPostgresMode()
+            ? 'Washes, runs, tanks, and logs are stored in PostgreSQL for everyone signed in. A backup is a JSON file and does not include employee passwords. Restoring replaces production records for every employee.'
+            : 'Washes, runs, tanks, and logs are one shared record for everyone signed in. Download a backup often. Restoring replaces that shared record for every browser.'}
         </p>
         <div className="admin-data-actions">
           <button type="button" className="btn btn-primary" onClick={handleDownloadBackup} data-testid="download-backup">
@@ -470,7 +485,7 @@ export function AdminUsers() {
           <input
             ref={restoreInputRef}
             type="file"
-            accept=".sqlite,.db,application/vnd.sqlite3,application/x-sqlite3"
+            accept={isPostgresMode() ? '.json,application/json' : '.sqlite,.db,application/vnd.sqlite3,application/x-sqlite3'}
             hidden
             data-testid="restore-backup-file"
             onChange={(e) => void handleRestoreFile(e.target.files?.[0])}
@@ -480,7 +495,9 @@ export function AdminUsers() {
 
         <h3 className="admin-subtitle">Reset</h3>
         <p className="admin-hint">
-          Clear the shared record for everyone and start from sample data, or empty every holding tank and leave the other records in place.
+          {isPostgresMode()
+            ? 'Clear production records for every employee, or empty every holding tank and leave the other records in place. Employee logins stay.'
+            : 'Clear the shared record for everyone and start from sample data, or empty every holding tank and leave the other records in place.'}
         </p>
         <div className="admin-data-actions">
           <button type="button" className="btn btn-secondary" onClick={handleClearAllData}>
@@ -490,6 +507,39 @@ export function AdminUsers() {
             Empty All Tanks
           </button>
         </div>
+
+        {isPostgresMode() && (
+          <>
+            <h3 className="admin-subtitle">Audit log</h3>
+            <p className="admin-hint">
+              Saves, restores, and clears are recorded with the employee who made them.
+            </p>
+            {auditEvents.length === 0 ? (
+              <p className="admin-hint" data-testid="audit-log">No production changes have been recorded yet.</p>
+            ) : (
+              <table className="admin-table" data-testid="audit-log">
+                <thead>
+                  <tr>
+                    <th>When</th>
+                    <th>Employee</th>
+                    <th>Action</th>
+                    <th>Record</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {auditEvents.map((event) => (
+                    <tr key={event.id}>
+                      <td>{formatRecordedAt(event.created_at)}</td>
+                      <td>{event.email}</td>
+                      <td>{event.action}</td>
+                      <td>{event.summary}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </>
+        )}
       </div>
 
       {editUser && (

@@ -1,4 +1,4 @@
-import initSqlJs, { Database, SqlValue } from 'sql.js/dist/sql-wasm.js';
+import initSqlJs, { Database, type SqlValue } from 'sql.js/dist/sql-wasm.js';
 import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 import { getStoredToken } from '../lib/auth-api';
 import {
@@ -14,6 +14,34 @@ import { buildCscFloorEquipmentRows, CSC_FLOOR_PLAN_SIZE } from '../lib/csc-floo
 import { PACKAGING_BOTTLES } from '../lib/packaging-bottles';
 import type { BlendIngredientInput } from '../types';
 import { SCHEMA, SEED_DATA } from './schema';
+import {
+  bindSqlHandle,
+  insertRow,
+  queryAll,
+  queryOne,
+  runQuery,
+  setProductionMutationRedirect,
+  setWriteListener,
+} from './sql-session';
+import {
+  getSharedNotice,
+  notifySharedRefresh,
+  setSharedNotice,
+} from './refresh';
+import {
+  configureProductionBridge,
+  fetchProductionRevision,
+  fetchProductionSnapshot,
+  invokeProductionMutation,
+} from './production-client';
+
+export {
+  dismissSharedNotice,
+  getSharedNotice,
+  subscribeSharedNotice,
+  subscribeSharedRefresh,
+} from './refresh';
+export { insertRow, queryAll, queryOne, runQuery };
 
 const FLOOR_MIGRATION = `
 CREATE TABLE IF NOT EXISTS floor_plans (
@@ -259,7 +287,7 @@ function runMigrations(): void {
   );
   if (!hasFloor) {
     db.run(FLOOR_MIGRATION);
-    db.run(FLOOR_SEED);
+    if (!postgresMode) db.run(FLOOR_SEED);
     persistDb();
   }
 
@@ -1523,83 +1551,27 @@ const LEGACY_DB_KEYS = [
 ];
 
 let db: Database | null = null;
+let postgresMode = false;
+bindSqlHandle(() => db);
+
+export function isPostgresMode(): boolean {
+  return postgresMode;
+}
 let sqlModule: Awaited<ReturnType<typeof initSqlJs>> | null = null;
 let initPromise: Promise<Database> | null = null;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let pushTimer: ReturnType<typeof setTimeout> | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let serverRevision = 0;
+
+export function productionBaseRevision(): number {
+  return serverRevision;
+}
 let lastSyncedPayload: string | null = null;
 let suspendPush = false;
 let pushing = false;
 let localDirty = false;
-let sharedNotice: string | null = null;
 let seedEmptyServer = false;
-const noticeListeners = new Set<() => void>();
-const refreshListeners = new Set<() => void>();
-
-export function subscribeSharedNotice(listener: () => void): () => void {
-  noticeListeners.add(listener);
-  return () => noticeListeners.delete(listener);
-}
-
-export function getSharedNotice(): string | null {
-  return sharedNotice;
-}
-
-export function subscribeSharedRefresh(listener: () => void): () => void {
-  refreshListeners.add(listener);
-  return () => refreshListeners.delete(listener);
-}
-
-function setSharedNotice(message: string | null): void {
-  if (sharedNotice === message) return;
-  sharedNotice = message;
-  noticeListeners.forEach((listener) => listener());
-}
-
-export function dismissSharedNotice(): void {
-  setSharedNotice(null);
-}
-
-function notifySharedRefresh(): void {
-  refreshListeners.forEach((listener) => listener());
-}
-
-function rowToObject<T>(
-  columns: string[],
-  values: SqlValue[],
-): T {
-  const obj: Record<string, unknown> = {};
-  columns.forEach((col, i) => {
-    obj[col] = values[i];
-  });
-  return obj as T;
-}
-
-function queryAll<T>(
-  sql: string,
-  params: SqlValue[] = [],
-): T[] {
-  if (!db) return [];
-  const stmt = db.prepare(sql);
-  stmt.bind(params);
-  const results: T[] = [];
-  while (stmt.step()) {
-    results.push(rowToObject<T>(stmt.getColumnNames(), stmt.get()));
-  }
-  stmt.free();
-  return results;
-}
-
-function queryOne<T>(
-  sql: string,
-  params: SqlValue[] = [],
-): T | null {
-  const rows = queryAll<T>(sql, params);
-  return rows[0] ?? null;
-}
-
 function toBase64(data: Uint8Array): string {
   let binary = '';
   const chunkSize = 8192;
@@ -1614,11 +1586,12 @@ function bytesFromBase64(stored: string): Uint8Array {
 }
 
 function cacheLocalDatabase(): void {
-  if (!db) return;
+  if (!db || postgresMode) return;
   localStorage.setItem(DB_STORAGE_KEY, toBase64(new Uint8Array(db.export())));
 }
 
 function persistDb(): void {
+  if (postgresMode) return;
   cacheLocalDatabase();
   if (suspendPush || !getStoredToken()) return;
   localDirty = true;
@@ -1665,7 +1638,7 @@ async function pushSharedDatabase(): Promise<void> {
       serverRevision = remote.revision;
       lastSyncedPayload = payload;
       localDirty = false;
-      if (sharedNotice?.startsWith('The shared record could not be saved')) setSharedNotice(null);
+      if (getSharedNotice()?.startsWith('The shared record could not be saved')) setSharedNotice(null);
       return;
     } else if (remote.revision !== serverRevision) {
       const basedOnCurrentServer = !lastSyncedPayload || remote.database === lastSyncedPayload;
@@ -1681,7 +1654,7 @@ async function pushSharedDatabase(): Promise<void> {
     serverRevision = await putSharedRecord(baseRevision, payload);
     lastSyncedPayload = payload;
     localDirty = false;
-    if (sharedNotice?.startsWith('The shared record could not be saved')) setSharedNotice(null);
+    if (getSharedNotice()?.startsWith('The shared record could not be saved')) setSharedNotice(null);
   } catch (error) {
     if (error instanceof SharedRecordConflict && error.record.database) {
       applyDatabaseBytes(error.record.database, error.record.revision, true);
@@ -1780,6 +1753,7 @@ function createFreshDatabase(): void {
   if (!sqlModule) throw new Error('Database not initialized');
   db = new sqlModule.Database();
   db.run(SCHEMA);
+  if (postgresMode) return;
   db.run(SEED_DATA);
   seedCscFloorEquipment({ assignSequentialIds: true, demoStatusForFirstTwo: true });
   clearAllBlendRecipesOnce();
@@ -1787,12 +1761,81 @@ function createFreshDatabase(): void {
 }
 
 function scheduleSave(): void {
+  if (postgresMode) return;
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(persistDb, 300);
 }
 
+setWriteListener(scheduleSave);
+
+function applyPostgresSnapshot(encoded: string, revision: number, notify: boolean): void {
+  if (!sqlModule) throw new Error('Database not initialized');
+  suspendPush = true;
+  try {
+    if (db) db.close();
+    db = new sqlModule.Database(bytesFromBase64(encoded));
+    serverRevision = revision;
+    localDirty = false;
+  } finally {
+    suspendPush = false;
+  }
+  if (notify) notifySharedRefresh();
+}
+
+async function pullPostgresSnapshot(notify: boolean): Promise<void> {
+  const remote = await fetchProductionSnapshot();
+  applyPostgresSnapshot(remote.database, remote.revision, notify);
+}
+
+function startPostgresPolling(): void {
+  if (pollTimer) return;
+  pollTimer = setInterval(() => {
+    void pollPostgres();
+  }, 4000);
+}
+
+async function pollPostgres(): Promise<void> {
+  if (!getStoredToken() || !db) return;
+  const modalOpen = typeof document !== 'undefined' && document.querySelector('.modal');
+  if (modalOpen) return;
+  try {
+    const revision = await fetchProductionRevision();
+    if (revision !== serverRevision) await pullPostgresSnapshot(true);
+  } catch {
+    // Keep the snapshot already on screen until the server answers again.
+  }
+}
+
 async function loadDatabase(): Promise<Database> {
+  const health = await fetch('/api/health').then((response) => response.json()).catch(() => null);
+  postgresMode = health?.database === 'postgres';
   sqlModule = await initSqlJs({ locateFile: () => wasmUrl });
+  if (postgresMode) {
+    configureProductionBridge({
+      revision: () => serverRevision,
+      apply: (snapshot, revision) => applyPostgresSnapshot(snapshot, revision, true),
+      notify: (message) => setSharedNotice(message),
+    });
+    setProductionMutationRedirect((name, args) => invokeProductionMutation(name, args));
+    suspendPush = true;
+    try {
+      if (getStoredToken()) {
+        try {
+          await pullPostgresSnapshot(false);
+        } catch (error) {
+          createFreshDatabase();
+          setSharedNotice(error instanceof Error ? error.message : 'The shared distillery record is not reachable.');
+        }
+      } else {
+        createFreshDatabase();
+      }
+    } finally {
+      suspendPush = false;
+    }
+    startPostgresPolling();
+    if (!db) throw new Error('Database not initialized');
+    return db;
+  }
   suspendPush = true;
   try {
     const stored = localStorage.getItem(DB_STORAGE_KEY) ?? localStorage.getItem('distillery-tracker-db-v4');
@@ -1829,6 +1872,14 @@ export function initDatabase(): Promise<Database> {
 export async function ensureSharedDatabase(): Promise<void> {
   await initDatabase();
   if (!getStoredToken()) return;
+  if (postgresMode) {
+    try {
+      await pullPostgresSnapshot(true);
+    } catch (error) {
+      setSharedNotice(error instanceof Error ? error.message : 'The shared distillery record is not reachable.');
+    }
+    return;
+  }
   try {
     await pullOrSeedSharedDatabase({ notify: true });
   } catch (error) {
@@ -1848,25 +1899,13 @@ export function getDb(): Database {
   return db;
 }
 
-export function runQuery(sql: string, params: SqlValue[] = []): void {
-  getDb().run(sql, params);
-  scheduleSave();
-}
-
-export function insertRow(
-  sql: string,
-  params: SqlValue[] = [],
-): number {
-  runQuery(sql, params);
-  const result = queryOne<{ id: number }>('SELECT last_insert_rowid() as id');
-  return result?.id ?? 0;
-}
-
-export { queryAll, queryOne, scheduleSave };
+export { scheduleSave };
 
 export function resetDatabase(): void {
-  for (const key of LEGACY_DB_KEYS) {
-    localStorage.removeItem(key);
+  if (!postgresMode) {
+    for (const key of LEGACY_DB_KEYS) {
+      localStorage.removeItem(key);
+    }
   }
   if (db) {
     db.close();
@@ -1911,7 +1950,7 @@ export async function replaceSharedDatabase(data: Uint8Array): Promise<void> {
   }
   lastSyncedPayload = payload;
   localDirty = false;
-  localStorage.setItem(DB_STORAGE_KEY, payload);
+  if (!postgresMode) localStorage.setItem(DB_STORAGE_KEY, payload);
 }
 
 export function exportDatabase(): Uint8Array {
@@ -1921,7 +1960,7 @@ export function exportDatabase(): Uint8Array {
 export function importDatabase(data: Uint8Array): void {
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = null;
-  localStorage.setItem(DB_STORAGE_KEY, toBase64(data));
+  if (!postgresMode) localStorage.setItem(DB_STORAGE_KEY, toBase64(data));
   if (db) db.close();
   db = null;
 }

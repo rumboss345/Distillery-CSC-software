@@ -43,6 +43,7 @@ import {
   listProcessAssignmentsByStage,
   publicUser,
   rejectUserById,
+  getUserPermissions,
   syncAdminFromEnv,
   updateUserByAdmin,
   type User,
@@ -55,6 +56,21 @@ import {
   readDistilleryRecord,
   writeDistilleryRecord,
 } from './distillery-store.js';
+import { userMayMutate, PRODUCTION_MUTATIONS } from '../src/db/production-catalog.ts';
+import { usingPostgres, redactDatabaseUrl } from './pg.js';
+import { blockSqliteWrite } from './sqlite-guard.js';
+import { migrateDatabase } from './migrate.js';
+import {
+  clearProductionData,
+  exportProductionBackup,
+  initProductionEngine,
+  listAuditEvents,
+  productionRevision,
+  productionSnapshot,
+  ProductionConflict,
+  restoreProductionBackup,
+  runProductionMutation,
+} from './production-engine.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const isProduction = process.env.NODE_ENV === 'production';
@@ -91,7 +107,7 @@ function signToken(user: User) {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
 }
 
-function authMiddleware(
+async function authMiddleware(
   req: express.Request,
   res: express.Response,
   next: express.NextFunction
@@ -104,7 +120,7 @@ function authMiddleware(
   }
   try {
     const payload = jwt.verify(token, JWT_SECRET) as AuthPayload;
-    const user = getUserById(payload.userId);
+    const user = await getUserById(payload.userId);
     if (!user || (user.role !== 'admin' && user.status !== 'approved')) {
       res.status(401).json({ error: 'Invalid session' });
       return;
@@ -141,7 +157,7 @@ app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '30mb' }));
 
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true });
+  res.json({ ok: true, database: usingPostgres() ? 'postgres' : 'sqlite' });
 });
 
 app.get('/api/distillery-db/revision', authMiddleware, (_req, res) => {
@@ -159,7 +175,7 @@ app.get('/api/distillery-db', authMiddleware, (_req, res) => {
   });
 });
 
-app.put('/api/distillery-db', authMiddleware, (req, res) => {
+app.put('/api/distillery-db', authMiddleware, blockSqliteWrite, (req, res) => {
   const baseRevision = Number(req.body?.baseRevision);
   const encoded = typeof req.body?.database === 'string' ? req.body.database : '';
   if (!Number.isInteger(baseRevision) || baseRevision < 0 || !encoded) {
@@ -185,7 +201,7 @@ app.put('/api/distillery-db', authMiddleware, (req, res) => {
   res.json({ revision: saved.revision, updatedAt: saved.updatedAt });
 });
 
-app.delete('/api/distillery-db', authMiddleware, adminMiddleware, (_req, res) => {
+app.delete('/api/distillery-db', authMiddleware, adminMiddleware, blockSqliteWrite, (_req, res) => {
   const cleared = clearDistilleryRecord();
   res.json({ revision: 0, clearedAt: cleared.clearedAt });
 });
@@ -207,13 +223,13 @@ app.post('/api/auth/register', async (req, res) => {
     res.status(400).json({ error: 'Password must be at least 8 characters' });
     return;
   }
-  if (getUserByEmail(email)) {
+  if (await getUserByEmail(email)) {
     res.status(409).json({ error: 'An account with this email already exists' });
     return;
   }
 
   const passwordHash = bcrypt.hashSync(password, 12);
-  const user = createUser(email, passwordHash, name);
+  const user = await createUser(email, passwordHash, name);
 
   try {
     await sendAdminApprovalEmail({
@@ -232,7 +248,7 @@ app.post('/api/auth/register', async (req, res) => {
   });
 });
 
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
   const email = String(req.body.email ?? '').trim().toLowerCase();
   const password = String(req.body.password ?? '');
 
@@ -241,7 +257,7 @@ app.post('/api/auth/login', (req, res) => {
     return;
   }
 
-  const user = getUserByEmail(email);
+  const user = await getUserByEmail(email);
   if (!user || !bcrypt.compareSync(password, user.password_hash)) {
     res.status(401).json({ error: 'Invalid email or password' });
     return;
@@ -265,15 +281,15 @@ app.post('/api/auth/login', (req, res) => {
   }
 
   const token = signToken(user);
-  res.json({ token, user: publicUser(user) });
+  res.json({ token, user: await publicUser(user) });
 });
 
-app.get('/api/auth/me', authMiddleware, (req, res) => {
-  res.json({ user: publicUser(req.user!) });
+app.get('/api/auth/me', authMiddleware, async (req, res) => {
+  res.json({ user: await publicUser(req.user!) });
 });
 
 /** Re-verify an administrator before sensitive actions (e.g. editing or deleting completed fermentations). */
-app.post('/api/auth/verify-admin', authMiddleware, (req, res) => {
+app.post('/api/auth/verify-admin', authMiddleware, async (req, res) => {
   const email = String(req.body.email ?? '').trim().toLowerCase();
   const password = String(req.body.password ?? '');
 
@@ -282,7 +298,7 @@ app.post('/api/auth/verify-admin', authMiddleware, (req, res) => {
     return;
   }
 
-  const user = getUserByEmail(email);
+  const user = await getUserByEmail(email);
   if (!user || user.role !== 'admin' || !bcrypt.compareSync(password, user.password_hash)) {
     res.status(401).json({ error: 'Invalid administrator credentials' });
     return;
@@ -291,14 +307,14 @@ app.post('/api/auth/verify-admin', authMiddleware, (req, res) => {
   res.json({ ok: true, email: user.email });
 });
 
-app.post('/api/auth/approve', (req, res) => {
+app.post('/api/auth/approve', async (req, res) => {
   const token = String(req.body.token ?? req.query.token ?? '').trim();
   if (!token) {
     res.status(400).json({ error: 'Approval token is required' });
     return;
   }
 
-  const user = approveUserByToken(token);
+  const user = await approveUserByToken(token);
   if (!user) {
     res.status(404).json({ error: 'Invalid or expired approval link' });
     return;
@@ -306,47 +322,47 @@ app.post('/api/auth/approve', (req, res) => {
 
   res.json({
     message: `${user.email} has been approved. They can now sign in.`,
-    user: publicUser(user),
+    user: await publicUser(user),
   });
 });
 
-app.get('/api/admin/pending-users', authMiddleware, adminMiddleware, (_req, res) => {
-  res.json({ users: listPendingUsers() });
+app.get('/api/admin/pending-users', authMiddleware, adminMiddleware, async (_req, res) => {
+  res.json({ users: await listPendingUsers() });
 });
 
-app.post('/api/admin/users/:id/approve', authMiddleware, adminMiddleware, (req, res) => {
+app.post('/api/admin/users/:id/approve', authMiddleware, adminMiddleware, async (req, res) => {
   const id = Number(req.params.id);
-  const user = approveUserById(id);
+  const user = await approveUserById(id);
   if (!user) {
     res.status(404).json({ error: 'Pending user not found' });
     return;
   }
-  res.json({ message: `${user.email} approved`, user: publicUser(user) });
+  res.json({ message: `${user.email} approved`, user: await publicUser(user) });
 });
 
-app.post('/api/admin/users/:id/reject', authMiddleware, adminMiddleware, (req, res) => {
+app.post('/api/admin/users/:id/reject', authMiddleware, adminMiddleware, async (req, res) => {
   const id = Number(req.params.id);
-  const user = rejectUserById(id);
+  const user = await rejectUserById(id);
   if (!user) {
     res.status(404).json({ error: 'Pending user not found' });
     return;
   }
-  res.json({ message: `${user.email} rejected`, user: publicUser(user) });
+  res.json({ message: `${user.email} rejected`, user: await publicUser(user) });
 });
 
-app.get('/api/process/assignments', authMiddleware, (_req, res) => {
-  res.json({ assignments: listProcessAssignmentsByStage() });
+app.get('/api/process/assignments', authMiddleware, async (_req, res) => {
+  res.json({ assignments: await listProcessAssignmentsByStage() });
 });
 
-app.get('/api/users/assignable', authMiddleware, (_req, res) => {
-  res.json({ users: listAssignableUsers() });
+app.get('/api/users/assignable', authMiddleware, async (_req, res) => {
+  res.json({ users: await listAssignableUsers() });
 });
 
-app.get('/api/admin/users', authMiddleware, adminMiddleware, (_req, res) => {
-  res.json({ users: listAllUsers() });
+app.get('/api/admin/users', authMiddleware, adminMiddleware, async (_req, res) => {
+  res.json({ users: await listAllUsers() });
 });
 
-app.post('/api/admin/users', authMiddleware, adminMiddleware, (req, res) => {
+app.post('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) => {
   const email = String(req.body.email ?? '').trim().toLowerCase();
   const password = String(req.body.password ?? '');
   const name = req.body.name ? String(req.body.name).trim() : null;
@@ -374,8 +390,8 @@ app.post('/api/admin/users', authMiddleware, adminMiddleware, (req, res) => {
   }
 
   try {
-    const user = createUserByAdmin(email, password, name, permissions, processAssignments, role);
-    res.status(201).json({ message: `${user.email} created`, user: publicUser(user) });
+    const user = await createUserByAdmin(email, password, name, permissions, processAssignments, role);
+    res.status(201).json({ message: `${user.email} created`, user: await publicUser(user) });
   } catch (err) {
     res.status(409).json({
       error: err instanceof Error ? err.message : 'Could not create user',
@@ -383,7 +399,7 @@ app.post('/api/admin/users', authMiddleware, adminMiddleware, (req, res) => {
   }
 });
 
-app.patch('/api/admin/users/:id', authMiddleware, adminMiddleware, (req, res) => {
+app.patch('/api/admin/users/:id', authMiddleware, adminMiddleware, async (req, res) => {
   const id = Number(req.params.id);
   const name = req.body.name !== undefined ? String(req.body.name).trim() || null : undefined;
   const permissions =
@@ -399,21 +415,21 @@ app.patch('/api/admin/users/:id', authMiddleware, adminMiddleware, (req, res) =>
         )
       : undefined;
 
-  const user = updateUserByAdmin(id, { name, permissions, processAssignments });
+  const user = await updateUserByAdmin(id, { name, permissions, processAssignments });
   if (!user) {
     res.status(404).json({ error: 'User not found or cannot be modified' });
     return;
   }
-  res.json({ message: 'User updated', user: publicUser(user) });
+  res.json({ message: 'User updated', user: await publicUser(user) });
 });
 
-app.delete('/api/admin/users/:id', authMiddleware, adminMiddleware, (req, res) => {
+app.delete('/api/admin/users/:id', authMiddleware, adminMiddleware, async (req, res) => {
   const id = Number(req.params.id);
   if (id === req.user!.id) {
     res.status(400).json({ error: 'You cannot remove your own account' });
     return;
   }
-  const result = deleteUserById(id);
+  const result = await deleteUserById(id);
   if (!result.ok) {
     res.status(400).json({ error: result.reason });
     return;
@@ -421,35 +437,136 @@ app.delete('/api/admin/users/:id', authMiddleware, adminMiddleware, (req, res) =
   res.json({ message: 'User removed' });
 });
 
-initializeAuthDatabase();
-syncAdminFromEnv();
+app.get('/api/production/revision', authMiddleware, (_req, res) => {
+  if (!usingPostgres()) {
+    res.status(404).json({ error: 'PostgreSQL is not configured.' });
+    return;
+  }
+  res.json({ revision: productionRevision() });
+});
 
-if (isProduction) {
-  const distPath = join(__dirname, '..', 'dist');
+app.get('/api/production/snapshot', authMiddleware, (_req, res) => {
+  if (!usingPostgres()) {
+    res.status(404).json({ error: 'PostgreSQL is not configured.' });
+    return;
+  }
+  res.json({ revision: productionRevision(), database: productionSnapshot() });
+});
 
-  app.use(express.static(distPath));
-
-  // SPA fallback: React Router routes work on direct refresh
-  app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/api/')) {
-      next();
-      return;
-    }
-    res.sendFile(join(distPath, 'index.html'), (err) => {
-      if (err) next(err);
+app.post('/api/production/mutate', authMiddleware, async (req, res) => {
+  if (!usingPostgres()) {
+    res.status(404).json({ error: 'PostgreSQL is not configured.' });
+    return;
+  }
+  const name = String(req.body?.name ?? '');
+  const args = Array.isArray(req.body?.args) ? req.body.args : null;
+  const baseRevision = Number(req.body?.baseRevision);
+  const mutation = PRODUCTION_MUTATIONS[name];
+  if (!mutation || !args || !Number.isInteger(baseRevision) || baseRevision < 0) {
+    res.status(400).json({ error: 'A valid production action is required.' });
+    return;
+  }
+  const permissions = req.user!.role === 'admin' ? [] : await getUserPermissions(req.user!.id);
+  if (!userMayMutate(req.user!.role, permissions, mutation.access)) {
+    res.status(403).json({ error: 'You do not have permission for that action.' });
+    return;
+  }
+  try {
+    const saved = await runProductionMutation(name, args, { id: req.user!.id, email: req.user!.email }, baseRevision);
+    res.json(saved);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'The change could not be saved.';
+    const status = error instanceof ProductionConflict ? 409 : 400;
+    res.status(status).json({
+      error: redactDatabaseUrl(message),
+      revision: productionRevision(),
+      database: status === 409 ? productionSnapshot() : undefined,
     });
+  }
+});
+
+app.get('/api/production/backup', authMiddleware, adminMiddleware, async (_req, res) => {
+  if (!usingPostgres()) {
+    res.status(404).json({ error: 'PostgreSQL is not configured.' });
+    return;
+  }
+  const backup = await exportProductionBackup();
+  const stamp = backup.exportedAt.slice(0, 16).replace(/[-:T]/g, '');
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Content-Disposition', `attachment; filename="csc-distillery-backup-${stamp}.json"`);
+  res.json(backup);
+});
+
+app.post('/api/production/restore', authMiddleware, adminMiddleware, async (req, res) => {
+  if (!usingPostgres()) {
+    res.status(404).json({ error: 'PostgreSQL is not configured.' });
+    return;
+  }
+  try {
+    const saved = await restoreProductionBackup(req.body, { id: req.user!.id, email: req.user!.email });
+    res.json(saved);
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? redactDatabaseUrl(error.message) : 'The backup could not be restored.' });
+  }
+});
+
+app.delete('/api/production', authMiddleware, adminMiddleware, async (req, res) => {
+  if (!usingPostgres()) {
+    res.status(404).json({ error: 'PostgreSQL is not configured.' });
+    return;
+  }
+  const saved = await clearProductionData({ id: req.user!.id, email: req.user!.email });
+  res.json(saved);
+});
+
+app.get('/api/production/audit', authMiddleware, adminMiddleware, async (_req, res) => {
+  if (!usingPostgres()) {
+    res.status(404).json({ error: 'PostgreSQL is not configured.' });
+    return;
+  }
+  res.json({ events: await listAuditEvents() });
+});
+
+async function start() {
+  if (usingPostgres()) {
+    await migrateDatabase();
+    await initProductionEngine();
+  }
+  await initializeAuthDatabase();
+  await syncAdminFromEnv();
+
+  if (isProduction) {
+    const distPath = join(__dirname, '..', 'dist');
+
+    app.use(express.static(distPath));
+
+    // SPA fallback: React Router routes work on direct refresh
+    app.get('*', (req, res, next) => {
+      if (req.path.startsWith('/api/')) {
+        next();
+        return;
+      }
+      res.sendFile(join(distPath, 'index.html'), (err) => {
+        if (err) next(err);
+      });
+    });
+  }
+
+  app.listen(PORT, HOST, () => {
+    const mode = isProduction ? 'production' : 'development';
+    const store = usingPostgres() ? 'PostgreSQL' : 'SQLite';
+    console.log(`Server listening on http://${HOST ?? 'localhost'}:${PORT} (${mode}, ${store})`);
+    if (isProduction) {
+      console.log('Serving frontend from dist/');
+    } else {
+      console.log(`Vite dev server expected at ${APP_URL ?? 'http://localhost:5173'}`);
+    }
+    if (APP_URL) console.log(`App URL: ${APP_URL}`);
   });
 }
 
-app.listen(PORT, HOST, () => {
-  const mode = isProduction ? 'production' : 'development';
-  console.log(`Server listening on http://${HOST ?? 'localhost'}:${PORT} (${mode})`);
-  if (isProduction) {
-    console.log(`Serving frontend from dist/`);
-  } else {
-    console.log(`Vite dev server expected at ${APP_URL ?? 'http://localhost:5173'}`);
-  }
-  if (APP_URL) {
-    console.log(`App URL: ${APP_URL}`);
-  }
+start().catch((error) => {
+  const message = error instanceof Error ? error.message : 'Server failed to start';
+  console.error(redactDatabaseUrl(message));
+  process.exit(1);
 });

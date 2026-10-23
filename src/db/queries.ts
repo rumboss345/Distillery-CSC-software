@@ -88,8 +88,8 @@ import type {
   EquipmentMaintenanceLogView,
   EquipmentMaintenanceStatus,
 } from '../types';
-import { initDatabase, resetSharedDatabase, subscribeSharedRefresh, backupFileError, exportDatabase, replaceSharedDatabase } from './database';
-import { backupFileName, downloadBytes } from '../lib/database-backup';
+import { subscribeSharedRefresh } from './refresh';
+import { forwardProductionMutation, queryAll, queryOne, runQuery, insertRow } from './sql-session';
 import type {
   Barrel,
   BarrelFill,
@@ -150,12 +150,6 @@ import type {
   YieldReport,
 } from '../types';
 import { mlToGallons } from '../types';
-import {
-  insertRow,
-  queryAll,
-  queryOne,
-  runQuery,
-} from './database';
 import {
   computeTheoreticalBlend,
   proofingRecordForBlend,
@@ -256,6 +250,9 @@ export function markEquipmentCleaned(
   cleanedByUserId: number,
   cleanedByUserName: string,
 ): void {
+  const __remote = forwardProductionMutation('markEquipmentCleaned', [equipmentId, cleanedByUserId, cleanedByUserName]);
+  if (__remote.forwarded) return __remote.value as never;
+
   const eq = queryOne<FloorEquipment>('SELECT * FROM floor_equipment WHERE id = ?', [equipmentId]);
   if (!eq) throw new Error('Equipment not found.');
   if (!equipmentNeedsCleaning(eq)) {
@@ -362,55 +359,11 @@ export function computeBlendFormulation(
   return { theoretical, reconciliation };
 }
 
-export function useDatabaseReady() {
-  const [ready, setReady] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    initDatabase()
-      .then(() => setReady(true))
-      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load database'));
-  }, []);
-
-  return { ready, error };
-}
-
 export function useRefreshKey() {
   const [key, setKey] = useState(0);
   const refresh = useCallback(() => setKey((k) => k + 1), []);
   useEffect(() => subscribeSharedRefresh(refresh), [refresh]);
   return { key, refresh };
-}
-
-export async function resetAllData(): Promise<void> {
-  await resetSharedDatabase();
-  window.location.reload();
-}
-
-/** Saves every distillery record in this browser to a file. */
-export function downloadDatabaseBackup(prefix?: string): string {
-  const fileName = backupFileName(new Date(), prefix);
-  downloadBytes(exportDatabase(), fileName);
-  return fileName;
-}
-
-/** Error message when the file cannot be restored, or null when it is a distillery backup. */
-export async function checkDatabaseBackup(file: Blob): Promise<string | null> {
-  return backupFileError(new Uint8Array(await file.arrayBuffer()));
-}
-
-/** Replaces the shared distillery record with a backup file. Returns an error message, or reloads. */
-export async function restoreDatabaseBackup(file: Blob): Promise<string | null> {
-  const data = new Uint8Array(await file.arrayBuffer());
-  const error = await backupFileError(data);
-  if (error) return error;
-  try {
-    await replaceSharedDatabase(data);
-  } catch (err) {
-    return err instanceof Error ? err.message : 'The backup could not be saved to the shared record.';
-  }
-  window.location.reload();
-  return null;
 }
 
 // ── Inventory ──────────────────────────────────────────────
@@ -480,6 +433,9 @@ export function ensureInventoryItem(input: {
   category: string;
   unit?: string;
 }): InventoryItem {
+  const __remote = forwardProductionMutation('ensureInventoryItem', [input]);
+  if (__remote.forwarded) return __remote.value as never;
+
   const name = preparedIngredientName(input.name);
   const category = input.category.trim().toLowerCase();
   if (!category) throw new Error('Choose an ingredient category.');
@@ -505,6 +461,9 @@ export function ensureInventoryItem(input: {
 }
 
 export function saveInventoryItem(item: Omit<InventoryItem, 'id' | 'created_at' | 'updated_at'>, id?: number): void {
+  const __remote = forwardProductionMutation('saveInventoryItem', [item, id]);
+  if (__remote.forwarded) return __remote.value as never;
+
   const packageSizeMl = item.category === 'packaging' && item.package_size_ml != null && item.package_size_ml > 0
     ? item.package_size_ml
     : null;
@@ -525,6 +484,9 @@ export function saveInventoryItem(item: Omit<InventoryItem, 'id' | 'created_at' 
 }
 
 export function adjustInventory(id: number, delta: number): void {
+  const __remote = forwardProductionMutation('adjustInventory', [id, delta]);
+  if (__remote.forwarded) return __remote.value as never;
+
   runQuery(
     `UPDATE inventory_items SET quantity = quantity + ?, updated_at = datetime('now') WHERE id = ?`,
     [delta, id],
@@ -532,6 +494,9 @@ export function adjustInventory(id: number, delta: number): void {
 }
 
 export function deleteInventoryItem(id: number): void {
+  const __remote = forwardProductionMutation('deleteInventoryItem', [id]);
+  if (__remote.forwarded) return __remote.value as never;
+
   runQuery('DELETE FROM inventory_items WHERE id = ?', [id]);
 }
 
@@ -552,6 +517,9 @@ export function getInventoryCategories(): string[] {
 }
 
 export function addInventoryCategory(name: string): string {
+  const __remote = forwardProductionMutation('addInventoryCategory', [name]);
+  if (__remote.forwarded) return __remote.value as never;
+
   const normalized = name.trim().toLowerCase();
   if (!normalized) {
     throw new Error('Category name is required.');
@@ -675,6 +643,9 @@ export function saveRecipe(
   id?: number,
   nutrients: RecipeNutrientInput[] = [],
 ): number {
+  const __remote = forwardProductionMutation('saveRecipe', [recipe, id, nutrients]);
+  if (__remote.forwarded) return __remote.value as never;
+
   let recipeId = id;
   if (recipeId) {
     runQuery(
@@ -715,6 +686,9 @@ export function saveRecipe(
 }
 
 export function deleteRecipe(id: number): void {
+  const __remote = forwardProductionMutation('deleteRecipe', [id]);
+  if (__remote.forwarded) return __remote.value as never;
+
   runQuery('DELETE FROM recipe_nutrients WHERE recipe_id = ?', [id]);
   runQuery('DELETE FROM recipes WHERE id = ?', [id]);
 }
@@ -732,6 +706,9 @@ export function getMashBatch(id: number): MashBatch | undefined {
 }
 
 export function saveMashBatch(batch: Omit<MashBatch, 'id' | 'created_at'>, id?: number): number {
+  const __remote = forwardProductionMutation('saveMashBatch', [batch, id]);
+  if (__remote.forwarded) return __remote.value as never;
+
   if (id) {
     runQuery(
       `UPDATE mash_batches SET batch_number=?, recipe_name=?, grain_type=?, grain_lbs=?, water_gal=?, yeast_strain=?, yeast_lbs=?, start_date=?, fermentation_start_date=?, expected_completion_date=?, target_brix=?, actual_brix=?, target_final_brix=?, status=?, assigned_user_id=?, assigned_user_name=?, notes=? WHERE id=?`,
@@ -1498,6 +1475,9 @@ export function saveHoldingTankOnHand(input: {
   notes?: string;
   changedBy: string;
 }): void {
+  const __remote = forwardProductionMutation('saveHoldingTankOnHand', [input]);
+  if (__remote.forwarded) return __remote.value as never;
+
   assertSpiritTransferVessel(input.tankEquipmentId, 'destination');
   if (!Number.isFinite(input.volumeGal) || input.volumeGal < 0) {
     throw new Error('Enter the gallons on hand.');
@@ -1556,6 +1536,9 @@ export function saveHoldingTankOnHand(input: {
 }
 
 export function clearHoldingTankOnHand(tankId: number, reason: string, changedBy: string): void {
+  const __remote = forwardProductionMutation('clearHoldingTankOnHand', [tankId, reason, changedBy]);
+  if (__remote.forwarded) return __remote.value as never;
+
   const existing = queryOne<{ notes: string }>(
     'SELECT notes FROM holding_tank_opening_balances WHERE tank_equipment_id = ?',
     [tankId],
@@ -2512,6 +2495,9 @@ export function saveHoldingTankTransfer(
     spirit_type?: HoldingTankTransfer['spirit_type'];
   },
 ): void {
+  const __remote = forwardProductionMutation('saveHoldingTankTransfer', [transfer]);
+  if (__remote.forwarded) return __remote.value as never;
+
   const discarding = transfer.dest_tank_equipment_id == null;
   if (!discarding && transfer.source_tank_equipment_id === transfer.dest_tank_equipment_id) {
     throw new Error('Source and destination tanks must be different.');
@@ -2556,6 +2542,9 @@ export function saveHoldingTankTransfer(
 }
 
 export function deleteHoldingTankTransfer(id: number): void {
+  const __remote = forwardProductionMutation('deleteHoldingTankTransfer', [id]);
+  if (__remote.forwarded) return __remote.value as never;
+
   runQuery('DELETE FROM holding_tank_transfers WHERE id = ?', [id]);
   syncHoldingTankStatuses();
 }
@@ -2581,6 +2570,9 @@ export function saveHoldingTankDilution(input: {
   notes?: string;
   changedBy: string;
 }): void {
+  const __remote = forwardProductionMutation('saveHoldingTankDilution', [input]);
+  if (__remote.forwarded) return __remote.value as never;
+
   assertSpiritTransferVessel(input.tankEquipmentId, 'destination');
   assertEquipmentUsableForProduction(input.tankEquipmentId, 'Tank');
   const tank = queryOne<{ name: string; equipment_type: string; capacity_gal: number }>(
@@ -2627,6 +2619,9 @@ export function saveHoldingTankDilution(input: {
 }
 
 export function deleteHoldingTankDilution(id: number): void {
+  const __remote = forwardProductionMutation('deleteHoldingTankDilution', [id]);
+  if (__remote.forwarded) return __remote.value as never;
+
   runQuery('DELETE FROM holding_tank_dilutions WHERE id = ?', [id]);
   syncHoldingTankStatuses();
 }
@@ -2734,6 +2729,9 @@ export function saveFermenterWashTransfer(input: {
   notes: string;
   changedBy: string;
 }): void {
+  const __remote = forwardProductionMutation('saveFermenterWashTransfer', [input]);
+  if (__remote.forwarded) return __remote.value as never;
+
   const sources = queryAll<{
     id: number;
     mash_batch_id: number;
@@ -2863,6 +2861,9 @@ export function saveFermenterWashTransfer(input: {
 
 /** Put discarded gallons back when the fermenter is empty or still holds that wash. */
 export function deleteDiscardedFermentation(id: number): void {
+  const __remote = forwardProductionMutation('deleteDiscardedFermentation', [id]);
+  if (__remote.forwarded) return __remote.value as never;
+
   const row = queryOne<DiscardedFermentation>(
     'SELECT * FROM discarded_fermentations WHERE id = ?',
     [id],
@@ -2939,6 +2940,9 @@ export function emptyAllHoldingTanks(): {
   runsCleared: number;
   blendsCleared: number;
 } {
+  const __remote = forwardProductionMutation('emptyAllHoldingTanks', []);
+  if (__remote.forwarded) return __remote.value as never;
+
   const transfersRemoved = queryOne<{ count: number }>(
     'SELECT COUNT(*) as count FROM holding_tank_transfers',
   )?.count ?? 0;
@@ -3073,6 +3077,9 @@ export function saveMashFermenterAssignments(
   mashBatchId: number,
   assignments: FermenterAssignmentInput[],
 ): void {
+  const __remote = forwardProductionMutation('saveMashFermenterAssignments', [mashBatchId, assignments]);
+  if (__remote.forwarded) return __remote.value as never;
+
   const batch = getMashBatch(mashBatchId);
   const batchStatus = batch?.status;
   const planOnly = plannedRecordSkipsEquipmentStatus(batchStatus);
@@ -3190,6 +3197,9 @@ export function saveMashBatchWithFermenters(
   id?: number,
   options?: { replaceAssignments?: boolean },
 ): number {
+  const __remote = forwardProductionMutation('saveMashBatchWithFermenters', [batch, assignments, nutrients, id, options]);
+  if (__remote.forwarded) return __remote.value as never;
+
   const previous = id ? getMashBatch(id) : undefined;
   const previousNutrients = id
     ? getMashBatchNutrients(id).map((n) => ({ name: n.name, amount: n.amount, unit: n.unit }))
@@ -3243,6 +3253,9 @@ export function fermenterHasFermentationLogs(mashBatchId: number, floorEquipment
 
 /** Mark the fermentation in this fermenter complete. A log on that fermenter is required. */
 export function completeFermenterAssignment(equipmentId: number): void {
+  const __remote = forwardProductionMutation('completeFermenterAssignment', [equipmentId]);
+  if (__remote.forwarded) return __remote.value as never;
+
   const info = queryOne<{ mash_batch_id: number; status: string }>(`
     SELECT a.mash_batch_id, COALESCE(a.status, 'fermenting') AS status
     FROM mash_fermenter_assignments a
@@ -3276,6 +3289,9 @@ export function saveFermentationSet(
   moveLogs?: { fromEquipmentId: number; toEquipmentId: number },
   options?: { keepStatusWhenEmpty?: boolean; actualStartBrix?: number; expectedCompletionDate?: string },
 ): void {
+  const __remote = forwardProductionMutation('saveFermentationSet', [mashBatchId, assignments, moveLogs, options]);
+  if (__remote.forwarded) return __remote.value as never;
+
   const batch = getMashBatch(mashBatchId);
   if (!batch) throw new Error('Wash batch not found.');
 
@@ -3391,6 +3407,9 @@ export function recordFermenterLeftover(input: {
   notes: string;
   changedBy: string;
 }): void {
+  const __remote = forwardProductionMutation('recordFermenterLeftover', [input]);
+  if (__remote.forwarded) return __remote.value as never;
+
   const batch = getMashBatch(input.mashBatchId);
   if (!batch) throw new Error('Wash batch not found.');
   if (!(input.volumeGal > 0)) return;
@@ -3415,6 +3434,9 @@ export function recordFermenterLeftover(input: {
 
 /** Remove one fermenter. Sibling fermenters and the wash batch stay. */
 export function deleteOneFermentation(mashBatchId: number, equipmentId: number | null): void {
+  const __remote = forwardProductionMutation('deleteOneFermentation', [mashBatchId, equipmentId]);
+  if (__remote.forwarded) return __remote.value as never;
+
   if (equipmentId == null) {
     deleteMashBatch(mashBatchId);
     return;
@@ -3437,11 +3459,17 @@ export function deleteOneFermentation(mashBatchId: number, equipmentId: number |
 }
 
 export function releaseFermentersForMash(mashBatchId: number): void {
+  const __remote = forwardProductionMutation('releaseFermentersForMash', [mashBatchId]);
+  if (__remote.forwarded) return __remote.value as never;
+
   runQuery('DELETE FROM mash_fermenter_assignments WHERE mash_batch_id = ?', [mashBatchId]);
   syncFermenterAndStillStatuses();
 }
 
 export function releaseFermenterForMash(mashBatchId: number, equipmentId: number): void {
+  const __remote = forwardProductionMutation('releaseFermenterForMash', [mashBatchId, equipmentId]);
+  if (__remote.forwarded) return __remote.value as never;
+
   runQuery(
     'DELETE FROM mash_fermenter_assignments WHERE mash_batch_id = ? AND floor_equipment_id = ?',
     [mashBatchId, equipmentId],
@@ -3588,6 +3616,9 @@ function applyFermenterChargeChanges(
  * Fermentation page is unchanged.
  */
 export function completeFermentationsSelectedForDistillation(): void {
+  const __remote = forwardProductionMutation('completeFermentationsSelectedForDistillation', []);
+  if (__remote.forwarded) return __remote.value as never;
+
   const selected = queryAll<{ mash_batch_id: number; floor_equipment_id: number; status: string }>(`
     SELECT DISTINCT source_mash_batch_id as mash_batch_id,
            source_fermenter_equipment_id as floor_equipment_id,
@@ -3663,6 +3694,9 @@ function maybeCompleteMashAfterCharge(mashBatchId: number): void {
 }
 
 export function deleteMashBatch(id: number): void {
+  const __remote = forwardProductionMutation('deleteMashBatch', [id]);
+  if (__remote.forwarded) return __remote.value as never;
+
   releaseWashTankForMashBatch(id);
   releaseFermentersForMash(id);
   deleteStatusDateLog('wash', id);
@@ -3846,6 +3880,9 @@ function recordActualStartBrixLogs(
 }
 
 export function addFermentationLog(log: Omit<FermentationLog, 'id'>): void {
+  const __remote = forwardProductionMutation('addFermentationLog', [log]);
+  if (__remote.forwarded) return __remote.value as never;
+
   const batch = getMashBatch(log.mash_batch_id);
   if (!batch) throw new Error('Wash batch not found.');
   if (log.floor_equipment_id) {
@@ -4048,6 +4085,9 @@ export function getDistillationCollectionLoss(runId: number): DistillationAlcoho
 
 /** Store the alcohol charged, the alcohol collected, and the loss on the run. */
 export function recordDistillationCollectionLoss(runId: number): void {
+  const __remote = forwardProductionMutation('recordDistillationCollectionLoss', [runId]);
+  if (__remote.forwarded) return __remote.value as never;
+
   const cutCount = queryOne<{ n: number }>(
     'SELECT COUNT(*) as n FROM distillation_cuts WHERE distillation_run_id = ?',
     [runId],
@@ -4156,6 +4196,9 @@ export function saveDistillationRun(
   botanicals?: GinBotanicalInput[],
   tankSources?: DistillationTankSourceInput[],
 ): number {
+  const __remote = forwardProductionMutation('saveDistillationRun', [run, id, botanicals, tankSources]);
+  if (__remote.forwarded) return __remote.value as never;
+
   assertEnteredAbv(run.charge_abv, 'Charge ABV');
   assertEnteredAbv(run.proof_spirit_abv, 'Charge ABV');
   const runType = (run.run_type ?? 'wash') as DistillationRunType;
@@ -4379,6 +4422,9 @@ export function saveGinRecipe(
   id: number | undefined,
   botanicals: GinBotanicalInput[],
 ): number {
+  const __remote = forwardProductionMutation('saveGinRecipe', [recipe, id, botanicals]);
+  if (__remote.forwarded) return __remote.value as never;
+
   const name = recipe.name.trim();
   if (!name) throw new Error('Enter a name for the gin recipe.');
   const lines = activeGinBotanicals(botanicals);
@@ -4418,11 +4464,17 @@ export function saveGinRecipe(
 }
 
 export function deleteGinRecipe(id: number): void {
+  const __remote = forwardProductionMutation('deleteGinRecipe', [id]);
+  if (__remote.forwarded) return __remote.value as never;
+
   runQuery('DELETE FROM gin_recipe_botanicals WHERE gin_recipe_id = ?', [id]);
   runQuery('DELETE FROM gin_recipes WHERE id = ?', [id]);
 }
 
 export function deleteDistillationRun(id: number): void {
+  const __remote = forwardProductionMutation('deleteDistillationRun', [id]);
+  if (__remote.forwarded) return __remote.value as never;
+
   const run = queryOne<DistillationRun>('SELECT * FROM distillation_runs WHERE id = ?', [id]);
   if (run && distillationRunActivelyChargesFermenter(run.status)) {
     revertFermenterChargeFromRun(run);
@@ -4450,6 +4502,9 @@ export function getDistillationCuts(runId: number): DistillationCutView[] {
 }
 
 export function saveDistillationCut(cut: Omit<DistillationCut, 'id'>, id?: number): void {
+  const __remote = forwardProductionMutation('saveDistillationCut', [cut, id]);
+  if (__remote.forwarded) return __remote.value as never;
+
   assertEnteredAbv(cut.abv, 'Cut ABV');
   const run = queryOne<{ status: string }>(
     'SELECT status FROM distillation_runs WHERE id = ?',
@@ -4535,6 +4590,9 @@ export function saveDistillationCut(cut: Omit<DistillationCut, 'id'>, id?: numbe
 }
 
 export function deleteDistillationCut(id: number): void {
+  const __remote = forwardProductionMutation('deleteDistillationCut', [id]);
+  if (__remote.forwarded) return __remote.value as never;
+
   const cut = queryOne<{ distillation_run_id: number }>(
     'SELECT distillation_run_id FROM distillation_cuts WHERE id = ?',
     [id],
@@ -4566,6 +4624,9 @@ export function getWarehouseLocations(): WarehouseLocation[] {
 }
 
 export function saveWarehouseLocation(name: string, options?: { rejectDuplicate?: boolean }): WarehouseLocation {
+  const __remote = forwardProductionMutation('saveWarehouseLocation', [name, options]);
+  if (__remote.forwarded) return __remote.value as never;
+
   const error = warehouseLocationNameError(name);
   if (error) throw new Error(error);
   const normalized = normalizeWarehouseLocationName(name);
@@ -4587,6 +4648,9 @@ export function saveWarehouseLocation(name: string, options?: { rejectDuplicate?
 }
 
 export function deleteWarehouseLocation(id: number): void {
+  const __remote = forwardProductionMutation('deleteWarehouseLocation', [id]);
+  if (__remote.forwarded) return __remote.value as never;
+
   const location = queryOne<WarehouseLocation>(
     'SELECT * FROM warehouse_locations WHERE id = ?',
     [id],
@@ -4616,6 +4680,9 @@ export function getBarrelsForBlend(): Barrel[] {
 }
 
 export function saveBarrel(barrel: Omit<Barrel, 'id' | 'created_at'>, id?: number): number | void {
+  const __remote = forwardProductionMutation('saveBarrel', [barrel, id]);
+  if (__remote.forwarded) return __remote.value as never;
+
   assertEnteredAbv(barrel.initial_abv, 'Initial ABV');
   const warehouse_location = normalizeWarehouseLocationName(barrel.warehouse_location);
   if (warehouse_location) saveWarehouseLocation(warehouse_location);
@@ -4678,6 +4745,9 @@ export function createBarrelFromHoldingTank(
   sourceHoldingTankEquipmentId: number,
   volumeGal: number,
 ): number {
+  const __remote = forwardProductionMutation('createBarrelFromHoldingTank', [barrel, sourceHoldingTankEquipmentId, volumeGal]);
+  if (__remote.forwarded) return __remote.value as never;
+
   if (!(volumeGal > 0)) throw new Error('Initial fill volume must be greater than zero.');
   const id = saveBarrel({
     ...barrel,
@@ -4697,6 +4767,9 @@ export function createBarrelFromHoldingTank(
 }
 
 export function deleteBarrel(id: number): void {
+  const __remote = forwardProductionMutation('deleteBarrel', [id]);
+  if (__remote.forwarded) return __remote.value as never;
+
   deleteStatusDateLog('barrel', id);
   runQuery('DELETE FROM barrels WHERE id = ?', [id]);
 }
@@ -4719,6 +4792,9 @@ export interface FillBarrelFromTankInput {
 
 /** Transfer spirit from a holding tank into a barrel; deducts from tank ledger. */
 export function fillBarrelFromHoldingTank(input: FillBarrelFromTankInput): void {
+  const __remote = forwardProductionMutation('fillBarrelFromHoldingTank', [input]);
+  if (__remote.forwarded) return __remote.value as never;
+
   const barrel = queryOne<Barrel>('SELECT * FROM barrels WHERE id = ?', [input.barrelId]);
   if (!barrel) throw new Error('Barrel not found.');
   if (barrel.status === 'dumped') throw new Error('Cannot fill a dumped barrel.');
@@ -4898,6 +4974,9 @@ export function saveBottlingRun(
   lines: BottlingRunLineInput[],
   id?: number,
 ): void {
+  const __remote = forwardProductionMutation('saveBottlingRun', [run, lines, id]);
+  if (__remote.forwarded) return __remote.value as never;
+
   assertEnteredAbv(run.final_abv, 'Final ABV');
   const activeLines = lines.filter((line) => line.bottle_count > 0 && line.bottle_size_ml > 0);
   const previousLines = id ? bottlingLinesToInventoryInput(getBottlingRunLines(id)) : [];
@@ -5046,6 +5125,9 @@ export function saveBottlingRun(
 }
 
 export function deleteBottlingRun(id: number): void {
+  const __remote = forwardProductionMutation('deleteBottlingRun', [id]);
+  if (__remote.forwarded) return __remote.value as never;
+
   const previousLines = bottlingLinesToInventoryInput(getBottlingRunLines(id));
   syncBottlingPackagingInventory(previousLines, []);
   runQuery('DELETE FROM bottling_run_returns WHERE bottling_run_id = ?', [id]);
@@ -5214,6 +5296,9 @@ export function saveBlendRecipe(
   ingredients: BlendIngredientInput[],
   id?: number,
 ): number {
+  const __remote = forwardProductionMutation('saveBlendRecipe', [recipe, spiritSources, ingredients, id]);
+  if (__remote.forwarded) return __remote.value as never;
+
   if (!recipe.name.trim()) throw new Error('Recipe name is required.');
   assertEnteredAbv(recipe.target_abv, 'Target ABV');
   for (const source of spiritSources) assertEnteredAbv(source.abv, 'Spirit ABV');
@@ -5277,6 +5362,9 @@ export function saveBlendRecipe(
 }
 
 export function deleteBlendRecipe(id: number): void {
+  const __remote = forwardProductionMutation('deleteBlendRecipe', [id]);
+  if (__remote.forwarded) return __remote.value as never;
+
   runQuery('UPDATE blend_products SET blend_recipe_version_id = NULL WHERE blend_recipe_id = ?', [id]);
   runQuery('DELETE FROM blend_recipe_versions WHERE blend_recipe_id = ?', [id]);
   runQuery('DELETE FROM blend_recipes WHERE id = ?', [id]);
@@ -5309,6 +5397,9 @@ export function saveBlendRecipeFromWizard(
   ingredients: BlendIngredientInput[],
   id?: number,
 ): number {
+  const __remote = forwardProductionMutation('saveBlendRecipeFromWizard', [name, product, spiritSources, ingredients, id]);
+  if (__remote.forwarded) return __remote.value as never;
+
   return saveBlendRecipe(
     {
       name,
@@ -5471,6 +5562,9 @@ export function saveBlendFormula(
   ingredients: BlendIngredientInput[],
   id?: number,
 ): number {
+  const __remote = forwardProductionMutation('saveBlendFormula', [product, spiritSources, ingredients, id]);
+  if (__remote.forwarded) return __remote.value as never;
+
   assertEnteredAbv(product.target_abv, 'Target ABV');
   assertEnteredAbv(product.actual_abv, 'Measured ABV');
   assertEnteredAbv(product.base_spirit_abv, 'Spirit ABV');
@@ -5588,6 +5682,9 @@ export function saveBlendProduct(
   ingredients: BlendIngredientInput[],
   id?: number,
 ): number {
+  const __remote = forwardProductionMutation('saveBlendProduct', [product, ingredients, id]);
+  if (__remote.forwarded) return __remote.value as never;
+
   return saveBlendFormula(
     {
       ...product,
@@ -5675,6 +5772,9 @@ function inventoryDeductionsForBlend(
 
 /** Approved execution — consumes tank spirit and inventory lots; deposits finished liquid into a holding tank. */
 export function executeBlendProduct(id: number, outputTankId: number): void {
+  const __remote = forwardProductionMutation('executeBlendProduct', [id, outputTankId]);
+  if (__remote.forwarded) return __remote.value as never;
+
   const product = queryOne<BlendProduct>('SELECT * FROM blend_products WHERE id = ?', [id]);
   if (!product) throw new Error('Blend formula not found.');
   if (product.status === 'executed' || product.status === 'bottled' || product.status === 'blended') {
@@ -5841,6 +5941,9 @@ export function executeBlendProduct(id: number, outputTankId: number): void {
  * the finished batch from the output-tank ledger by returning status to approved.
  */
 export function undoBlendProduction(id: number): void {
+  const __remote = forwardProductionMutation('undoBlendProduction', [id]);
+  if (__remote.forwarded) return __remote.value as never;
+
   const product = queryOne<BlendProduct>('SELECT * FROM blend_products WHERE id = ?', [id]);
   if (!product) throw new Error('Blend formula not found.');
   if (product.status !== 'executed') {
@@ -5907,6 +6010,9 @@ export function saveBlendVerification(
   id: number,
   data: Pick<BlendProduct, 'actual_abv' | 'actual_volume_gal' | 'actual_weight_lbs' | 'actual_brix'>,
 ): void {
+  const __remote = forwardProductionMutation('saveBlendVerification', [id, data]);
+  if (__remote.forwarded) return __remote.value as never;
+
   const product = queryOne<{ status: string }>('SELECT status FROM blend_products WHERE id = ?', [id]);
   if (!product) throw new Error('Blend not found.');
   assertEnteredAbv(data.actual_abv, 'Measured ABV');
@@ -5920,6 +6026,9 @@ export function saveBlendVerification(
 }
 
 export function deleteBlendProduct(id: number): void {
+  const __remote = forwardProductionMutation('deleteBlendProduct', [id]);
+  if (__remote.forwarded) return __remote.value as never;
+
   const product = queryOne<{ status: string }>('SELECT status FROM blend_products WHERE id = ?', [id]);
   if (product?.status === 'executed' || product?.status === 'bottled' || product?.status === 'blended') {
     throw new Error('Cannot delete an executed blend.');
@@ -6321,6 +6430,9 @@ export function addFloorPlan(
   width_ft = 160,
   height_ft = 120,
 ): number {
+  const __remote = forwardProductionMutation('addFloorPlan', [name, width_ft, height_ft]);
+  if (__remote.forwarded) return __remote.value as never;
+
   return insertRow(
     `INSERT INTO floor_plans (name, width_ft, height_ft, notes) VALUES (?, ?, ?, '')`,
     [name.trim(), width_ft, height_ft],
@@ -6328,6 +6440,9 @@ export function addFloorPlan(
 }
 
 export function saveFloorPlan(plan: Omit<FloorPlan, 'id'>, id = 1): void {
+  const __remote = forwardProductionMutation('saveFloorPlan', [plan, id]);
+  if (__remote.forwarded) return __remote.value as never;
+
   runQuery(
     `UPDATE floor_plans SET name=?, width_ft=?, height_ft=?, notes=? WHERE id=?`,
     [plan.name, plan.width_ft, plan.height_ft, plan.notes, id],
@@ -6497,6 +6612,9 @@ export function updateEquipmentMaintenance(
   recordedByUserId: number,
   recordedByUserName: string,
 ): void {
+  const __remote = forwardProductionMutation('updateEquipmentMaintenance', [equipmentId, maintenance_status, maintenance_notes, recordedByUserId, recordedByUserName]);
+  if (__remote.forwarded) return __remote.value as never;
+
   if (!recordedByUserId) {
     throw new Error('Select who recorded this maintenance action.');
   }
@@ -6529,6 +6647,9 @@ export function getEquipmentTypeOptions(): { value: string; label: string; icon:
 }
 
 export function addEquipmentType(name: string, icon = 'other'): string {
+  const __remote = forwardProductionMutation('addEquipmentType', [name, icon]);
+  if (__remote.forwarded) return __remote.value as never;
+
   const normalized = normalizeEquipmentTypeName(name);
   const existing = queryAll<{ name: string }>('SELECT name FROM equipment_types');
   const error = equipmentTypeNameError(normalized, existing.map((row) => row.name));
@@ -6561,6 +6682,9 @@ export function getCustomEquipmentTypes(): CustomEquipmentType[] {
 }
 
 export function deleteEquipmentType(name: string): void {
+  const __remote = forwardProductionMutation('deleteEquipmentType', [name]);
+  if (__remote.forwarded) return __remote.value as never;
+
   const normalized = normalizeEquipmentTypeName(name);
   const row = queryOne<{ id: number; name: string }>(
     'SELECT id, name FROM equipment_types WHERE name = ? COLLATE NOCASE',
@@ -6580,6 +6704,9 @@ export function saveFloorEquipment(
   item: Omit<FloorEquipment, 'id' | 'created_at'>,
   id?: number,
 ): void {
+  const __remote = forwardProductionMutation('saveFloorEquipment', [item, id]);
+  if (__remote.forwarded) return __remote.value as never;
+
   const maintenanceStatus = item.maintenance_status ?? null;
   const maintenanceNotes = item.maintenance_notes ?? '';
   const icon = resolveEquipmentIcon(item.icon, item.equipment_type);
@@ -6608,10 +6735,16 @@ export function saveFloorEquipment(
 }
 
 export function updateEquipmentPosition(id: number, pos_x_ft: number, pos_y_ft: number): void {
+  const __remote = forwardProductionMutation('updateEquipmentPosition', [id, pos_x_ft, pos_y_ft]);
+  if (__remote.forwarded) return __remote.value as never;
+
   runQuery('UPDATE floor_equipment SET pos_x_ft=?, pos_y_ft=? WHERE id=?', [pos_x_ft, pos_y_ft, id]);
 }
 
 export function updateEquipmentProcessPosition(id: number, process_pos_x: number, process_pos_y: number): void {
+  const __remote = forwardProductionMutation('updateEquipmentProcessPosition', [id, process_pos_x, process_pos_y]);
+  if (__remote.forwarded) return __remote.value as never;
+
   runQuery(
     'UPDATE floor_equipment SET process_pos_x=?, process_pos_y=? WHERE id=?',
     [process_pos_x, process_pos_y, id],
@@ -6624,6 +6757,9 @@ export function moveEquipmentToPlan(
   pos_x_ft = 4,
   pos_y_ft = 4,
 ): void {
+  const __remote = forwardProductionMutation('moveEquipmentToPlan', [equipmentId, planId, pos_x_ft, pos_y_ft]);
+  if (__remote.forwarded) return __remote.value as never;
+
   runQuery(
     'UPDATE floor_equipment SET floor_plan_id=?, pos_x_ft=?, pos_y_ft=? WHERE id=?',
     [planId, pos_x_ft, pos_y_ft, equipmentId],
@@ -6631,6 +6767,9 @@ export function moveEquipmentToPlan(
 }
 
 export function deleteFloorEquipment(id: number): void {
+  const __remote = forwardProductionMutation('deleteFloorEquipment', [id]);
+  if (__remote.forwarded) return __remote.value as never;
+
   deleteStatusDateLog('equipment', id);
   runQuery('DELETE FROM floor_equipment WHERE id = ?', [id]);
 }
