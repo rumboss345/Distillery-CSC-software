@@ -30,6 +30,9 @@ import { Calendar } from './pages/Calendar';
 import { FloorPlanPage } from './pages/FloorPlan';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
+import { ForgotPassword } from './pages/ForgotPassword';
+import { ResetPassword } from './pages/ResetPassword';
+import { ChangePassword } from './pages/ChangePassword';
 import { ApproveUser } from './pages/ApproveUser';
 import { AdminUsers } from './pages/AdminUsers';
 import { SpiritWeightCalculator } from './pages/SpiritWeightCalculator';
@@ -60,6 +63,8 @@ function AppContent() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/approve" element={<ApproveUser />} />
         <Route element={<RequirePermission />}>
           <Route element={<Layout />}>
@@ -93,6 +98,7 @@ function AppContent() {
               <Route path="traceability" element={<TraceabilityReport />} />
             </Route>
             <Route path="/admin/users" element={<AdminUsers />} />
+            <Route path="/account/password" element={<ChangePassword />} />
           </Route>
         </Route>
       </Routes>

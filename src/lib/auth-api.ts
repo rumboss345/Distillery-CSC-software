@@ -68,6 +68,27 @@ export async function verifyAdminCredentials(email: string, password: string) {
   });
 }
 
+export async function requestPasswordReset(email: string) {
+  return apiFetch<{ message: string }>('/api/auth/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+}
+
+export async function resetPassword(token: string, password: string) {
+  return apiFetch<{ message: string }>('/api/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ token, password }),
+  });
+}
+
+export async function changePassword(currentPassword: string, newPassword: string) {
+  return apiFetch<{ message: string }>('/api/auth/change-password', {
+    method: 'POST',
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+}
+
 export async function approveByToken(token: string) {
   return apiFetch<{ message: string; user: AuthUser }>('/api/auth/approve', {
     method: 'POST',
@@ -125,6 +146,7 @@ export async function updateAdminUser(
     name?: string | null;
     permissions?: PermissionKey[];
     processAssignments?: ProcessStageKey[];
+    password?: string;
   },
 ) {
   return apiFetch<{ message: string; user: AuthUser }>(`/api/admin/users/${id}`, {

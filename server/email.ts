@@ -62,3 +62,38 @@ export async function sendAdminApprovalEmail(params: {
 
   return { sent: true, approveUrl };
 }
+
+export async function sendPasswordResetEmail(params: { to: string; token: string }) {
+  const resetUrl = `${APP_URL}/reset-password?token=${encodeURIComponent(params.token)}`;
+  const subject = 'CSC Distillery Tracker: reset your password';
+  const text = [
+    'A password reset was requested for your CSC Distillery Tracker account.',
+    '',
+    'Choose a new password:',
+    resetUrl,
+    '',
+    'This link expires in one hour. If you did not request it, you can ignore this email.',
+  ].join('\n');
+
+  const transport = createTransport();
+  if (!transport) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('\n--- Password reset (SMTP not configured) ---');
+      console.log(`To: ${params.to}`);
+      console.log(text);
+      console.log('---\n');
+    } else {
+      console.warn('Password reset email was not sent because SMTP is not configured.');
+    }
+    return { sent: false };
+  }
+
+  await transport.sendMail({
+    from: process.env.SMTP_FROM ?? ADMIN_EMAIL ?? 'noreply@localhost',
+    to: params.to,
+    subject,
+    text,
+  });
+
+  return { sent: true };
+}

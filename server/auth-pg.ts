@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
+import { hashResetToken, newResetToken, resetTokenExpired } from './password-reset.js';
 import {
   DEFAULT_USER_PERMISSIONS,
   PROCESS_STAGE_KEYS,
@@ -144,12 +145,18 @@ export async function updateUserByAdmin(
     name?: string | null;
     permissions?: PermissionKey[];
     processAssignments?: ProcessStageKey[];
+    password?: string;
   },
 ): Promise<User | null> {
   const user = await getUserById(id);
   if (!user || user.role === 'admin') return null;
   if (updates.name !== undefined) {
     await getPool().query('UPDATE users SET name = $1 WHERE id = $2', [updates.name, id]);
+  }
+  if (updates.password) {
+    const passwordHash = bcrypt.hashSync(updates.password, 12);
+    await getPool().query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, id]);
+    await getPool().query('DELETE FROM password_reset_tokens WHERE user_id = $1', [id]);
   }
   if (updates.permissions) await setUserPermissions(id, updates.permissions);
   if (updates.processAssignments) await setUserProcessAssignments(id, updates.processAssignments);
@@ -160,6 +167,7 @@ export async function deleteUserById(id: number): Promise<{ ok: true } | { ok: f
   const user = await getUserById(id);
   if (!user) return { ok: false, reason: 'User not found' };
   if (user.role === 'admin') return { ok: false, reason: 'Cannot remove admin accounts' };
+  await getPool().query('DELETE FROM password_reset_tokens WHERE user_id = $1', [id]);
   await getPool().query('DELETE FROM users WHERE id = $1', [id]);
   return { ok: true };
 }
@@ -277,4 +285,78 @@ export async function syncAdminFromEnv(): Promise<void> {
   }
   await resetAdminAccount(adminEmail, adminPassword);
   console.log(`Admin account synced for ${adminEmail}`);
+}
+
+export async function createPasswordResetToken(email: string): Promise<string | null> {
+  const user = await getUserByEmail(email);
+  if (!user || user.status !== 'approved') return null;
+  const issued = newResetToken();
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('DELETE FROM password_reset_tokens WHERE user_id = $1', [user.id]);
+    await client.query(
+      'INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)',
+      [user.id, issued.tokenHash, issued.expiresAt],
+    );
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+  return issued.token;
+}
+
+export async function resetPasswordWithToken(token: string, password: string): Promise<boolean> {
+  const tokenHash = hashResetToken(token.trim());
+  const found = await getPool().query(
+    'SELECT user_id, expires_at FROM password_reset_tokens WHERE token_hash = $1',
+    [tokenHash],
+  );
+  const row = found.rows[0] as { user_id: number; expires_at: string } | undefined;
+  if (!row || resetTokenExpired(String(row.expires_at))) {
+    if (row) await getPool().query('DELETE FROM password_reset_tokens WHERE token_hash = $1', [tokenHash]);
+    return false;
+  }
+  const passwordHash = bcrypt.hashSync(password, 12);
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, row.user_id]);
+    await client.query('DELETE FROM password_reset_tokens WHERE user_id = $1', [row.user_id]);
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+  return true;
+}
+
+export async function changePassword(
+  userId: number,
+  currentPassword: string,
+  nextPassword: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const user = await getUserById(userId);
+  if (!user || !bcrypt.compareSync(currentPassword, user.password_hash)) {
+    return { ok: false, error: 'Current password is incorrect' };
+  }
+  const passwordHash = bcrypt.hashSync(nextPassword, 12);
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, userId]);
+    await client.query('DELETE FROM password_reset_tokens WHERE user_id = $1', [userId]);
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+  return { ok: true };
 }

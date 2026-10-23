@@ -122,3 +122,21 @@ export function resetAdminAccount(email: string, password: string, name = 'Admin
     ? pgAuth.resetAdminAccount(email, password, name)
     : Promise.resolve(sqliteAuth.resetAdminAccount(email, password, name));
 }
+
+export function createPasswordResetToken(email: string) {
+  return postgres()
+    ? pgAuth.createPasswordResetToken(email)
+    : Promise.resolve(sqliteAuth.createPasswordResetToken(email));
+}
+
+export function resetPasswordWithToken(token: string, password: string) {
+  return postgres()
+    ? pgAuth.resetPasswordWithToken(token, password)
+    : Promise.resolve(sqliteAuth.resetPasswordWithToken(token, password));
+}
+
+export function changePassword(userId: number, currentPassword: string, nextPassword: string) {
+  return postgres()
+    ? pgAuth.changePassword(userId, currentPassword, nextPassword)
+    : Promise.resolve(sqliteAuth.changePassword(userId, currentPassword, nextPassword));
+}

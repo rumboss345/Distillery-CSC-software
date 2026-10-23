@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
 import { mkdirSync } from 'fs';
+import { hashResetToken, newResetToken, resetTokenExpired } from './password-reset.js';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import {
@@ -71,6 +72,14 @@ function ensureDb() {
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       stage_key TEXT NOT NULL,
       PRIMARY KEY (user_id, stage_key)
+    );
+
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      token_hash TEXT NOT NULL UNIQUE,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
   migrateExistingUserPermissions();
@@ -243,6 +252,7 @@ export function updateUserByAdmin(
     name?: string | null;
     permissions?: PermissionKey[];
     processAssignments?: ProcessStageKey[];
+    password?: string;
   },
 ): User | null {
   const user = getUserById(id);
@@ -250,6 +260,11 @@ export function updateUserByAdmin(
 
   if (updates.name !== undefined) {
     ensureDb().prepare('UPDATE users SET name = ? WHERE id = ?').run(updates.name, id);
+  }
+  if (updates.password) {
+    const passwordHash = bcrypt.hashSync(updates.password, 12);
+    ensureDb().prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(passwordHash, id);
+    ensureDb().prepare('DELETE FROM password_reset_tokens WHERE user_id = ?').run(id);
   }
   if (updates.permissions) {
     setUserPermissions(id, updates.permissions);
@@ -265,6 +280,7 @@ export function deleteUserById(id: number): { ok: true } | { ok: false; reason: 
   if (!user) return { ok: false, reason: 'User not found' };
   if (user.role === 'admin') return { ok: false, reason: 'Cannot remove admin accounts' };
 
+  ensureDb().prepare('DELETE FROM password_reset_tokens WHERE user_id = ?').run(id);
   ensureDb().prepare('DELETE FROM users WHERE id = ?').run(id);
   return { ok: true };
 }
@@ -391,4 +407,57 @@ export function resetAdminAccount(email: string, password: string, name = 'Admin
        VALUES (?, ?, ?, 'admin', 'approved', NULL)`,
     )
     .run(normalized, passwordHash, name);
+}
+
+export function createPasswordResetToken(email: string): string | null {
+  const user = getUserByEmail(email);
+  if (!user || user.status !== 'approved') return null;
+  const issued = newResetToken();
+  const database = ensureDb();
+  const replace = database.transaction(() => {
+    database.prepare('DELETE FROM password_reset_tokens WHERE user_id = ?').run(user.id);
+    database
+      .prepare('INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) VALUES (?, ?, ?)')
+      .run(user.id, issued.tokenHash, issued.expiresAt);
+  });
+  replace();
+  return issued.token;
+}
+
+export function resetPasswordWithToken(token: string, password: string): boolean {
+  const tokenHash = hashResetToken(token.trim());
+  const database = ensureDb();
+  const row = database
+    .prepare('SELECT user_id, expires_at FROM password_reset_tokens WHERE token_hash = ?')
+    .get(tokenHash) as { user_id: number; expires_at: string } | undefined;
+  if (!row || resetTokenExpired(row.expires_at)) {
+    if (row) database.prepare('DELETE FROM password_reset_tokens WHERE token_hash = ?').run(tokenHash);
+    return false;
+  }
+  const passwordHash = bcrypt.hashSync(password, 12);
+  const apply = database.transaction(() => {
+    database.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(passwordHash, row.user_id);
+    database.prepare('DELETE FROM password_reset_tokens WHERE user_id = ?').run(row.user_id);
+  });
+  apply();
+  return true;
+}
+
+export function changePassword(
+  userId: number,
+  currentPassword: string,
+  nextPassword: string,
+): { ok: true } | { ok: false; error: string } {
+  const user = getUserById(userId);
+  if (!user || !bcrypt.compareSync(currentPassword, user.password_hash)) {
+    return { ok: false, error: 'Current password is incorrect' };
+  }
+  const passwordHash = bcrypt.hashSync(nextPassword, 12);
+  const database = ensureDb();
+  const apply = database.transaction(() => {
+    database.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(passwordHash, userId);
+    database.prepare('DELETE FROM password_reset_tokens WHERE user_id = ?').run(userId);
+  });
+  apply();
+  return { ok: true };
 }
