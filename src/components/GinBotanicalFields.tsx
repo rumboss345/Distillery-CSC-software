@@ -1,7 +1,10 @@
+import { IngredientSelect } from './IngredientSelect';
 import {
   emptyGinBotanical,
+  normalizeBotanicalPlace,
   normalizeBotanicalWeightUnit,
 } from '../lib/gin-botanicals';
+import type { BotanicalPlace } from '../types';
 import { NUTRIENT_UNITS } from '../lib/wash-recipe-nutrients';
 import type { GinBotanicalInput } from '../types';
 
@@ -33,18 +36,23 @@ export function GinBotanicalFields({
         </button>
       </div>
       <p className="field-hint">
-        Enter the weight of each botanical.
+        Choose each botanical, enter its weight, and say whether it goes in the pot or in the basket.
       </p>
       {lines.map((line, index) => (
         <div key={index} className="form-grid" style={{ marginBottom: '0.75rem' }}>
           <div className="form-group">
             <label>Botanical</label>
-            <input
-              list="gin-botanical-names"
-              data-testid={`gin-botanical-name-${index}`}
+            <IngredientSelect
+              testId={`gin-botanical-name-${index}`}
               value={line.name}
-              onChange={(e) => update(index, { name: e.target.value })}
-              placeholder="Botanical name"
+              emptyLabel="— Select botanical —"
+              noun="botanical"
+              category="botanicals"
+              unit={normalizeBotanicalWeightUnit(line.weight_unit)}
+              options={inventoryNames.map((name) => ({ value: name, label: name }))}
+              orphanLabel={line.name || undefined}
+              onSelect={(name) => update(index, { name })}
+              onAdded={(item) => update(index, { name: item.name })}
             />
           </div>
           <div className="form-group">
@@ -70,6 +78,22 @@ export function GinBotanicalFields({
               ))}
             </select>
           </div>
+          <div className="form-group full-width">
+            <span className="measure-mode-label">Where will this botanical go?</span>
+            <div className="measure-mode-buttons">
+              {(['pot', 'basket'] as BotanicalPlace[]).map((place) => (
+                <button
+                  key={place}
+                  type="button"
+                  data-testid={`gin-botanical-place-${place}-${index}`}
+                  className={`btn btn-sm ${normalizeBotanicalPlace(line.place) === place ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => update(index, { place })}
+                >
+                  {place === 'pot' ? 'In the pot' : 'In the basket'}
+                </button>
+              ))}
+            </div>
+          </div>
           {lines.length > 1 && (
             <div className="form-group">
               <label>&nbsp;</label>
@@ -84,11 +108,6 @@ export function GinBotanicalFields({
           )}
         </div>
       ))}
-      <datalist id="gin-botanical-names">
-        {inventoryNames.map((name) => (
-          <option key={name} value={name} />
-        ))}
-      </datalist>
     </div>
   );
 }

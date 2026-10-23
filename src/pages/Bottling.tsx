@@ -1,13 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useEquipmentReturn } from '../lib/equipment-return';
+import { useAuth } from '../context/AuthContext';
 import { RecentCompletedNote } from '../components/RecentCompletedNote';
 import {
   getBottlingRuns,
   saveBottlingRun,
   deleteBottlingRun,
+  barrelBlendProductName,
   getBarrels,
   getInventoryByCategory,
   getChargeableHoldingTanksForBottling,
+  getCollectionVessels,
   getHoldingTankContents,
   getHoldingTanks,
   generateBatchNumber,
@@ -15,25 +19,40 @@ import {
 } from '../db/queries';
 import { DatePicker } from '../components/DatePicker';
 import { limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
+import { roundAbv } from '../lib/reporting/alcohol-units';
 import { formatDateDisplay } from '../lib/date-input';
 import { latestCompleted } from '../lib/recent-completed';
 import { localIsoDate } from '../lib/planned-event-date';
 import { Modal } from '../components/Modal';
 import {
+  bottlingAlcoholVarianceGal,
+  bottlingReturnsError,
+  bottlingVolumeVarianceGal,
+  formatBottlingAlcoholVariance,
   formatLinesSummary,
   isRumBottlingProduct,
   lineVolumeGal,
   maxBottlesFromGallons,
+  reportedBottlingAlcoholVarianceGal,
+  reportedBottlingVarianceGal,
   totalBottleCount,
   totalVolumeGal,
 } from '../lib/bottling-lines';
 import { packagingBottleOptions, type PackagingBottleOption } from '../lib/packaging-bottles';
+import { tankContentsPhrase, tankDropdownLabel } from '../lib/tank-menu-label';
+import { volumeChangeReasonError } from '../lib/tank-volume-variance';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
-import type { BottlingRunLineInput, BottlingRunView } from '../types';
+import type { BottlingRunLineInput, BottlingRunReturnInput, BottlingRunView } from '../types';
 
 type BottlingSourceType = 'none' | 'barrel' | 'tank';
 
 type RunHeaderForm = Omit<BottlingRunView, 'id' | 'created_at' | 'lines'>;
+
+/** Show proof to hundredths so tank math does not spill extra digits. */
+function formatBottlingAbv(value: number): string {
+  if (!Number.isFinite(value)) return '0.00';
+  return roundAbv(value).toFixed(2);
+}
 
 const emptyLine = (): BottlingRunLineInput => ({
   packaging_bottle: '',
@@ -41,13 +60,36 @@ const emptyLine = (): BottlingRunLineInput => ({
   bottle_count: 0,
 });
 
+const emptyReturnLine = (): BottlingRunReturnInput => ({
+  holding_tank_equipment_id: null,
+  volume_gal: null,
+});
+
+function returnsFromRun(run: BottlingRunView): BottlingRunReturnInput[] {
+  if (run.returns && run.returns.length > 0) {
+    return run.returns.map((line) => ({
+      holding_tank_equipment_id: line.holding_tank_equipment_id,
+      volume_gal: line.volume_gal,
+    }));
+  }
+  if (run.return_holding_tank_equipment_id && (run.return_volume_gal ?? 0) > 0) {
+    return [{
+      holding_tank_equipment_id: run.return_holding_tank_equipment_id,
+      volume_gal: run.return_volume_gal ?? null,
+    }];
+  }
+  return [];
+}
+
 const emptyRun = (): RunHeaderForm => ({
   batch_number: generateBatchNumber('BT'),
   source_barrel_id: null,
   source_holding_tank_equipment_id: null,
   source_volume_gal: null,
+  source_abv: null,
   bottled_volume_gal: null,
   volume_variance_gal: null,
+  alcohol_variance_gal: null,
   source_run_id: null,
   bottling_date: localIsoDate(),
   packaging_bottle: '',
@@ -77,13 +119,23 @@ function linesFromRun(run: BottlingRunView): BottlingRunLineInput[] {
 }
 
 export function Bottling() {
+  const { user } = useAuth();
+  const changedBy = user?.name?.trim() || user?.email || 'Unknown';
   const [searchParams, setSearchParams] = useSearchParams();
+  const { returnToEquipment } = useEquipmentReturn();
+  const closeForm = () => {
+    setShowForm(false);
+    returnToEquipment();
+  };
   const calendarPlanHandled = useRef(false);
   const { key, refresh } = useRefreshKey();
   const runs = getBottlingRuns();
   const recentRuns = latestCompleted(runs, (run) => run.bottling_date, (run) => run.id);
   const barrels = getBarrels().filter((b) => b.status === 'aging' || b.status === 'empty');
   const holdingTanks = getHoldingTanks();
+  const collectionVessels = getCollectionVessels();
+  const namedHoldingTanks = getHoldingTanks({ includeUnavailable: true });
+  const namedCollectionVessels = getCollectionVessels({ includeUnavailable: true });
   const packagingInventory = getInventoryByCategory('packaging');
   const bottleOptions = useMemo(
     () => packagingBottleOptions(packagingInventory),
@@ -94,6 +146,8 @@ export function Bottling() {
   const [form, setForm] = useState<RunHeaderForm>(emptyRun());
   const [lines, setLines] = useState<BottlingRunLineInput[]>([emptyLine()]);
   const [sourceType, setSourceType] = useState<BottlingSourceType>('none');
+  const [varianceReason, setVarianceReason] = useState('');
+  const [returnLines, setReturnLines] = useState<BottlingRunReturnInput[]>([]);
 
   void key;
 
@@ -103,7 +157,7 @@ export function Bottling() {
     if (chargeableTanks.some((t) => t.id === form.source_holding_tank_equipment_id)) {
       return chargeableTanks;
     }
-    const saved = holdingTanks.find((t) => t.id === form.source_holding_tank_equipment_id);
+    const saved = namedHoldingTanks.find((t) => t.id === form.source_holding_tank_equipment_id);
     if (!saved) return chargeableTanks;
     return [
       ...chargeableTanks,
@@ -113,20 +167,72 @@ export function Bottling() {
         available_abv: form.final_abv,
       },
     ];
-  }, [chargeableTanks, form.source_holding_tank_equipment_id, form.source_volume_gal, form.final_abv, holdingTanks]);
+  }, [chargeableTanks, form.source_holding_tank_equipment_id, form.source_volume_gal, form.final_abv, namedHoldingTanks]);
 
   const selectedTankAvailable = form.source_holding_tank_equipment_id
     ? getHoldingTankContents(form.source_holding_tank_equipment_id, undefined, undefined, editId)
     : null;
+  const selectedTankContents = form.source_holding_tank_equipment_id
+    ? tankContentsPhrase(form.source_holding_tank_equipment_id)
+    : null;
 
   const plannedDrawGal = totalVolumeGal(lines);
   const tankVolumeGal = selectedTankAvailable?.volume_gal ?? null;
+  const returnGal = sourceType === 'tank'
+    ? returnLines.reduce((sum, line) => {
+      const gallons = line.volume_gal ?? 0;
+      return sum + (gallons > 0 ? gallons : 0);
+    }, 0)
+    : 0;
   const bottlingVarianceGal = tankVolumeGal != null && plannedDrawGal > 0
-    ? plannedDrawGal - tankVolumeGal
+    ? bottlingVolumeVarianceGal(tankVolumeGal, plannedDrawGal, returnGal)
     : null;
+  const bottlingAlcoholGal = tankVolumeGal != null && plannedDrawGal > 0
+    ? bottlingAlcoholVarianceGal({
+      sourceGal: tankVolumeGal,
+      sourceAbv: selectedTankAvailable?.abv,
+      bottledGal: plannedDrawGal,
+      bottledAbv: form.final_abv,
+      returnGal,
+    })
+    : null;
+  const volumeNeedsReason = bottlingVarianceGal != null && Math.abs(bottlingVarianceGal) >= 0.01;
+  const alcoholNeedsReason = bottlingAlcoholGal != null && Math.abs(bottlingAlcoholGal) >= 0.01;
   const unbottledInTankGal = tankVolumeGal != null
     ? Math.max(0, tankVolumeGal - plannedDrawGal)
     : null;
+
+  const returnDestinations = (() => {
+    const sourceId = form.source_holding_tank_equipment_id;
+    const usable = [...holdingTanks, ...collectionVessels].filter(
+      (tank) => tank.status !== 'offline' && tank.id !== sourceId,
+    );
+    const savedIds = returnLines
+      .map((line) => line.holding_tank_equipment_id)
+      .filter((id): id is number => id != null && id !== sourceId && !usable.some((tank) => tank.id === id));
+    const saved = savedIds.flatMap((id) => {
+      const tank = namedHoldingTanks.find((item) => item.id === id)
+        ?? namedCollectionVessels.find((item) => item.id === id);
+      return tank ? [tank] : [];
+    });
+    return [...usable, ...saved].map((tank) => {
+      const contents = getHoldingTankContents(tank.id, undefined, undefined, editId);
+      const roomGal = tank.capacity_gal > 0
+        ? Math.max(0, tank.capacity_gal - contents.volume_gal)
+        : null;
+      return { ...tank, volume_gal: contents.volume_gal, roomGal };
+    });
+  })();
+  const shownReturnLines = returnLines.length > 0 ? returnLines : [emptyReturnLine()];
+  const hasReturnSelection = returnLines.some(
+    (line) => line.holding_tank_equipment_id != null || (line.volume_gal ?? 0) > 0.001,
+  );
+  const showReturnToTank = sourceType === 'tank'
+    && form.source_holding_tank_equipment_id != null
+    && (
+      (unbottledInTankGal != null && unbottledInTankGal > 0.01)
+      || hasReturnSelection
+    );
   const isRumBottling = isRumBottlingProduct(form.product_name);
 
   const remainingBySku = useMemo(() => {
@@ -165,7 +271,9 @@ export function Bottling() {
       bottling_date: planDate ?? emptyRun().bottling_date,
     });
     setLines([emptyLine()]);
+    setReturnLines([]);
     setSourceType('none');
+    setVarianceReason('');
     setShowForm(true);
   };
 
@@ -183,16 +291,31 @@ export function Bottling() {
       setForm({
         ...emptyRun(),
         source_holding_tank_equipment_id: tankId,
-        final_abv: contents.abv,
+        product_name: tankContentsPhrase(tankId) ?? '',
+        final_abv: roundAbv(contents.abv),
       });
       setLines([emptyLine()]);
+      setReturnLines([]);
       setSourceType('tank');
+      setVarianceReason('');
       setShowForm(true);
     } else if (plan) {
       openNew(plan.date ?? undefined);
     }
     const next = stripCalendarPlanQuery(searchParams);
     next.delete('tank');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  const calendarRecordHandled = useRef(false);
+  useEffect(() => {
+    const recordId = Number(searchParams.get('record')) || 0;
+    if (!recordId || calendarRecordHandled.current) return;
+    calendarRecordHandled.current = true;
+    const run = getBottlingRuns().find((item) => item.id === recordId);
+    if (run) openEdit(run);
+    const next = new URLSearchParams(searchParams);
+    next.delete('record');
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
 
@@ -203,20 +326,24 @@ export function Bottling() {
       source_barrel_id: run.source_barrel_id,
       source_holding_tank_equipment_id: run.source_holding_tank_equipment_id,
       source_volume_gal: run.source_volume_gal,
+      source_abv: run.source_abv,
       bottled_volume_gal: run.bottled_volume_gal,
       volume_variance_gal: run.volume_variance_gal,
+      alcohol_variance_gal: run.alcohol_variance_gal,
       source_run_id: run.source_run_id,
       bottling_date: run.bottling_date,
       packaging_bottle: run.packaging_bottle,
       bottle_size_ml: run.bottle_size_ml,
       bottle_count: run.bottle_count,
-      final_abv: run.final_abv,
+      final_abv: roundAbv(run.final_abv),
       product_name: run.product_name,
       lot_number: run.lot_number,
       notes: run.notes,
     });
     setLines(linesFromRun(run));
+    setReturnLines(returnsFromRun(run));
     setSourceType(sourceTypeFromRun(run));
+    setVarianceReason(run.variance_reason ?? '');
     setShowForm(true);
   };
 
@@ -227,6 +354,49 @@ export function Bottling() {
       source_barrel_id: next === 'barrel' ? form.source_barrel_id : null,
       source_holding_tank_equipment_id: next === 'tank' ? form.source_holding_tank_equipment_id : null,
       source_volume_gal: next === 'tank' ? form.source_volume_gal : null,
+    });
+    if (next !== 'tank') setReturnLines([]);
+  };
+
+  const updateReturnLine = (index: number, patch: Partial<BottlingRunReturnInput>) => {
+    setReturnLines((prev) => {
+      const base = prev.length > 0 ? prev : [emptyReturnLine()];
+      return base.map((line, i) => (i === index ? { ...line, ...patch } : line));
+    });
+  };
+
+  const handleReturnTankChange = (index: number, tankId: number | null) => {
+    setReturnLines((prev) => {
+      const base = prev.length > 0 ? [...prev] : [emptyReturnLine()];
+      while (base.length <= index) base.push(emptyReturnLine());
+      if (!tankId) {
+        base[index] = emptyReturnLine();
+        return base;
+      }
+      const others = base.reduce((sum, line, i) => {
+        if (i === index) return sum;
+        const gallons = line.volume_gal ?? 0;
+        return sum + (gallons > 0 ? gallons : 0);
+      }, 0);
+      const current = base[index]?.volume_gal ?? 0;
+      const remaining = Math.max(0, (unbottledInTankGal ?? 0) - others);
+      const fill = current > 0.001 ? current : remaining;
+      base[index] = {
+        holding_tank_equipment_id: tankId,
+        volume_gal: fill > 0.001 ? Math.round(fill * 100) / 100 : null,
+      };
+      return base;
+    });
+  };
+
+  const addReturnLine = () => {
+    setReturnLines((prev) => [...(prev.length > 0 ? prev : [emptyReturnLine()]), emptyReturnLine()]);
+  };
+
+  const removeReturnLine = (index: number) => {
+    setReturnLines((prev) => {
+      const base = prev.length > 0 ? prev : [emptyReturnLine()];
+      return base.filter((_, i) => i !== index);
     });
   };
 
@@ -239,8 +409,10 @@ export function Bottling() {
       ...form,
       source_holding_tank_equipment_id: tankId,
       source_barrel_id: null,
-      final_abv: contents?.abv ?? tank?.available_abv ?? form.final_abv,
+      product_name: tankId ? (tankContentsPhrase(tankId) ?? '') : form.product_name,
+      final_abv: roundAbv(contents?.abv ?? tank?.available_abv ?? form.final_abv),
     });
+    setReturnLines([]);
   };
 
   const updateLine = (index: number, patch: Partial<BottlingRunLineInput>) => {
@@ -288,20 +460,61 @@ export function Bottling() {
       alert('Select the holding tank to bottle from.');
       return;
     }
+    const varianceNeedsReason = sourceType === 'tank' && (volumeNeedsReason || alcoholNeedsReason);
+    if (sourceType === 'tank' && form.source_holding_tank_equipment_id && selectedTankAvailable && plannedDrawGal > 0) {
+      const returnError = bottlingReturnsError({
+        returns: returnLines.map((line) => {
+          const dest = returnDestinations.find((tank) => tank.id === line.holding_tank_equipment_id);
+          return {
+            tankId: line.holding_tank_equipment_id,
+            gallons: line.volume_gal ?? 0,
+            name: dest?.name,
+            destVolumeGal: dest?.volume_gal,
+            destCapacityGal: dest?.capacity_gal,
+          };
+        }),
+        unbottledGal: unbottledInTankGal ?? 0,
+        sourceTankId: form.source_holding_tank_equipment_id,
+      });
+      if (returnError) {
+        alert(returnError);
+        return;
+      }
+    }
+    if (varianceNeedsReason) {
+      const reasonError = volumeChangeReasonError(varianceReason);
+      if (reasonError) {
+        alert(reasonError);
+        return;
+      }
+    }
+    const sentReturns = returnLines.filter(
+      (line) => line.holding_tank_equipment_id != null && (line.volume_gal ?? 0) > 0.001,
+    );
     if (
       sourceType === 'tank'
       && selectedTankAvailable
       && plannedDrawGal > 0
-      && Math.abs(plannedDrawGal - selectedTankAvailable.volume_gal) > 0.01
+      && (sentReturns.length > 0 || varianceNeedsReason)
     ) {
-      const variance = plannedDrawGal - selectedTankAvailable.volume_gal;
-      const varianceNote = variance > 0
-        ? `${variance.toFixed(2)} gal over the ${selectedTankAvailable.volume_gal.toFixed(1)} gal in the tank`
-        : `${Math.abs(variance).toFixed(2)} gal left in the tank after bottling (recorded as variance)`;
-      if (!confirm(
-        `The source tank will be emptied (${selectedTankAvailable.volume_gal.toFixed(1)} gal drawn). `
-        + `Bottled total is ${plannedDrawGal.toFixed(2)} gal — ${varianceNote}. Continue?`,
-      )) {
+      const notes: string[] = [
+        `The source tank will be emptied (${selectedTankAvailable.volume_gal.toFixed(1)} gal drawn).`,
+        `Bottled total is ${plannedDrawGal.toFixed(2)} gal.`,
+      ];
+      for (const line of sentReturns) {
+        const name = returnDestinations.find((tank) => tank.id === line.holding_tank_equipment_id)?.name ?? 'tank';
+        notes.push(`${(line.volume_gal ?? 0).toFixed(2)} gal goes to ${name}.`);
+      }
+      if (volumeNeedsReason && bottlingVarianceGal != null) {
+        const varianceNote = bottlingVarianceGal > 0
+          ? `${bottlingVarianceGal.toFixed(2)} gal over the tank`
+          : `${Math.abs(bottlingVarianceGal).toFixed(2)} gal still unaccounted (recorded as variance)`;
+        notes.push(varianceNote);
+      }
+      if (alcoholNeedsReason && bottlingAlcoholGal != null) {
+        notes.push(`${formatBottlingAlcoholVariance(bottlingAlcoholGal)}.`);
+      }
+      if (!confirm(`${notes.join(' ')} Continue?`)) {
         return;
       }
     }
@@ -310,12 +523,17 @@ export function Bottling() {
         ...form,
         source_barrel_id: sourceType === 'barrel' ? form.source_barrel_id : null,
         source_holding_tank_equipment_id: sourceType === 'tank' ? form.source_holding_tank_equipment_id : null,
+        returns: sourceType === 'tank' ? returnLines : [],
+        return_holding_tank_equipment_id: null,
+        return_volume_gal: null,
+        variance_reason: varianceNeedsReason ? varianceReason.trim() : null,
+        variance_changed_by: varianceNeedsReason || sentReturns.length > 0 ? changedBy : null,
       }, activeLines, editId);
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Could not save bottling run.');
       return;
     }
-    setShowForm(false);
+    closeForm();
     refresh();
   };
 
@@ -332,11 +550,36 @@ export function Bottling() {
     return `${sign}${variance.toFixed(2)} gal`;
   };
 
+  const alcoholVarianceLine = (run: BottlingRunView) => {
+    const alcohol = reportedBottlingAlcoholVarianceGal(run);
+    if (alcohol == null || Math.abs(alcohol) < 0.01) return null;
+    return <div>{formatBottlingAlcoholVariance(alcohol)}</div>;
+  };
+
+  const tankName = (id: number | null | undefined) => {
+    if (!id) return null;
+    return namedHoldingTanks.find((tank) => tank.id === id)?.name
+      ?? namedCollectionVessels.find((tank) => tank.id === id)?.name
+      ?? null;
+  };
+
+  const returnLabel = (run: BottlingRunView) => {
+    const stored = (run.returns && run.returns.length > 0)
+      ? run.returns
+      : (run.return_holding_tank_equipment_id && (run.return_volume_gal ?? 0) >= 0.01
+        ? [{ holding_tank_equipment_id: run.return_holding_tank_equipment_id, volume_gal: run.return_volume_gal ?? 0 }]
+        : []);
+    const parts = stored
+      .filter((line) => line.holding_tank_equipment_id && line.volume_gal >= 0.01)
+      .map((line) => `${tankName(line.holding_tank_equipment_id) ?? 'Tank'} ${line.volume_gal.toFixed(2)} gal`);
+    return parts.length > 0 ? parts.join(', ') : '—';
+  };
+
   const sourceLabel = (run: BottlingRunView) => {
     if (run.source_holding_tank_equipment_id) {
-      const tank = holdingTanks.find((t) => t.id === run.source_holding_tank_equipment_id);
+      const name = tankName(run.source_holding_tank_equipment_id);
       const draw = run.source_volume_gal != null ? ` emptied ${run.source_volume_gal.toFixed(1)} gal` : '';
-      return tank ? `${tank.name}${draw}` : 'Holding tank';
+      return name ? `${name}${draw}` : 'Holding tank';
     }
     const barrel = barrels.find((b) => b.id === run.source_barrel_id);
     return barrel?.barrel_number ?? '—';
@@ -351,42 +594,6 @@ export function Bottling() {
           <button type="button" className="btn btn-primary" onClick={() => openNew()}>+ New Bottling Run</button>
         </div>
       </div>
-
-      {!(showForm && isRumBottling) && (
-        <div className="card" style={{ marginBottom: '1.25rem' }}>
-          <h3 className="section-title" style={{ marginTop: 0 }}>Packaging Bottles</h3>
-          <p className="text-muted" style={{ marginBottom: '0.75rem' }}>
-            Bottle SKUs from Inventory, category Packaging. A bottle you add there shows up in this list and in the bottling dropdown.
-          </p>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Bottle</th>
-                  <th>Size</th>
-                  <th>On Hand</th>
-                  <th>Reorder At</th>
-                </tr>
-              </thead>
-              <tbody>
-                {bottleOptions.map((bottle) => {
-                  const inv = packagingInventory.find(
-                    (i) => i.name.toLowerCase() === bottle.name.toLowerCase(),
-                  );
-                  return (
-                    <tr key={bottle.name}>
-                      <td><strong>{bottle.name}</strong></td>
-                      <td>{bottle.sizeMl != null ? `${bottle.sizeMl} ml` : '—'}</td>
-                      <td>{inv ? `${inv.quantity.toLocaleString()} ${inv.unit}` : '—'}</td>
-                      <td>{inv ? inv.reorder_level.toLocaleString() : '—'}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
 
       <div className="card-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
         <div className="stat-card">
@@ -406,7 +613,7 @@ export function Bottling() {
       {runs.length === 0 ? (
         <div className="empty-state">
           <p>No bottling runs recorded yet.</p>
-          <button type="button" className="btn btn-primary" onClick={() => openNew()} style={{ marginTop: '1rem' }}>Record first bottling</button>
+          <button type="button" className="btn btn-secondary" onClick={() => openNew()} style={{ marginTop: '1rem' }}>Record first bottling</button>
         </div>
       ) : (
         <>
@@ -420,11 +627,14 @@ export function Bottling() {
                 <th>Packaging</th>
                 <th>Lot</th>
                 <th>Date</th>
-                <th>Bottles</th>
-                <th>Volume</th>
-                <th>Tank draw</th>
-                <th>Variance</th>
-                <th>ABV</th>
+                <th className="num">Bottles</th>
+                <th className="num">Volume</th>
+                <th className="num">Tank draw</th>
+                <th>To tank</th>
+                <th className="num">Variance</th>
+                <th>Why</th>
+                <th>Who</th>
+                <th className="num">ABV</th>
                 <th>Source</th>
                 <th></th>
               </tr>
@@ -437,15 +647,21 @@ export function Bottling() {
                   <td>{formatLinesSummary(r.lines)}</td>
                   <td>{r.lot_number}</td>
                   <td>{formatDateDisplay(r.bottling_date)}</td>
-                  <td>{totalBottleCount(r.lines).toLocaleString()}</td>
-                  <td>{totalVolumeGal(r.lines).toFixed(2)} gal</td>
-                  <td>
+                  <td className="num">{totalBottleCount(r.lines).toLocaleString()}</td>
+                  <td className="num">{totalVolumeGal(r.lines).toFixed(2)} gal</td>
+                  <td className="num">
                     {r.source_holding_tank_equipment_id && r.source_volume_gal != null
                       ? `${r.source_volume_gal.toFixed(2)} gal`
                       : '—'}
                   </td>
-                  <td>{formatVariance(r.volume_variance_gal)}</td>
-                  <td>{r.final_abv}%</td>
+                  <td>{returnLabel(r)}</td>
+                  <td className="num">
+                    <div>{formatVariance(reportedBottlingVarianceGal(r))}</div>
+                    {alcoholVarianceLine(r)}
+                  </td>
+                  <td>{r.variance_reason?.trim() || '—'}</td>
+                  <td>{r.variance_changed_by?.trim() || '—'}</td>
+                  <td className="num">{formatBottlingAbv(r.final_abv)}%</td>
                   <td>{sourceLabel(r)}</td>
                   <td className="td-actions">
                     <button type="button" className="btn btn-sm btn-ghost" onClick={() => openEdit(r)}>Edit</button>
@@ -460,7 +676,7 @@ export function Bottling() {
       )}
 
       {showForm && (
-        <Modal title={editId ? 'Edit Bottling Run' : 'New Bottling Run'} onClose={() => setShowForm(false)}>
+        <Modal title={editId ? 'Edit Bottling Run' : 'New Bottling Run'} onClose={closeForm}>
           <div className="form-grid">
             <div className="form-group">
               <label>Batch Number</label>
@@ -468,7 +684,14 @@ export function Bottling() {
             </div>
             <div className="form-group full-width">
               <label>Product Name</label>
-              <input value={form.product_name} onChange={(e) => setForm({ ...form, product_name: e.target.value })} />
+              <input
+                data-testid="bottling-product-name"
+                value={form.product_name}
+                onChange={(e) => setForm({ ...form, product_name: e.target.value })}
+              />
+              {sourceType === 'tank' && selectedTankContents && form.product_name.trim() === selectedTankContents.trim() && (
+                <span className="field-hint">Taken from what is in the source holding tank.</span>
+              )}
               {isRumBottling ? (
                 <span className="field-hint">
                   Rum product — pick bottle styles from the list, set size (ml), and enter counts. Matching packaging inventory is reduced when you save.
@@ -512,7 +735,7 @@ export function Bottling() {
                 >
                   <option value="">— Select barrel —</option>
                   {barrels.map((b) => (
-                    <option key={b.id} value={b.id}>{b.barrel_number} — {b.spirit_type}</option>
+                    <option key={b.id} value={b.id}>{b.barrel_number} — {barrelBlendProductName(b.id) || b.spirit_type}</option>
                   ))}
                 </select>
               </div>
@@ -527,7 +750,7 @@ export function Bottling() {
                   <option value="">— Select tank —</option>
                   {tankOptions.map((t) => (
                     <option key={t.id} value={t.id}>
-                      {t.name} ({t.available_gal.toFixed(1)} gal @ {t.available_abv.toFixed(1)}%)
+                      {tankDropdownLabel(t.name, t.id)}
                     </option>
                   ))}
                 </select>
@@ -536,13 +759,29 @@ export function Bottling() {
                 )}
                 {selectedTankAvailable && form.source_holding_tank_equipment_id && (
                   <p className="field-hint">
-                    In tank: {selectedTankAvailable.volume_gal.toFixed(1)} gal @ {selectedTankAvailable.abv.toFixed(1)}% ABV.
+                    In tank: {selectedTankAvailable.volume_gal.toFixed(1)} gal @ {formatBottlingAbv(selectedTankAvailable.abv)}% ABV
+                    {selectedTankContents ? ` — ${selectedTankContents}` : ''}.
                     {' '}Saving empties the tank (draws {selectedTankAvailable.volume_gal.toFixed(1)} gal).
+                    {returnLines.some((line) => (line.volume_gal ?? 0) > 0.01 && line.holding_tank_equipment_id) && (
+                      <>
+                        {' '}
+                        {returnLines
+                          .filter((line) => (line.volume_gal ?? 0) > 0.01 && line.holding_tank_equipment_id)
+                          .map((line) => `${(line.volume_gal ?? 0).toFixed(2)} gal goes to ${tankName(line.holding_tank_equipment_id) ?? 'tank'}.`)
+                          .join(' ')}
+                      </>
+                    )}
                     {plannedDrawGal > 0 && (
                       <> Bottled total: {plannedDrawGal.toFixed(2)} gal.</>
                     )}
-                    {bottlingVarianceGal != null && Math.abs(bottlingVarianceGal) >= 0.01 && (
-                      <> Variance vs tank: {formatVariance(bottlingVarianceGal)} (shown on Reports).</>
+                    {volumeNeedsReason && (
+                      <> Variance vs tank: {formatVariance(bottlingVarianceGal)}.</>
+                    )}
+                    {alcoholNeedsReason && bottlingAlcoholGal != null && (
+                      <> <span data-testid="bottling-alcohol-variance">{formatBottlingAlcoholVariance(bottlingAlcoholGal)}</span>.</>
+                    )}
+                    {(volumeNeedsReason || alcoholNeedsReason) && (
+                      <> Listed on Reports → Volume changes.</>
                     )}
                   </p>
                 )}
@@ -614,7 +853,7 @@ export function Bottling() {
             {sourceType === 'tank' && unbottledInTankGal != null && unbottledInTankGal > 0 && !isRumBottling && remainingBySku.length > 0 && (
               <div className="form-group full-width bottling-remaining-panel">
                 <p className="bottling-remaining-title">
-                  Not yet assigned to bottles ({unbottledInTankGal.toFixed(2)} gal — variance if saved as-is)
+                  Not yet assigned to bottles ({unbottledInTankGal.toFixed(2)} gal). Send that product to one or more tanks, or the difference is recorded as variance.
                 </p>
                 <ul className="bottling-remaining-list">
                   {remainingBySku.map((entry) => (
@@ -630,7 +869,7 @@ export function Bottling() {
             {sourceType === 'tank' && unbottledInTankGal != null && unbottledInTankGal > 0 && isRumBottling && remainingByLineSize.length > 0 && (
               <div className="form-group full-width bottling-remaining-panel">
                 <p className="bottling-remaining-title">
-                  Not yet assigned to bottles ({unbottledInTankGal.toFixed(2)} gal — variance if saved as-is)
+                  Not yet assigned to bottles ({unbottledInTankGal.toFixed(2)} gal). Send that product to one or more tanks, or the difference is recorded as variance.
                 </p>
                 <ul className="bottling-remaining-list">
                   {remainingByLineSize.map((entry) => (
@@ -643,27 +882,117 @@ export function Bottling() {
               </div>
             )}
 
+            {showReturnToTank && (
+              <div className="form-group full-width bottling-lines-section">
+                <div className="bottling-lines-header">
+                  <label>Send unbottled product to tanks</label>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-secondary"
+                    data-testid="bottling-return-add"
+                    onClick={addReturnLine}
+                  >
+                    + Add another tank
+                  </button>
+                </div>
+                <p className="field-hint">
+                  Holding tanks and collection vessels. The source tank is still emptied. Split the leftover across more than one tank.
+                </p>
+                {shownReturnLines.map((line, index) => {
+                  const taken = new Set(
+                    shownReturnLines.map((other, otherIndex) => (
+                      otherIndex === index ? null : other.holding_tank_equipment_id
+                    )),
+                  );
+                  const options = returnDestinations.filter(
+                    (tank) => tank.id === line.holding_tank_equipment_id || !taken.has(tank.id),
+                  );
+                  return (
+                    <div key={index} className="bottling-line-row" data-testid="bottling-return-row">
+                      <div className="form-group">
+                        <label htmlFor={`bottling-return-tank-${index}`}>Tank</label>
+                        <select
+                          id={`bottling-return-tank-${index}`}
+                          data-testid={index === 0 ? 'bottling-return-tank' : `bottling-return-tank-${index}`}
+                          value={line.holding_tank_equipment_id ?? ''}
+                          onChange={(e) => handleReturnTankChange(index, e.target.value ? parseInt(e.target.value, 10) : null)}
+                        >
+                          <option value="">{shownReturnLines.length > 1 ? '— Select tank —' : '— Leave as variance —'}</option>
+                          {options.map((tank) => (
+                            <option key={tank.id} value={tank.id}>
+                              {tankDropdownLabel(tank.name, tank.id)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="form-group">
+                        <label htmlFor={`bottling-return-volume-${index}`}>Gallons</label>
+                        <input
+                          id={`bottling-return-volume-${index}`}
+                          data-testid={index === 0 ? 'bottling-return-volume' : `bottling-return-volume-${index}`}
+                          type="number"
+                          step="0.01"
+                          min={0}
+                          value={line.volume_gal ?? ''}
+                          onChange={(e) => {
+                            const raw = e.target.value.trim();
+                            updateReturnLine(index, {
+                              volume_gal: raw === '' ? null : parseFloat(raw) || 0,
+                            });
+                          }}
+                          disabled={!line.holding_tank_equipment_id}
+                        />
+                      </div>
+                      {shownReturnLines.length > 1 && (
+                        <div className="form-group bottling-line-meta">
+                          <button type="button" className="btn btn-sm btn-ghost" onClick={() => removeReturnLine(index)}>Remove</button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                <p className="field-hint">
+                  {unbottledInTankGal != null
+                    ? `Up to ${unbottledInTankGal.toFixed(2)} gal left after the bottle lines, at ${formatBottlingAbv(form.final_abv || selectedTankAvailable?.abv || 0)}% ABV. ${returnGal.toFixed(2)} gal assigned to tanks.`
+                    : 'Enter the gallons that were not bottled.'}
+                </p>
+              </div>
+            )}
             <div className="form-group">
               <label>Final ABV (%)</label>
               <input
                 type="number"
-                step="0.1"
+                step="0.01"
                 min={0}
                 max={MAX_ENTERED_ABV}
-                value={form.final_abv || ''}
+                value={form.final_abv ? roundAbv(form.final_abv) : ''}
                 onChange={(e) => {
                   const limited = limitAbvInput(e.target.value);
-                  setForm({ ...form, final_abv: limited.trim() === '' ? 0 : parseFloat(limited) || 0 });
+                  const parsed = parseFloat(limited);
+                  setForm({ ...form, final_abv: limited.trim() === '' || !Number.isFinite(parsed) ? 0 : roundAbv(parsed) });
                 }}
               />
             </div>
+            {sourceType === 'tank' && (volumeNeedsReason || alcoholNeedsReason) && (
+              <div className="form-group full-width">
+                <label htmlFor="bottling-variance-why">Why the volume or alcohol differs from the tank</label>
+                <input
+                  id="bottling-variance-why"
+                  value={varianceReason}
+                  onChange={(e) => setVarianceReason(e.target.value)}
+                  placeholder="Required"
+                  required
+                />
+                <p className="field-hint">Recorded by {changedBy}. This shows on Reports → Volume changes.</p>
+              </div>
+            )}
             <div className="form-group full-width">
               <label>Notes</label>
               <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
             </div>
           </div>
           <div className="form-actions">
-            <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+            <button type="button" className="btn btn-secondary" onClick={closeForm}>Cancel</button>
             <button type="button" className="btn btn-primary" onClick={handleSave}>Save</button>
           </div>
         </Modal>

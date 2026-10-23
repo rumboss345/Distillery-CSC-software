@@ -69,6 +69,8 @@ CREATE TABLE IF NOT EXISTS mash_batches (
   yeast_strain TEXT NOT NULL DEFAULT '',
   yeast_lbs REAL NOT NULL DEFAULT 0,
   start_date TEXT NOT NULL,
+  fermentation_start_date TEXT,
+  expected_completion_date TEXT,
   target_brix REAL,
   actual_brix REAL,
   target_final_brix REAL,
@@ -103,6 +105,10 @@ CREATE TABLE IF NOT EXISTS distillation_runs (
   run_date TEXT NOT NULL,
   charge_volume_gal REAL NOT NULL DEFAULT 0,
   charge_abv REAL,
+  alcohol_charged_gal REAL,
+  alcohol_collected_gal REAL,
+  alcohol_loss_gal REAL,
+  alcohol_charge_basis TEXT,
   proof_spirit_gal REAL,
   proof_spirit_abv REAL,
   proof_water_gal REAL NOT NULL DEFAULT 0,
@@ -136,10 +142,23 @@ CREATE TABLE IF NOT EXISTS distillation_run_botanicals (
   amount REAL NOT NULL DEFAULT 0,
   weight REAL NOT NULL DEFAULT 0,
   weight_unit TEXT NOT NULL DEFAULT 'g',
+  place TEXT,
   sort_order INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_run_botanicals_run ON distillation_run_botanicals(distillation_run_id);
+
+CREATE TABLE IF NOT EXISTS distillation_run_tank_sources (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  distillation_run_id INTEGER NOT NULL REFERENCES distillation_runs(id) ON DELETE CASCADE,
+  holding_tank_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
+  volume_gal REAL NOT NULL,
+  abv REAL NOT NULL DEFAULT 0,
+  sort_order INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_distillation_tank_sources_run ON distillation_run_tank_sources(distillation_run_id);
+CREATE INDEX IF NOT EXISTS idx_distillation_tank_sources_tank ON distillation_run_tank_sources(holding_tank_equipment_id);
 
 CREATE TABLE IF NOT EXISTS gin_recipes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -156,6 +175,7 @@ CREATE TABLE IF NOT EXISTS gin_recipe_botanicals (
   amount REAL NOT NULL DEFAULT 0,
   weight REAL NOT NULL DEFAULT 0,
   weight_unit TEXT NOT NULL DEFAULT 'g',
+  place TEXT,
   sort_order INTEGER NOT NULL DEFAULT 0
 );
 
@@ -204,8 +224,14 @@ CREATE TABLE IF NOT EXISTS bottling_runs (
   source_barrel_id INTEGER REFERENCES barrels(id),
   source_holding_tank_equipment_id INTEGER REFERENCES floor_equipment(id),
   source_volume_gal REAL,
+  source_abv REAL,
   bottled_volume_gal REAL,
   volume_variance_gal REAL,
+  alcohol_variance_gal REAL,
+  variance_reason TEXT,
+  variance_changed_by TEXT,
+  return_holding_tank_equipment_id INTEGER REFERENCES floor_equipment(id),
+  return_volume_gal REAL,
   source_run_id INTEGER REFERENCES distillation_runs(id),
   bottling_date TEXT NOT NULL,
   packaging_bottle TEXT NOT NULL DEFAULT '',
@@ -228,6 +254,17 @@ CREATE TABLE IF NOT EXISTS bottling_run_lines (
 );
 
 CREATE INDEX IF NOT EXISTS idx_bottling_run_lines_run ON bottling_run_lines(bottling_run_id);
+
+CREATE TABLE IF NOT EXISTS bottling_run_returns (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  bottling_run_id INTEGER NOT NULL REFERENCES bottling_runs(id) ON DELETE CASCADE,
+  holding_tank_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
+  volume_gal REAL NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_bottling_run_returns_run ON bottling_run_returns(bottling_run_id);
+CREATE INDEX IF NOT EXISTS idx_bottling_run_returns_tank ON bottling_run_returns(holding_tank_equipment_id);
 
 CREATE TABLE IF NOT EXISTS blend_recipes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -328,6 +365,7 @@ CREATE TABLE IF NOT EXISTS blend_spirit_sources (
   holding_tank_equipment_id INTEGER NOT NULL DEFAULT 0 REFERENCES floor_equipment(id),
   barrel_id INTEGER REFERENCES barrels(id),
   volume_gal REAL NOT NULL DEFAULT 0,
+  emptied_volume_gal REAL,
   abv REAL NOT NULL DEFAULT 0,
   sort_order INTEGER NOT NULL DEFAULT 0
 );
@@ -401,11 +439,29 @@ CREATE TABLE IF NOT EXISTS holding_tank_volume_variances (
   variance_gal REAL NOT NULL,
   recorded_at TEXT NOT NULL,
   notes TEXT NOT NULL DEFAULT '',
+  changed_by TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_tank_volume_variances_tank ON holding_tank_volume_variances(tank_equipment_id);
 CREATE INDEX IF NOT EXISTS idx_tank_volume_variances_date ON holding_tank_volume_variances(recorded_at);
+
+CREATE TABLE IF NOT EXISTS holding_tank_dilutions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tank_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
+  spirit_volume_gal REAL NOT NULL,
+  spirit_abv REAL NOT NULL,
+  water_gal REAL NOT NULL,
+  finished_volume_gal REAL NOT NULL,
+  finished_abv REAL NOT NULL,
+  recorded_at TEXT NOT NULL,
+  notes TEXT NOT NULL DEFAULT '',
+  changed_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_tank_dilutions_tank ON holding_tank_dilutions(tank_equipment_id);
+CREATE INDEX IF NOT EXISTS idx_tank_dilutions_date ON holding_tank_dilutions(recorded_at);
 
 CREATE INDEX IF NOT EXISTS idx_fermentation_mash ON fermentation_logs(mash_batch_id);
 CREATE INDEX IF NOT EXISTS idx_fermentation_fermenter ON fermentation_logs(floor_equipment_id);
@@ -474,6 +530,20 @@ CREATE TABLE IF NOT EXISTS equipment_maintenance_log (
 CREATE INDEX IF NOT EXISTS idx_equipment_maintenance_log_equipment ON equipment_maintenance_log(floor_equipment_id);
 CREATE INDEX IF NOT EXISTS idx_equipment_maintenance_log_created ON equipment_maintenance_log(created_at);
 
+CREATE TABLE IF NOT EXISTS production_status_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  record_kind TEXT NOT NULL,
+  record_id INTEGER NOT NULL,
+  floor_equipment_id INTEGER,
+  previous_status TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL,
+  changed_at TEXT NOT NULL DEFAULT (datetime('now')),
+  changed_by TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_production_status_logs_record
+  ON production_status_logs(record_kind, record_id, changed_at);
+
 CREATE TABLE IF NOT EXISTS mash_fermenter_assignments (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   mash_batch_id INTEGER NOT NULL REFERENCES mash_batches(id) ON DELETE CASCADE,
@@ -495,6 +565,7 @@ CREATE TABLE IF NOT EXISTS discarded_fermentations (
   volume_gal REAL NOT NULL,
   discarded_date TEXT NOT NULL,
   notes TEXT NOT NULL DEFAULT '',
+  changed_by TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

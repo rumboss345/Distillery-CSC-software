@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import {
   approveUser,
@@ -10,6 +10,14 @@ import {
   updateAdminUser,
   type AuthUser,
 } from '../lib/auth-api';
+import {
+  checkDatabaseBackup,
+  downloadDatabaseBackup,
+  emptyAllHoldingTanks,
+  getHoldingTanksWithContents,
+  resetAllData,
+  restoreDatabaseBackup,
+} from '../db/queries';
 import { useAuth } from '../context/AuthContext';
 import { formatRecordedAt } from '../lib/date-input';
 import {
@@ -39,6 +47,9 @@ export function AdminUsers() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [restoring, setRestoring] = useState(false);
+  const [backupNote, setBackupNote] = useState('');
+  const restoreInputRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState(emptyForm);
   const [editUser, setEditUser] = useState<AuthUser | null>(null);
   const [editPermissions, setEditPermissions] = useState<PermissionKey[]>([]);
@@ -202,6 +213,73 @@ export function AdminUsers() {
     return u.processAssignments.map((k) => PROCESS_STAGE_LABELS[k]).join(', ');
   }
 
+  function handleClearAllData() {
+    if (!confirm('Clear the shared distillery record for everyone? This removes washes, runs, blends, barrels, bottling, inventory, and floor plan records.')) {
+      return;
+    }
+    if (!confirm('This cannot be undone. Clear the shared record and reset it to sample data?')) {
+      return;
+    }
+    void resetAllData().catch((error: unknown) => {
+      window.alert(error instanceof Error ? error.message : 'Could not clear the shared distillery record.');
+    });
+  }
+
+  function handleDownloadBackup() {
+    const fileName = downloadDatabaseBackup();
+    setBackupNote(`Backup downloaded as ${fileName}.`);
+  }
+
+  async function handleRestoreFile(file: File | undefined) {
+    if (restoreInputRef.current) restoreInputRef.current.value = '';
+    if (!file) return;
+    const fileError = await checkDatabaseBackup(file);
+    if (fileError) {
+      alert(fileError);
+      return;
+    }
+    if (!confirm(
+      `Restore from ${file.name}?\n\n`
+      + 'This replaces the shared distillery record for everyone signed in. '
+      + 'A backup of the current data downloads first so you can undo this.',
+    )) {
+      return;
+    }
+    setRestoring(true);
+    downloadDatabaseBackup('csc-distillery-before-restore');
+    const restoreError = await restoreDatabaseBackup(file);
+    if (restoreError) {
+      setRestoring(false);
+      alert(restoreError);
+    }
+  }
+
+  function handleEmptyAllTanks() {
+    const tanksWithSpirit = getHoldingTanksWithContents().filter((t) => t.volume_gal > 0);
+    if (tanksWithSpirit.length === 0) {
+      alert('All holding tanks are already empty.');
+      return;
+    }
+    const tankList = tanksWithSpirit
+      .map((t) => `${t.name} (${t.volume_gal.toFixed(1)} gal)`)
+      .join('\n');
+    if (!confirm(
+      `Empty all holding tanks?\n\nThis clears tank spirit from:\n${tankList}\n\n`
+      + 'Distillation cut records stay, but tank volumes, transfers, and blend draws are zeroed. '
+      + 'This cannot be undone.',
+    )) {
+      return;
+    }
+    const result = emptyAllHoldingTanks();
+    alert(
+      `All holding tanks emptied.\n\n`
+      + `${result.transfersRemoved} transfer(s) removed\n`
+      + `${result.cutsCleared} cut(s) cleared from tanks\n`
+      + `${result.runsCleared} low-wines charge(s) cleared\n`
+      + `${result.blendsCleared} blend draw(s) cleared`,
+    );
+  }
+
   function formatPermissions(u: AuthUser) {
     if (u.role === 'admin') return 'Full access';
     if (u.permissions.length === 0) return 'No access';
@@ -239,7 +317,7 @@ export function AdminUsers() {
                   <td>{u.name ?? '—'}</td>
                   <td>{formatRecordedAt(u.created_at)}</td>
                   <td className="table-actions">
-                    <button type="button" className="btn btn-primary btn-sm" onClick={() => handleApprove(u.id)}>
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => handleApprove(u.id)}>
                       Approve
                     </button>
                     <button type="button" className="btn btn-danger btn-sm" onClick={() => handleReject(u.id)}>
@@ -367,6 +445,51 @@ export function AdminUsers() {
             </tbody>
           </table>
         )}
+      </div>
+
+      <div className="card admin-section" data-testid="admin-data-management">
+        <h2 className="admin-section-title">Data Management</h2>
+        <h3 className="admin-subtitle">Backup</h3>
+        <p className="admin-hint">
+          Washes, runs, tanks, and logs are one shared record for everyone signed in.
+          Download a backup often. Restoring replaces that shared record for every browser.
+        </p>
+        <div className="admin-data-actions">
+          <button type="button" className="btn btn-primary" onClick={handleDownloadBackup} data-testid="download-backup">
+            Download backup
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            disabled={restoring}
+            onClick={() => restoreInputRef.current?.click()}
+            data-testid="restore-backup"
+          >
+            {restoring ? 'Restoring…' : 'Restore backup'}
+          </button>
+          <input
+            ref={restoreInputRef}
+            type="file"
+            accept=".sqlite,.db,application/vnd.sqlite3,application/x-sqlite3"
+            hidden
+            data-testid="restore-backup-file"
+            onChange={(e) => void handleRestoreFile(e.target.files?.[0])}
+          />
+        </div>
+        {backupNote && <p className="admin-hint" data-testid="backup-note">{backupNote}</p>}
+
+        <h3 className="admin-subtitle">Reset</h3>
+        <p className="admin-hint">
+          Clear the shared record for everyone and start from sample data, or empty every holding tank and leave the other records in place.
+        </p>
+        <div className="admin-data-actions">
+          <button type="button" className="btn btn-secondary" onClick={handleClearAllData}>
+            Clear all data
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={handleEmptyAllTanks}>
+            Empty All Tanks
+          </button>
+        </div>
       </div>
 
       {editUser && (

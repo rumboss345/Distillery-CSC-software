@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import { equipmentReturnState } from '../../lib/equipment-return';
 import {
   equipmentBlocksProduction,
   equipmentHasMaintenanceTag,
@@ -74,6 +75,7 @@ export function ProcessEquipmentContextMenu({
                 role="menuitem"
                 className="process-context-menu-item"
                 to={item.to}
+                state={equipmentReturnState(equipment.id)}
                 onClick={onClose}
               >
                 {item.label}
@@ -90,6 +92,7 @@ export function ProcessEquipmentContextMenu({
                 role="menuitem"
                 className="process-context-menu-item"
                 to={item.to}
+                state={equipmentReturnState(equipment.id)}
                 onClick={onClose}
               >
                 {item.label}
@@ -119,6 +122,7 @@ export function ProcessEquipmentContextMenu({
             role="menuitem"
             className="process-context-menu-item"
             to={menu.maintenance.to}
+            state={equipmentReturnState(equipment.id)}
             onClick={onClose}
           >
             {tagged ? 'Open Equipment Maintenance' : menu.maintenance.label}

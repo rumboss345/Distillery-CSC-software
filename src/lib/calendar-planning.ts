@@ -5,19 +5,19 @@ import type { PermissionKey } from './permissions';
 export const CALENDAR_PLAN_ACTIVITY_KINDS: CalendarActivityKind[] = [
   'wash',
   'distillation',
-  'barrel',
   'bottling',
   'blend',
-  'transfer',
 ];
 
 export const CALENDAR_PLAN_PERMISSION: Record<CalendarActivityKind, PermissionKey> = {
   wash: 'wash',
+  fermentation: 'wash',
   distillation: 'distillation',
   barrel: 'barrels',
   bottling: 'bottling',
   blend: 'blending',
   transfer: 'distillation',
+  cleaning: 'equipment',
 };
 
 export function isValidCalendarPlanDate(value: string): boolean {

@@ -7,7 +7,17 @@ import {
   stillageSaveError,
   stillageSummary,
   stillageTransferError,
+  suggestedStillageVolumeGal,
 } from './stillage';
+
+describe('suggested stillage volume', () => {
+  it('starts from the charge minus the gallons collected', () => {
+    expect(suggestedStillageVolumeGal(150, 36.2)).toBe(113.8);
+    expect(suggestedStillageVolumeGal(50, 50)).toBe(0);
+    expect(suggestedStillageVolumeGal(40, 55)).toBe(0);
+    expect(suggestedStillageVolumeGal(80, 0)).toBe(80);
+  });
+});
 
 describe('stillage on completed low wine and heavy rum runs', () => {
   it('treats only the Stillage Tank equipment type as a stillage tank', () => {
@@ -57,6 +67,8 @@ describe('stillage on completed low wine and heavy rum runs', () => {
     expect(runAsksForStillage('wash')).toBe(true);
     expect(runAsksForStillage('heavy_rum')).toBe(true);
     expect(runAsksForStillage('low_wines')).toBe(false);
+    expect(runAsksForStillage('vodka')).toBe(false);
+    expect(runAsksForStillage('gin')).toBe(false);
   });
 
   it('requires a volume and a store-or-discard choice when completing', () => {
@@ -98,6 +110,13 @@ describe('stillage on completed low wine and heavy rum runs', () => {
     expect(stillageSaveError({
       status: 'complete',
       runType: 'low_wines',
+      volumeGal: null,
+      discarded: false,
+      tankId: null,
+    })).toBeNull();
+    expect(stillageSaveError({
+      status: 'complete',
+      runType: 'vodka',
       volumeGal: null,
       discarded: false,
       tankId: null,

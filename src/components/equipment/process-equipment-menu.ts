@@ -28,6 +28,8 @@ export interface ProcessEquipmentMenuSource {
   liquidName?: string | null;
   /** Open distillation run (running, or planned if nothing is running) on this still. */
   distillationRunId?: number | null;
+  /** Status of distillationRunId. Cuts belong in Next step only while the run is distilling. */
+  distillationRunStatus?: string | null;
 }
 
 export function buildProcessEquipmentContextMenu(
@@ -60,6 +62,23 @@ export function buildProcessEquipmentContextMenu(
       to: `/fermentation?wash=${source.linked_mash_batch_id}`,
     });
   }
+  if (canChargeFermenter && source.active_mash_status === 'fermenting') {
+    next.push({
+      key: 'logs',
+      label: 'Logs',
+      to: `/fermentation?logsEquipment=${source.id}`,
+    });
+  }
+  const distilling = isStill
+    && source.distillationRunId
+    && source.distillationRunStatus === 'running';
+  if (distilling) {
+    next.push({
+      key: 'cuts',
+      label: 'Cuts',
+      to: `/distillation?cutsRun=${source.distillationRunId}`,
+    });
+  }
   if (canChargeFermenter) {
     next.push(
       {
@@ -86,6 +105,18 @@ export function buildProcessEquipmentContextMenu(
       to: `/tank-transfer?source=${source.id}`,
     });
   }
+  const canWaterDown = (isHoldingTank || source.equipment_type === 'collection_vessel')
+    && hasLiquid
+    && (source.abv ?? 0) > 0
+    && liquidClass !== 'stillage'
+    && liquidClass !== 'dunder';
+  if (canWaterDown) {
+    next.push({
+      key: 'water-down',
+      label: 'Water down',
+      to: `/tank-transfer?waterDown=${source.id}`,
+    });
+  }
   if (canProcessSpirit) {
     next.push(
       {
@@ -107,19 +138,11 @@ export function buildProcessEquipmentContextMenu(
   }
 
   const records: ProcessEquipmentMenuLink[] = [];
-  if (canChargeFermenter) {
-    const viewing = source.active_mash_status === 'complete';
+  if (canChargeFermenter && source.active_mash_status !== 'fermenting') {
     records.push({
       key: 'logs',
-      label: viewing ? 'View logs' : 'Add logs',
+      label: 'View logs',
       to: `/fermentation?logsEquipment=${source.id}`,
-    });
-  }
-  if (isStill && source.distillationRunId) {
-    records.push({
-      key: 'cuts',
-      label: 'Add cuts',
-      to: `/distillation?cutsRun=${source.distillationRunId}`,
     });
   }
 

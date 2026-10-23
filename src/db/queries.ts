@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
+import { gallonsRestoredToEmptiedBarrel } from '../lib/barrel-blending';
 import { BARREL_STOCK_CATEGORY, BARREL_STOCK_ITEM_NAME } from '../lib/barrel-inventory';
 import {
+  bottlingAlcoholVarianceGal,
+  bottlingReturnsError,
+  bottlingVolumeVarianceGal,
   packagingBottleCountsBySku,
   packagingInventoryAdjustments,
 } from '../lib/bottling-lines';
@@ -14,8 +18,11 @@ import {
   type StoredCutType,
   type VesselInflow,
 } from '../lib/collection-vessel-cuts';
-import { isFermenterSourcedRun, isSpiritStyleRun, isTankSourcedRun } from '../lib/distillation-run-types';
-import { activeGinBotanicals, normalizeBotanicalWeightUnit } from '../lib/gin-botanicals';
+import { distillationAlcoholBalance, washChargeAbvFromBrix, type AlcoholChargeBasis, type DistillationAlcoholBalance } from '../lib/distillation-loss';
+import type { MonthlyProduction } from '../lib/reporting/productivity';
+import { isFermenterSourcedRun, isSpiritStyleRun, isTankSourcedRun, runTypeLabel, stillChargeSourcePhrase } from '../lib/distillation-run-types';
+import { activeGinBotanicals, ginBotanicalPlaceError, normalizeBotanicalWeightUnit } from '../lib/gin-botanicals';
+import { preparedIngredientName } from '../lib/quick-ingredient';
 import {
   chargeExceedsStillCapacity,
   plannedRecordSkipsEquipmentStatus,
@@ -24,20 +31,38 @@ import {
   stillAlreadyOccupiedMessage,
   stillChargeCapacityMessage,
   stillRunOccupiesEquipment,
+  distillationRunAllowsCutChanges,
 } from '../lib/still-charge';
 import {
   equipmentBlocksProduction,
   equipmentUnavailableForProduction,
   maintenanceStatusLabel,
 } from '../lib/equipment-maintenance';
-import { equipmentCleaningStatusLabel, equipmentNeedsCleaning, equipmentStatusWhenReturningToPlanned } from '../lib/equipment-cleaning';
+import { CALENDAR_CLEANING_EQUIPMENT_TYPES, equipmentCleaningStatusLabel, equipmentNeedsCleaning, equipmentStatusWhenReturningToPlanned } from '../lib/equipment-cleaning';
 import { assertEnteredAbv } from '../lib/abv-limits';
-import { roundThousandths, tankVolumeVarianceGal } from '../lib/tank-volume-variance';
+import { planTankProofDown } from '../lib/tank-proof-down';
+import { roundThousandths, tankReadingChanged, tankVolumeVarianceGal, volumeChangeReasonError } from '../lib/tank-volume-variance';
 import { EQUIPMENT_TYPES, isSpiritLedgerEquipmentType, resolveEquipmentIcon } from '../lib/equipment';
 import { equipmentTypeDeleteError, equipmentTypeNameError, normalizeEquipmentTypeName } from '../lib/equipment-type';
 import { countActiveFermentations, fermenterShowsAssignedWash } from '../lib/mash-fermenter-fill';
 import { compareStoredDatesDesc } from '../lib/date-input';
+import {
+  applyTankWithdrawals,
+  consumeOldestLots,
+  distillationLabelsFromLots,
+  instantBefore,
+  transferIntakeSummary,
+  transferredLiquidPhrase,
+  intakeAtOrBefore,
+  productNamesFromRemainingLots,
+  TANK_PRODUCT_WALK_LIMIT,
+  type TankLot,
+  type TankWithdrawal,
+} from '../lib/tank-product-name';
+import { ACTUAL_START_BRIX_LOG_NOTE, defaultExpectedCompletionDate, expectedCompletionDateError, fermentersForStartBrixLog } from '../lib/fermentation';
 import { eventDateWhenLeavingPlanned, localIsoDate } from '../lib/planned-event-date';
+import { choosePlannedFermenterRun } from '../lib/planned-fermenter-distillation';
+import { deleteStatusDateLog, recordStatusDateLog } from './status-logs';
 import { DISCARD_DESTINATION, fermenterTransferError } from '../lib/fermenter-transfer';
 import {
   distillationStillageTankError,
@@ -56,14 +81,15 @@ import {
   buildBlendRecipeSnapshot,
   parseBlendRecipeSnapshot,
 } from '../lib/blend-recipe-version';
-import { inventoryQuantityDelta } from '../lib/inventory-units';
+import { inventoryCategoryLabel, inventoryQuantityDelta } from '../lib/inventory-units';
 import { mashStatusFromFermentations } from '../lib/wash-stage';
 import type {
   EquipmentMaintenanceLogEventType,
   EquipmentMaintenanceLogView,
   EquipmentMaintenanceStatus,
 } from '../types';
-import { initDatabase, resetSharedDatabase, subscribeSharedRefresh } from './database';
+import { initDatabase, resetSharedDatabase, subscribeSharedRefresh, backupFileError, exportDatabase, replaceSharedDatabase } from './database';
+import { backupFileName, downloadBytes } from '../lib/database-backup';
 import type {
   Barrel,
   BarrelFill,
@@ -84,6 +110,8 @@ import type {
   BottlingRun,
   BottlingRunLine,
   BottlingRunLineInput,
+  BottlingRunReturn,
+  BottlingRunReturnInput,
   BottlingRunView,
   CutType,
   DistillationCut,
@@ -93,6 +121,7 @@ import type {
   DiscardedFermentation,
   HoldingTankTransfer,
   HoldingTankTransferView,
+  HoldingTankDilutionView,
   DistillationRun,
   DistillationRunBotanical,
   DistillationRunType,
@@ -212,7 +241,7 @@ function assertEquipmentUsableForProduction(equipmentId: number, role = 'Equipme
   if (!eq) throw new Error(`${role} not found.`);
   if (equipmentNeedsCleaning(eq)) {
     throw new Error(
-      `${eq.name} is ${equipmentCleaningStatusLabel().toLowerCase()} and cannot be used until marked clean on the process view.`,
+      `${eq.name} is ${equipmentCleaningStatusLabel().toLowerCase()} and cannot be used until marked clean.`,
     );
   }
   if (equipmentBlocksProduction(eq)) {
@@ -358,6 +387,32 @@ export async function resetAllData(): Promise<void> {
   window.location.reload();
 }
 
+/** Saves every distillery record in this browser to a file. */
+export function downloadDatabaseBackup(prefix?: string): string {
+  const fileName = backupFileName(new Date(), prefix);
+  downloadBytes(exportDatabase(), fileName);
+  return fileName;
+}
+
+/** Error message when the file cannot be restored, or null when it is a distillery backup. */
+export async function checkDatabaseBackup(file: Blob): Promise<string | null> {
+  return backupFileError(new Uint8Array(await file.arrayBuffer()));
+}
+
+/** Replaces the shared distillery record with a backup file. Returns an error message, or reloads. */
+export async function restoreDatabaseBackup(file: Blob): Promise<string | null> {
+  const data = new Uint8Array(await file.arrayBuffer());
+  const error = await backupFileError(data);
+  if (error) return error;
+  try {
+    await replaceSharedDatabase(data);
+  } catch (err) {
+    return err instanceof Error ? err.message : 'The backup could not be saved to the shared record.';
+  }
+  window.location.reload();
+  return null;
+}
+
 // ── Inventory ──────────────────────────────────────────────
 
 export function getInventoryItems(): InventoryItem[] {
@@ -419,6 +474,36 @@ function bottlingLinesToInventoryInput(lines: BottlingRunLine[]): BottlingRunLin
   }));
 }
 
+/** Create an inventory ingredient, or return the same-category item that already has this name. */
+export function ensureInventoryItem(input: {
+  name: string;
+  category: string;
+  unit?: string;
+}): InventoryItem {
+  const name = preparedIngredientName(input.name);
+  const category = input.category.trim().toLowerCase();
+  if (!category) throw new Error('Choose an ingredient category.');
+  const existing = findInventoryItem(category, name);
+  if (existing) return existing;
+  const unit = input.unit?.trim() || 'lbs';
+  runQuery('INSERT OR IGNORE INTO inventory_categories (name) VALUES (?)', [category]);
+  saveInventoryItem({
+    name,
+    category,
+    unit,
+    quantity: 0,
+    reorder_level: 0,
+    notes: '',
+    package_size_ml: null,
+    density_g_per_ml: null,
+    density_reference: '',
+    abv: null,
+  });
+  const created = findInventoryItem(category, name);
+  if (!created) throw new Error('Could not save that ingredient.');
+  return created;
+}
+
 export function saveInventoryItem(item: Omit<InventoryItem, 'id' | 'created_at' | 'updated_at'>, id?: number): void {
   const packageSizeMl = item.category === 'packaging' && item.package_size_ml != null && item.package_size_ml > 0
     ? item.package_size_ml
@@ -477,7 +562,7 @@ export function addInventoryCategory(name: string): string {
     [normalized],
   );
   if (existing) {
-    throw new Error(`Category "${existing.name}" already exists.`);
+    throw new Error(`Category "${inventoryCategoryLabel(existing.name)}" already exists.`);
   }
 
   insertRow('INSERT INTO inventory_categories (name) VALUES (?)', [normalized]);
@@ -649,14 +734,14 @@ export function getMashBatch(id: number): MashBatch | undefined {
 export function saveMashBatch(batch: Omit<MashBatch, 'id' | 'created_at'>, id?: number): number {
   if (id) {
     runQuery(
-      `UPDATE mash_batches SET batch_number=?, recipe_name=?, grain_type=?, grain_lbs=?, water_gal=?, yeast_strain=?, yeast_lbs=?, start_date=?, target_brix=?, actual_brix=?, target_final_brix=?, status=?, assigned_user_id=?, assigned_user_name=?, notes=? WHERE id=?`,
-      [batch.batch_number, batch.recipe_name, batch.grain_type, batch.grain_lbs, batch.water_gal, batch.yeast_strain, batch.yeast_lbs, batch.start_date, batch.target_brix, batch.actual_brix, batch.target_final_brix, batch.status, batch.assigned_user_id, batch.assigned_user_name ?? '', batch.notes, id],
+      `UPDATE mash_batches SET batch_number=?, recipe_name=?, grain_type=?, grain_lbs=?, water_gal=?, yeast_strain=?, yeast_lbs=?, start_date=?, fermentation_start_date=?, expected_completion_date=?, target_brix=?, actual_brix=?, target_final_brix=?, status=?, assigned_user_id=?, assigned_user_name=?, notes=? WHERE id=?`,
+      [batch.batch_number, batch.recipe_name, batch.grain_type, batch.grain_lbs, batch.water_gal, batch.yeast_strain, batch.yeast_lbs, batch.start_date, batch.fermentation_start_date || null, batch.expected_completion_date || null, batch.target_brix, batch.actual_brix, batch.target_final_brix, batch.status, batch.assigned_user_id, batch.assigned_user_name ?? '', batch.notes, id],
     );
     return id;
   }
   return insertRow(
-    `INSERT INTO mash_batches (batch_number, recipe_name, grain_type, grain_lbs, water_gal, yeast_strain, yeast_lbs, start_date, target_brix, actual_brix, target_final_brix, actual_final_brix, status, assigned_user_id, assigned_user_name, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [batch.batch_number, batch.recipe_name, batch.grain_type, batch.grain_lbs, batch.water_gal, batch.yeast_strain, batch.yeast_lbs, batch.start_date, batch.target_brix, batch.actual_brix, batch.target_final_brix, batch.actual_final_brix, batch.status, batch.assigned_user_id, batch.assigned_user_name ?? '', batch.notes],
+    `INSERT INTO mash_batches (batch_number, recipe_name, grain_type, grain_lbs, water_gal, yeast_strain, yeast_lbs, start_date, fermentation_start_date, expected_completion_date, target_brix, actual_brix, target_final_brix, actual_final_brix, status, assigned_user_id, assigned_user_name, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [batch.batch_number, batch.recipe_name, batch.grain_type, batch.grain_lbs, batch.water_gal, batch.yeast_strain, batch.yeast_lbs, batch.start_date, batch.fermentation_start_date || null, batch.expected_completion_date || null, batch.target_brix, batch.actual_brix, batch.target_final_brix, batch.actual_final_brix, batch.status, batch.assigned_user_id, batch.assigned_user_name ?? '', batch.notes],
   );
 }
 
@@ -893,6 +978,19 @@ export function getActiveDistillationRunOnStill(
   ) ?? undefined;
 }
 
+/** Planned wash or heavy rum run already scheduled from this fermenter. */
+export function getPlannedDistillationForFermenter(
+  fermenterId: number,
+  preferRunType?: string,
+): DistillationRunView | undefined {
+  const planned = getDistillationRuns().filter((run) => (
+    run.source_fermenter_equipment_id === fermenterId
+    && run.status === 'planned'
+    && (run.run_type === 'wash' || run.run_type === 'heavy_rum')
+  ));
+  return choosePlannedFermenterRun(planned, preferRunType);
+}
+
 /** Running run first, otherwise a planned run, so the process menu can open cuts. */
 export function getDistillationRunForCuts(
   stillName: string,
@@ -1003,20 +1101,44 @@ export function getCollectionVesselStoredCutType(
       occurredAt: cut.occurred_at,
       volumeGal: cut.volume_gal,
       cutType: cut.cut_type as CutType,
+      proofingWater: false,
     })),
     ...transfers.map((transfer) => ({
       occurredAt: transfer.occurred_at,
       volumeGal: transfer.volume_gal,
       cutType: singleCutTypeOnEquipment(transfer.source_tank_equipment_id),
+      proofingWater: false,
     })),
     ...stillage.map((row) => ({
       occurredAt: row.occurred_at,
       volumeGal: row.volume_gal,
       cutType: null as CutType | null,
+      proofingWater: false,
     })),
+    ...proofingWaterInflows(vesselId),
   ].sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
 
   return storedCutTypeFromInflows(inflows, volume);
+}
+
+/** Gauge rise from watering down alcohol that stayed in the tank. */
+function proofingWaterInflows(tankId: number): {
+  occurredAt: string;
+  volumeGal: number;
+  cutType: CutType | null;
+  proofingWater: true;
+}[] {
+  return queryAll<{ volume_gal: number; occurred_at: string }>(`
+    SELECT (finished_volume_gal - spirit_volume_gal) as volume_gal, recorded_at as occurred_at
+    FROM holding_tank_dilutions
+    WHERE tank_equipment_id = ?
+      AND finished_volume_gal > spirit_volume_gal + 0.001
+  `, [tankId]).map((row) => ({
+    occurredAt: row.occurred_at,
+    volumeGal: row.volume_gal,
+    cutType: null,
+    proofingWater: true as const,
+  }));
 }
 
 /** Cut type from cuts on a vessel, without following transfers (avoids a lookup loop). */
@@ -1032,10 +1154,16 @@ function singleCutTypeOnEquipment(equipmentId: number): CutType | null {
      ORDER BY c.start_time DESC`,
     [equipmentId],
   );
-  const stored = storedCutTypeFromInflows(
-    cuts.map((cut) => ({ volumeGal: cut.volume_gal, cutType: cut.cut_type })),
-    volume,
-  );
+  const inflows = [
+    ...cuts.map((cut) => ({
+      occurredAt: cut.occurred_at,
+      volumeGal: cut.volume_gal,
+      cutType: cut.cut_type,
+      proofingWater: false,
+    })),
+    ...proofingWaterInflows(equipmentId),
+  ].sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
+  const stored = storedCutTypeFromInflows(inflows, volume);
   return stored === 'mixed' || stored == null ? null : stored;
 }
 
@@ -1127,13 +1255,29 @@ function computeHoldingTankContents(
 
   const runOuts = queryOne<{ volume_gal: number; gpa: number }>(`
     SELECT
-      COALESCE(SUM(${TANK_CHARGE_DRAWN_GAL_SQL}), 0) as volume_gal,
-      COALESCE(SUM(${TANK_CHARGE_DRAWN_GPA_SQL}), 0) as gpa
-    FROM distillation_runs
-    WHERE source_holding_tank_equipment_id = ?
-      AND status IN ('running', 'complete')
-      AND (? IS NULL OR id != ?)
-  `, [tankId, excludeRunId ?? null, excludeRunId ?? -1]);
+      COALESCE(SUM(drawn_gal), 0) as volume_gal,
+      COALESCE(SUM(drawn_gpa), 0) as gpa
+    FROM (
+      SELECT s.volume_gal as drawn_gal, s.volume_gal * COALESCE(s.abv, 0) / 100.0 as drawn_gpa
+      FROM distillation_run_tank_sources s
+      JOIN distillation_runs r ON r.id = s.distillation_run_id
+      WHERE s.holding_tank_equipment_id = ?
+        AND r.status IN ('running', 'complete')
+        AND (? IS NULL OR r.id != ?)
+      UNION ALL
+      SELECT ${TANK_CHARGE_DRAWN_GAL_SQL} as drawn_gal, ${TANK_CHARGE_DRAWN_GPA_SQL} as drawn_gpa
+      FROM distillation_runs r
+      WHERE r.source_holding_tank_equipment_id = ?
+        AND r.status IN ('running', 'complete')
+        AND (? IS NULL OR r.id != ?)
+        AND NOT EXISTS (
+          SELECT 1 FROM distillation_run_tank_sources s WHERE s.distillation_run_id = r.id
+        )
+    ) AS tank_draws
+  `, [
+    tankId, excludeRunId ?? null, excludeRunId ?? -1,
+    tankId, excludeRunId ?? null, excludeRunId ?? -1,
+  ]);
 
   const blendOuts = queryOne<{ volume_gal: number; gpa: number }>(
     blendTankDrawsSql('?', '?'),
@@ -1148,6 +1292,17 @@ function computeHoldingTankContents(
     WHERE source_holding_tank_equipment_id = ?
       AND source_volume_gal > 0
       AND (? IS NULL OR id != ?)
+  `, [tankId, excludeBottlingRunId ?? null, excludeBottlingRunId ?? -1]);
+
+  const bottlingReturns = queryOne<{ volume_gal: number; gpa: number }>(`
+    SELECT
+      COALESCE(SUM(r.volume_gal), 0) as volume_gal,
+      COALESCE(SUM(r.volume_gal * COALESCE(b.final_abv, 0) / 100.0), 0) as gpa
+    FROM bottling_run_returns r
+    JOIN bottling_runs b ON b.id = r.bottling_run_id
+    WHERE r.holding_tank_equipment_id = ?
+      AND COALESCE(r.volume_gal, 0) > 0
+      AND (? IS NULL OR b.id != ?)
   `, [tankId, excludeBottlingRunId ?? null, excludeBottlingRunId ?? -1]);
 
   const barrelFillOuts = queryOne<{ volume_gal: number; gpa: number }>(`
@@ -1184,8 +1339,16 @@ function computeHoldingTankContents(
       AND final_volume_gal > 0
   `, [tankId]);
 
-  const stillageIns = queryOne<{ volume_gal: number }>(`
-    SELECT COALESCE(SUM(stillage_volume_gal), 0) as volume_gal
+  const stillageIns = queryOne<{ volume_gal: number; gpa: number }>(`
+    SELECT
+      COALESCE(SUM(stillage_volume_gal), 0) as volume_gal,
+      COALESCE(SUM(
+        CASE
+          WHEN COALESCE(alcohol_loss_gal, 0) > 0 AND COALESCE(stillage_volume_gal, 0) > 0
+          THEN MIN(alcohol_loss_gal, stillage_volume_gal)
+          ELSE 0
+        END
+      ), 0) as gpa
     FROM distillation_runs
     WHERE stillage_holding_tank_equipment_id = ?
       AND status = 'complete'
@@ -1199,11 +1362,20 @@ function computeHoldingTankContents(
     WHERE tank_equipment_id = ?
   `, [tankId]);
 
+  const dilutionIns = queryOne<{ volume_gal: number }>(`
+    SELECT COALESCE(SUM(finished_volume_gal - spirit_volume_gal), 0) as volume_gal
+    FROM holding_tank_dilutions
+    WHERE tank_equipment_id = ?
+      AND finished_volume_gal > spirit_volume_gal
+  `, [tankId]);
+
   const volumeIn = (ins?.volume_gal ?? 0) + (transferIns?.volume_gal ?? 0) + (blendIns?.volume_gal ?? 0)
-    + (stillageIns?.volume_gal ?? 0);
+    + (stillageIns?.volume_gal ?? 0) + (bottlingReturns?.volume_gal ?? 0)
+    + (dilutionIns?.volume_gal ?? 0);
   const volumeOut = (runOuts?.volume_gal ?? 0) + (blendOuts?.volume_gal ?? 0)
     + (bottlingOuts?.volume_gal ?? 0) + (barrelFillOuts?.volume_gal ?? 0) + (transferOuts?.volume_gal ?? 0);
-  const gpaIn = (ins?.gpa ?? 0) + (transferIns?.gpa ?? 0) + (blendIns?.gpa ?? 0);
+  const gpaIn = (ins?.gpa ?? 0) + (transferIns?.gpa ?? 0) + (blendIns?.gpa ?? 0)
+    + (bottlingReturns?.gpa ?? 0) + (stillageIns?.gpa ?? 0);
   const gpaOut = (runOuts?.gpa ?? 0) + (blendOuts?.gpa ?? 0)
     + (bottlingOuts?.gpa ?? 0) + (barrelFillOuts?.gpa ?? 0) + (transferOuts?.gpa ?? 0);
   const productionVolume = volumeIn - volumeOut;
@@ -1264,6 +1436,7 @@ export interface HoldingTankVolumeVariance {
   variance_gal: number;
   recorded_at: string;
   notes: string;
+  changed_by: string | null;
 }
 
 function recordHoldingTankVolumeVariance(input: {
@@ -1274,13 +1447,14 @@ function recordHoldingTankVolumeVariance(input: {
   setAbv: number;
   recordedAt: string;
   notes: string;
+  changedBy: string;
 }): void {
   const bookVolume = roundThousandths(input.bookVolumeGal);
   const setVolume = roundThousandths(input.setVolumeGal);
   insertRow(
     `INSERT INTO holding_tank_volume_variances
-      (tank_equipment_id, book_volume_gal, book_abv, set_volume_gal, set_abv, variance_gal, recorded_at, notes)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      (tank_equipment_id, book_volume_gal, book_abv, set_volume_gal, set_abv, variance_gal, recorded_at, notes, changed_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       input.tankEquipmentId,
       bookVolume,
@@ -1290,6 +1464,7 @@ function recordHoldingTankVolumeVariance(input: {
       tankVolumeVarianceGal(bookVolume, setVolume),
       input.recordedAt,
       input.notes,
+      input.changedBy,
     ],
   );
 }
@@ -1298,7 +1473,7 @@ export function getHoldingTankVolumeVariances(): HoldingTankVolumeVariance[] {
   return queryAll<HoldingTankVolumeVariance>(`
     SELECT v.id, v.tank_equipment_id, e.name as tank_name,
            v.book_volume_gal, v.book_abv, v.set_volume_gal, v.set_abv,
-           v.variance_gal, v.recorded_at, v.notes
+           v.variance_gal, v.recorded_at, v.notes, v.changed_by
     FROM holding_tank_volume_variances v
     JOIN floor_equipment e ON e.id = v.tank_equipment_id
     ORDER BY v.recorded_at DESC, v.id DESC
@@ -1321,6 +1496,7 @@ export function saveHoldingTankOnHand(input: {
   abv: number;
   recordedAt: string;
   notes?: string;
+  changedBy: string;
 }): void {
   assertSpiritTransferVessel(input.tankEquipmentId, 'destination');
   if (!Number.isFinite(input.volumeGal) || input.volumeGal < 0) {
@@ -1336,6 +1512,11 @@ export function saveHoldingTankOnHand(input: {
   const measuredVolume = Math.round(input.volumeGal * 1000) / 1000;
   const measuredAbv = Math.round(input.abv * 1000) / 1000;
   const production = computeHoldingTankContents(input.tankEquipmentId);
+  const notes = input.notes?.trim() ?? '';
+  if (tankReadingChanged(production.volume_gal, measuredVolume, production.abv, measuredAbv)) {
+    const reasonError = volumeChangeReasonError(notes);
+    if (reasonError) throw new Error(reasonError);
+  }
   recordHoldingTankVolumeVariance({
     tankEquipmentId: input.tankEquipmentId,
     bookVolumeGal: production.volume_gal,
@@ -1343,11 +1524,11 @@ export function saveHoldingTankOnHand(input: {
     setVolumeGal: measuredVolume,
     setAbv: measuredAbv,
     recordedAt: input.recordedAt,
-    notes: input.notes?.trim() ?? '',
+    notes,
+    changedBy: input.changedBy.trim() || 'Unknown',
   });
   const adjustmentVolume = Math.round((measuredVolume - production.production_volume_gal) * 1000) / 1000;
   const adjustmentAlcohol = Math.round((measuredVolume * measuredAbv / 100 - production.production_gpa) * 1000) / 1000;
-  const notes = input.notes?.trim() ?? '';
   const existing = queryOne<{ id: number }>(
     'SELECT id FROM holding_tank_opening_balances WHERE tank_equipment_id = ?',
     [input.tankEquipmentId],
@@ -1374,7 +1555,7 @@ export function saveHoldingTankOnHand(input: {
   syncHoldingTankStatuses();
 }
 
-export function clearHoldingTankOnHand(tankId: number): void {
+export function clearHoldingTankOnHand(tankId: number, reason: string, changedBy: string): void {
   const existing = queryOne<{ notes: string }>(
     'SELECT notes FROM holding_tank_opening_balances WHERE tank_equipment_id = ?',
     [tankId],
@@ -1384,6 +1565,9 @@ export function clearHoldingTankOnHand(tankId: number): void {
   const returnedVolume = Math.max(0, ledger.production_volume_gal);
   const returnedGpa = Math.max(0, ledger.production_gpa);
   const returnedAbv = returnedVolume > 0 ? (returnedGpa / returnedVolume) * 100 : 0;
+  const why = reason.trim();
+  const reasonError = volumeChangeReasonError(why);
+  if (reasonError) throw new Error(reasonError);
   const priorNotes = existing.notes.trim();
   recordHoldingTankVolumeVariance({
     tankEquipmentId: tankId,
@@ -1392,7 +1576,8 @@ export function clearHoldingTankOnHand(tankId: number): void {
     setVolumeGal: returnedVolume,
     setAbv: returnedAbv,
     recordedAt: localIsoDate(),
-    notes: priorNotes ? `On-hand reading removed. ${priorNotes}` : 'On-hand reading removed',
+    notes: priorNotes ? `On-hand reading removed. ${why} ${priorNotes}` : `On-hand reading removed. ${why}`,
+    changedBy: changedBy.trim() || 'Unknown',
   });
   runQuery('DELETE FROM holding_tank_opening_balances WHERE tank_equipment_id = ?', [tankId]);
   syncHoldingTankStatuses();
@@ -1415,6 +1600,31 @@ export function getChargeableHoldingTanks(
       };
     })
     .filter((tank) => tank.available_gal > 0);
+}
+
+/** Holding tanks, stillage tanks, and collection vessels that still hold liquid. */
+export function getChargeableSourceTanks(
+  excludeRunId?: number,
+  options?: EquipmentListOptions,
+): (FloorEquipment & {
+  available_gal: number;
+  available_abv: number;
+})[] {
+  syncHoldingTankStatuses();
+  return listForProduction(
+    getFloorEquipment().filter((tank) => isSpiritLedgerEquipmentType(tank.equipment_type)),
+    options,
+  )
+    .map((tank) => {
+      const contents = getHoldingTankContents(tank.id, excludeRunId);
+      return {
+        ...tank,
+        available_gal: contents.volume_gal,
+        available_abv: contents.abv,
+      };
+    })
+    .filter((tank) => tank.available_gal > 0)
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
 }
 
 export function getHighWinesDestinationTanks(
@@ -1453,11 +1663,13 @@ export function getCutDestinationsForRun(
   return [...vessels, ...holding.filter((h) => !seen.has(h.id))];
 }
 
+/** Holding tanks and collection vessels that still hold liquid. Stillage tanks are not a blend source. */
 export function getChargeableHoldingTanksForBlend(excludeBlendId?: number): (FloorEquipment & {
   available_gal: number;
   available_abv: number;
 })[] {
-  return getHoldingTanks()
+  return getSpiritTransferVessels()
+    .filter((tank) => tank.equipment_type !== 'stillage_tank')
     .map((tank) => {
       const contents = getHoldingTankContents(tank.id, undefined, excludeBlendId);
       return {
@@ -1466,7 +1678,8 @@ export function getChargeableHoldingTanksForBlend(excludeBlendId?: number): (Flo
         available_abv: contents.abv,
       };
     })
-    .filter((tank) => tank.available_gal > 0);
+    .filter((tank) => tank.available_gal > 0)
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
 }
 
 export function getChargeableHoldingTanksForBottling(excludeBottlingRunId?: number): (FloorEquipment & {
@@ -1537,7 +1750,7 @@ export function defaultDestTankIdForRunType(
   runType: string,
   excludeTankId?: number | null,
 ): number | null {
-  if (runType === 'low_wines') return defaultLowWinesTankId(excludeTankId);
+  if (runType === 'low_wines' || runType === 'vodka') return defaultLowWinesTankId(excludeTankId);
   return null;
 }
 
@@ -1600,22 +1813,37 @@ function tankVolumeInflows(tankId: number, seen: Set<number>): VesselInflow[] {
       volumeGal: cut.volume_gal,
       cutType: cut.cut_type,
       stillage: false,
+      proofingWater: false,
     })),
     ...transfers.map((transfer) => ({
       occurredAt: transfer.occurred_at,
       volumeGal: transfer.volume_gal,
       cutType: null as CutType | null,
       stillage: sourceHoldsStillage(transfer.source_tank_equipment_id, seen),
+      proofingWater: false,
     })),
     ...stillage.map((row) => ({
       occurredAt: row.occurred_at,
       volumeGal: row.volume_gal,
       cutType: null as CutType | null,
       stillage: true,
+      proofingWater: false,
+    })),
+    ...proofingWaterInflows(tankId).map((row) => ({
+      occurredAt: row.occurredAt,
+      volumeGal: row.volumeGal,
+      cutType: null as CutType | null,
+      stillage: false,
+      proofingWater: true,
     })),
   ]
     .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
-    .map(({ volumeGal, cutType, stillage }) => ({ volumeGal, cutType, stillage }));
+    .map(({ volumeGal, cutType, stillage, proofingWater }) => ({
+      volumeGal,
+      cutType,
+      stillage,
+      proofingWater,
+    }));
 }
 
 /**
@@ -1810,6 +2038,7 @@ export function getHoldingTankIntakeHistory(
     abv: number;
     notes: string;
     source_tank_name: string;
+    source_tank_equipment_id: number;
   }>(`
     SELECT
       t.id,
@@ -1817,7 +2046,8 @@ export function getHoldingTankIntakeHistory(
       t.volume_gal,
       t.abv,
       t.notes,
-      src.name as source_tank_name
+      src.name as source_tank_name,
+      t.source_tank_equipment_id
     FROM holding_tank_transfers t
     JOIN floor_equipment src ON src.id = t.source_tank_equipment_id
     WHERE t.dest_tank_equipment_id = ?
@@ -1846,17 +2076,10 @@ export function getHoldingTankIntakeHistory(
       AND final_volume_gal > 0
   `, [tankId]);
 
-  const runTypeLabels: Record<string, string> = {
-    wash: 'low wine run',
-    low_wines: 'spirit run',
-    gin: 'gin run',
-    heavy_rum: 'heavy rum run',
-  };
-
   const entries: HoldingTankIntakeEntry[] = [
     ...cuts.map((c) => {
       const cutLabel = c.cut_type.charAt(0).toUpperCase() + c.cut_type.slice(1);
-      const runLabel = runTypeLabels[c.run_type] ?? c.run_type;
+      const runLabel = runTypeLabel(c.run_type);
       const detailParts = [c.still_name, c.mash_batch ? `wash ${c.mash_batch}` : null].filter(Boolean);
       return {
         kind: 'cut' as const,
@@ -1865,21 +2088,31 @@ export function getHoldingTankIntakeHistory(
         occurred_at: c.occurred_at,
         volume_gal: c.volume_gal,
         abv: c.abv,
-        summary: `${cutLabel} from ${c.batch_number} (${runLabel})`,
+        summary: `${runLabel} · ${cutLabel} from ${c.batch_number}`,
         detail: detailParts.length > 0 ? detailParts.join(' · ') : undefined,
         notes: c.notes?.trim() || undefined,
       };
     }),
-    ...transfers.map((t) => ({
-      kind: 'transfer' as const,
-      id: t.id,
-      occurred_at: t.occurred_at,
-      volume_gal: t.volume_gal,
-      abv: t.abv,
-      summary: `Transfer from ${t.source_tank_name}`,
-      detail: undefined,
-      notes: t.notes?.trim() || undefined,
-    })),
+    ...transfers.map((t) => {
+      const moved = withdrawnDetails(
+        t.source_tank_equipment_id,
+        t.occurred_at,
+        t.volume_gal,
+        new Set(),
+      );
+      const liquid = transferredLiquidPhrase(moved.productName, moved.distillationLabel);
+      return {
+        kind: 'transfer' as const,
+        id: t.id,
+        occurred_at: t.occurred_at,
+        volume_gal: t.volume_gal,
+        abv: t.abv,
+        summary: transferIntakeSummary(t.source_tank_name, liquid),
+        detail: undefined,
+        notes: t.notes?.trim() || undefined,
+        sourceTankId: t.source_tank_equipment_id,
+      };
+    }),
     ...blends.map((b) => ({
       kind: 'blend' as const,
       id: b.id,
@@ -1889,6 +2122,7 @@ export function getHoldingTankIntakeHistory(
       summary: `Blend ${b.batch_number} — ${b.product_name}`,
       detail: 'Finished batch',
       notes: b.notes?.trim() || undefined,
+      productName: b.product_name,
     })),
     ...queryAll<{
       id: number;
@@ -1913,7 +2147,7 @@ export function getHoldingTankIntakeHistory(
       occurred_at: row.occurred_at,
       volume_gal: row.volume_gal,
       abv: 0,
-      summary: `Stillage from ${row.batch_number} (${runTypeLabels[row.run_type] ?? row.run_type})`,
+      summary: `${runTypeLabel(row.run_type)} · Stillage from ${row.batch_number}`,
       detail: row.still_name || undefined,
       notes: row.notes?.trim() || undefined,
     })),
@@ -1942,6 +2176,316 @@ export function getHoldingTankIntakeHistory(
 
   entries.sort((a, b) => compareStoredDatesDesc(a.occurred_at, b.occurred_at));
   return entries.slice(0, limit);
+}
+
+function tankLotsOnHand(tankId: number, asOf: string | null): { ins: TankLot[]; outs: TankWithdrawal[] } {
+  const within = (at: string) => asOf == null || intakeAtOrBefore(at, asOf);
+  const ins: TankLot[] = [];
+  const outs: TankWithdrawal[] = [];
+
+  for (const row of queryAll<{ at: string; volume_gal: number; cut_type: string; run_type: string }>(`
+    SELECT c.start_time as at, c.volume_gal, c.cut_type, r.run_type
+    FROM distillation_cuts c
+    JOIN distillation_runs r ON r.id = c.distillation_run_id
+    WHERE c.holding_tank_equipment_id = ?
+      AND r.status IN ('running', 'complete')
+      AND c.volume_gal > 0
+  `, [tankId])) {
+    if (!within(row.at)) continue;
+    ins.push({
+      at: row.at,
+      volumeGal: row.volume_gal,
+      kind: 'cut',
+      cutType: row.cut_type,
+      runType: row.run_type,
+    });
+  }
+
+  for (const row of queryAll<{ at: string; volume_gal: number; source_tank_equipment_id: number }>(`
+    SELECT COALESCE(created_at, transfer_date) as at, volume_gal, source_tank_equipment_id
+    FROM holding_tank_transfers
+    WHERE dest_tank_equipment_id = ? AND volume_gal > 0
+  `, [tankId])) {
+    if (!within(row.at)) continue;
+    ins.push({
+      at: row.at,
+      volumeGal: row.volume_gal,
+      kind: 'transfer',
+      sourceTankId: row.source_tank_equipment_id,
+    });
+  }
+
+  for (const row of queryAll<{ at: string; volume_gal: number; product_name: string }>(`
+    SELECT COALESCE(executed_at, created_at) as at, final_volume_gal as volume_gal, product_name
+    FROM blend_products
+    WHERE output_holding_tank_equipment_id = ?
+      AND status IN ${BLEND_LEDGER_STATUSES_SQL}
+      AND final_volume_gal > 0
+  `, [tankId])) {
+    if (!within(row.at)) continue;
+    ins.push({
+      at: row.at,
+      volumeGal: row.volume_gal,
+      kind: 'blend',
+      productName: row.product_name,
+    });
+  }
+
+  for (const row of queryAll<{ at: string; volume_gal: number; run_type: string }>(`
+    SELECT run_date as at, stillage_volume_gal as volume_gal, run_type
+    FROM distillation_runs
+    WHERE stillage_holding_tank_equipment_id = ?
+      AND status = 'complete'
+      AND COALESCE(stillage_discarded, 0) = 0
+      AND stillage_volume_gal > 0
+  `, [tankId])) {
+    if (!within(row.at)) continue;
+    ins.push({
+      at: row.at,
+      volumeGal: row.volume_gal,
+      kind: 'stillage',
+      runType: row.run_type,
+    });
+  }
+
+  for (const row of queryAll<{ at: string; volume_gal: number }>(`
+    SELECT recorded_at as at, volume_gal
+    FROM holding_tank_opening_balances
+    WHERE tank_equipment_id = ? AND ABS(volume_gal) > 0.001
+  `, [tankId])) {
+    if (!within(row.at)) continue;
+    // volume_gal is the gauge adjustment, not the measured total.
+    // A short gauge removes the oldest liquid; a long gauge is unnamed stock.
+    if (row.volume_gal > 0) {
+      ins.push({ at: row.at, volumeGal: row.volume_gal, kind: 'opening' });
+    } else {
+      outs.push({ at: row.at, volumeGal: Math.abs(row.volume_gal) });
+    }
+  }
+
+  for (const row of queryAll<{ at: string; volume_gal: number; product_name: string }>(`
+    SELECT b.bottling_date as at, r.volume_gal, b.product_name
+    FROM bottling_run_returns r
+    JOIN bottling_runs b ON b.id = r.bottling_run_id
+    WHERE r.holding_tank_equipment_id = ? AND r.volume_gal > 0
+  `, [tankId])) {
+    if (!within(row.at)) continue;
+    ins.push({
+      at: row.at,
+      volumeGal: row.volume_gal,
+      kind: 'return',
+      productName: row.product_name,
+    });
+  }
+
+  for (const row of queryAll<{ at: string; volume_gal: number }>(`
+    SELECT COALESCE(created_at, transfer_date) as at, volume_gal
+    FROM holding_tank_transfers
+    WHERE source_tank_equipment_id = ? AND volume_gal > 0
+  `, [tankId])) {
+    if (!within(row.at)) continue;
+    outs.push({ at: row.at, volumeGal: row.volume_gal });
+  }
+
+  for (const row of queryAll<{ at: string; volume_gal: number }>(`
+    SELECT bottling_date as at, source_volume_gal as volume_gal
+    FROM bottling_runs
+    WHERE source_holding_tank_equipment_id = ? AND source_volume_gal > 0
+  `, [tankId])) {
+    if (!within(row.at)) continue;
+    outs.push({ at: row.at, volumeGal: row.volume_gal });
+  }
+
+  for (const row of queryAll<{ at: string; volume_gal: number }>(`
+    SELECT COALESCE(NULLIF(TRIM(created_at), ''), fill_date) as at, volume_gal
+    FROM barrel_fills
+    WHERE source_holding_tank_equipment_id = ? AND volume_gal > 0
+  `, [tankId])) {
+    if (!within(row.at)) continue;
+    outs.push({ at: row.at, volumeGal: row.volume_gal });
+  }
+
+  for (const row of queryAll<{ at: string; volume_gal: number }>(`
+    SELECT r.run_date as at, s.volume_gal
+    FROM distillation_run_tank_sources s
+    JOIN distillation_runs r ON r.id = s.distillation_run_id
+    WHERE s.holding_tank_equipment_id = ?
+      AND s.volume_gal > 0
+      AND r.status IN ('running', 'complete')
+  `, [tankId])) {
+    if (!within(row.at)) continue;
+    outs.push({ at: row.at, volumeGal: row.volume_gal });
+  }
+
+  for (const row of queryAll<{ at: string; volume_gal: number }>(`
+    SELECT run_date as at, ${TANK_CHARGE_DRAWN_GAL_SQL} as volume_gal
+    FROM distillation_runs r
+    WHERE r.source_holding_tank_equipment_id = ?
+      AND r.status IN ('running', 'complete')
+      AND NOT EXISTS (
+        SELECT 1 FROM distillation_run_tank_sources s WHERE s.distillation_run_id = r.id
+      )
+  `, [tankId])) {
+    if (!(row.volume_gal > 0) || !within(row.at)) continue;
+    outs.push({ at: row.at, volumeGal: row.volume_gal });
+  }
+
+  for (const row of queryAll<{ at: string; volume_gal: number }>(`
+    SELECT COALESCE(b.executed_at, b.created_at) as at, bss.volume_gal
+    FROM blend_spirit_sources bss
+    JOIN blend_products b ON b.id = bss.blend_product_id
+    WHERE bss.holding_tank_equipment_id = ?
+      AND b.status IN ${BLEND_LEDGER_STATUSES_SQL}
+      AND bss.volume_gal > 0
+  `, [tankId])) {
+    if (!within(row.at)) continue;
+    outs.push({ at: row.at, volumeGal: row.volume_gal });
+  }
+
+  for (const row of queryAll<{ at: string; volume_gal: number }>(`
+    SELECT COALESCE(executed_at, created_at) as at, base_spirit_volume_gal as volume_gal
+    FROM blend_products b
+    WHERE source_holding_tank_equipment_id = ?
+      AND status IN ${BLEND_LEDGER_STATUSES_SQL}
+      AND base_spirit_volume_gal > 0
+      AND NOT EXISTS (SELECT 1 FROM blend_spirit_sources s WHERE s.blend_product_id = b.id)
+  `, [tankId])) {
+    if (!within(row.at)) continue;
+    outs.push({ at: row.at, volumeGal: row.volume_gal });
+  }
+
+  return { ins, outs };
+}
+
+function annotateTransferLots(lots: TankLot[], seen: Set<number>): void {
+  for (const lot of lots) {
+    if (lot.kind !== 'transfer' || !lot.sourceTankId) continue;
+    if (lot.productName?.trim() && lot.distillationLabel?.trim()) continue;
+    const details = withdrawnDetails(lot.sourceTankId, lot.at, lot.volumeGal, seen);
+    if (!lot.productName?.trim()) lot.productName = details.productName;
+    if (!lot.distillationLabel?.trim()) lot.distillationLabel = details.distillationLabel;
+  }
+}
+
+/** What a transfer or barrel fill took: a blend name, or the distillation and cut. */
+function withdrawnDetails(
+  tankId: number,
+  at: string,
+  volumeGal: number,
+  seen: Set<number>,
+): { productName: string | null; distillationLabel: string | null } {
+  if (seen.has(tankId) || seen.size >= TANK_PRODUCT_WALK_LIMIT) {
+    return { productName: null, distillationLabel: null };
+  }
+  seen.add(tankId);
+  const cutoff = /^\d{4}-\d{2}-\d{2}$/.test(at.trim()) ? `${at.trim()} 23:59:59` : at;
+  const { ins, outs } = tankLotsOnHand(tankId, instantBefore(cutoff));
+  const present = applyTankWithdrawals(ins, outs);
+  annotateTransferLots(present, seen);
+  const taken = consumeOldestLots(present, volumeGal);
+  return {
+    productName: productNamesFromRemainingLots(taken),
+    distillationLabel: distillationLabelsFromLots(taken),
+  };
+}
+
+/** Product names of the gallons a transfer or barrel fill took from a tank. */
+function productWithdrawnFromTank(
+  tankId: number,
+  at: string,
+  volumeGal: number,
+  seen: Set<number>,
+): string | null {
+  return withdrawnDetails(tankId, at, volumeGal, seen).productName;
+}
+
+function blendProductNameAt(
+  tankId: number,
+  asOf: string | null,
+  seen: Set<number>,
+): string | null {
+  if (seen.has(tankId) || seen.size >= TANK_PRODUCT_WALK_LIMIT) return null;
+  seen.add(tankId);
+  const { ins, outs } = tankLotsOnHand(tankId, asOf);
+  const remaining = applyTankWithdrawals(ins, outs);
+  annotateTransferLots(remaining, seen);
+  return productNamesFromRemainingLots(remaining);
+}
+
+/** Distillation type and cut for spirit still in the tank, when it is not a blend. */
+function distillationContentsAt(
+  tankId: number,
+  seen: Set<number>,
+): string | null {
+  if (seen.has(tankId) || seen.size >= TANK_PRODUCT_WALK_LIMIT) return null;
+  seen.add(tankId);
+  const { ins, outs } = tankLotsOnHand(tankId, null);
+  const remaining = applyTankWithdrawals(ins, outs);
+  annotateTransferLots(remaining, seen);
+  return distillationLabelsFromLots(remaining);
+}
+
+/** Cut and distillation for gallons still in the tank. Blends stay unlabeled here. */
+export function holdingTankDistillationContents(tankId: number, volumeGal?: number): string | null {
+  const volume = volumeGal ?? getHoldingTankContents(tankId).volume_gal;
+  if (!(volume > 0.05)) return null;
+  return distillationContentsAt(tankId, new Set());
+}
+
+/** Blend product name for spirit still in the tank. Empty tanks stay unlabeled. */
+export function holdingTankProductName(tankId: number, volumeGal?: number): string | null {
+  const volume = volumeGal ?? getHoldingTankContents(tankId).volume_gal;
+  if (!(volume > 0.05)) return null;
+  return blendProductNameAt(tankId, null, new Set());
+}
+
+/** Product name of a tank at a fill or transfer, even if that tank is empty now. */
+export function holdingTankProductNameAsOf(tankId: number, asOf: string): string | null {
+  const cutoff = /^\d{4}-\d{2}-\d{2}$/.test(asOf.trim()) ? `${asOf.trim()} 23:59:59` : asOf;
+  return blendProductNameAt(tankId, cutoff, new Set());
+}
+
+/** Blend product that was filled into this barrel. Older blends are not included. */
+export function barrelBlendProductName(barrelId: number): string | null {
+  const fill = queryOne<{
+    source_holding_tank_equipment_id: number;
+    fill_date: string;
+    created_at: string;
+    volume_gal: number;
+  }>(`
+    SELECT source_holding_tank_equipment_id, fill_date, created_at, volume_gal
+    FROM barrel_fills
+    WHERE barrel_id = ?
+      AND volume_gal > 0
+      AND source_holding_tank_equipment_id IS NOT NULL
+    ORDER BY datetime(
+      CASE WHEN TRIM(COALESCE(created_at, '')) = '' THEN fill_date ELSE created_at END
+    ) DESC, id DESC
+    LIMIT 1
+  `, [barrelId]);
+  if (fill?.source_holding_tank_equipment_id) {
+    return productWithdrawnFromTank(
+      fill.source_holding_tank_equipment_id,
+      fill.created_at?.trim() || fill.fill_date,
+      fill.volume_gal,
+      new Set(),
+    );
+  }
+  const barrel = queryOne<{
+    source_holding_tank_equipment_id: number | null;
+    fill_date: string;
+    current_volume_gal: number;
+  }>(
+    'SELECT source_holding_tank_equipment_id, fill_date, current_volume_gal FROM barrels WHERE id = ?',
+    [barrelId],
+  );
+  if (!barrel?.source_holding_tank_equipment_id) return null;
+  return productWithdrawnFromTank(
+    barrel.source_holding_tank_equipment_id,
+    barrel.fill_date,
+    barrel.current_volume_gal,
+    new Set(),
+  );
 }
 
 export function getHoldingTankTransfers(): HoldingTankTransferView[] {
@@ -2013,6 +2557,77 @@ export function saveHoldingTankTransfer(
 
 export function deleteHoldingTankTransfer(id: number): void {
   runQuery('DELETE FROM holding_tank_transfers WHERE id = ?', [id]);
+  syncHoldingTankStatuses();
+}
+
+export function getHoldingTankDilutions(): HoldingTankDilutionView[] {
+  return queryAll<HoldingTankDilutionView>(`
+    SELECT d.id, d.tank_equipment_id, e.name as tank_name,
+           d.spirit_volume_gal, d.spirit_abv, d.water_gal,
+           d.finished_volume_gal, d.finished_abv,
+           d.recorded_at, d.notes, d.changed_by, d.created_at
+    FROM holding_tank_dilutions d
+    JOIN floor_equipment e ON e.id = d.tank_equipment_id
+    ORDER BY d.recorded_at DESC, d.id DESC
+  `);
+}
+
+/** Add proofing water to alcohol that is already in a tank. The spirit stays in that tank. */
+export function saveHoldingTankDilution(input: {
+  tankEquipmentId: number;
+  targetAbvPercent?: number | null;
+  waterGal?: number | null;
+  recordedAt: string;
+  notes?: string;
+  changedBy: string;
+}): void {
+  assertSpiritTransferVessel(input.tankEquipmentId, 'destination');
+  assertEquipmentUsableForProduction(input.tankEquipmentId, 'Tank');
+  const tank = queryOne<{ name: string; equipment_type: string; capacity_gal: number }>(
+    'SELECT name, equipment_type, capacity_gal FROM floor_equipment WHERE id = ?',
+    [input.tankEquipmentId],
+  );
+  if (!tank) throw new Error('Tank not found.');
+  if (isStillageTankType(tank.equipment_type)) {
+    throw new Error(`${tank.name} holds stillage. Water down alcohol in a holding tank or collection vessel.`);
+  }
+  if (!input.recordedAt?.trim()) {
+    throw new Error('Enter the date of this watering down.');
+  }
+  if (input.targetAbvPercent != null) assertEnteredAbv(input.targetAbvPercent, 'Target ABV');
+  const contents = getHoldingTankContents(input.tankEquipmentId);
+  const plan = planTankProofDown({
+    spiritGal: contents.volume_gal,
+    spiritAbvPercent: contents.abv,
+    capacityGal: tank.capacity_gal,
+    tankName: tank.name,
+    targetAbvPercent: input.targetAbvPercent,
+    waterGal: input.waterGal,
+  });
+  if (!plan.ok) {
+    throw new Error(plan.message ?? 'Could not water down this tank.');
+  }
+  insertRow(
+    `INSERT INTO holding_tank_dilutions
+      (tank_equipment_id, spirit_volume_gal, spirit_abv, water_gal, finished_volume_gal, finished_abv, recorded_at, notes, changed_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      input.tankEquipmentId,
+      plan.spiritGal,
+      plan.spiritAbvPercent,
+      plan.waterGal,
+      plan.finishedGal,
+      plan.finishedAbvPercent,
+      input.recordedAt.trim(),
+      input.notes?.trim() ?? '',
+      input.changedBy.trim() || 'Unknown',
+    ],
+  );
+  syncHoldingTankStatuses();
+}
+
+export function deleteHoldingTankDilution(id: number): void {
+  runQuery('DELETE FROM holding_tank_dilutions WHERE id = ?', [id]);
   syncHoldingTankStatuses();
 }
 
@@ -2117,6 +2732,7 @@ export function saveFermenterWashTransfer(input: {
   volumeGal: number;
   transferDate: string;
   notes: string;
+  changedBy: string;
 }): void {
   const sources = queryAll<{
     id: number;
@@ -2188,6 +2804,10 @@ export function saveFermenterWashTransfer(input: {
   if (!input.transferDate.trim()) {
     throw new Error('Enter the transfer date.');
   }
+  if (discarded) {
+    const reasonError = volumeChangeReasonError(input.notes);
+    if (reasonError) throw new Error(reasonError);
+  }
 
   const remaining = source.volume_gal - input.volumeGal;
   if (remaining <= 0.01) {
@@ -2202,8 +2822,8 @@ export function saveFermenterWashTransfer(input: {
   if (discarded) {
     insertRow(
       `INSERT INTO discarded_fermentations
-        (mash_batch_id, source_fermenter_equipment_id, batch_number, fermenter_name, volume_gal, discarded_date, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        (mash_batch_id, source_fermenter_equipment_id, batch_number, fermenter_name, volume_gal, discarded_date, notes, changed_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         source.mash_batch_id,
         input.sourceEquipmentId,
@@ -2211,7 +2831,8 @@ export function saveFermenterWashTransfer(input: {
         source.fermenter_name,
         input.volumeGal,
         input.transferDate,
-        input.notes.trim() || 'Leftovers',
+        input.notes.trim(),
+        input.changedBy.trim() || 'Unknown',
       ],
     );
     // Only these gallons are unusable. The fermentation is not discarded.
@@ -2322,6 +2943,7 @@ export function emptyAllHoldingTanks(): {
     'SELECT COUNT(*) as count FROM holding_tank_transfers',
   )?.count ?? 0;
   runQuery('DELETE FROM holding_tank_transfers');
+  runQuery('DELETE FROM holding_tank_dilutions');
 
   const cutsCleared = queryOne<{ count: number }>(`
     SELECT COUNT(*) as count FROM distillation_cuts
@@ -2337,6 +2959,13 @@ export function emptyAllHoldingTanks(): {
     SELECT COUNT(*) as count FROM distillation_runs
     WHERE source_holding_tank_equipment_id IS NOT NULL AND charge_volume_gal > 0
   `)?.count ?? 0;
+  runQuery(`
+    DELETE FROM distillation_run_tank_sources
+    WHERE distillation_run_id IN (
+      SELECT id FROM distillation_runs
+      WHERE source_holding_tank_equipment_id IS NOT NULL AND charge_volume_gal > 0
+    )
+  `);
   runQuery(`
     UPDATE distillation_runs
     SET charge_volume_gal = 0, charge_abv = NULL,
@@ -2444,8 +3073,16 @@ export function saveMashFermenterAssignments(
   mashBatchId: number,
   assignments: FermenterAssignmentInput[],
 ): void {
-  const batchStatus = getMashBatch(mashBatchId)?.status;
+  const batch = getMashBatch(mashBatchId);
+  const batchStatus = batch?.status;
   const planOnly = plannedRecordSkipsEquipmentStatus(batchStatus);
+  const previousAssignments = queryAll<{ floor_equipment_id: number; status: string | null }>(
+    'SELECT floor_equipment_id, status FROM mash_fermenter_assignments WHERE mash_batch_id = ?',
+    [mashBatchId],
+  );
+  const previousStatusByEquipment = new Map(
+    previousAssignments.map((row) => [row.floor_equipment_id, assignmentStatus(row.status)]),
+  );
   if (planOnly) {
     const fermenters = queryAll<{ floor_equipment_id: number }>(
       'SELECT floor_equipment_id FROM mash_fermenter_assignments WHERE mash_batch_id = ?',
@@ -2464,6 +3101,15 @@ export function saveMashFermenterAssignments(
       `INSERT INTO mash_fermenter_assignments (mash_batch_id, floor_equipment_id, volume_gal, status) VALUES (?, ?, ?, ?)`,
       [mashBatchId, a.equipmentId, a.volumeGal, status],
     );
+    const hadEquipment = previousStatusByEquipment.has(a.equipmentId);
+    recordStatusDateLog({
+      recordKind: 'fermentation',
+      recordId: mashBatchId,
+      floorEquipmentId: a.equipmentId,
+      previousStatus: hadEquipment ? previousStatusByEquipment.get(a.equipmentId) : '',
+      status,
+      changedBy: batch?.assigned_user_name,
+    });
   }
   syncFermenterAndStillStatuses();
 }
@@ -2570,10 +3216,19 @@ export function saveMashBatchWithFermenters(
     syncWashTankForMashBatch(mashId, datedBatch.status);
   } catch (err) {
     if (!id) {
+      deleteStatusDateLog('wash', mashId);
+      deleteStatusDateLog('fermentation', mashId);
       runQuery('DELETE FROM mash_batches WHERE id = ?', [mashId]);
     }
     throw err;
   }
+  recordStatusDateLog({
+    recordKind: 'wash',
+    recordId: mashId,
+    previousStatus: previous?.status,
+    status: datedBatch.status,
+    changedBy: datedBatch.assigned_user_name,
+  });
   return mashId;
 }
 
@@ -2586,12 +3241,40 @@ export function fermenterHasFermentationLogs(mashBatchId: number, floorEquipment
   return (row?.count ?? 0) > 0;
 }
 
+/** Mark the fermentation in this fermenter complete. A log on that fermenter is required. */
+export function completeFermenterAssignment(equipmentId: number): void {
+  const info = queryOne<{ mash_batch_id: number; status: string }>(`
+    SELECT a.mash_batch_id, COALESCE(a.status, 'fermenting') AS status
+    FROM mash_fermenter_assignments a
+    WHERE a.floor_equipment_id = ?
+      AND a.volume_gal > 0.01
+      AND COALESCE(a.status, 'fermenting') != 'discarded'
+    ORDER BY a.id DESC
+    LIMIT 1
+  `, [equipmentId]);
+  if (!info) throw new Error('This fermenter does not have a fermentation to complete.');
+  if (assignmentStatus(info.status) === 'complete') {
+    throw new Error('This fermentation is already complete.');
+  }
+  const assignments = getMashFermenterAssignments(info.mash_batch_id);
+  saveFermentationSet(
+    info.mash_batch_id,
+    assignments.map((assignment) => ({
+      equipmentId: assignment.floor_equipment_id,
+      volumeGal: assignment.volume_gal,
+      status: assignment.floor_equipment_id === equipmentId
+        ? 'complete'
+        : assignmentStatus(assignment.status),
+    })),
+  );
+}
+
 /** Save one wash's fermenter rows. Mash status follows those fermenters. */
 export function saveFermentationSet(
   mashBatchId: number,
   assignments: FermenterAssignmentInput[],
   moveLogs?: { fromEquipmentId: number; toEquipmentId: number },
-  options?: { keepStatusWhenEmpty?: boolean; actualStartBrix?: number },
+  options?: { keepStatusWhenEmpty?: boolean; actualStartBrix?: number; expectedCompletionDate?: string },
 ): void {
   const batch = getMashBatch(mashBatchId);
   if (!batch) throw new Error('Wash batch not found.');
@@ -2626,6 +3309,13 @@ export function saveFermentationSet(
     const status = batch.status === 'discarded' ? 'fermenting' : batch.status;
     if (status !== batch.status) {
       runQuery(`UPDATE mash_batches SET status = ? WHERE id = ?`, [status, mashBatchId]);
+      recordStatusDateLog({
+        recordKind: 'wash',
+        recordId: mashBatchId,
+        previousStatus: batch.status,
+        status,
+        changedBy: batch.assigned_user_name,
+      });
     }
     saveMashFermenterAssignments(mashBatchId, []);
     return;
@@ -2633,6 +3323,13 @@ export function saveFermentationSet(
 
   if (nextStatus === 'mashing' && assignments.length === 0) {
     runQuery(`UPDATE mash_batches SET status = 'mashing' WHERE id = ?`, [mashBatchId]);
+    recordStatusDateLog({
+      recordKind: 'wash',
+      recordId: mashBatchId,
+      previousStatus: batch.status,
+      status: 'mashing',
+      changedBy: batch.assigned_user_name,
+    });
     saveMashFermenterAssignments(mashBatchId, []);
     return;
   }
@@ -2644,10 +3341,25 @@ export function saveFermentationSet(
   }));
   const { id: _id, created_at: _created, ...batchFields } = batch;
   const actualStartBrix = options?.actualStartBrix;
+  const fermenting = nextStatus === 'fermenting';
+  const fermentationStart = batch.fermentation_start_date
+    || (fermenting
+      ? (batch.status === 'fermenting' ? batch.start_date : localIsoDate())
+      : '');
+  const submittedCompletion = options?.expectedCompletionDate?.trim() ?? '';
+  const expectedCompletion = submittedCompletion
+    || batch.expected_completion_date
+    || (fermenting ? defaultExpectedCompletionDate(fermentationStart) : '');
+  if (fermenting) {
+    const dateError = expectedCompletionDateError(expectedCompletion, fermentationStart);
+    if (dateError) throw new Error(dateError);
+  }
   saveMashBatchWithFermenters(
     {
       ...batchFields,
       status: nextStatus,
+      fermentation_start_date: fermenting ? fermentationStart : batch.fermentation_start_date,
+      expected_completion_date: expectedCompletion || null,
       ...(actualStartBrix != null && Number.isFinite(actualStartBrix) ? { actual_brix: actualStartBrix } : {}),
     },
     assignments,
@@ -2663,6 +3375,11 @@ export function saveFermentationSet(
       [moveLogs.toEquipmentId, mashBatchId, moveLogs.fromEquipmentId],
     );
   }
+
+  const startBrix = actualStartBrix != null && Number.isFinite(actualStartBrix)
+    ? actualStartBrix
+    : batch.actual_brix;
+  recordActualStartBrixLogs(mashBatchId, assignments, startBrix);
 }
 
 /** Record gallons from one fermenter that cannot be used. The fermentation itself stays. */
@@ -2672,14 +3389,17 @@ export function recordFermenterLeftover(input: {
   fermenterName: string;
   volumeGal: number;
   notes: string;
+  changedBy: string;
 }): void {
   const batch = getMashBatch(input.mashBatchId);
   if (!batch) throw new Error('Wash batch not found.');
   if (!(input.volumeGal > 0)) return;
+  const reasonError = volumeChangeReasonError(input.notes);
+  if (reasonError) throw new Error(reasonError);
   insertRow(
     `INSERT INTO discarded_fermentations
-      (mash_batch_id, source_fermenter_equipment_id, batch_number, fermenter_name, volume_gal, discarded_date, notes)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      (mash_batch_id, source_fermenter_equipment_id, batch_number, fermenter_name, volume_gal, discarded_date, notes, changed_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       input.mashBatchId,
       input.equipmentId,
@@ -2687,7 +3407,8 @@ export function recordFermenterLeftover(input: {
       input.fermenterName,
       input.volumeGal,
       localIsoDate(),
-      input.notes.trim() || 'Leftovers',
+      input.notes.trim(),
+      input.changedBy.trim() || 'Unknown',
     ],
   );
 }
@@ -2861,22 +3582,91 @@ function applyFermenterChargeChanges(
   }
 }
 
+/**
+ * A fermenter charged on a running or completed low wine or heavy rum run is finished.
+ * A planned run leaves that fermentation fermenting. Marking it complete on the
+ * Fermentation page is unchanged.
+ */
+export function completeFermentationsSelectedForDistillation(): void {
+  const selected = queryAll<{ mash_batch_id: number; floor_equipment_id: number; status: string }>(`
+    SELECT DISTINCT source_mash_batch_id as mash_batch_id,
+           source_fermenter_equipment_id as floor_equipment_id,
+           status
+    FROM distillation_runs
+    WHERE run_type IN ('wash', 'heavy_rum')
+      AND source_mash_batch_id IS NOT NULL
+      AND source_fermenter_equipment_id IS NOT NULL
+  `);
+  const mashIds = new Set<number>();
+  for (const row of selected) {
+    if (!runConsumesSource(row.status)) continue;
+    const assignment = queryOne<{ id: number; status: string | null }>(
+      `SELECT id, status FROM mash_fermenter_assignments
+       WHERE mash_batch_id = ? AND floor_equipment_id = ?`,
+      [row.mash_batch_id, row.floor_equipment_id],
+    );
+    if (!assignment || assignmentStatus(assignment.status) !== 'fermenting') continue;
+    const batch = getMashBatch(row.mash_batch_id);
+    if (!batch || batch.status === 'discarded') continue;
+    runQuery(
+      `UPDATE mash_fermenter_assignments SET status = 'complete' WHERE id = ?`,
+      [assignment.id],
+    );
+    recordStatusDateLog({
+      recordKind: 'fermentation',
+      recordId: row.mash_batch_id,
+      floorEquipmentId: row.floor_equipment_id,
+      previousStatus: 'fermenting',
+      status: 'complete',
+      changedBy: batch.assigned_user_name,
+    });
+    mashIds.add(row.mash_batch_id);
+  }
+  for (const mashId of mashIds) {
+    const batch = getMashBatch(mashId);
+    if (!batch || batch.status === 'discarded' || batch.status === 'complete') continue;
+    const statuses = getMashFermenterAssignments(mashId).map((assignment) => assignmentStatus(assignment.status));
+    const next = mashStatusFromFermentations(batch.status, statuses);
+    if (next === batch.status) continue;
+    runQuery(`UPDATE mash_batches SET status = ? WHERE id = ?`, [next, mashId]);
+    recordStatusDateLog({
+      recordKind: 'wash',
+      recordId: mashId,
+      previousStatus: batch.status,
+      status: next,
+      changedBy: batch.assigned_user_name,
+    });
+  }
+  if (mashIds.size > 0) syncFermenterAndStillStatuses();
+}
+
 function maybeCompleteMashAfterCharge(mashBatchId: number): void {
   const remaining = queryOne<{ count: number }>(
     'SELECT COUNT(*) as count FROM mash_fermenter_assignments WHERE mash_batch_id = ?',
     [mashBatchId],
   );
   if (remaining?.count === 0) {
+    const batch = getMashBatch(mashBatchId);
+    if (!batch || (batch.status !== 'fermenting' && batch.status !== 'mashing')) return;
     runQuery(
       `UPDATE mash_batches SET status='complete' WHERE id=? AND status IN ('fermenting', 'mashing')`,
       [mashBatchId],
     );
+    recordStatusDateLog({
+      recordKind: 'wash',
+      recordId: mashBatchId,
+      previousStatus: batch.status,
+      status: 'complete',
+      changedBy: batch.assigned_user_name,
+    });
   }
 }
 
 export function deleteMashBatch(id: number): void {
   releaseWashTankForMashBatch(id);
   releaseFermentersForMash(id);
+  deleteStatusDateLog('wash', id);
+  deleteStatusDateLog('fermentation', id);
   runQuery('DELETE FROM mash_batches WHERE id = ?', [id]);
 }
 
@@ -3032,6 +3822,29 @@ export function getFermentationLogs(
   );
 }
 
+/** Write Actual Start Brix as the first log on fermenters that were just set to ferment. */
+function recordActualStartBrixLogs(
+  mashBatchId: number,
+  assignments: FermenterAssignmentInput[],
+  startBrix: number | null | undefined,
+): void {
+  if (startBrix == null || !Number.isFinite(startBrix) || startBrix <= 0) return;
+  const withLogs = new Set(
+    assignments
+      .filter((assignment) => fermenterHasFermentationLogs(mashBatchId, assignment.equipmentId))
+      .map((assignment) => assignment.equipmentId),
+  );
+  const targets = fermentersForStartBrixLog(assignments, withLogs);
+  if (targets.length === 0) return;
+  const loggedAt = new Date().toISOString();
+  for (const equipmentId of targets) {
+    insertRow(
+      `INSERT INTO fermentation_logs (mash_batch_id, floor_equipment_id, logged_at, temperature_f, brix, ph, notes) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [mashBatchId, equipmentId, loggedAt, null, startBrix, null, ACTUAL_START_BRIX_LOG_NOTE],
+    );
+  }
+}
+
 export function addFermentationLog(log: Omit<FermentationLog, 'id'>): void {
   const batch = getMashBatch(log.mash_batch_id);
   if (!batch) throw new Error('Wash batch not found.');
@@ -3069,6 +3882,25 @@ export function addFermentationLog(log: Omit<FermentationLog, 'id'>): void {
     ],
   );
   syncMashFinalBrixFromLogs(log.mash_batch_id);
+}
+
+/** ABV of a wash from its start Brix and the latest Brix on that fermenter. */
+export function estimatedWashChargeAbv(
+  mashBatchId: number,
+  fermenterEquipmentId?: number | null,
+): number | null {
+  const mash = queryOne<{
+    actual_brix: number | null;
+    target_brix: number | null;
+    actual_final_brix: number | null;
+  }>(
+    'SELECT actual_brix, target_brix, actual_final_brix FROM mash_batches WHERE id = ?',
+    [mashBatchId],
+  );
+  if (!mash) return null;
+  const start = mash.actual_brix ?? mash.target_brix;
+  const current = getLatestFermentationBrix(mashBatchId, fermenterEquipmentId) ?? mash.actual_final_brix;
+  return washChargeAbvFromBrix(start, current);
 }
 
 export function getLatestFermentationBrix(mashBatchId: number, floorEquipmentId?: number | null): number | null {
@@ -3176,20 +4008,158 @@ function releaseDistillationEquipmentForReturnToPlan(run: DistillationRun, runId
     for (const cut of cuts) {
       if (cut.holding_tank_equipment_id) tankIds.add(cut.holding_tank_equipment_id);
     }
+    const sources = queryAll<{ holding_tank_equipment_id: number }>(
+      'SELECT holding_tank_equipment_id FROM distillation_run_tank_sources WHERE distillation_run_id = ?',
+      [runId],
+    );
+    for (const source of sources) tankIds.add(source.holding_tank_equipment_id);
   }
   for (const tankId of tankIds) {
     releaseEquipmentWithoutCleaningHold(tankId, tankHasLiquid(tankId));
   }
 }
 
+export function getDistillationCollectionLoss(runId: number): DistillationAlcoholBalance | null {
+  const run = queryOne<DistillationRun>('SELECT * FROM distillation_runs WHERE id = ?', [runId]);
+  if (!run) return null;
+  const cuts = queryAll<{ volume_gal: number; abv: number }>(
+    'SELECT volume_gal, abv FROM distillation_cuts WHERE distillation_run_id = ?',
+    [runId],
+  );
+  const enteredAbv = run.charge_abv;
+  const estimated = enteredAbv == null
+    && isFermenterSourcedRun(run.run_type)
+    && run.source_mash_batch_id != null;
+  const chargeAbv = enteredAbv ?? (
+    estimated && run.source_mash_batch_id != null
+      ? estimatedWashChargeAbv(run.source_mash_batch_id, run.source_fermenter_equipment_id)
+      : null
+  );
+  return distillationAlcoholBalance({
+    chargeVolumeGal: run.charge_volume_gal,
+    chargeAbv,
+    proofSpiritGal: run.proof_spirit_gal,
+    proofSpiritAbv: run.proof_spirit_abv,
+    proofWaterGal: run.proof_water_gal,
+    estimatedFromBrix: estimated && chargeAbv != null,
+    cuts,
+  });
+}
+
+/** Store the alcohol charged, the alcohol collected, and the loss on the run. */
+export function recordDistillationCollectionLoss(runId: number): void {
+  const cutCount = queryOne<{ n: number }>(
+    'SELECT COUNT(*) as n FROM distillation_cuts WHERE distillation_run_id = ?',
+    [runId],
+  );
+  if (!cutCount?.n) {
+    runQuery(
+      `UPDATE distillation_runs
+       SET alcohol_charged_gal = NULL, alcohol_collected_gal = NULL, alcohol_loss_gal = NULL, alcohol_charge_basis = NULL
+       WHERE id = ?`,
+      [runId],
+    );
+    return;
+  }
+  const balance = getDistillationCollectionLoss(runId);
+  if (!balance) return;
+  const basis: AlcoholChargeBasis | null = balance.basis === 'unknown' ? null : balance.basis;
+  runQuery(
+    `UPDATE distillation_runs
+     SET alcohol_charged_gal = ?, alcohol_collected_gal = ?, alcohol_loss_gal = ?, alcohol_charge_basis = ?
+     WHERE id = ?`,
+    [balance.chargedGal, balance.collectedGal, balance.lossGal, basis, runId],
+  );
+}
+
+function fermenterChargeAbvForSave(run: {
+  charge_abv: number | null;
+  source_mash_batch_id: number | null;
+  source_fermenter_equipment_id: number | null;
+}): number | null {
+  if (run.charge_abv != null && Number.isFinite(run.charge_abv)) return run.charge_abv;
+  if (!run.source_mash_batch_id) return null;
+  return estimatedWashChargeAbv(run.source_mash_batch_id, run.source_fermenter_equipment_id);
+}
+
+export interface DistillationTankSourceInput {
+  tankId: number;
+  volumeGal: number;
+  abv: number;
+}
+
+export interface DistillationTankSourceRow {
+  id: number;
+  runId: number;
+  tankId: number;
+  volumeGal: number;
+  abv: number;
+  tankName: string;
+  equipmentType: string;
+}
+
+export function listDistillationTankSources(): DistillationTankSourceRow[] {
+  return queryAll<{
+    id: number;
+    distillation_run_id: number;
+    holding_tank_equipment_id: number;
+    volume_gal: number;
+    abv: number;
+    tank_name: string;
+    equipment_type: string;
+  }>(`
+    SELECT s.id, s.distillation_run_id, s.holding_tank_equipment_id, s.volume_gal, s.abv,
+           fe.name as tank_name, fe.equipment_type
+    FROM distillation_run_tank_sources s
+    JOIN floor_equipment fe ON fe.id = s.holding_tank_equipment_id
+    ORDER BY s.distillation_run_id, s.sort_order, s.id
+  `).map((row) => ({
+    id: row.id,
+    runId: row.distillation_run_id,
+    tankId: row.holding_tank_equipment_id,
+    volumeGal: row.volume_gal,
+    abv: row.abv,
+    tankName: row.tank_name,
+    equipmentType: row.equipment_type,
+  }));
+}
+
+export function getDistillationRunTankSources(runId: number): DistillationTankSourceRow[] {
+  return listDistillationTankSources().filter((row) => row.runId === runId);
+}
+
+function persistDistillationTankSources(
+  runId: number,
+  runType: DistillationRunType,
+  sources: DistillationTankSourceInput[] | undefined,
+): void {
+  if (!isTankSourcedRun(runType)) {
+    runQuery('DELETE FROM distillation_run_tank_sources WHERE distillation_run_id = ?', [runId]);
+    return;
+  }
+  if (!sources) return;
+  runQuery('DELETE FROM distillation_run_tank_sources WHERE distillation_run_id = ?', [runId]);
+  sources.forEach((source, index) => {
+    if (!(source.tankId > 0) || !(source.volumeGal > 0)) return;
+    insertRow(
+      `INSERT INTO distillation_run_tank_sources
+        (distillation_run_id, holding_tank_equipment_id, volume_gal, abv, sort_order)
+       VALUES (?, ?, ?, ?, ?)`,
+      [runId, source.tankId, source.volumeGal, source.abv, index],
+    );
+  });
+}
+
 export function saveDistillationRun(
   run: Omit<DistillationRun, 'id' | 'created_at'>,
   id?: number,
   botanicals?: GinBotanicalInput[],
+  tankSources?: DistillationTankSourceInput[],
 ): number {
   assertEnteredAbv(run.charge_abv, 'Charge ABV');
-  assertEnteredAbv(run.proof_spirit_abv, 'Tails ABV');
+  assertEnteredAbv(run.proof_spirit_abv, 'Charge ABV');
   const runType = (run.run_type ?? 'wash') as DistillationRunType;
+  const chargeAbvToStore = isTankSourcedRun(runType) ? run.charge_abv : fermenterChargeAbvForSave(run);
   const planOnly = plannedRecordSkipsEquipmentStatus(run.status);
   const previousRun = id
     ? queryOne<DistillationRun>('SELECT * FROM distillation_runs WHERE id = ?', [id])
@@ -3207,8 +4177,15 @@ export function saveDistillationRun(
     ) {
       assertEquipmentUsableForProduction(run.source_fermenter_equipment_id, 'Fermenter');
     }
-    if (isTankSourcedRun(runType) && run.source_holding_tank_equipment_id) {
-      assertEquipmentUsableForProduction(run.source_holding_tank_equipment_id, 'Source tank');
+    if (isTankSourcedRun(runType)) {
+      const tankIds = tankSources && tankSources.length > 0
+        ? tankSources.map((source) => source.tankId)
+        : run.source_holding_tank_equipment_id
+          ? [run.source_holding_tank_equipment_id]
+          : [];
+      for (const tankId of tankIds) {
+        if (tankId > 0) assertEquipmentUsableForProduction(tankId, 'Source tank');
+      }
     }
   }
   const stillCapacity = getStillCapacityByName(run.still_name);
@@ -3240,6 +4217,10 @@ export function saveDistillationRun(
     assertStillageFitsTank(stillage.tankId, stillage.volumeGal, id);
   }
   const runDate = eventDateWhenLeavingPlanned(previousRun?.status, run.status, run.run_date);
+  const primarySourceId = isTankSourcedRun(runType)
+    ? (tankSources?.find((source) => source.tankId > 0 && source.volumeGal > 0)?.tankId
+      ?? run.source_holding_tank_equipment_id)
+    : null;
   let runId = id ?? 0;
   if (id) {
     runQuery(
@@ -3249,12 +4230,12 @@ export function saveDistillationRun(
         runType,
         isFermenterSourcedRun(runType) ? run.source_mash_batch_id : null,
         isFermenterSourcedRun(runType) ? run.source_fermenter_equipment_id : null,
-        isTankSourcedRun(runType) ? run.source_holding_tank_equipment_id : null,
+        primarySourceId,
         null,
         run.still_name,
         runDate,
         run.charge_volume_gal,
-        isTankSourcedRun(runType) ? run.charge_abv : null,
+        chargeAbvToStore,
         isTankSourcedRun(runType) ? run.proof_spirit_gal ?? null : null,
         isTankSourcedRun(runType) ? run.proof_spirit_abv ?? null : null,
         isTankSourcedRun(runType) ? run.proof_water_gal ?? 0 : 0,
@@ -3277,12 +4258,12 @@ export function saveDistillationRun(
         runType,
         isFermenterSourcedRun(runType) ? run.source_mash_batch_id : null,
         isFermenterSourcedRun(runType) ? run.source_fermenter_equipment_id : null,
-        isTankSourcedRun(runType) ? run.source_holding_tank_equipment_id : null,
+        primarySourceId,
         null,
         run.still_name,
         runDate,
         run.charge_volume_gal,
-        isTankSourcedRun(runType) ? run.charge_abv : null,
+        chargeAbvToStore,
         isTankSourcedRun(runType) ? run.proof_spirit_gal ?? null : null,
         isTankSourcedRun(runType) ? run.proof_spirit_abv ?? null : null,
         isTankSourcedRun(runType) ? run.proof_water_gal ?? 0 : 0,
@@ -3298,6 +4279,13 @@ export function saveDistillationRun(
     );
   }
 
+  if (
+    isFermenterSourcedRun(runType)
+    && run.source_mash_batch_id
+    && run.source_fermenter_equipment_id
+  ) {
+    completeFermentationsSelectedForDistillation();
+  }
   applyFermenterChargeChanges(run, runType, id, previousRun);
   if (
     id
@@ -3328,19 +4316,31 @@ export function saveDistillationRun(
   if (runType === 'gin' && botanicals) {
     persistRunBotanicals(runId, botanicals);
   }
+  persistDistillationTankSources(runId, runType, tankSources);
+  recordDistillationCollectionLoss(runId);
   syncHoldingTankStatuses();
   syncFermenterAndStillStatuses();
+  recordStatusDateLog({
+    recordKind: 'distillation',
+    recordId: runId,
+    previousStatus: previousRun?.status,
+    status: run.status,
+    changedBy: run.assigned_user_name,
+  });
   return runId;
 }
 
 function persistRunBotanicals(runId: number, botanicals: GinBotanicalInput[]): void {
+  const lines = activeGinBotanicals(botanicals);
+  const placeError = ginBotanicalPlaceError(lines);
+  if (placeError) throw new Error(placeError);
   runQuery('DELETE FROM distillation_run_botanicals WHERE distillation_run_id = ?', [runId]);
-  activeGinBotanicals(botanicals).forEach((line, index) => {
+  lines.forEach((line, index) => {
     insertRow(
       `INSERT INTO distillation_run_botanicals
-        (distillation_run_id, name, amount, weight, weight_unit, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [runId, line.name, line.amount, line.weight, line.weight_unit, index],
+        (distillation_run_id, name, amount, weight, weight_unit, place, sort_order)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [runId, line.name, line.amount, line.weight, line.weight_unit, line.place ?? null, index],
     );
   });
 }
@@ -3385,6 +4385,8 @@ export function saveGinRecipe(
   if (lines.length === 0) {
     throw new Error('Add at least one botanical with a weight.');
   }
+  const placeError = ginBotanicalPlaceError(lines);
+  if (placeError) throw new Error(placeError);
   const named = queryOne<{ id: number }>(
     'SELECT id FROM gin_recipes WHERE name = ? COLLATE NOCASE AND (? IS NULL OR id != ?)',
     [name, id ?? null, id ?? 0],
@@ -3407,9 +4409,9 @@ export function saveGinRecipe(
   lines.forEach((line, index) => {
     insertRow(
       `INSERT INTO gin_recipe_botanicals
-        (gin_recipe_id, name, amount, weight, weight_unit, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [recipeId, line.name, line.amount, line.weight, normalizeBotanicalWeightUnit(line.weight_unit), index],
+        (gin_recipe_id, name, amount, weight, weight_unit, place, sort_order)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [recipeId, line.name, line.amount, line.weight, normalizeBotanicalWeightUnit(line.weight_unit), line.place ?? null, index],
     );
   });
   return recipeId;
@@ -3429,6 +4431,8 @@ export function deleteDistillationRun(id: number): void {
     releaseStillAfterRunningRun(run, '', 'complete');
   }
   runQuery('DELETE FROM distillation_run_botanicals WHERE distillation_run_id = ?', [id]);
+  runQuery('DELETE FROM distillation_run_tank_sources WHERE distillation_run_id = ?', [id]);
+  deleteStatusDateLog('distillation', id);
   runQuery('DELETE FROM distillation_runs WHERE id = ?', [id]);
   syncHoldingTankStatuses();
   syncFermenterAndStillStatuses();
@@ -3451,8 +4455,12 @@ export function saveDistillationCut(cut: Omit<DistillationCut, 'id'>, id?: numbe
     'SELECT status FROM distillation_runs WHERE id = ?',
     [cut.distillation_run_id],
   );
-  if (run?.status === 'complete') {
-    throw new Error('Cannot add or change cuts on a completed distillation run.');
+  if (run && !distillationRunAllowsCutChanges(run.status)) {
+    throw new Error(
+      run.status === 'complete'
+        ? 'Cannot add or change cuts on a completed distillation run.'
+        : 'Cuts cannot be recorded while this distillation is still planned.',
+    );
   }
   if (cut.cut_type === 'heads') {
     const existingHeads = queryOne<{ id: number }>(
@@ -3523,6 +4531,7 @@ export function saveDistillationCut(cut: Omit<DistillationCut, 'id'>, id?: numbe
     );
   }
   syncHoldingTankStatuses();
+  recordDistillationCollectionLoss(cut.distillation_run_id);
 }
 
 export function deleteDistillationCut(id: number): void {
@@ -3535,11 +4544,16 @@ export function deleteDistillationCut(id: number): void {
       'SELECT status FROM distillation_runs WHERE id = ?',
       [cut.distillation_run_id],
     );
-    if (run?.status === 'complete') {
-      throw new Error('Cannot add or change cuts on a completed distillation run.');
+    if (run && !distillationRunAllowsCutChanges(run.status)) {
+      throw new Error(
+        run.status === 'complete'
+          ? 'Cannot add or change cuts on a completed distillation run.'
+          : 'Cuts cannot be recorded while this distillation is still planned.',
+      );
     }
   }
   runQuery('DELETE FROM distillation_cuts WHERE id = ?', [id]);
+  if (cut) recordDistillationCollectionLoss(cut.distillation_run_id);
   syncHoldingTankStatuses();
 }
 
@@ -3605,6 +4619,10 @@ export function saveBarrel(barrel: Omit<Barrel, 'id' | 'created_at'>, id?: numbe
   assertEnteredAbv(barrel.initial_abv, 'Initial ABV');
   const warehouse_location = normalizeWarehouseLocationName(barrel.warehouse_location);
   if (warehouse_location) saveWarehouseLocation(warehouse_location);
+  const previous = id
+    ? queryOne<{ status: string }>('SELECT status FROM barrels WHERE id = ?', [id])
+    : undefined;
+  let savedId = id ?? 0;
   if (id) {
     runQuery(
       `UPDATE barrels SET barrel_number=?, wood_type=?, capacity_gal=?, fill_date=?, spirit_type=?, source_run_id=?, source_holding_tank_equipment_id=?, initial_abv=?, current_volume_gal=?, warehouse_location=?, status=?, notes=? WHERE id=?`,
@@ -3624,26 +4642,34 @@ export function saveBarrel(barrel: Omit<Barrel, 'id' | 'created_at'>, id?: numbe
         id,
       ],
     );
-    return;
+    savedId = id;
+  } else {
+    deductOneBarrelFromInventory();
+    savedId = insertRow(
+      `INSERT INTO barrels (barrel_number, wood_type, capacity_gal, fill_date, spirit_type, source_run_id, source_holding_tank_equipment_id, initial_abv, current_volume_gal, warehouse_location, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        barrel.barrel_number,
+        barrel.wood_type,
+        barrel.capacity_gal,
+        barrel.fill_date,
+        barrel.spirit_type,
+        barrel.source_run_id,
+        barrel.source_holding_tank_equipment_id,
+        barrel.initial_abv,
+        barrel.current_volume_gal,
+        warehouse_location,
+        barrel.status,
+        barrel.notes,
+      ],
+    );
   }
-  deductOneBarrelFromInventory();
-  return insertRow(
-    `INSERT INTO barrels (barrel_number, wood_type, capacity_gal, fill_date, spirit_type, source_run_id, source_holding_tank_equipment_id, initial_abv, current_volume_gal, warehouse_location, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      barrel.barrel_number,
-      barrel.wood_type,
-      barrel.capacity_gal,
-      barrel.fill_date,
-      barrel.spirit_type,
-      barrel.source_run_id,
-      barrel.source_holding_tank_equipment_id,
-      barrel.initial_abv,
-      barrel.current_volume_gal,
-      warehouse_location,
-      barrel.status,
-      barrel.notes,
-    ],
-  );
+  recordStatusDateLog({
+    recordKind: 'barrel',
+    recordId: savedId,
+    previousStatus: previous?.status,
+    status: barrel.status,
+  });
+  return id ? undefined : savedId;
 }
 
 /** Register a new barrel and transfer the initial fill from a holding tank (ledger + barrel_fills). */
@@ -3671,6 +4697,7 @@ export function createBarrelFromHoldingTank(
 }
 
 export function deleteBarrel(id: number): void {
+  deleteStatusDateLog('barrel', id);
   runQuery('DELETE FROM barrels WHERE id = ?', [id]);
 }
 
@@ -3727,8 +4754,8 @@ export function fillBarrelFromHoldingTank(input: FillBarrelFromTankInput): void 
   }
 
   insertRow(
-    `INSERT INTO barrel_fills (barrel_id, source_holding_tank_equipment_id, volume_gal, abv, fill_date, notes)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO barrel_fills (barrel_id, source_holding_tank_equipment_id, volume_gal, abv, fill_date, notes, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`,
     [
       input.barrelId,
       input.sourceHoldingTankEquipmentId,
@@ -3781,14 +4808,36 @@ function attachBottlingRunLines(runs: BottlingRun[]): BottlingRunView[] {
     bucket.push(line);
     linesByRun.set(line.bottling_run_id, bucket);
   }
+  const allReturns = queryAll<BottlingRunReturn>(
+    'SELECT * FROM bottling_run_returns ORDER BY sort_order, id',
+  );
+  const returnsByRun = new Map<number, BottlingRunReturn[]>();
+  for (const line of allReturns) {
+    const bucket = returnsByRun.get(line.bottling_run_id) ?? [];
+    bucket.push(line);
+    returnsByRun.set(line.bottling_run_id, bucket);
+  }
   return runs.map((run) => {
     const stored = linesByRun.get(run.id);
+    const storedReturns = returnsByRun.get(run.id) ?? [];
+    const returns = storedReturns.length > 0
+      ? storedReturns
+      : (run.return_holding_tank_equipment_id && (run.return_volume_gal ?? 0) > 0
+        ? [{
+          id: 0,
+          bottling_run_id: run.id,
+          holding_tank_equipment_id: run.return_holding_tank_equipment_id,
+          volume_gal: run.return_volume_gal ?? 0,
+          sort_order: 0,
+        }]
+        : []);
     if (stored && stored.length > 0) {
-      return { ...run, lines: stored };
+      return { ...run, lines: stored, returns };
     }
     if (run.bottle_count > 0) {
       return {
         ...run,
+        returns,
         lines: [{
           id: 0,
           bottling_run_id: run.id,
@@ -3799,7 +4848,22 @@ function attachBottlingRunLines(runs: BottlingRun[]): BottlingRunView[] {
         }],
       };
     }
-    return { ...run, lines: [] };
+    return { ...run, lines: [], returns };
+  });
+}
+
+function persistBottlingRunReturns(
+  runId: number,
+  returns: { tankId: number; gallons: number }[],
+): void {
+  runQuery('DELETE FROM bottling_run_returns WHERE bottling_run_id = ?', [runId]);
+  returns.forEach((line, index) => {
+    if (line.gallons <= 0 || !line.tankId) return;
+    insertRow(
+      `INSERT INTO bottling_run_returns (bottling_run_id, holding_tank_equipment_id, volume_gal, sort_order)
+       VALUES (?, ?, ?, ?)`,
+      [runId, line.tankId, line.gallons, index],
+    );
   });
 }
 
@@ -3830,7 +4894,7 @@ export function getBottlingRunLines(bottlingRunId: number): BottlingRunLine[] {
 }
 
 export function saveBottlingRun(
-  run: Omit<BottlingRun, 'id' | 'created_at'>,
+  run: Omit<BottlingRun, 'id' | 'created_at'> & { returns?: BottlingRunReturnInput[] },
   lines: BottlingRunLineInput[],
   id?: number,
 ): void {
@@ -3848,10 +4912,13 @@ export function saveBottlingRun(
     ? activeLines.reduce((sum, line) => sum + mlToGallons(line.bottle_count * line.bottle_size_ml), 0)
     : null;
   let sourceVolumeGal: number | null = null;
+  let sourceAbv: number | null = null;
   let volumeVarianceGal: number | null = null;
+  let alcoholVarianceGal: number | null = null;
   if (fromTank && sourceTankId && bottledVolumeGal != null && bottledVolumeGal > 0) {
     const available = getHoldingTankContents(sourceTankId, undefined, undefined, id);
     sourceVolumeGal = available.volume_gal;
+    sourceAbv = available.abv;
     volumeVarianceGal = bottledVolumeGal - sourceVolumeGal;
   }
   const packagingSummary = activeLines.length === 1
@@ -3861,29 +4928,118 @@ export function saveBottlingRun(
       : '';
   const headerSizeMl = activeLines.length === 1 ? activeLines[0].bottle_size_ml : 0;
 
+  const requestedReturns: BottlingRunReturnInput[] = fromTank
+    ? (run.returns ?? (
+      (run.return_holding_tank_equipment_id != null || (run.return_volume_gal ?? 0) > 0.001)
+        ? [{
+          holding_tank_equipment_id: run.return_holding_tank_equipment_id ?? null,
+          volume_gal: run.return_volume_gal ?? null,
+        }]
+        : []
+    ))
+    : [];
+  const checkedReturns: {
+    tankId: number | null;
+    gallons: number;
+    name?: string;
+    destVolumeGal?: number;
+    destCapacityGal?: number;
+  }[] = [];
+  if (fromTank && sourceTankId && bottledVolumeGal != null && bottledVolumeGal > 0) {
+    const unbottled = Math.max(0, (sourceVolumeGal ?? 0) - bottledVolumeGal);
+    for (const line of requestedReturns) {
+      const gallons = line.volume_gal ?? 0;
+      const tankId = line.holding_tank_equipment_id;
+      const sending = Number.isFinite(gallons) && gallons > 0.001;
+      if (!sending && tankId == null) continue;
+      let destName: string | undefined;
+      let destVolume = 0;
+      let destCapacity = 0;
+      if (tankId) {
+        const dest = queryOne<FloorEquipment>('SELECT * FROM floor_equipment WHERE id = ?', [tankId]);
+        if (!dest || !isSpiritLedgerEquipmentType(dest.equipment_type) || dest.equipment_type === 'stillage_tank') {
+          throw new Error('Choose a holding tank or collection vessel for the product that is not bottled.');
+        }
+        assertEquipmentUsableForProduction(tankId, 'Destination tank');
+        destName = dest.name;
+        destCapacity = dest.capacity_gal;
+        destVolume = getHoldingTankContents(tankId, undefined, undefined, id).volume_gal;
+      }
+      checkedReturns.push({
+        tankId,
+        gallons,
+        name: destName,
+        destVolumeGal: destVolume,
+        destCapacityGal: destCapacity,
+      });
+    }
+    const returnError = bottlingReturnsError({
+      returns: checkedReturns,
+      unbottledGal: unbottled,
+      sourceTankId,
+    });
+    if (returnError) throw new Error(returnError);
+    const returnGal = checkedReturns.reduce((sum, line) => sum + (line.gallons > 0 ? line.gallons : 0), 0);
+    volumeVarianceGal = bottlingVolumeVarianceGal(sourceVolumeGal ?? 0, bottledVolumeGal, returnGal);
+    alcoholVarianceGal = bottlingAlcoholVarianceGal({
+      sourceGal: sourceVolumeGal ?? 0,
+      sourceAbv,
+      bottledGal: bottledVolumeGal,
+      bottledAbv: run.final_abv,
+      returnGal,
+    });
+  }
+  const storedReturns = checkedReturns.filter(
+    (line): line is { tankId: number; gallons: number; name?: string; destVolumeGal?: number; destCapacityGal?: number } =>
+      line.tankId != null && line.gallons > 0.001,
+  );
+  const storedReturnTankId = storedReturns.length === 1 ? storedReturns[0].tankId : null;
+  const storedReturnGal = storedReturns.length === 1 ? storedReturns[0].gallons : null;
+  const varianceReason = run.variance_reason?.trim() ?? '';
+  const volumeNeedsReason = fromTank && volumeVarianceGal != null && Math.abs(volumeVarianceGal) >= 0.01;
+  const alcoholNeedsReason = fromTank && alcoholVarianceGal != null && Math.abs(alcoholVarianceGal) >= 0.01;
+  const recordsWho = volumeNeedsReason
+    || alcoholNeedsReason
+    || (fromTank && storedReturns.some((line) => line.gallons > 0.001));
+  if (volumeNeedsReason || alcoholNeedsReason) {
+    const reasonError = volumeChangeReasonError(varianceReason);
+    if (reasonError) throw new Error(reasonError);
+  }
   const header = {
     ...run,
     packaging_bottle: packagingSummary,
     bottle_size_ml: headerSizeMl,
     bottle_count: totalCount,
     source_volume_gal: sourceVolumeGal,
+    source_abv: fromTank ? sourceAbv : null,
     bottled_volume_gal: fromTank ? bottledVolumeGal : null,
     volume_variance_gal: fromTank ? volumeVarianceGal : null,
+    alcohol_variance_gal: fromTank ? alcoholVarianceGal : null,
+    variance_reason: volumeNeedsReason || alcoholNeedsReason
+      ? varianceReason
+      : null,
+    variance_changed_by: recordsWho
+      ? (run.variance_changed_by?.trim() || 'Unknown')
+      : null,
+    return_holding_tank_equipment_id: storedReturnTankId,
+    return_volume_gal: storedReturnGal,
   };
 
   let runId = id;
   if (runId) {
     runQuery(
-      `UPDATE bottling_runs SET batch_number=?, source_barrel_id=?, source_holding_tank_equipment_id=?, source_volume_gal=?, bottled_volume_gal=?, volume_variance_gal=?, source_run_id=?, bottling_date=?, packaging_bottle=?, bottle_size_ml=?, bottle_count=?, final_abv=?, product_name=?, lot_number=?, notes=? WHERE id=?`,
-      [header.batch_number, sourceBarrelId, sourceTankId, header.source_volume_gal, header.bottled_volume_gal, header.volume_variance_gal, header.source_run_id, header.bottling_date, header.packaging_bottle, header.bottle_size_ml, header.bottle_count, header.final_abv, header.product_name, header.lot_number, header.notes, runId],
+      `UPDATE bottling_runs SET batch_number=?, source_barrel_id=?, source_holding_tank_equipment_id=?, source_volume_gal=?, source_abv=?, bottled_volume_gal=?, volume_variance_gal=?, alcohol_variance_gal=?, variance_reason=?, variance_changed_by=?, return_holding_tank_equipment_id=?, return_volume_gal=?, source_run_id=?, bottling_date=?, packaging_bottle=?, bottle_size_ml=?, bottle_count=?, final_abv=?, product_name=?, lot_number=?, notes=? WHERE id=?`,
+      [header.batch_number, sourceBarrelId, sourceTankId, header.source_volume_gal, header.source_abv, header.bottled_volume_gal, header.volume_variance_gal, header.alcohol_variance_gal, header.variance_reason, header.variance_changed_by, header.return_holding_tank_equipment_id, header.return_volume_gal, header.source_run_id, header.bottling_date, header.packaging_bottle, header.bottle_size_ml, header.bottle_count, header.final_abv, header.product_name, header.lot_number, header.notes, runId],
     );
     persistBottlingRunLines(runId, activeLines);
+    persistBottlingRunReturns(runId, storedReturns);
   } else {
     runId = insertRow(
-      `INSERT INTO bottling_runs (batch_number, source_barrel_id, source_holding_tank_equipment_id, source_volume_gal, bottled_volume_gal, volume_variance_gal, source_run_id, bottling_date, packaging_bottle, bottle_size_ml, bottle_count, final_abv, product_name, lot_number, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [header.batch_number, sourceBarrelId, sourceTankId, header.source_volume_gal, header.bottled_volume_gal, header.volume_variance_gal, header.source_run_id, header.bottling_date, header.packaging_bottle, header.bottle_size_ml, header.bottle_count, header.final_abv, header.product_name, header.lot_number, header.notes],
+      `INSERT INTO bottling_runs (batch_number, source_barrel_id, source_holding_tank_equipment_id, source_volume_gal, source_abv, bottled_volume_gal, volume_variance_gal, alcohol_variance_gal, variance_reason, variance_changed_by, return_holding_tank_equipment_id, return_volume_gal, source_run_id, bottling_date, packaging_bottle, bottle_size_ml, bottle_count, final_abv, product_name, lot_number, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [header.batch_number, sourceBarrelId, sourceTankId, header.source_volume_gal, header.source_abv, header.bottled_volume_gal, header.volume_variance_gal, header.alcohol_variance_gal, header.variance_reason, header.variance_changed_by, header.return_holding_tank_equipment_id, header.return_volume_gal, header.source_run_id, header.bottling_date, header.packaging_bottle, header.bottle_size_ml, header.bottle_count, header.final_abv, header.product_name, header.lot_number, header.notes],
     );
     persistBottlingRunLines(runId, activeLines);
+    persistBottlingRunReturns(runId, storedReturns);
   }
   syncBottlingPackagingInventory(previousLines, activeLines);
   syncHoldingTankStatuses();
@@ -3892,6 +5048,7 @@ export function saveBottlingRun(
 export function deleteBottlingRun(id: number): void {
   const previousLines = bottlingLinesToInventoryInput(getBottlingRunLines(id));
   syncBottlingPackagingInventory(previousLines, []);
+  runQuery('DELETE FROM bottling_run_returns WHERE bottling_run_id = ?', [id]);
   runQuery('DELETE FROM bottling_runs WHERE id = ?', [id]);
   syncHoldingTankStatuses();
 }
@@ -4182,7 +5339,7 @@ export function getBlendProducts(): BlendProductView[] {
     `SELECT b.*, fe.name as source_tank_name, out_fe.name as output_tank_name, br.name as blend_recipe_name,
         brv.version_number as blend_recipe_version_number
      FROM blend_products b
-     JOIN floor_equipment fe ON fe.id = b.source_holding_tank_equipment_id
+     LEFT JOIN floor_equipment fe ON fe.id = b.source_holding_tank_equipment_id
      LEFT JOIN floor_equipment out_fe ON out_fe.id = b.output_holding_tank_equipment_id
      LEFT JOIN blend_recipes br ON br.id = b.blend_recipe_id
      LEFT JOIN blend_recipe_versions brv ON brv.id = b.blend_recipe_version_id
@@ -4587,18 +5744,24 @@ export function executeBlendProduct(id: number, outputTankId: number): void {
     throw new Error('Finished batch cannot go into a tank you are pulling spirit from.');
   }
 
+  const emptiedBarrels = new Set<number>();
   for (const source of sources) {
-    if (!source.barrel_id || source.volume_gal <= 0) continue;
+    if (!source.barrel_id || source.volume_gal <= 0 || emptiedBarrels.has(source.barrel_id)) continue;
     const barrel = queryOne<{ current_volume_gal: number }>(
       'SELECT current_volume_gal FROM barrels WHERE id = ?',
       [source.barrel_id],
     );
     if (!barrel) continue;
-    const remaining = Math.max(0, barrel.current_volume_gal - source.volume_gal);
-    const nextStatus = remaining <= 0.01 ? 'empty' : 'aging';
+    emptiedBarrels.add(source.barrel_id);
     runQuery(
-      'UPDATE barrels SET current_volume_gal = ?, status = ? WHERE id = ?',
-      [remaining, nextStatus, source.barrel_id],
+      'UPDATE barrels SET current_volume_gal = 0, status = ? WHERE id = ?',
+      ['empty', source.barrel_id],
+    );
+    runQuery(
+      `UPDATE blend_spirit_sources
+       SET emptied_volume_gal = ?
+       WHERE blend_product_id = ? AND barrel_id = ?`,
+      [barrel.current_volume_gal, id, source.barrel_id],
     );
   }
 
@@ -4674,7 +5837,7 @@ export function executeBlendProduct(id: number, outputTankId: number): void {
 
 /**
  * Reverse an executed blend. The blending page requires an administrator email and password first.
- * Restores inventory and barrel pulls and removes
+ * Restores inventory and the volume that was in each chosen barrel, and removes
  * the finished batch from the output-tank ledger by returning status to approved.
  */
 export function undoBlendProduction(id: number): void {
@@ -4701,18 +5864,28 @@ export function undoBlendProduction(id: number): void {
   }
 
   const spiritSources = getBlendSpiritSources(id);
+  const restoredBarrels = new Set<number>();
   for (const source of spiritSources) {
-    if (!source.barrel_id || source.volume_gal <= 0) continue;
+    if (!source.barrel_id || restoredBarrels.has(source.barrel_id)) continue;
+    const restoreGal = gallonsRestoredToEmptiedBarrel(spiritSources, source.barrel_id);
+    if (restoreGal <= 0) continue;
+    restoredBarrels.add(source.barrel_id);
     const barrel = queryOne<{ current_volume_gal: number }>(
       'SELECT current_volume_gal FROM barrels WHERE id = ?',
       [source.barrel_id],
     );
     if (!barrel) continue;
-    const restored = barrel.current_volume_gal + source.volume_gal;
+    const restored = barrel.current_volume_gal + restoreGal;
     const nextStatus = restored > 0.01 ? 'aging' : 'empty';
     runQuery(
       'UPDATE barrels SET current_volume_gal = ?, status = ? WHERE id = ?',
       [restored, nextStatus, source.barrel_id],
+    );
+    runQuery(
+      `UPDATE blend_spirit_sources
+       SET emptied_volume_gal = NULL
+       WHERE blend_product_id = ? AND barrel_id = ?`,
+      [id, source.barrel_id],
     );
   }
 
@@ -4756,7 +5929,7 @@ export function deleteBlendProduct(id: number): void {
 
 // ── Reports & Dashboard ────────────────────────────────────
 
-export function getProductionSummary(reportMonth?: string): ProductionSummary {
+export function getProductionSummary(reportMonth?: string, heartsMonth = reportMonth): ProductionSummary {
   const activeMashes = queryOne<{ count: number }>(
     "SELECT COUNT(*) as count FROM mash_batches WHERE status IN ('mashing', 'fermenting')",
   )?.count ?? 0;
@@ -4785,13 +5958,13 @@ export function getProductionSummary(reportMonth?: string): ProductionSummary {
     "SELECT COUNT(*) as count FROM barrels WHERE status = 'aging'",
   )?.count ?? 0;
 
-  const totalHeartsGal = reportMonth
+  const totalHeartsGal = heartsMonth
     ? queryOne<{ total: number }>(
       `SELECT COALESCE(SUM(c.volume_gal), 0) as total
        FROM distillation_cuts c
        JOIN distillation_runs r ON r.id = c.distillation_run_id
        WHERE c.cut_type = 'hearts' AND strftime('%Y-%m', r.run_date) = ?`,
-      [reportMonth],
+      [heartsMonth],
     )?.total ?? 0
     : queryOne<{ total: number }>(
       "SELECT COALESCE(SUM(volume_gal), 0) as total FROM distillation_cuts WHERE cut_type = 'hearts'",
@@ -4815,11 +5988,32 @@ export function getProductionSummary(reportMonth?: string): ProductionSummary {
       'SELECT COALESCE(SUM(bottle_count), 0) as total FROM bottling_runs',
     )?.total ?? 0;
 
+  const bottleSizeRows = queryAll<{ bottle_size_ml: number; bottle_count: number }>(
+    reportMonth
+      ? `SELECT l.bottle_size_ml, SUM(l.bottle_count) as bottle_count
+         FROM bottling_run_lines l
+         JOIN bottling_runs r ON r.id = l.bottling_run_id
+         WHERE l.bottle_count > 0 AND l.bottle_size_ml > 0
+           AND strftime('%Y-%m', r.bottling_date) = ?
+         GROUP BY l.bottle_size_ml
+         ORDER BY l.bottle_size_ml DESC`
+      : `SELECT l.bottle_size_ml, SUM(l.bottle_count) as bottle_count
+         FROM bottling_run_lines l
+         WHERE l.bottle_count > 0 AND l.bottle_size_ml > 0
+         GROUP BY l.bottle_size_ml
+         ORDER BY l.bottle_size_ml DESC`,
+    reportMonth ? [reportMonth] : [],
+  );
+  const bottlesBySize = bottleSizeRows.map((row) => ({
+    sizeMl: row.bottle_size_ml,
+    count: row.bottle_count,
+  }));
+
   const lowStockItems = queryOne<{ count: number }>(
     'SELECT COUNT(*) as count FROM inventory_items WHERE quantity <= reorder_level',
   )?.count ?? 0;
 
-  return { activeMashes, activeFermentations, activeRuns, barrelsAging, totalHeartsGal, bottlesThisMonth, lowStockItems };
+  return { activeMashes, activeFermentations, activeRuns, barrelsAging, totalHeartsGal, bottlesThisMonth, bottlesBySize, lowStockItems };
 }
 
 export function getYieldReports(reportMonth?: string): YieldReport[] {
@@ -4850,12 +6044,128 @@ export function getYieldReports(reportMonth?: string): YieldReport[] {
   `, params);
 }
 
+/** Month buckets for the productivity graph. Months are YYYY-MM. */
+export function getMonthlyProduction(): MonthlyProduction[] {
+  const hearts = queryAll<{ month: string | null; hearts_gal: number; pure_alcohol_gal: number }>(`
+    SELECT
+      strftime('%Y-%m', r.run_date) as month,
+      COALESCE(SUM(c.volume_gal), 0) as hearts_gal,
+      COALESCE(SUM(c.volume_gal * c.abv / 100.0), 0) as pure_alcohol_gal
+    FROM distillation_cuts c
+    JOIN distillation_runs r ON r.id = c.distillation_run_id
+    WHERE c.cut_type = 'hearts'
+      AND r.status IN ('running', 'complete')
+    GROUP BY month
+  `);
+  const runs = queryAll<{ month: string | null; runs: number }>(`
+    SELECT strftime('%Y-%m', run_date) as month, COUNT(*) as runs
+    FROM distillation_runs
+    WHERE status = 'complete'
+    GROUP BY month
+  `);
+  const bottles = queryAll<{ month: string | null; bottles: number }>(`
+    SELECT month, SUM(bottles) as bottles
+    FROM (
+      SELECT
+        strftime('%Y-%m', r.bottling_date) as month,
+        CASE
+          WHEN COALESCE((
+            SELECT SUM(l.bottle_count) FROM bottling_run_lines l WHERE l.bottling_run_id = r.id
+          ), 0) > 0
+          THEN (
+            SELECT SUM(l.bottle_count) FROM bottling_run_lines l WHERE l.bottling_run_id = r.id
+          )
+          ELSE r.bottle_count
+        END as bottles
+      FROM bottling_runs r
+    )
+    GROUP BY month
+  `);
+
+  const fermentations = queryAll<{ month: string | null; fermentations: number }>(`
+    SELECT month, COUNT(*) as fermentations
+    FROM (
+      SELECT strftime('%Y-%m', COALESCE(NULLIF(TRIM(m.fermentation_start_date), ''), m.start_date)) as month
+      FROM mash_fermenter_assignments a
+      JOIN mash_batches m ON m.id = a.mash_batch_id
+      UNION ALL
+      SELECT strftime('%Y-%m', COALESCE(NULLIF(TRIM(m.fermentation_start_date), ''), m.start_date)) as month
+      FROM distillation_runs r
+      JOIN mash_batches m ON m.id = r.source_mash_batch_id
+      WHERE r.run_type IN ('wash', 'heavy_rum')
+        AND r.source_fermenter_equipment_id IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM mash_fermenter_assignments a
+          WHERE a.mash_batch_id = r.source_mash_batch_id
+            AND a.floor_equipment_id = r.source_fermenter_equipment_id
+        )
+      GROUP BY m.id, r.source_fermenter_equipment_id
+      UNION ALL
+      SELECT strftime('%Y-%m', COALESCE(NULLIF(TRIM(m.fermentation_start_date), ''), m.start_date)) as month
+      FROM mash_batches m
+      WHERE m.status IN ('fermenting', 'complete', 'discarded')
+        AND NOT EXISTS (
+          SELECT 1 FROM mash_fermenter_assignments a WHERE a.mash_batch_id = m.id
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM distillation_runs r
+          WHERE r.source_mash_batch_id = m.id
+            AND r.source_fermenter_equipment_id IS NOT NULL
+        )
+    )
+    GROUP BY month
+  `);
+
+  const byMonth = new Map<string, MonthlyProduction>();
+  const bucket = (month: string | null): MonthlyProduction | null => {
+    if (!month || !/^\d{4}-\d{2}$/.test(month)) return null;
+    const existing = byMonth.get(month);
+    if (existing) return existing;
+    const created: MonthlyProduction = {
+      month,
+      heartsGal: 0,
+      pureAlcoholGal: 0,
+      bottles: 0,
+      runs: 0,
+      fermentations: 0,
+    };
+    byMonth.set(month, created);
+    return created;
+  };
+
+  for (const row of hearts) {
+    const month = bucket(row.month);
+    if (!month) continue;
+    month.heartsGal += row.hearts_gal;
+    month.pureAlcoholGal += row.pure_alcohol_gal;
+  }
+  for (const row of runs) {
+    const month = bucket(row.month);
+    if (!month) continue;
+    month.runs += row.runs;
+  }
+  for (const row of bottles) {
+    const month = bucket(row.month);
+    if (!month) continue;
+    month.bottles += row.bottles;
+  }
+  for (const row of fermentations) {
+    const month = bucket(row.month);
+    if (!month) continue;
+    month.fermentations += row.fermentations;
+  }
+
+  return [...byMonth.values()].sort((a, b) => a.month.localeCompare(b.month));
+}
+
 export function getAllFloorEquipmentWithContext(): FloorEquipmentView[] {
   return getFloorPlans().flatMap((plan) => getFloorEquipmentWithContext(plan.id));
 }
 
 function collectionVesselContentsDetail(vesselId: number, volumeGal: number): string {
   if (!(volumeGal > 0.05)) return '';
+  const distilled = holdingTankDistillationContents(vesselId, volumeGal);
+  if (distilled) return distilled;
   const stored = getCollectionVesselStoredCutType(vesselId);
   const stillageGal = queryOne<{ volume: number }>(`
     SELECT COALESCE(SUM(stillage_volume_gal), 0) as volume
@@ -4875,11 +6185,22 @@ export function getEquipmentVolumeReport(): EquipmentVolumeReport[] {
   return equipment.map((eq) => {
     if (isSpiritLedgerEquipmentType(eq.equipment_type)) {
       const contents = getHoldingTankContents(eq.id);
-      const detail = eq.equipment_type === 'collection_vessel'
-        ? collectionVesselContentsDetail(eq.id, contents.volume_gal)
-        : contents.run_count > 0
-          ? `${contents.run_count} distillation run${contents.run_count === 1 ? '' : 's'} · ${contents.cut_count} cut${contents.cut_count === 1 ? '' : 's'}`
-          : '';
+      const hasLiquid = contents.volume_gal > 0.05;
+      const blendName = hasLiquid
+        ? (holdingTankProductName(eq.id, contents.volume_gal)?.trim() || '')
+        : '';
+      const distilled = hasLiquid && !blendName
+        ? (holdingTankDistillationContents(eq.id, contents.volume_gal)?.trim() || '')
+        : '';
+      const detail = !hasLiquid
+        ? ''
+        : blendName
+          || distilled
+          || (eq.equipment_type === 'collection_vessel'
+            ? collectionVesselContentsDetail(eq.id, contents.volume_gal)
+            : contents.run_count > 0
+              ? `${contents.run_count} distillation run${contents.run_count === 1 ? '' : 's'} · ${contents.cut_count} cut${contents.cut_count === 1 ? '' : 's'}`
+              : '');
       return {
         id: eq.id,
         name: eq.name,
@@ -4934,7 +6255,7 @@ export function getEquipmentVolumeReport(): EquipmentVolumeReport[] {
           [run.source_holding_tank_equipment_id],
         )?.name;
         if (tankName) {
-          const prefix = run.run_type === 'gin' ? 'Gin from' : 'Spirit from';
+          const prefix = stillChargeSourcePhrase(run.run_type);
           detail = `${prefix} ${tankName} · ${detail}`;
         }
       }
@@ -5028,11 +6349,16 @@ export function getFloorEquipmentWithContext(planId = 1): FloorEquipmentView[] {
     if (isSpiritLedgerEquipmentType(eq.equipment_type)) {
       const contents = getHoldingTankContents(eq.id);
       if (contents.volume_gal <= 0) return eq;
+      const productName = holdingTankProductName(eq.id, contents.volume_gal);
+      const distilled = productName
+        ? null
+        : holdingTankDistillationContents(eq.id, contents.volume_gal);
       return {
         ...eq,
         active_volume_gal: contents.volume_gal,
         active_abv: contents.abv,
         active_run_count: contents.run_count,
+        active_liquid_name: productName ?? distilled ?? undefined,
       };
     }
     if (eq.equipment_type === 'mash_tun' && eq.linked_mash_batch_id) {
@@ -5057,9 +6383,11 @@ export function getFloorEquipmentWithContext(planId = 1): FloorEquipmentView[] {
       status: string;
       actual_brix: number | null;
       target_brix: number | null;
+      expected_completion_date: string | null;
     }>(`
       SELECT m.id AS mash_batch_id, m.batch_number, a.volume_gal,
-             COALESCE(a.status, m.status) as status, m.actual_brix, m.target_brix
+             COALESCE(a.status, m.status) as status, m.actual_brix, m.target_brix,
+             m.expected_completion_date
       FROM mash_fermenter_assignments a
       JOIN mash_batches m ON m.id = a.mash_batch_id
       WHERE a.floor_equipment_id = ? AND a.volume_gal > 0.01
@@ -5077,6 +6405,7 @@ export function getFloorEquipmentWithContext(planId = 1): FloorEquipmentView[] {
       active_mash_status: info.status as FloorEquipmentView['active_mash_status'],
       active_start_brix,
       active_latest_brix,
+      active_expected_completion_date: info.expected_completion_date,
     };
   });
 }
@@ -5118,6 +6447,47 @@ export function getAllEquipmentMaintenanceLog(limit = 500): EquipmentMaintenance
 /** Full maintenance and cleaning history for Reports. The working page keeps the latest 10. */
 export function getEquipmentMaintenanceReportLog(): EquipmentMaintenanceLogView[] {
   return queryAll(EQUIPMENT_MAINTENANCE_LOG_SELECT);
+}
+
+/** Cleaning log rows for the daily staff sheet: tanks, fermenters, and stills. */
+export function getTankCleaningLog(): {
+  id: number;
+  equipmentId: number;
+  equipmentName: string;
+  equipmentType: string;
+  eventType: 'needs_cleaning' | 'marked_cleaned';
+  createdAt: string;
+  recordedBy: string;
+  status: string;
+}[] {
+  return queryAll<{
+    id: number;
+    equipment_id: number;
+    equipment_name: string;
+    equipment_type: string;
+    event_type: 'needs_cleaning' | 'marked_cleaned';
+    created_at: string;
+    recorded_by: string;
+    status: string;
+  }>(`
+    SELECT l.id, l.floor_equipment_id as equipment_id, fe.name as equipment_name,
+           fe.equipment_type, l.event_type, l.created_at,
+           l.recorded_by_user_name as recorded_by, fe.status
+    FROM equipment_maintenance_log l
+    JOIN floor_equipment fe ON fe.id = l.floor_equipment_id
+    WHERE l.event_type IN ('needs_cleaning', 'marked_cleaned')
+      AND fe.equipment_type IN (${CALENDAR_CLEANING_EQUIPMENT_TYPES.map(() => '?').join(', ')})
+    ORDER BY l.created_at, l.id
+  `, [...CALENDAR_CLEANING_EQUIPMENT_TYPES]).map((row) => ({
+    id: row.id,
+    equipmentId: row.equipment_id,
+    equipmentName: row.equipment_name,
+    equipmentType: row.equipment_type,
+    eventType: row.event_type,
+    createdAt: row.created_at,
+    recordedBy: row.recorded_by,
+    status: row.status,
+  }));
 }
 
 export function updateEquipmentMaintenance(
@@ -5213,17 +6583,28 @@ export function saveFloorEquipment(
   const maintenanceStatus = item.maintenance_status ?? null;
   const maintenanceNotes = item.maintenance_notes ?? '';
   const icon = resolveEquipmentIcon(item.icon, item.equipment_type);
+  const previous = id
+    ? queryOne<{ status: string }>('SELECT status FROM floor_equipment WHERE id = ?', [id])
+    : undefined;
+  let savedId = id ?? 0;
   if (id) {
     runQuery(
       `UPDATE floor_equipment SET floor_plan_id=?, name=?, equipment_type=?, icon=?, pos_x_ft=?, pos_y_ft=?, width_ft=?, depth_ft=?, capacity_gal=?, status=?, linked_mash_batch_id=?, notes=?, maintenance_status=?, maintenance_notes=? WHERE id=?`,
       [item.floor_plan_id, item.name, item.equipment_type, icon, item.pos_x_ft, item.pos_y_ft, item.width_ft, item.depth_ft, item.capacity_gal, item.status, item.linked_mash_batch_id, item.notes, maintenanceStatus, maintenanceNotes, id],
     );
+    savedId = id;
   } else {
-    insertRow(
+    savedId = insertRow(
       `INSERT INTO floor_equipment (floor_plan_id, name, equipment_type, icon, pos_x_ft, pos_y_ft, width_ft, depth_ft, capacity_gal, status, linked_mash_batch_id, notes, maintenance_status, maintenance_notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [item.floor_plan_id, item.name, item.equipment_type, icon, item.pos_x_ft, item.pos_y_ft, item.width_ft, item.depth_ft, item.capacity_gal, item.status, item.linked_mash_batch_id, item.notes, maintenanceStatus, maintenanceNotes],
     );
   }
+  recordStatusDateLog({
+    recordKind: 'equipment',
+    recordId: savedId,
+    previousStatus: previous?.status,
+    status: item.status,
+  });
 }
 
 export function updateEquipmentPosition(id: number, pos_x_ft: number, pos_y_ft: number): void {
@@ -5250,5 +6631,6 @@ export function moveEquipmentToPlan(
 }
 
 export function deleteFloorEquipment(id: number): void {
+  deleteStatusDateLog('equipment', id);
   runQuery('DELETE FROM floor_equipment WHERE id = ?', [id]);
 }

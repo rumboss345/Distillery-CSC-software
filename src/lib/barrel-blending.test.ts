@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { barrelsForBlendRow, hasDuplicateBarrelSelections } from './barrel-blending';
+import {
+  barrelShownContents,
+  barrelsForBlendRow,
+  gallonsRestoredToEmptiedBarrel,
+  hasDuplicateBarrelSelections,
+} from './barrel-blending';
 import type { Barrel } from '../types';
 
 const barrel = (id: number): Barrel => ({
@@ -33,9 +38,37 @@ describe('barrelsForBlendRow', () => {
   });
 });
 
+describe('barrelShownContents', () => {
+  it('shows the blend that was filled, not an older joined spirit type', () => {
+    const filled = barrel(4);
+    filled.spirit_type = 'GR Dark · sf · rum';
+    expect(barrelShownContents(filled, 'Dark')).toBe('Dark');
+    expect(barrelShownContents(filled, null)).toBe('GR Dark · sf · rum');
+  });
+});
+
 describe('hasDuplicateBarrelSelections', () => {
   it('detects duplicate barrel ids', () => {
     expect(hasDuplicateBarrelSelections([1, 2, 1])).toBe(true);
     expect(hasDuplicateBarrelSelections([1, 2, null])).toBe(false);
+  });
+});
+
+describe('gallonsRestoredToEmptiedBarrel', () => {
+  it('puts back the volume that was in the barrel, once', () => {
+    const sources = [
+      { barrel_id: 4, volume_gal: 20, emptied_volume_gal: 53 },
+      { barrel_id: 4, volume_gal: 5, emptied_volume_gal: 53 },
+      { barrel_id: 9, volume_gal: 12, emptied_volume_gal: 48 },
+    ];
+    expect(gallonsRestoredToEmptiedBarrel(sources, 4)).toBe(53);
+    expect(gallonsRestoredToEmptiedBarrel(sources, 9)).toBe(48);
+  });
+
+  it('falls back to the formula pull for batches produced before barrels were emptied', () => {
+    expect(gallonsRestoredToEmptiedBarrel([
+      { barrel_id: 4, volume_gal: 20, emptied_volume_gal: null },
+      { barrel_id: 4, volume_gal: 5 },
+    ], 4)).toBe(25);
   });
 });

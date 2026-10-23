@@ -1,7 +1,7 @@
 import { queryAll } from '../../db/database';
 import { getBottlingRuns, getEquipmentVolumeReport, getHoldingTankVolumeVariances } from '../../db/queries';
 import { formatTankVolumeVariance } from '../tank-volume-variance';
-import { totalVolumeGal } from '../bottling-lines';
+import { formatBottlingAlcoholVariance, reportedBottlingAlcoholVarianceGal, reportedBottlingVarianceGal, totalVolumeGal } from '../bottling-lines';
 import { buildBlendReportRows } from './blend-rows';
 import { compareStoredDatesDesc } from '../date-input';
 import { localIsoDate } from '../planned-event-date';
@@ -27,15 +27,27 @@ export function buildProductionExceptions(range: ReportDateRange): ProductionExc
 
   for (const run of getBottlingRuns()) {
     if (!eventInReportRange(run.bottling_date, range)) continue;
-    const variance = run.volume_variance_gal;
-    if (variance != null && Math.abs(variance) >= VARIANCE_GAL_THRESHOLD) {
+    const variance = reportedBottlingVarianceGal(run);
+    const alcoholVariance = reportedBottlingAlcoholVarianceGal(run);
+    const volumeNotable = variance != null && Math.abs(variance) >= VARIANCE_GAL_THRESHOLD;
+    const alcoholNotable = alcoholVariance != null && Math.abs(alcoholVariance) >= VARIANCE_GAL_THRESHOLD;
+    if (volumeNotable || alcoholNotable) {
+      const why = run.variance_reason?.trim();
+      const who = run.variance_changed_by?.trim();
+      const parts: string[] = [];
+      if (volumeNotable && variance != null) {
+        parts.push(`${variance > 0 ? '+' : ''}${variance.toFixed(2)} gal after gallons sent to a tank`);
+      }
+      if (alcoholNotable && alcoholVariance != null) {
+        parts.push(formatBottlingAlcoholVariance(alcoholVariance));
+      }
       rows.push({
         row_key: `bottling_var:${run.id}`,
         severity: 'warning',
         category: 'Bottling variance',
         occurred_at: run.bottling_date,
         reference: run.batch_number,
-        message: `Tank draw vs bottled differs by ${variance > 0 ? '+' : ''}${variance.toFixed(2)} gal (${run.product_name}).`,
+        message: `Bottling variance is ${parts.join(', ')} (${run.product_name})${why ? `. ${why}` : ''}${who ? ` Changed by ${who}.` : '.'}`,
       });
     }
   }
@@ -84,15 +96,45 @@ export function buildProductionExceptions(range: ReportDateRange): ProductionExc
 
   for (const variance of getHoldingTankVolumeVariances()) {
     if (!eventInReportRange(variance.recorded_at, range)) continue;
-    if (Math.abs(variance.variance_gal) < VARIANCE_GAL_THRESHOLD) continue;
+    const abvChanged = Math.abs(variance.set_abv - variance.book_abv) >= 0.05;
+    if (Math.abs(variance.variance_gal) < VARIANCE_GAL_THRESHOLD && !abvChanged) continue;
     const note = variance.notes.trim();
+    const who = variance.changed_by?.trim();
+    const abvNote = abvChanged
+      ? `, ABV ${variance.book_abv.toFixed(1)}% to ${variance.set_abv.toFixed(1)}%`
+      : '';
     rows.push({
       row_key: `tank_var:${variance.id}`,
       severity: 'warning',
       category: 'Tank volume',
       occurred_at: variance.recorded_at,
       reference: variance.tank_name,
-      message: `Set from ${variance.book_volume_gal.toFixed(2)} gal to ${variance.set_volume_gal.toFixed(2)} gal (${formatTankVolumeVariance(variance.variance_gal)})${note ? `. ${note}` : '.'}`,
+      message: `Set from ${variance.book_volume_gal.toFixed(2)} gal to ${variance.set_volume_gal.toFixed(2)} gal (${formatTankVolumeVariance(variance.variance_gal)})${abvNote}${note ? `. ${note}` : ''}${who ? ` Changed by ${who}.` : '.'}`,
+    });
+  }
+
+  const leftovers = queryAll<{
+    id: number;
+    batch_number: string;
+    fermenter_name: string;
+    volume_gal: number;
+    discarded_date: string;
+    notes: string;
+    changed_by: string | null;
+  }>(`
+    SELECT id, batch_number, fermenter_name, volume_gal, discarded_date, notes, changed_by
+    FROM discarded_fermentations
+  `);
+  for (const leftover of leftovers) {
+    if (!eventInReportRange(leftover.discarded_date, range)) continue;
+    const who = leftover.changed_by?.trim();
+    rows.push({
+      row_key: `leftover:${leftover.id}`,
+      severity: 'info',
+      category: 'Fermenter leftovers',
+      occurred_at: leftover.discarded_date,
+      reference: leftover.fermenter_name || leftover.batch_number,
+      message: `${leftover.volume_gal.toFixed(1)} gal could not be used${leftover.notes.trim() ? `. ${leftover.notes.trim()}` : ''}${who ? ` Changed by ${who}.` : '.'}`,
     });
   }
 

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { useEquipmentReturn } from '../lib/equipment-return';
+import { CollapsibleSection } from '../components/CollapsibleSection';
 import { useAuth } from '../context/AuthContext';
 import { DatePicker } from '../components/DatePicker';
 import { AbvVolumeTemperatureFields } from '../components/AbvVolumeTemperatureFields';
@@ -10,6 +12,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import {
   clearHoldingTankOnHand,
   deleteDiscardedFermentation,
+  deleteHoldingTankDilution,
   deleteHoldingTankTransfer,
   getCollectionVesselStoredCutType,
   getDiscardedFermentations,
@@ -17,26 +20,38 @@ import {
   getFermenterTransferDestinations,
   getFloorEquipment,
   getHoldingTankContents,
+  getHoldingTankDilutions,
   getHoldingTankIntakeHistory,
+  holdingTankProductName,
   getHoldingTankOnHand,
   getHoldingTankTransfers,
   getHoldingTankVolumeVariances,
   getSpiritTransferVessels,
   saveFermenterWashTransfer,
+  saveHoldingTankDilution,
   saveHoldingTankOnHand,
   saveHoldingTankTransfer,
   transferSourceIsStillage,
   useRefreshKey,
 } from '../db/queries';
 import { isSpiritLedgerEquipmentType } from '../lib/equipment';
+import { mixedSpiritConfirmMessage } from '../lib/blend-spirit-mix';
+import { tankContentsPhrase, tankDropdownLabel } from '../lib/tank-menu-label';
 import { isStillageTankType, STILLAGE_DISCARD_DESTINATION } from '../lib/stillage';
 import { limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
 import { formatDateDisplay } from '../lib/date-input';
 import { localIsoDate } from '../lib/planned-event-date';
 import { latestCompleted } from '../lib/recent-completed';
-import { formatTankVolumeVariance, tankVolumeMatchesRecord, tankVolumeVarianceGal } from '../lib/tank-volume-variance';
+import {
+  formatTankVolumeVariance,
+  tankReadingChanged,
+  tankVolumeMatchesRecord,
+  tankVolumeVarianceGal,
+  volumeChangeReasonError,
+} from '../lib/tank-volume-variance';
 import { DISCARD_DESTINATION, fermenterTransferError } from '../lib/fermenter-transfer';
+import { planTankProofDown } from '../lib/tank-proof-down';
 const destAcceptsTransferFrom = (sourceId: number, destId: number): boolean => {
   const sourceIsStillage = sourceId > 0 && transferSourceIsStillage(sourceId);
   if (destId === STILLAGE_DISCARD_DESTINATION) return sourceIsStillage;
@@ -54,6 +69,8 @@ const sourceTankVolumeGal = (tankId: number) => {
 
 const tankContentsSummary = (tankId: number, volumeGal: number): string => {
   if (volumeGal <= 0.001) return '—';
+  const product = holdingTankProductName(tankId, volumeGal);
+  if (product) return product;
   const intake = getHoldingTankIntakeHistory(tankId, 1)[0]?.summary;
   if (intake) return intake;
   const cutType = getCollectionVesselStoredCutType(tankId);
@@ -82,7 +99,13 @@ const emptyFermenterForm = () => ({
 export function TankTransfer() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
+  const changedBy = user?.name?.trim() || user?.email || 'Unknown';
   const [searchParams, setSearchParams] = useSearchParams();
+  const { returnToEquipment } = useEquipmentReturn();
+  const finishForm = (hide: (show: boolean) => void) => {
+    hide(false);
+    returnToEquipment();
+  };
   const calendarPlanHandled = useRef(false);
   const { key, refresh } = useRefreshKey();
   const spiritTransferVessels = getSpiritTransferVessels();
@@ -92,7 +115,12 @@ export function TankTransfer() {
       ...tank,
       ...getHoldingTankContents(tank.id),
     }));
+  const [showEmptyTanks, setShowEmptyTanks] = useState(false);
+  const tanksHoldingSpirit = tanksWithContents.filter((tank) => tank.volume_gal > 0.001);
+  const emptyTankCount = tanksWithContents.length - tanksHoldingSpirit.length;
+  const visibleTanks = showEmptyTanks ? tanksWithContents : tanksHoldingSpirit;
   const tankTransfers = getHoldingTankTransfers();
+  const tankDilutions = getHoldingTankDilutions();
   const volumeVariances = getHoldingTankVolumeVariances();
   const recentVariances = latestCompleted(
     volumeVariances,
@@ -110,6 +138,15 @@ export function TankTransfer() {
     (transfer) => transfer.transfer_date,
     (transfer) => transfer.id,
   );
+  const recentDilutions = latestCompleted(
+    tankDilutions,
+    (row) => row.recorded_at,
+    (row) => row.id,
+  );
+  const focusTransferId = Number(searchParams.get('record')) || 0;
+  const transferRows = focusTransferId && !recentTransfers.shown.some((transfer) => transfer.id === focusTransferId)
+    ? [...recentTransfers.shown, ...tankTransfers.filter((transfer) => transfer.id === focusTransferId)]
+    : recentTransfers.shown;
   const fermentersWithWash = getFermentersWithWash();
   const discardedFermentations = getDiscardedFermentations();
   const recentLeftovers = latestCompleted(
@@ -121,6 +158,15 @@ export function TankTransfer() {
   const [transferForm, setTransferForm] = useState(emptyTransferForm);
   const [showFermenterForm, setShowFermenterForm] = useState(false);
   const [fermenterForm, setFermenterForm] = useState(emptyFermenterForm);
+  const [showWaterDown, setShowWaterDown] = useState(false);
+  const [waterDownTankId, setWaterDownTankId] = useState(0);
+  const [waterDownForm, setWaterDownForm] = useState({
+    mode: 'target' as 'target' | 'water',
+    target_abv: '',
+    water_gal: '',
+    recorded_at: localIsoDate(),
+    notes: '',
+  });
   const [onHandTankId, setOnHandTankId] = useState<number | null>(null);
   const [onHandForm, setOnHandForm] = useState({
     volume_gal: '',
@@ -136,16 +182,29 @@ export function TankTransfer() {
   const onHandVariance = onHandBook != null && onHandEnteredGal != null && Number.isFinite(onHandEnteredGal)
     ? tankVolumeVarianceGal(onHandBook.volume_gal, onHandEnteredGal)
     : null;
+  const onHandEnteredAbv = onHandForm.abv.trim() === '' ? null : parseFloat(onHandForm.abv);
+  const onHandReadingChanged = onHandBook != null
+    && onHandEnteredGal != null
+    && Number.isFinite(onHandEnteredGal)
+    && onHandEnteredAbv != null
+    && Number.isFinite(onHandEnteredAbv)
+    && tankReadingChanged(
+      onHandBook.volume_gal,
+      onHandEnteredGal,
+      onHandBook.abv,
+      onHandEnteredAbv,
+    );
   const sourceTanksForTransfer = tanksWithContents.filter((t) => t.volume_gal > 0);
   const transferSourceInTankLine = (t: { id: number; volume_gal: number; abv: number }) => {
-    const currentLabel = getHoldingTankIntakeHistory(t.id, 1)[0]?.summary;
+    const currentLabel = holdingTankProductName(t.id, t.volume_gal)
+      ?? getHoldingTankIntakeHistory(t.id, 1)[0]?.summary;
     const cutType = getCollectionVesselStoredCutType(t.id);
     const quantity = `${t.volume_gal.toFixed(1)} gal @ ${t.abv.toFixed(1)}% ABV`;
     const product = currentLabel ?? cutType ?? null;
     return product ? `In tank: ${quantity} — ${product}` : `In tank: ${quantity}`;
   };
-  const transferSourceTankOptionLabel = (t: { id: number; name: string; volume_gal: number; abv: number }) =>
-    `${t.name} — ${transferSourceInTankLine(t)}`;
+  const transferSourceTankOptionLabel = (t: { id: number; name: string }) =>
+    tankDropdownLabel(t.name, t.id, { volume: true });
   const selectedTransferSourceTank = sourceTanksForTransfer.find(
     (t) => t.id === transferForm.source_tank_equipment_id,
   );
@@ -201,6 +260,26 @@ export function TankTransfer() {
     setShowTransferForm(true);
   };
 
+  const tankCanWaterDown = (tank: { volume_gal: number; abv: number; equipment_type: string }) => (
+    tank.volume_gal > 0.05 && tank.abv > 0.05 && !isStillageTankType(tank.equipment_type)
+  );
+
+  const openWaterDown = (tankId?: number) => {
+    const eligible = tanksWithContents.filter(tankCanWaterDown);
+    const selected = tankId && eligible.some((tank) => tank.id === tankId)
+      ? tankId
+      : (eligible.length === 1 ? eligible[0].id : 0);
+    setWaterDownTankId(selected);
+    setWaterDownForm({
+      mode: 'target',
+      target_abv: '',
+      water_gal: '',
+      recorded_at: localIsoDate(),
+      notes: '',
+    });
+    setShowWaterDown(true);
+  };
+
   const openFermenterTransfer = (
     fermenter: { floor_equipment_id: number; volume_gal: number },
     transferDate?: string,
@@ -244,6 +323,20 @@ export function TankTransfer() {
     next.delete('source');
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams, sourceTanksForTransfer, fermentersWithWash]);
+
+  useEffect(() => {
+    const tankId = parseInt(searchParams.get('waterDown') ?? '', 10);
+    if (!(tankId > 0)) return;
+    openWaterDown(tankId);
+    const next = new URLSearchParams(searchParams);
+    next.delete('waterDown');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
+    if (!focusTransferId) return;
+    document.getElementById(`transfer-${focusTransferId}`)?.scrollIntoView({ block: 'center' });
+  }, [focusTransferId]);
 
   const handleSourceTankChange = (tankId: number) => {
     setTransferForm((prev) => applySourceTankToForm(prev, tankId));
@@ -289,6 +382,20 @@ export function TankTransfer() {
           return;
         }
       }
+      if (transferDestContents.volume_gal > 0.05 && transferForm.source_tank_equipment_id > 0) {
+        const sourceTank = sourceTanksForTransfer.find((tank) => tank.id === transferForm.source_tank_equipment_id);
+        const mixMessage = mixedSpiritConfirmMessage([
+          {
+            spirit: tankContentsPhrase(transferForm.source_tank_equipment_id) || 'Spirit',
+            place: sourceTank?.name ?? 'Source tank',
+          },
+          {
+            spirit: tankContentsPhrase(transferDestTank.id) || 'Spirit',
+            place: transferDestTank.name,
+          },
+        ]);
+        if (mixMessage && !confirm(mixMessage)) return;
+      }
     }
     try {
       saveHoldingTankTransfer({
@@ -299,7 +406,7 @@ export function TankTransfer() {
         transfer_date: transferForm.transfer_date,
         notes: transferForm.notes,
       });
-      setShowTransferForm(false);
+      finishForm(setShowTransferForm);
       refresh();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Could not save transfer.');
@@ -309,6 +416,57 @@ export function TankTransfer() {
   const handleDeleteTransfer = (id: number) => {
     if (confirm('Delete this tank transfer? Tank levels will be restored.')) {
       deleteHoldingTankTransfer(id);
+      refresh();
+    }
+  };
+
+  const waterDownTanks = tanksWithContents.filter(tankCanWaterDown);
+  const waterDownTank = waterDownTanks.find((tank) => tank.id === waterDownTankId) ?? null;
+  const waterDownTarget = waterDownForm.mode === 'target' && waterDownForm.target_abv.trim() !== ''
+    ? Number(waterDownForm.target_abv)
+    : null;
+  const waterDownGallons = waterDownForm.mode === 'water' && waterDownForm.water_gal.trim() !== ''
+    ? Number(waterDownForm.water_gal)
+    : null;
+  const waterDownPlan = waterDownTank
+    ? planTankProofDown({
+      spiritGal: waterDownTank.volume_gal,
+      spiritAbvPercent: waterDownTank.abv,
+      capacityGal: waterDownTank.capacity_gal,
+      tankName: waterDownTank.name,
+      targetAbvPercent: waterDownTarget,
+      waterGal: waterDownGallons,
+    })
+    : null;
+
+  const handleSaveWaterDown = () => {
+    if (!waterDownTank) {
+      alert('Select the tank to water down.');
+      return;
+    }
+    if (!waterDownPlan?.ok) {
+      alert(waterDownPlan?.message ?? 'Enter a lower ABV, or the gallons of water to add.');
+      return;
+    }
+    try {
+      saveHoldingTankDilution({
+        tankEquipmentId: waterDownTank.id,
+        targetAbvPercent: waterDownTarget,
+        waterGal: waterDownGallons,
+        recordedAt: waterDownForm.recorded_at,
+        notes: waterDownForm.notes,
+        changedBy,
+      });
+      finishForm(setShowWaterDown);
+      refresh();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Could not water down this tank.');
+    }
+  };
+
+  const handleDeleteDilution = (id: number) => {
+    if (confirm('Delete this watering down? The tank goes back to the proof it had before the water was added.')) {
+      deleteHoldingTankDilution(id);
       refresh();
     }
   };
@@ -359,6 +517,13 @@ export function TankTransfer() {
       alert(error);
       return;
     }
+    if (discarded) {
+      const reasonError = volumeChangeReasonError(fermenterForm.notes);
+      if (reasonError) {
+        alert(reasonError);
+        return;
+      }
+    }
     try {
       saveFermenterWashTransfer({
         sourceEquipmentId: selectedFermenter.floor_equipment_id,
@@ -367,8 +532,9 @@ export function TankTransfer() {
         volumeGal: fermenterForm.volume_gal,
         transferDate: fermenterForm.transfer_date,
         notes: fermenterForm.notes,
+        changedBy,
       });
-      setShowFermenterForm(false);
+      finishForm(setShowFermenterForm);
       refresh();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Could not transfer fermenter wash.');
@@ -408,6 +574,16 @@ export function TankTransfer() {
         return;
       }
     }
+    const readingChanged = tank
+      ? tankReadingChanged(tank.volume_gal, volumeGal, tank.abv, abv)
+      : true;
+    if (readingChanged) {
+      const reasonError = volumeChangeReasonError(onHandForm.notes);
+      if (reasonError) {
+        alert(reasonError);
+        return;
+      }
+    }
     try {
       saveHoldingTankOnHand({
         tankEquipmentId: onHandTankId,
@@ -415,6 +591,7 @@ export function TankTransfer() {
         abv,
         recordedAt: onHandForm.recorded_at,
         notes: onHandForm.notes,
+        changedBy,
       });
       setOnHandTankId(null);
       refresh();
@@ -425,11 +602,16 @@ export function TankTransfer() {
 
   const handleClearOnHand = () => {
     if (!isAdmin || !onHandTankId) return;
+    const reasonError = volumeChangeReasonError(onHandForm.notes);
+    if (reasonError) {
+      alert(reasonError);
+      return;
+    }
     if (!confirm('Remove the on-hand reading? The tank goes back to only what production records add and remove. That change is saved as a variance.')) {
       return;
     }
     try {
-      clearHoldingTankOnHand(onHandTankId);
+      clearHoldingTankOnHand(onHandTankId, onHandForm.notes, changedBy);
       setOnHandTankId(null);
       refresh();
     } catch (err) {
@@ -452,16 +634,24 @@ export function TankTransfer() {
     <div>
       <div className="page-header">
         <h2>Tank Transfer</h2>
-        <p>Move spirit between holding tanks and collection vessels. Fermenter wash moves to another fermenter, or the unusable gallons are recorded as leftovers.</p>
+        <p>Move spirit between holding tanks and collection vessels, or water down alcohol in the tank it is already in. Fermenter wash moves to another fermenter, or the unusable gallons are recorded as leftovers.</p>
         <div className="page-actions">
+          <button type="button" className="btn btn-secondary" data-testid="water-down-open" onClick={() => openWaterDown()}>
+            Water down
+          </button>
           <button type="button" className="btn btn-primary" onClick={() => openTransferForm()}>
             + New Transfer
           </button>
         </div>
       </div>
 
-      <div className="detail-panel">
-        <h4>Fermenters</h4>
+      <CollapsibleSection
+        className="detail-panel"
+        headingLevel="h4"
+        title="Fermenters"
+        summary={`${fermentersWithWash.length} with wash`}
+        storageKey="tank-transfer-fermenters"
+      >
         <p className="field-hint" style={{ marginTop: '-0.5rem' }}>
           Select a fermenter with wash to move some of it to another fermenter, or record leftovers that cannot be used.
         </p>
@@ -474,9 +664,9 @@ export function TankTransfer() {
                 <tr>
                   <th>Fermenter</th>
                   <th>Wash</th>
-                  <th>Volume</th>
-                  <th>Brix</th>
-                  <th>Capacity</th>
+                  <th className="num">Volume</th>
+                  <th className="num">Brix</th>
+                  <th className="num">Capacity</th>
                   <th>Status</th>
                   <th></th>
                 </tr>
@@ -491,9 +681,9 @@ export function TankTransfer() {
                   >
                     <td><strong>{fermenter.equipment_name}</strong></td>
                     <td>{fermenter.batch_number} · {fermenter.recipe_name}</td>
-                    <td>{fermenter.volume_gal.toFixed(1)} gal</td>
-                    <td>{fermenter.latest_brix != null ? `${fermenter.latest_brix.toFixed(1)}°` : '—'}</td>
-                    <td>{fermenter.capacity_gal > 0 ? `${fermenter.capacity_gal} gal` : '—'}</td>
+                    <td className="num">{fermenter.volume_gal.toFixed(1)} gal</td>
+                    <td className="num">{fermenter.latest_brix != null ? `${fermenter.latest_brix.toFixed(1)}°` : '—'}</td>
+                    <td className="num">{fermenter.capacity_gal > 0 ? `${fermenter.capacity_gal} gal` : '—'}</td>
                     <td>
                       <StatusBadge
                         status={fermenter.status === 'cleaning' || fermenter.status === 'offline'
@@ -519,13 +709,19 @@ export function TankTransfer() {
             </table>
           </div>
         )}
-      </div>
+      </CollapsibleSection>
 
-      <div className="detail-panel">
-        <h4>Fermenter leftovers</h4>
+      <CollapsibleSection
+        className="detail-panel"
+        headingLevel="h4"
+        title="Fermenter leftovers"
+        summary={recentLeftovers.total}
+        defaultOpen={false}
+        storageKey="tank-transfer-leftovers"
+      >
         <RecentCompletedNote
           hiddenCount={recentLeftovers.hiddenCount}
-          to="/reports/fermentation"
+          to="/reports/volume-changes"
           label="leftovers"
         />
         {recentLeftovers.total === 0 ? (
@@ -538,8 +734,9 @@ export function TankTransfer() {
                   <th>Date</th>
                   <th>Fermenter</th>
                   <th>Wash</th>
-                  <th>Volume</th>
-                  <th>Notes</th>
+                  <th className="num">Volume</th>
+                  <th>Why</th>
+                  <th>Who</th>
                   <th></th>
                 </tr>
               </thead>
@@ -549,8 +746,9 @@ export function TankTransfer() {
                     <td>{formatDateDisplay(row.discarded_date)}</td>
                     <td>{row.fermenter_name}</td>
                     <td>{row.batch_number || '—'}</td>
-                    <td>{row.volume_gal.toFixed(1)} gal</td>
+                    <td className="num">{row.volume_gal.toFixed(1)} gal</td>
                     <td>{row.notes || '—'}</td>
+                    <td>{row.changed_by || '—'}</td>
                     <td>
                       <button type="button" className="btn btn-sm btn-ghost" onClick={() => handleDeleteDiscard(row.id)}>
                         Delete
@@ -562,14 +760,19 @@ export function TankTransfer() {
             </table>
           </div>
         )}
-      </div>
+      </CollapsibleSection>
 
-      <div className="detail-panel">
-        <h4>Tanks</h4>
+      <CollapsibleSection
+        className="detail-panel"
+        headingLevel="h4"
+        title="Tanks"
+        summary={`${tanksHoldingSpirit.length} holding liquid`}
+        storageKey="tank-transfer-tanks"
+      >
         <p className="field-hint" style={{ marginTop: '-0.5rem' }}>
           {isAdmin
-            ? 'Set volume to the gallons and ABV actually in the tank. If a transfer or a recording error left the tank off from the record, the difference is saved as a variance. Later transfers and production add to or take from the volume you set.'
-            : 'Select a tank with spirit to transfer it. An administrator sets the gallons already in a tank.'}
+            ? 'Water down lowers the proof of alcohol already in a tank. Set volume records the gallons and ABV actually in the tank. If a transfer or a recording error left the tank off from the record, the difference is saved as a variance. Later transfers and production add to or take from the volume you set.'
+            : 'Select a tank with spirit to transfer it, or water it down in the tank. An administrator sets the gallons already in a tank.'}
         </p>
         {tanksWithContents.length === 0 ? (
           <p style={{ color: 'var(--text-muted)' }}>No holding tanks or collection vessels on the floor plan.</p>
@@ -579,17 +782,18 @@ export function TankTransfer() {
               <thead>
                 <tr>
                   <th>Tank</th>
-                  <th>Volume</th>
-                  <th>ABV</th>
-                  <th>Capacity</th>
+                  <th className="num">Volume</th>
+                  <th className="num">ABV</th>
+                  <th className="num">Capacity</th>
                   <th>Contents</th>
                   <th>Status</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
-                {tanksWithContents.map((tank) => {
+                {visibleTanks.map((tank) => {
                   const canTransfer = tank.volume_gal > 0.001;
+                  const canWaterDown = tankCanWaterDown(tank);
                   const latestVariance = latestVarianceByTank.get(tank.id);
                   return (
                     <tr
@@ -599,7 +803,7 @@ export function TankTransfer() {
                       title={canTransfer ? `Transfer from ${tank.name}` : undefined}
                     >
                       <td><strong>{tank.name}</strong></td>
-                      <td>
+                      <td className="num">
                         {canTransfer ? `${tank.volume_gal.toFixed(1)} gal` : '—'}
                         {latestVariance && !tankVolumeMatchesRecord(latestVariance.variance_gal) && (
                           <div className="field-hint" style={{ margin: 0 }}>
@@ -607,8 +811,8 @@ export function TankTransfer() {
                           </div>
                         )}
                       </td>
-                      <td>{canTransfer ? `${tank.abv.toFixed(1)}%` : '—'}</td>
-                      <td>{tank.capacity_gal > 0 ? `${tank.capacity_gal} gal` : '—'}</td>
+                      <td className="num">{canTransfer ? `${tank.abv.toFixed(1)}%` : '—'}</td>
+                      <td className="num">{tank.capacity_gal > 0 ? `${tank.capacity_gal} gal` : '—'}</td>
                       <td>{tankContentsSummary(tank.id, tank.volume_gal)}</td>
                       <td>
                         <StatusBadge
@@ -630,6 +834,19 @@ export function TankTransfer() {
                             Set volume
                           </button>
                         )}
+                        {canWaterDown && (
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-secondary"
+                            data-testid={`water-down-${tank.id}`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              openWaterDown(tank.id);
+                            }}
+                          >
+                            Water down
+                          </button>
+                        )}
                         {canTransfer && (
                           <button
                             type="button"
@@ -648,20 +865,94 @@ export function TankTransfer() {
                 })}
               </tbody>
             </table>
+            {visibleTanks.length === 0 && (
+              <p style={{ color: 'var(--text-muted)', margin: '0.75rem 0 0' }}>No tanks hold liquid right now.</p>
+            )}
           </div>
         )}
-      </div>
+        {emptyTankCount > 0 && (
+          <button
+            type="button"
+            className="btn btn-sm btn-ghost"
+            style={{ marginTop: '0.5rem' }}
+            data-testid="toggle-empty-tanks"
+            onClick={() => setShowEmptyTanks((show) => !show)}
+          >
+            {showEmptyTanks ? 'Hide empty tanks' : `Show ${emptyTankCount} empty tank${emptyTankCount === 1 ? '' : 's'}`}
+          </button>
+        )}
+      </CollapsibleSection>
 
-      <div className="detail-panel">
-        <h4>Volume variances</h4>
+      <CollapsibleSection
+        className="detail-panel"
+        headingLevel="h4"
+        title="Watered down"
+        summary={recentDilutions.total}
+        defaultOpen={false}
+        storageKey="tank-transfer-watered-down"
+      >
+        <p className="field-hint" style={{ marginTop: '-0.5rem' }}>
+          Water blended into alcohol that stayed in the same tank. The alcohol is not lost. The gauge rise is smaller than the water poured because of contraction.
+        </p>
+        <RecentCompletedNote
+          hiddenCount={recentDilutions.hiddenCount}
+          to="/reports/volume-changes"
+          label="watered down"
+        />
+        {recentDilutions.total === 0 ? (
+          <p style={{ color: 'var(--text-muted)' }}>No tanks have been watered down yet.</p>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Tank</th>
+                  <th className="num">Before</th>
+                  <th className="num">Water</th>
+                  <th className="num">After</th>
+                  <th>Who</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentDilutions.shown.map((row) => (
+                  <tr key={row.id} data-testid={`water-down-record-${row.id}`}>
+                    <td>{formatDateDisplay(row.recorded_at)}</td>
+                    <td>{row.tank_name}</td>
+                    <td className="num">{row.spirit_volume_gal.toFixed(1)} gal @ {row.spirit_abv.toFixed(1)}%</td>
+                    <td className="num">{row.water_gal.toFixed(1)} gal</td>
+                    <td className="num">{row.finished_volume_gal.toFixed(1)} gal @ {row.finished_abv.toFixed(1)}%</td>
+                    <td>{row.changed_by || '—'}</td>
+                    <td>
+                      <button type="button" className="btn btn-sm btn-ghost" onClick={() => handleDeleteDilution(row.id)}>
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        className="detail-panel"
+        headingLevel="h4"
+        title="Volume variances"
+        summary={recentVariances.total}
+        defaultOpen={false}
+        storageKey="tank-transfer-variances"
+      >
         <p className="field-hint" style={{ marginTop: '-0.5rem' }}>
           Each time a tank volume is set, the difference from the gallons already on the record is kept here.
           A negative variance means the tank was short. A positive variance means it held more than the record.
         </p>
         {recentVariances.hiddenCount > 0 && (
           <p className="field-hint" style={{ margin: '0.35rem 0 0.75rem' }}>
-            Showing the last {recentVariances.shown.length}. Differences of 0.25 gal or more also appear on{' '}
-            <Link to="/reports/exceptions">Exceptions</Link>.
+            Showing the last {recentVariances.shown.length}. Every set volume, leftover, and bottling variance is on{' '}
+            <Link to="/reports/volume-changes">Volume changes</Link>.
           </p>
         )}
         {recentVariances.total === 0 ? (
@@ -673,10 +964,11 @@ export function TankTransfer() {
                 <tr>
                   <th>Date</th>
                   <th>Tank</th>
-                  <th>On record</th>
-                  <th>Set to</th>
-                  <th>Variance</th>
-                  <th>Notes</th>
+                  <th className="num">On record</th>
+                  <th className="num">Set to</th>
+                  <th className="num">Variance</th>
+                  <th>Why</th>
+                  <th>Who</th>
                 </tr>
               </thead>
               <tbody>
@@ -684,20 +976,28 @@ export function TankTransfer() {
                   <tr key={row.id}>
                     <td>{formatDateDisplay(row.recorded_at)}</td>
                     <td>{row.tank_name}</td>
-                    <td>{row.book_volume_gal.toFixed(1)} gal @ {row.book_abv.toFixed(1)}%</td>
-                    <td>{row.set_volume_gal.toFixed(1)} gal @ {row.set_abv.toFixed(1)}%</td>
-                    <td>{formatTankVolumeVariance(row.variance_gal)}</td>
+                    <td className="num">{row.book_volume_gal.toFixed(1)} gal @ {row.book_abv.toFixed(1)}%</td>
+                    <td className="num">{row.set_volume_gal.toFixed(1)} gal @ {row.set_abv.toFixed(1)}%</td>
+                    <td className="num">{formatTankVolumeVariance(row.variance_gal)}</td>
                     <td>{row.notes || '—'}</td>
+                    <td>{row.changed_by || '—'}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         )}
-      </div>
+      </CollapsibleSection>
 
-      <div className="detail-panel">
-        <h4>Transfers</h4>
+      <CollapsibleSection
+        className="detail-panel"
+        headingLevel="h4"
+        title="Transfers"
+        summary={recentTransfers.total}
+        defaultOpen={false}
+        forceOpen={focusTransferId > 0}
+        storageKey="tank-transfer-transfers"
+      >
         <RecentCompletedNote
           hiddenCount={recentTransfers.hiddenCount}
           to="/reports/movements"
@@ -713,20 +1013,24 @@ export function TankTransfer() {
                   <th>Date</th>
                   <th>From</th>
                   <th>To</th>
-                  <th>Volume</th>
-                  <th>ABV</th>
+                  <th className="num">Volume</th>
+                  <th className="num">ABV</th>
                   <th>Notes</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
-                {recentTransfers.shown.map((t) => (
-                  <tr key={t.id}>
+                {transferRows.map((t) => (
+                  <tr
+                    key={t.id}
+                    id={`transfer-${t.id}`}
+                    className={Number(searchParams.get('record')) === t.id ? 'calendar-record-focus' : undefined}
+                  >
                     <td>{formatDateDisplay(t.transfer_date)}</td>
                     <td>{t.source_tank_name}</td>
                     <td>{t.dest_tank_name ?? 'Discarded'}</td>
-                    <td>{t.volume_gal.toFixed(1)} gal</td>
-                    <td>{t.abv.toFixed(1)}%</td>
+                    <td className="num">{t.volume_gal.toFixed(1)} gal</td>
+                    <td className="num">{t.abv.toFixed(1)}%</td>
                     <td>{t.notes || '—'}</td>
                     <td><button type="button" className="btn btn-sm btn-ghost" onClick={() => handleDeleteTransfer(t.id)}>Delete</button></td>
                   </tr>
@@ -735,10 +1039,10 @@ export function TankTransfer() {
             </table>
           </div>
         )}
-      </div>
+      </CollapsibleSection>
 
       {showTransferForm && (
-        <Modal title="Tank Transfer" onClose={() => setShowTransferForm(false)}>
+        <Modal title="Tank Transfer" onClose={() => finishForm(setShowTransferForm)}>
           <div className="form-grid">
             <div className="form-group">
               <label>Transfer Date</label>
@@ -780,13 +1084,9 @@ export function TankTransfer() {
                 {sourceSendsStillage && (
                   <option value={String(STILLAGE_DISCARD_DESTINATION)}>Discarded</option>
                 )}
-                {destTanksForTransfer.map((t) => {
-                  const contents = getHoldingTankContents(t.id);
-                  const label = contents.volume_gal > 0
-                    ? `${t.name} (${contents.volume_gal.toFixed(1)} gal @ ${contents.abv.toFixed(1)}%)`
-                    : `${t.name} (empty · ${t.capacity_gal} gal cap)`;
-                  return <option key={t.id} value={t.id}>{label}</option>;
-                })}
+                {destTanksForTransfer.map((t) => (
+                  <option key={t.id} value={t.id}>{tankDropdownLabel(t.name, t.id)}</option>
+                ))}
               </select>
               <p className="field-hint">
                 {sourceSendsStillage
@@ -845,7 +1145,7 @@ export function TankTransfer() {
             </div>
           </div>
           <div className="form-actions">
-            <button type="button" className="btn btn-secondary" onClick={() => setShowTransferForm(false)}>Cancel</button>
+            <button type="button" className="btn btn-secondary" onClick={() => finishForm(setShowTransferForm)}>Cancel</button>
             <button type="button" className="btn btn-primary" onClick={handleSaveTransfer}>
               {transferForm.dest_tank_equipment_id === STILLAGE_DISCARD_DESTINATION ? 'Discard' : 'Transfer'}
             </button>
@@ -854,7 +1154,7 @@ export function TankTransfer() {
       )}
 
       {showFermenterForm && (
-        <Modal title="Transfer fermenter wash" onClose={() => setShowFermenterForm(false)}>
+        <Modal title="Transfer fermenter wash" onClose={() => finishForm(setShowFermenterForm)}>
           <div className="form-grid">
             <div className="form-group">
               <label>Transfer Date</label>
@@ -932,18 +1232,143 @@ export function TankTransfer() {
               )}
             </div>
             <div className="form-group full-width">
-              <label>Notes</label>
+              <label htmlFor="fermenter-transfer-why">
+                {fermenterForm.dest_equipment_id === DISCARD_DESTINATION ? 'Why these leftovers cannot be used' : 'Notes'}
+              </label>
               <input
+                id="fermenter-transfer-why"
                 value={fermenterForm.notes}
                 onChange={(e) => setFermenterForm({ ...fermenterForm, notes: e.target.value })}
-                placeholder={fermenterForm.dest_equipment_id === DISCARD_DESTINATION ? 'Leftovers' : 'Optional'}
+                placeholder={fermenterForm.dest_equipment_id === DISCARD_DESTINATION ? 'Required' : 'Optional'}
+                required={fermenterForm.dest_equipment_id === DISCARD_DESTINATION}
               />
+              {fermenterForm.dest_equipment_id === DISCARD_DESTINATION && (
+                <p className="field-hint">Recorded by {changedBy}. This shows on Reports → Volume changes.</p>
+              )}
             </div>
           </div>
           <div className="form-actions">
-            <button type="button" className="btn btn-secondary" onClick={() => setShowFermenterForm(false)}>Cancel</button>
+            <button type="button" className="btn btn-secondary" onClick={() => finishForm(setShowFermenterForm)}>Cancel</button>
             <button type="button" className="btn btn-primary" onClick={handleSaveFermenterTransfer}>
               {fermenterForm.dest_equipment_id === DISCARD_DESTINATION ? 'Record leftovers' : 'Transfer'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {showWaterDown && (
+        <Modal title="Water down in the tank" onClose={() => finishForm(setShowWaterDown)}>
+          <p className="field-hint" style={{ marginTop: 0 }}>
+            Add water to the alcohol already in this tank. The spirit stays here.
+            The finished gallons include contraction, so the tank rises by less than the water added.
+          </p>
+          <div className="form-grid">
+            <div className="form-group">
+              <label htmlFor="water-down-date">Date</label>
+              <DatePicker
+                id="water-down-date"
+                value={waterDownForm.recorded_at}
+                onChange={(recorded_at) => setWaterDownForm({ ...waterDownForm, recorded_at })}
+              />
+            </div>
+            <div className="form-group full-width">
+              <label htmlFor="water-down-tank">Tank</label>
+              <select
+                id="water-down-tank"
+                data-testid="water-down-tank"
+                value={waterDownTankId || ''}
+                onChange={(event) => setWaterDownTankId(event.target.value ? parseInt(event.target.value, 10) : 0)}
+              >
+                <option value="">— Select tank —</option>
+                {waterDownTanks.map((tank) => (
+                  <option key={tank.id} value={tank.id}>
+                    {tankDropdownLabel(tank.name, tank.id, { volume: true })}
+                  </option>
+                ))}
+              </select>
+              {waterDownTanks.length === 0 && (
+                <p className="field-hint">No holding tank or collection vessel has alcohol to water down.</p>
+              )}
+              {waterDownTank && (
+                <p className="field-hint">
+                  In tank: {waterDownTank.volume_gal.toFixed(1)} gal at {waterDownTank.abv.toFixed(1)}% ABV
+                  {waterDownTank.capacity_gal > 0
+                    ? `. Room for ${Math.max(0, waterDownTank.capacity_gal - waterDownTank.volume_gal).toFixed(1)} gal.`
+                    : '.'}
+                </p>
+              )}
+            </div>
+            <div className="form-group">
+              <label htmlFor="water-down-mode">How to water it down</label>
+              <select
+                id="water-down-mode"
+                data-testid="water-down-mode"
+                value={waterDownForm.mode}
+                onChange={(event) => setWaterDownForm({
+                  ...waterDownForm,
+                  mode: event.target.value === 'water' ? 'water' : 'target',
+                })}
+              >
+                <option value="target">Bring it down to an ABV</option>
+                <option value="water">Add gallons of water</option>
+              </select>
+            </div>
+            {waterDownForm.mode === 'target' ? (
+              <div className="form-group">
+                <label htmlFor="water-down-target">Target ABV (%)</label>
+                <input
+                  id="water-down-target"
+                  data-testid="water-down-target"
+                  type="number"
+                  min={0}
+                  max={MAX_ENTERED_ABV}
+                  step="0.1"
+                  value={waterDownForm.target_abv}
+                  onChange={(event) => setWaterDownForm({
+                    ...waterDownForm,
+                    target_abv: limitAbvInput(event.target.value),
+                  })}
+                />
+              </div>
+            ) : (
+              <div className="form-group">
+                <label htmlFor="water-down-water">Water (gal)</label>
+                <input
+                  id="water-down-water"
+                  data-testid="water-down-water"
+                  type="number"
+                  min={0}
+                  step="0.1"
+                  value={waterDownForm.water_gal}
+                  onChange={(event) => setWaterDownForm({ ...waterDownForm, water_gal: event.target.value })}
+                />
+              </div>
+            )}
+            <div className="form-group full-width">
+              <label htmlFor="water-down-notes">Notes</label>
+              <input
+                id="water-down-notes"
+                value={waterDownForm.notes}
+                onChange={(event) => setWaterDownForm({ ...waterDownForm, notes: event.target.value })}
+                placeholder="Optional"
+              />
+            </div>
+          </div>
+          {waterDownPlan && (
+            <p
+              className="field-hint"
+              data-testid="water-down-preview"
+              style={waterDownPlan.ok ? undefined : { color: 'var(--danger)' }}
+            >
+              {waterDownPlan.ok
+                ? `Blend ${waterDownPlan.waterGal.toFixed(2)} gal of water into the spirit. Alcohol stays ${((waterDownPlan.spiritGal * waterDownPlan.spiritAbvPercent) / 100).toFixed(2)} gal. The tank goes from ${waterDownPlan.spiritGal.toFixed(1)} gal at ${waterDownPlan.spiritAbvPercent.toFixed(1)}% ABV to ${waterDownPlan.finishedGal.toFixed(1)} gal at ${waterDownPlan.finishedAbvPercent.toFixed(1)}% ABV. Contraction is ${waterDownPlan.contractionGal.toFixed(2)} gal of volume, not a loss of alcohol.`
+                : waterDownPlan.message}
+            </p>
+          )}
+          <div className="form-actions">
+            <button type="button" className="btn btn-secondary" onClick={() => finishForm(setShowWaterDown)}>Cancel</button>
+            <button type="button" className="btn btn-primary" data-testid="water-down-save" onClick={handleSaveWaterDown}>
+              Water down
             </button>
           </div>
         </Modal>
@@ -1000,13 +1425,19 @@ export function TankTransfer() {
               />
             </div>
             <div className="form-group full-width">
-              <label htmlFor="on-hand-notes">Notes</label>
+              <label htmlFor="on-hand-notes">
+                {onHandReadingChanged ? 'Why was this changed?' : 'Notes'}
+              </label>
               <input
                 id="on-hand-notes"
                 value={onHandForm.notes}
                 onChange={(e) => setOnHandForm({ ...onHandForm, notes: e.target.value })}
-                placeholder="Transfer was short, or an earlier entry was wrong"
+                placeholder={onHandReadingChanged ? 'Required' : 'Optional unless the gallons or ABV change'}
+                required={onHandReadingChanged}
               />
+              <p className="field-hint">
+                Recorded by {changedBy}. A changed volume or ABV, and a cleared reading, show on Reports → Volume changes.
+              </p>
             </div>
           </div>
           <div className="form-actions">

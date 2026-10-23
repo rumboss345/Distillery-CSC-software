@@ -7,6 +7,9 @@ import { limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
 import { defaultAssignee } from '../lib/assignee';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
 import { formatDateDisplay, formatRecordedAt } from '../lib/date-input';
+import { useEquipmentReturn } from '../lib/equipment-return';
+import { roundAbv, roundVolume } from '../lib/reporting/alcohol-units';
+import { formatDistillationAlcoholResult, formatDistillationLossSummary } from '../lib/distillation-loss';
 import { latestCompleted } from '../lib/recent-completed';
 import {
   getDistillationRuns,
@@ -21,12 +24,18 @@ import {
   getActiveDistillationRunOnStill,
   getFloorEquipment,
   getFermenterWashSourceFermenters,
+  getPlannedDistillationForFermenter,
   getFermenterChargeCapacityGal,
   getLatestFermentationBrix,
-  getChargeableHoldingTanks,
+  estimatedWashChargeAbv,
+  getDistillationCollectionLoss,
+  recordDistillationCollectionLoss,
+  getChargeableSourceTanks,
+  getDistillationRunTankSources,
+  listDistillationTankSources,
+  type DistillationTankSourceInput,
   getStillageTanks,
   defaultTankForCutType,
-  getCollectionVesselStoredCutType,
   getCollectionVessels,
   getCutDestinationsForRun,
   getHoldingTankContents,
@@ -39,12 +48,25 @@ import {
   useRefreshKey,
 } from '../db/queries';
 import { AbvVolumeTemperatureFields } from '../components/AbvVolumeTemperatureFields';
+import {
+  blendDistillationTankPulls,
+  distillationChargeTypeChoices,
+  distillationSourceSummary,
+  distillationTankPullError,
+  fitDistillationTankPulls,
+  tanksOfEquipmentType,
+  type DistillationTankPull,
+} from '../lib/distillation-source-tanks';
+import { mixedSpiritConfirmMessage } from '../lib/blend-spirit-mix';
+import { equipmentTypeLabel } from '../lib/equipment';
+import { formatTankMenuLabel, tankContentsPhrase, tankDropdownLabel } from '../lib/tank-menu-label';
 import { AbvTemperatureInput, correctedAbvFromInputs } from '../components/AbvTemperatureInput';
 import { AdminCredentialConfirmModal } from '../components/AdminCredentialConfirmModal';
 import { GinBotanicalFields } from '../components/GinBotanicalFields';
 import { Modal } from '../components/Modal';
 import { RecentCompletedNote } from '../components/RecentCompletedNote';
 import { StatusBadge } from '../components/StatusBadge';
+import { StatusDateLog } from '../components/StatusDateLog';
 import {
   ALL_RUN_TYPES,
   isFermenterSourcedRun,
@@ -59,11 +81,14 @@ import {
   botanicalsFromRecipe,
   emptyGinBotanical,
   formatGinBotanicalsSummary,
+  ginBotanicalPlaceError,
 } from '../lib/gin-botanicals';
 import { FERMENTATION_READY_MAX_BRIX, isBrixReadyForDistillation } from '../lib/fermentation';
 import { eventDateWhenLeavingPlanned, localIsoDate, localIsoDateTime } from '../lib/planned-event-date';
+import { plannedFermenterDistillationMessage } from '../lib/planned-fermenter-distillation';
 import {
   chargeExceedsStillCapacity,
+  distillationRunShowsCuts,
   plannedRecordSkipsEquipmentStatus,
   stillAlreadyOccupiedMessage,
   stillRunOccupiesEquipment,
@@ -74,7 +99,7 @@ import {
   spiritChargeDetail,
   type SpiritProofPlace,
 } from '../lib/spirit-charge-proof';
-import { runAsksForStillage, stillageSaveError, stillageSummary } from '../lib/stillage';
+import { runAsksForStillage, stillageSaveError, stillageSummary, suggestedStillageVolumeGal } from '../lib/stillage';
 import type {
   DistillationCutView,
   DistillationRun,
@@ -86,6 +111,8 @@ import type {
 } from '../types';
 
 const RUN_STATUSES: RunStatus[] = ['planned', 'running', 'complete'];
+/** The list shows what is distilling, then what is planned, then finished runs. */
+const RUN_STATUS_LIST_ORDER: RunStatus[] = ['running', 'planned', 'complete'];
 
 const RUN_STATUS_GROUP_HEADINGS: Record<RunStatus, string> = {
   planned: 'Planned',
@@ -115,9 +142,17 @@ const emptyRun = (runType: DistillationRunType = 'wash'): Omit<DistillationRun, 
   notes: '',
 });
 
+interface SourceTankLine {
+  key: string;
+  equipmentType: string;
+  tankId: number | null;
+  volumeGal: number;
+}
+
 export function Distillation() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { returnToEquipment } = useEquipmentReturn();
   const calendarPlanHandled = useRef(false);
   const { key, refresh } = useRefreshKey();
   const runs = getDistillationRuns();
@@ -131,6 +166,18 @@ export function Distillation() {
   const [editCutId, setEditCutId] = useState<number | undefined>();
   const [editRunId, setEditRunId] = useState<number | undefined>();
   const [runForm, setRunForm] = useState(emptyRun());
+  const sourceLineSeq = useRef(1);
+  const freshSourceLine = (partial?: Partial<SourceTankLine>): SourceTankLine => {
+    sourceLineSeq.current += 1;
+    return {
+      key: `src-${sourceLineSeq.current}`,
+      equipmentType: '',
+      tankId: null,
+      volumeGal: 0,
+      ...partial,
+    };
+  };
+  const [sourceLines, setSourceLines] = useState<SourceTankLine[]>(() => [freshSourceLine()]);
   const [plannedScheduleDate, setPlannedScheduleDate] = useState<string | null>(null);
   const planOnly = plannedRecordSkipsEquipmentStatus(runForm.status);
   const equipmentListOptions = planOnly ? { includeUnavailable: true as const } : undefined;
@@ -165,10 +212,17 @@ export function Distillation() {
     setAppliedCutsRunId(0);
   } else if (cutsRunId && appliedCutsRunId !== cutsRunId && runs.some((run) => run.id === cutsRunId)) {
     setAppliedCutsRunId(cutsRunId);
-    setSelectedRunId(cutsRunId);
+    const linked = runs.find((run) => run.id === cutsRunId);
+    if (linked && distillationRunShowsCuts(linked.status)) setSelectedRunId(cutsRunId);
   }
 
   void key;
+
+  useEffect(() => {
+    if (!selectedRunId) return;
+    recordDistillationCollectionLoss(selectedRunId);
+    refresh();
+  }, [selectedRunId, refresh]);
 
   const fermenterSourceOptions = useMemo(() => {
     if (runForm.run_type !== 'wash' && runForm.run_type !== 'heavy_rum') return [];
@@ -207,19 +261,38 @@ export function Distillation() {
     key,
   ]);
 
-  const chargeableSourceTanks = isTankSourcedRun(runForm.run_type)
-    ? getChargeableHoldingTanks(editRunId, equipmentListOptions)
-    : [];
-
-  const selectedSourceTank = chargeableSourceTanks.find(
-    (t) => t.id === runForm.source_holding_tank_equipment_id,
+  const chargeableSourceTanks = (isTankSourcedRun(runForm.run_type)
+    ? getChargeableSourceTanks(editRunId, equipmentListOptions)
+    : []
+  ).filter((tank) => (
+    tank.equipment_type !== 'stillage_tank'
+    || sourceLines.some((line) => line.tankId === tank.id)
+  ));
+  const sourceTypeOptions = distillationChargeTypeChoices([
+    ...chargeableSourceTanks.map((tank) => tank.equipment_type),
+    ...sourceLines.map((line) => line.equipmentType),
+  ]);
+  const chosenSourceTankIds = new Set(
+    sourceLines.map((line) => line.tankId).filter((id): id is number => id != null && id > 0),
   );
-  const savedLowWineTankName = runForm.source_holding_tank_equipment_id
-    ? equipment.find((e) => e.id === runForm.source_holding_tank_equipment_id)?.name
-    : undefined;
-  const selectedLowWineAvailable = runForm.source_holding_tank_equipment_id
-    ? getHoldingTankContents(runForm.source_holding_tank_equipment_id, editRunId)
-    : null;
+
+  const tankPulls: DistillationTankPull[] = sourceLines.flatMap((line) => {
+    if (!line.tankId) return [];
+    const tank = chargeableSourceTanks.find((item) => item.id === line.tankId);
+    return [{
+      tankId: line.tankId,
+      volumeGal: Number(line.volumeGal) || 0,
+      abv: tank ? roundAbv(tank.available_abv) : 0,
+      tankName: tank?.name ?? equipment.find((item) => item.id === line.tankId)?.name,
+    }];
+  });
+  const blendedPull = blendDistillationTankPulls(tankPulls);
+  const sourceTankNames = tankPulls
+    .filter((pull) => pull.volumeGal > 0)
+    .map((pull) => pull.tankName ?? '')
+    .filter(Boolean);
+  const primarySourceTank = chargeableSourceTanks.find((tank) => tank.id === tankPulls[0]?.tankId)
+    ?? chargeableSourceTanks.find((tank) => tank.id === runForm.source_holding_tank_equipment_id);
 
   const selectedStill = stills.find((s) => s.name === runForm.still_name);
   const fermenterSourceOptionLabel = (
@@ -232,6 +305,15 @@ export function Distillation() {
       : `below ${FERMENTATION_READY_MAX_BRIX}° recommended`;
     return `${row.equipment_name} — ${row.batch_number} (${row.volume_gal.toFixed(1)} gal · ${brixNote}, ${readyNote})`;
   };
+
+  const sourceTankLabel = (
+    tank: (typeof chargeableSourceTanks)[number],
+  ) => formatTankMenuLabel(
+    tank.name,
+    tankContentsPhrase(tank.id) ?? 'Spirit',
+    tank.available_abv,
+    tank.available_gal,
+  );
 
   const clearChargeProof = () => {
     setProofTarget('');
@@ -251,12 +333,64 @@ export function Distillation() {
       assigned_user_name: runForm.assigned_user_name,
     });
     clearChargeProof();
+    setSourceLines([freshSourceLine()]);
     setBotanicals(runType === 'gin' ? [emptyGinBotanical()] : []);
     setGinRecipeId('');
     setGinRecipeName('');
   };
 
+  const commitSourceLines = (next: SourceTankLine[]) => {
+    setSourceLines(next);
+    const pulls: DistillationTankPull[] = next.flatMap((line) => {
+      if (!line.tankId) return [];
+      const tank = chargeableSourceTanks.find((item) => item.id === line.tankId);
+      return [{
+        tankId: line.tankId,
+        volumeGal: Number(line.volumeGal) || 0,
+        abv: tank ? roundAbv(tank.available_abv) : 0,
+        tankName: tank?.name,
+      }];
+    });
+    const blend = blendDistillationTankPulls(pulls);
+    const primaryId = pulls.find((pull) => pull.volumeGal > 0)?.tankId ?? pulls[0]?.tankId ?? null;
+    setRunForm((prev) => ({
+      ...prev,
+      source_holding_tank_equipment_id: primaryId,
+      charge_volume_gal: blend.volumeGal,
+      charge_abv: blend.abv,
+    }));
+    setChargeAbvObserved(blend.abv != null ? String(blend.abv) : '');
+    if (blend.abv != null) setChargeTempF('60');
+  };
+
+  const updateSourceLine = (key: string, patch: Partial<SourceTankLine>) => {
+    commitSourceLines(sourceLines.map((line) => (line.key === key ? { ...line, ...patch } : line)));
+  };
+
+  const openPlannedFermenterRun = (fermenterId: number, runType: DistillationRunType) => {
+    const planned = getPlannedDistillationForFermenter(fermenterId, runType);
+    if (!planned || planned.id === editRunId) return false;
+    const fermenterName = equipment.find((item) => item.id === fermenterId)?.name
+      ?? fermenterSourceOptions.find((item) => item.floor_equipment_id === fermenterId)?.equipment_name
+      ?? 'This fermenter';
+    alert(plannedFermenterDistillationMessage({
+      fermenterName,
+      runLabel: runTypeLabel(planned.run_type),
+      batchNumber: planned.batch_number,
+      plannedDate: formatDateDisplay(planned.run_date),
+    }));
+    openEditRun(planned);
+    return true;
+  };
+
   const handleFermenterSourceChange = (equipmentId: number | null) => {
+    if (
+      equipmentId
+      && isFermenterSourcedRun(runForm.run_type)
+      && openPlannedFermenterRun(equipmentId, runForm.run_type)
+    ) {
+      return;
+    }
     const row = fermenterSourceOptions.find((f) => f.floor_equipment_id === equipmentId);
     const chargeGal = row && equipmentId
       ? runForm.run_type === 'heavy_rum'
@@ -268,25 +402,14 @@ export function Distillation() {
       source_fermenter_equipment_id: equipmentId,
       source_mash_batch_id: row?.mash_batch_id ?? null,
       charge_volume_gal: chargeGal,
+      charge_abv: row && equipmentId ? estimatedWashChargeAbv(row.mash_batch_id, equipmentId) : null,
     });
   };
 
-  const handleRunSourceTankChange = (tankId: number | null) => {
-    const tank = chargeableSourceTanks.find((t) => t.id === tankId);
-    setRunForm({
-      ...runForm,
-      source_holding_tank_equipment_id: tankId,
-      charge_volume_gal: tank?.available_gal ?? runForm.charge_volume_gal,
-      charge_abv: tank ? tank.available_abv : null,
-      dest_holding_tank_equipment_id: null,
-    });
-    if (tank) {
-      setChargeAbvObserved(tank.available_abv.toString());
-      setChargeTempF('60');
-    } else {
-      setChargeAbvObserved('');
-      setChargeTempF('60');
-    }
+  const setPrimarySpiritPull = (gallons: number) => {
+    const first = sourceLines[0] ?? freshSourceLine();
+    const rest = sourceLines.slice(1).map((line) => ({ ...line, volumeGal: 0 }));
+    commitSourceLines([{ ...first, volumeGal: roundVolume(gallons) }, ...rest]);
   };
 
   const syncChargeAbvFromObservation = (observed: string, tempF: string) => {
@@ -294,6 +417,11 @@ export function Distillation() {
     setChargeTempF(tempF);
     const corrected = correctedAbvFromInputs(observed, tempF);
     setRunForm((prev) => ({ ...prev, charge_abv: corrected }));
+  };
+
+  const collectedCutGal = (runId: number | undefined): number => {
+    if (!runId) return 0;
+    return getDistillationCuts(runId).reduce((sum, cut) => sum + (cut.volume_gal > 0 ? cut.volume_gal : 0), 0);
   };
 
   const handleRunStatusChange = (status: RunStatus) => {
@@ -305,7 +433,13 @@ export function Distillation() {
       run_date = plannedScheduleDate;
       setPlannedScheduleDate(null);
     }
-    setRunForm({ ...runForm, status, run_date });
+    const stillageUnset = runForm.stillage_volume_gal == null || Number.isNaN(runForm.stillage_volume_gal);
+    const stillage_volume_gal = status === 'complete'
+      && runAsksForStillage(runForm.run_type)
+      && stillageUnset
+      ? suggestedStillageVolumeGal(runForm.charge_volume_gal, collectedCutGal(editRunId))
+      : runForm.stillage_volume_gal;
+    setRunForm({ ...runForm, status, run_date, stillage_volume_gal });
   };
 
   const handleStillChange = (stillId: number | '') => {
@@ -324,6 +458,7 @@ export function Distillation() {
     setChargeAbvObserved('');
     setChargeTempF('60');
     clearChargeProof();
+    setSourceLines([freshSourceLine()]);
     setBotanicals(runType === 'gin' ? [emptyGinBotanical()] : []);
     setGinRecipeId('');
     setGinRecipeName('');
@@ -343,6 +478,14 @@ export function Distillation() {
 
     if (fromFermenter) {
       const runType: DistillationRunType = searchParams.get('runType') === 'heavy_rum' ? 'heavy_rum' : 'wash';
+      if (openPlannedFermenterRun(fermenterId, runType)) {
+        const next = stripCalendarPlanQuery(searchParams);
+        next.delete('chargeFermenter');
+        next.delete('chargeTank');
+        next.delete('runType');
+        setSearchParams(next, { replace: true });
+        return;
+      }
       const row = getFermenterWashSourceFermenters().find((f) => f.floor_equipment_id === fermenterId);
       const chargeGal = row
         ? runType === 'heavy_rum'
@@ -357,24 +500,32 @@ export function Distillation() {
         source_fermenter_equipment_id: row ? fermenterId : null,
         source_mash_batch_id: row?.mash_batch_id ?? null,
         charge_volume_gal: chargeGal,
+        charge_abv: row ? estimatedWashChargeAbv(row.mash_batch_id, fermenterId) : null,
       });
       setChargeAbvObserved('');
       setChargeTempF('60');
       clearChargeProof();
+      setSourceLines([freshSourceLine()]);
       setShowRunForm(true);
     } else if (fromTank) {
-      const tank = getChargeableHoldingTanks().find((t) => t.id === tankId);
+      const tank = getChargeableSourceTanks().find((t) => t.id === tankId);
+      const sourceTank = tank && tank.equipment_type !== 'stillage_tank' ? tank : undefined;
       setEditRunId(undefined);
       setPlannedScheduleDate(null);
+      setSourceLines([freshSourceLine(sourceTank ? {
+        equipmentType: sourceTank.equipment_type,
+        tankId: sourceTank.id,
+        volumeGal: roundVolume(sourceTank.available_gal),
+      } : {})]);
       setRunForm({
         ...emptyRun('low_wines'),
         ...defaultAssignee(user),
-        source_holding_tank_equipment_id: tank ? tankId : null,
-        charge_volume_gal: tank?.available_gal ?? 0,
-        charge_abv: tank?.available_abv ?? null,
+        source_holding_tank_equipment_id: sourceTank ? tankId : null,
+        charge_volume_gal: sourceTank ? roundVolume(sourceTank.available_gal) : 0,
+        charge_abv: sourceTank ? roundAbv(sourceTank.available_abv) : null,
         dest_holding_tank_equipment_id: null,
       });
-      setChargeAbvObserved(tank && tank.available_abv > 0 ? tank.available_abv.toString() : '');
+      setChargeAbvObserved(sourceTank && sourceTank.available_abv > 0 ? String(roundAbv(sourceTank.available_abv)) : '');
       setChargeTempF('60');
       clearChargeProof();
       setShowRunForm(true);
@@ -389,6 +540,18 @@ export function Distillation() {
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams, user]);
 
+  const calendarRecordHandled = useRef(false);
+  useEffect(() => {
+    const recordId = Number(searchParams.get('record')) || 0;
+    if (!recordId || calendarRecordHandled.current) return;
+    calendarRecordHandled.current = true;
+    const run = getDistillationRuns().find((item) => item.id === recordId);
+    if (run) openEditRun(run);
+    const next = new URLSearchParams(searchParams);
+    next.delete('record');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
   const openEditRun = (run: DistillationRun) => {
     setEditRunId(run.id);
     setPlannedScheduleDate(null);
@@ -402,7 +565,11 @@ export function Distillation() {
         : run.dest_holding_tank_equipment_id ?? null,
       charge_volume_gal: proofed ? run.proof_spirit_gal! : run.charge_volume_gal,
       charge_abv: proofed ? (run.proof_spirit_abv ?? run.charge_abv) : run.charge_abv ?? null,
-      stillage_volume_gal: run.stillage_volume_gal ?? null,
+      stillage_volume_gal: run.stillage_volume_gal ?? (
+        run.status === 'complete' && runAsksForStillage(run.run_type)
+          ? suggestedStillageVolumeGal(run.charge_volume_gal, collectedCutGal(run.id))
+          : null
+      ),
       stillage_discarded: run.stillage_discarded ?? 0,
       stillage_holding_tank_equipment_id: run.stillage_holding_tank_equipment_id ?? null,
     });
@@ -422,6 +589,27 @@ export function Distillation() {
     setBotanicals(savedBotanicals.length > 0 ? botanicalsFromRecipe(savedBotanicals) : [emptyGinBotanical()]);
     setGinRecipeId('');
     setGinRecipeName('');
+    if (isTankSourcedRun(run.run_type ?? 'wash')) {
+      const savedSources = getDistillationRunTankSources(run.id);
+      if (savedSources.length > 0) {
+        setSourceLines(savedSources.map((source) => freshSourceLine({
+          equipmentType: source.equipmentType,
+          tankId: source.tankId,
+          volumeGal: source.volumeGal,
+        })));
+      } else if (run.source_holding_tank_equipment_id) {
+        const savedTank = equipment.find((item) => item.id === run.source_holding_tank_equipment_id);
+        setSourceLines([freshSourceLine({
+          equipmentType: savedTank?.equipment_type ?? '',
+          tankId: run.source_holding_tank_equipment_id,
+          volumeGal: proofed ? run.proof_spirit_gal! : run.charge_volume_gal,
+        })]);
+      } else {
+        setSourceLines([freshSourceLine()]);
+      }
+    } else {
+      setSourceLines([freshSourceLine()]);
+    }
     setShowRunForm(true);
   };
 
@@ -478,13 +666,15 @@ export function Distillation() {
   };
 
   const sourceTankFreeGal = (() => {
-    if (!runForm.source_holding_tank_equipment_id || !selectedLowWineAvailable) return null;
-    const tank = equipment.find((item) => item.id === runForm.source_holding_tank_equipment_id);
+    const tank = primarySourceTank;
     if (!tank || !(tank.capacity_gal > 0)) return null;
-    return Math.max(0, tank.capacity_gal - selectedLowWineAvailable.volume_gal);
+    return Math.max(0, tank.capacity_gal - tank.available_gal);
   })();
+  const availableSpiritGal = chargeableSourceTanks
+    .filter((tank) => chosenSourceTankIds.has(tank.id))
+    .reduce((sum, tank) => sum + tank.available_gal, 0);
 
-  const pulledSpiritAbv = runForm.charge_abv ?? selectedLowWineAvailable?.abv ?? 0;
+  const pulledSpiritAbv = blendedPull.abv ?? runForm.charge_abv ?? 0;
   const spiritProofPlan = isTankSourcedRun(runForm.run_type) && proofTarget.trim()
     ? (chargeSizeMode === 'finished'
       ? planSpiritChargeForFinishedVolume({
@@ -493,10 +683,10 @@ export function Distillation() {
         targetAbvPercent: Number(proofTarget),
         stillCapacityGal: selectedStill && selectedStill.capacity_gal > 0 ? selectedStill.capacity_gal : null,
         sourceTankFreeGal,
-        availableSpiritGal: selectedLowWineAvailable?.volume_gal ?? null,
+        availableSpiritGal: chosenSourceTankIds.size > 0 ? availableSpiritGal : null,
         place: proofPlace,
         stillName: selectedStill?.name,
-        tankName: selectedSourceTank?.name ?? savedLowWineTankName,
+        tankName: distillationSourceSummary(sourceTankNames) || undefined,
       })
       : planSpiritChargeProof({
         spiritGal: runForm.charge_volume_gal,
@@ -506,7 +696,7 @@ export function Distillation() {
         sourceTankFreeGal,
         place: proofPlace,
         stillName: selectedStill?.name,
-        tankName: selectedSourceTank?.name ?? savedLowWineTankName,
+        tankName: distillationSourceSummary(sourceTankNames) || undefined,
       }))
     : null;
   const tailsToCharge = chargeSizeMode === 'finished' && spiritProofPlan?.ok
@@ -576,15 +766,20 @@ export function Distillation() {
       }
       try {
         saveDistillationRun(runForm, editRunId);
-        setShowRunForm(false);
+        closeRunForm();
         refresh();
       } catch (error) {
         alert(error instanceof Error ? error.message : 'Could not save distillation run.');
       }
       return;
     } else {
-      if (!runForm.source_holding_tank_equipment_id) {
-        alert('Select the low wines holding tank to charge from.');
+      const availableByTank = new Map(chargeableSourceTanks.map((tank) => [tank.id, tank.available_gal]));
+      const pullsToSave = chargeSizeMode === 'finished' && spiritProofPlan?.ok
+        ? fitDistillationTankPulls(tankPulls, spiritProofPlan.spiritGal, availableByTank)
+        : tankPulls;
+      const pullError = distillationTankPullError(pullsToSave, availableByTank);
+      if (pullError) {
+        alert(pullError);
         return;
       }
       if (chargeSizeMode === 'finished' && !proofTarget.trim()) {
@@ -594,43 +789,67 @@ export function Distillation() {
       if (tailsToCharge <= 0) {
         alert(chargeSizeMode === 'finished'
           ? 'Enter the final volume in the still and the proof it needs.'
-          : 'Enter the charge volume drawn from the low wines tank.');
+          : 'Enter the gallons drawn from each tank.');
         return;
       }
-      const available = getHoldingTankContents(
-        runForm.source_holding_tank_equipment_id,
-        editRunId,
-      );
-      if (tailsToCharge > available.volume_gal + 0.01) {
-        alert(`Only ${available.volume_gal.toFixed(1)} gal available in that tank.`);
+      if (
+        chargeSizeMode === 'finished'
+        && spiritProofPlan?.ok
+        && blendDistillationTankPulls(pullsToSave).volumeGal + 0.01 < spiritProofPlan.spiritGal
+      ) {
+        alert('The selected tanks do not hold enough spirit for that still volume.');
         return;
       }
-      const chargeAbv = runForm.charge_abv ?? available.abv;
+      const savedBlend = blendDistillationTankPulls(pullsToSave);
+      const chargeAbv = savedBlend.abv ?? blendedPull.abv ?? runForm.charge_abv ?? 0;
+      const tankSources: DistillationTankSourceInput[] = pullsToSave
+        .filter((pull) => pull.volumeGal > 0)
+        .map((pull) => ({
+          tankId: pull.tankId,
+          volumeGal: roundVolume(pull.volumeGal),
+          abv: roundAbv(pull.abv),
+        }));
       const savedRun = spiritProofPlan?.ok
         ? {
           ...runForm,
           charge_volume_gal: spiritProofPlan.stillGal,
           charge_abv: spiritProofPlan.targetAbvPercent,
           proof_spirit_gal: spiritProofPlan.spiritGal,
-          proof_spirit_abv: spiritProofPlan.spiritAbvPercent,
+          proof_spirit_abv: savedBlend.abv ?? spiritProofPlan.spiritAbvPercent,
           proof_water_gal: spiritProofPlan.waterGal,
           proof_place: spiritProofPlan.place,
         }
         : {
           ...runForm,
+          charge_volume_gal: savedBlend.volumeGal,
           charge_abv: chargeAbv,
           proof_spirit_gal: null,
           proof_spirit_abv: null,
           proof_water_gal: 0,
           proof_place: null,
         };
+      if (savedRun.run_type === 'gin') {
+        const placeError = ginBotanicalPlaceError(botanicals);
+        if (placeError) {
+          alert(placeError);
+          return;
+        }
+      }
+      const mixMessage = mixedSpiritConfirmMessage(pullsToSave.filter((pull) => pull.volumeGal > 0).map((pull) => ({
+        spirit: tankContentsPhrase(pull.tankId) || 'Spirit',
+        place: pull.tankName
+          || equipment.find((item) => item.id === pull.tankId)?.name
+          || 'Tank',
+      })));
+      if (mixMessage && !confirm(mixMessage)) return;
       try {
         saveDistillationRun(
           savedRun,
           editRunId,
           savedRun.run_type === 'gin' ? botanicals : undefined,
+          tankSources,
         );
-        setShowRunForm(false);
+        closeRunForm();
         refresh();
       } catch (error) {
         alert(error instanceof Error ? error.message : 'Could not save distillation run.');
@@ -638,12 +857,22 @@ export function Distillation() {
     }
   };
 
+  const tankSourceNamesByRun = new Map<number, string[]>();
+  for (const source of listDistillationTankSources()) {
+    const names = tankSourceNamesByRun.get(source.runId) ?? [];
+    if (source.tankName) names.push(source.tankName);
+    tankSourceNamesByRun.set(source.runId, names);
+  }
+
   const runSourceSummary = (run: DistillationRun & {
     source_holding_tank_name?: string;
     dest_holding_tank_name?: string;
   }) => {
     if (isTankSourcedRun(run.run_type ?? 'wash')) {
-      const from = run.source_holding_tank_name ?? fermenterLabel(run.source_holding_tank_equipment_id);
+      const savedNames = tankSourceNamesByRun.get(run.id) ?? [];
+      const from = savedNames.length > 0
+        ? distillationSourceSummary(savedNames)
+        : (run.source_holding_tank_name ?? fermenterLabel(run.source_holding_tank_equipment_id));
       const to = run.dest_holding_tank_name ?? fermenterLabel(run.dest_holding_tank_equipment_id);
       return to ? `${from} → ${to}` : from;
     }
@@ -653,12 +882,12 @@ export function Distillation() {
 
   const runsByStatus = useMemo(() => {
     const byStatus = Object.fromEntries(
-      RUN_STATUSES.map((status) => [status, [] as DistillationRunView[]]),
+      RUN_STATUS_LIST_ORDER.map((status) => [status, [] as DistillationRunView[]]),
     ) as Record<RunStatus, DistillationRunView[]>;
     for (const run of runs) {
       byStatus[run.status].push(run);
     }
-    return RUN_STATUSES
+    return RUN_STATUS_LIST_ORDER
       .map((status) => {
         const matching = byStatus[status];
         if (status !== 'complete') {
@@ -689,6 +918,11 @@ export function Distillation() {
 
   const suggestCutTank = (cutType: CutType, run?: DistillationRun, runCuts = cuts) =>
     defaultTankForCutType(cutType, { run, existingCuts: runCuts, excludeCutId: editCutId });
+
+  const closeRunForm = () => {
+    setShowRunForm(false);
+    returnToEquipment();
+  };
 
   const closeCutForm = () => {
     setShowCutForm(false);
@@ -829,6 +1063,20 @@ export function Distillation() {
           return;
         }
       }
+      if (baseVolume > 0.05 && selectedRun) {
+        const cutName = cutForm.cut_type.charAt(0).toUpperCase() + cutForm.cut_type.slice(1);
+        const mixMessage = mixedSpiritConfirmMessage([
+          {
+            spirit: `${runTypeLabel(selectedRun.run_type)} · ${cutName}`,
+            place: selectedRun.batch_number,
+          },
+          {
+            spirit: tankContentsPhrase(tankId) || 'Spirit',
+            place: tank?.name ?? 'Tank',
+          },
+        ]);
+        if (mixMessage && !confirm(mixMessage)) return;
+      }
     }
     try {
       saveDistillationCut({
@@ -847,25 +1095,10 @@ export function Distillation() {
     }
     closeCutForm();
     refresh();
+    returnToEquipment();
   };
 
-  const selectedTankContents = cutForm.holding_tank_equipment_id
-    ? getHoldingTankContents(cutForm.holding_tank_equipment_id)
-    : null;
-
-  const tankOptionLabel = (tank: { id: number; name: string; capacity_gal: number }) => {
-    const contents = getHoldingTankContents(tank.id);
-    const storedCut = getCollectionVesselStoredCutType(tank.id, editCutId);
-    const cutNote = storedCut === 'mixed'
-      ? ' · mixed cuts'
-      : storedCut
-        ? ` · holds ${storedCut}`
-        : '';
-    if (contents.volume_gal <= 0) {
-      return `${tank.name} (empty · ${tank.capacity_gal} gal cap${cutNote})`;
-    }
-    return `${tank.name} (${contents.volume_gal.toFixed(1)} gal @ ${contents.abv.toFixed(1)}% · ${contents.run_count} run${contents.run_count === 1 ? '' : 's'}${cutNote})`;
-  };
+  const tankOptionLabel = (tank: { id: number; name: string }) => tankDropdownLabel(tank.name, tank.id);
 
   const handleDeleteCut = (id: number) => {
     if (selectedRunIsComplete) {
@@ -887,18 +1120,22 @@ export function Distillation() {
 
   const heartsTotal = cuts.filter((c) => c.cut_type === 'hearts').reduce((s, c) => s + c.volume_gal, 0);
   const gpa = cuts.filter((c) => c.cut_type === 'hearts').reduce((s, c) => s + c.volume_gal * c.abv / 100, 0);
+  const collectionLoss = selectedRunId ? getDistillationCollectionLoss(selectedRunId) : null;
 
   return (
     <div>
       <div className="page-header">
         <h2>Distillation</h2>
-        <p>Low wine and heavy rum runs charge fermenters · Spirit runs and gin runs use holding tanks · Brix below {FERMENTATION_READY_MAX_BRIX}° recommended before charging</p>
+        <p>Low wine and heavy rum runs charge fermenters · Rum runs, vodka runs, and gin runs can charge more than one tank · Brix below {FERMENTATION_READY_MAX_BRIX}° recommended before charging</p>
         <div className="page-actions">
           <button type="button" className="btn btn-primary" onClick={() => openNewRun('wash')}>
             {RUN_TYPE_BUTTON_LABELS.wash}
           </button>
-          <button type="button" className="btn btn-secondary" onClick={() => openNewRun('low_wines')}>
+          <button type="button" className="btn btn-secondary" data-testid="new-rum-run" onClick={() => openNewRun('low_wines')}>
             {RUN_TYPE_BUTTON_LABELS.low_wines}
+          </button>
+          <button type="button" className="btn btn-secondary" data-testid="new-vodka-run" onClick={() => openNewRun('vodka')}>
+            {RUN_TYPE_BUTTON_LABELS.vodka}
           </button>
           <button type="button" className="btn btn-secondary" onClick={() => openNewRun('heavy_rum')}>
             {RUN_TYPE_BUTTON_LABELS.heavy_rum}
@@ -912,7 +1149,7 @@ export function Distillation() {
       {runs.length === 0 ? (
         <div className="empty-state">
           <p>No distillation runs recorded yet.</p>
-          <button type="button" className="btn btn-primary" onClick={() => openNewRun('wash')} style={{ marginTop: '1rem' }}>
+          <button type="button" className="btn btn-secondary" onClick={() => openNewRun('wash')} style={{ marginTop: '1rem' }}>
             Create first run
           </button>
         </div>
@@ -942,7 +1179,7 @@ export function Distillation() {
                       <th>Still</th>
                       <th>Date</th>
                       <th>Assigned to</th>
-                      <th>Charge</th>
+                      <th className="num">Charge</th>
                       <th></th>
                     </tr>
                   </thead>
@@ -964,9 +1201,12 @@ export function Distillation() {
                           <td>{r.still_name}</td>
                           <td>{formatDateDisplay(r.run_date)}</td>
                           <td><AssigneeCell name={r.assigned_user_name} /></td>
-                          <td>
+                          <td className="num">
                             {r.charge_volume_gal} gal
-                            {isTankSourcedRun(runType) && r.charge_abv != null ? ` @ ${r.charge_abv.toFixed(1)}%` : ''}
+                            {r.charge_abv != null ? ` @ ${r.charge_abv.toFixed(1)}%${r.alcohol_charge_basis === 'estimated_brix' ? ' est.' : ''}` : ''}
+                            {r.alcohol_loss_gal != null && (
+                              <div className="field-hint">{formatDistillationAlcoholResult(r.alcohol_loss_gal)} alcohol</div>
+                            )}
                             {spiritChargeDetail(r) && (
                               <div className="field-hint">{spiritChargeDetail(r)}</div>
                             )}
@@ -980,9 +1220,11 @@ export function Distillation() {
                             )}
                           </td>
                           <td className="td-actions">
-                            <button className="btn btn-sm btn-secondary" onClick={() => setSelectedRunId(r.id)}>
-                              {r.status === 'complete' ? 'View cuts' : 'Cuts'}
-                            </button>
+                            {distillationRunShowsCuts(r.status) && (
+                              <button className="btn btn-sm btn-secondary" onClick={() => setSelectedRunId(r.id)}>
+                                {r.status === 'complete' ? 'View cuts' : 'Cuts'}
+                              </button>
+                            )}
                             <button className="btn btn-sm btn-ghost" onClick={() => openEditRun(r)}>Edit</button>
                             <button
                               type="button"
@@ -1004,7 +1246,7 @@ export function Distillation() {
         </div>
       )}
 
-      {selectedRunId && (
+      {selectedRunId && distillationRunShowsCuts(selectedRun?.status) && (
         <Modal
           wide
           title={`${selectedRunIsComplete ? 'View cuts' : 'Cuts'} — ${runs.find((r) => r.id === selectedRunId)?.batch_number ?? ''}${selectedRun ? ` · ${formatDateDisplay(selectedRun.run_date)}` : ''}`}
@@ -1015,6 +1257,7 @@ export function Distillation() {
               next.delete('cutsRun');
               setSearchParams(next, { replace: true });
             }
+            returnToEquipment();
           }}
         >
           <div className="cuts-modal-toolbar">
@@ -1022,6 +1265,11 @@ export function Distillation() {
               <span className="text-muted">
                 Hearts: {heartsTotal.toFixed(1)} gal · GPA: {gpa.toFixed(2)} gal
               </span>
+            )}
+            {collectionLoss && (
+              <p className="field-hint" style={{ margin: 0 }} data-testid="distillation-alcohol-loss">
+                {formatDistillationLossSummary(collectionLoss)}
+              </p>
             )}
             {selectedStillageLabel && (
               <span className="text-muted">{selectedStillageLabel}</span>
@@ -1042,7 +1290,7 @@ export function Distillation() {
               <table>
                 <thead>
                   <tr>
-                    <th>Cut</th><th>Tank</th><th>Start</th><th>End</th><th>Volume</th><th>ABV</th><th>GPA</th><th>Notes</th>
+                    <th>Cut</th><th>Tank</th><th>Start</th><th>End</th><th className="num">Volume</th><th className="num">ABV</th><th className="num">GPA</th><th>Notes</th>
                     {!selectedRunIsComplete && <th></th>}
                   </tr>
                 </thead>
@@ -1053,9 +1301,9 @@ export function Distillation() {
                       <td>{c.holding_tank_name ?? (c.cut_type === 'heads' ? 'Discarded' : '—')}</td>
                       <td style={{ whiteSpace: 'nowrap' }}>{formatRecordedAt(c.start_time)}</td>
                       <td style={{ whiteSpace: 'nowrap' }}>{c.end_time ? formatRecordedAt(c.end_time) : '—'}</td>
-                      <td>{c.volume_gal} gal</td>
-                      <td>{c.abv}%</td>
-                      <td>{(c.volume_gal * c.abv / 100).toFixed(2)} gal</td>
+                      <td className="num">{c.volume_gal} gal</td>
+                      <td className="num">{c.abv}%</td>
+                      <td className="num">{(c.volume_gal * c.abv / 100).toFixed(2)} gal</td>
                       <td>{c.notes}</td>
                       {!selectedRunIsComplete && (
                         <td className="td-actions">
@@ -1091,7 +1339,7 @@ export function Distillation() {
       {showRunForm && (
         <Modal
           title={editRunId ? 'Edit Run' : runFormTitle(runForm.run_type)}
-          onClose={() => setShowRunForm(false)}
+          onClose={closeRunForm}
         >
           <div className="form-grid">
             <div className="form-group">
@@ -1149,32 +1397,115 @@ export function Distillation() {
                 </>
               </div>
             ) : (
-              <div className="form-group full-width">
-                <label>
-                  {runForm.run_type === 'heavy_rum' ? 'Source Tank' : 'Source Low Wines Tank'}
-                </label>
-                <select
-                  value={runForm.source_holding_tank_equipment_id ?? ''}
-                  onChange={(e) => handleRunSourceTankChange(e.target.value ? parseInt(e.target.value) : null)}
+              <div className="form-group full-width" data-testid="source-tank-lines">
+                <label>Source tanks</label>
+                {sourceLines.map((line, index) => {
+                  const lineTypeOptions = line.equipmentType === 'stillage_tank'
+                    ? ['stillage_tank', ...sourceTypeOptions.filter((type) => type !== 'stillage_tank')]
+                    : sourceTypeOptions;
+                  const lineTanks = tanksOfEquipmentType(chargeableSourceTanks, line.equipmentType)
+                    .filter((tank) => tank.id === line.tankId || !chosenSourceTankIds.has(tank.id));
+                  const selectedTank = chargeableSourceTanks.find((tank) => tank.id === line.tankId);
+                  const savedName = line.tankId
+                    ? equipment.find((item) => item.id === line.tankId)?.name
+                    : undefined;
+                  return (
+                    <div key={line.key} data-testid={`source-tank-line-${index}`} style={{ marginBottom: '0.75rem' }}>
+                      <div className="form-grid">
+                        <div className="form-group">
+                          <label htmlFor={`source-equipment-type-${line.key}`}>Equipment type</label>
+                          <select
+                            id={`source-equipment-type-${line.key}`}
+                            value={line.equipmentType}
+                            onChange={(e) => updateSourceLine(line.key, {
+                              equipmentType: e.target.value,
+                              tankId: null,
+                              volumeGal: 0,
+                            })}
+                          >
+                            <option value="">— Select equipment type —</option>
+                            {lineTypeOptions.map((type) => (
+                              <option key={type} value={type}>{equipmentTypeLabel(type)}</option>
+                            ))}
+                          </select>
+                        </div>
+                        {line.equipmentType && (
+                          <div className="form-group">
+                            <label htmlFor={`source-tank-${line.key}`}>Source tank</label>
+                            <select
+                              id={`source-tank-${line.key}`}
+                              value={line.tankId ?? ''}
+                              onChange={(e) => {
+                                const tankId = e.target.value ? parseInt(e.target.value, 10) : null;
+                                const tank = chargeableSourceTanks.find((item) => item.id === tankId);
+                                updateSourceLine(line.key, {
+                                  tankId,
+                                  volumeGal: tank ? roundVolume(tank.available_gal) : 0,
+                                });
+                              }}
+                            >
+                              <option value="">— Select tank —</option>
+                              {lineTanks.map((tank) => (
+                                <option key={tank.id} value={tank.id}>{sourceTankLabel(tank)}</option>
+                              ))}
+                              {line.tankId && savedName && !lineTanks.some((tank) => tank.id === line.tankId) && (
+                                <option value={line.tankId}>{savedName}</option>
+                              )}
+                            </select>
+                            {lineTanks.length === 0 && !savedName && (
+                              <p className="field-hint">No tanks of this type have spirit to charge.</p>
+                            )}
+                            {selectedTank && (
+                              <p className="field-hint">
+                                Available: {selectedTank.available_gal.toFixed(1)} gal @ {selectedTank.available_abv.toFixed(1)}% ABV
+                              </p>
+                            )}
+                          </div>
+                        )}
+                        {line.tankId && (
+                          <div className="form-group">
+                            <label htmlFor={`source-tank-gal-${line.key}`}>Gallons from this tank</label>
+                            <input
+                              id={`source-tank-gal-${line.key}`}
+                              type="number"
+                              step="0.1"
+                              min="0"
+                              max={selectedTank?.available_gal}
+                              value={line.volumeGal || ''}
+                              onChange={(e) => updateSourceLine(line.key, {
+                                volumeGal: parseFloat(e.target.value) || 0,
+                              })}
+                            />
+                          </div>
+                        )}
+                      </div>
+                      {sourceLines.length > 1 && (
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-ghost"
+                          onClick={() => commitSourceLines(sourceLines.filter((item) => item.key !== line.key))}
+                        >
+                          Remove tank
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  data-testid="add-source-tank"
+                  onClick={() => commitSourceLines([...sourceLines, freshSourceLine()])}
                 >
-                  <option value="">— Select tank —</option>
-                  {chargeableSourceTanks.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name} ({t.available_gal.toFixed(1)} gal @ {t.available_abv.toFixed(1)}%)
-                    </option>
-                  ))}
-                </select>
-                {runForm.source_holding_tank_equipment_id && !selectedSourceTank && savedLowWineTankName && (
-                  <p className="field-hint">Previously charged from {savedLowWineTankName}</p>
+                  Add another tank
+                </button>
+                {sourceTypeOptions.length === 0 && (
+                  <p className="field-hint">No tanks have spirit to charge yet.</p>
                 )}
-                {chargeableSourceTanks.length === 0 && !savedLowWineTankName && (
-                  <p className="field-hint">
-                    No spirit in holding tanks yet — add cuts from a low wine run first.
-                  </p>
-                )}
-                {selectedLowWineAvailable && runForm.source_holding_tank_equipment_id && (
-                  <p className="field-hint">
-                    Available: {selectedLowWineAvailable.volume_gal.toFixed(1)} gal @ {selectedLowWineAvailable.abv.toFixed(1)}% ABV
+                {blendedPull.volumeGal > 0 && (
+                  <p className="field-hint" data-testid="spirit-pull-total">
+                    Spirit pull {blendedPull.volumeGal.toFixed(1)} gal
+                    {blendedPull.abv != null ? ` @ ${blendedPull.abv.toFixed(1)}% ABV` : ''}.
                   </p>
                 )}
               </div>
@@ -1228,7 +1559,7 @@ export function Distillation() {
               />
             </div>
             <div className="form-group">
-              <label>{isTankSourcedRun(runForm.run_type) ? 'Tails to charge (gal)' : 'Charge Volume (gal)'}</label>
+              <label>Charge volume (gal)</label>
               <input
                 type="number"
                 step="0.1"
@@ -1241,35 +1572,63 @@ export function Distillation() {
                       : undefined
                 }
                 value={runForm.charge_volume_gal || ''}
+                readOnly={isTankSourcedRun(runForm.run_type)}
                 onChange={(e) => setRunForm({ ...runForm, charge_volume_gal: parseFloat(e.target.value) || 0 })}
               />
               {isTankSourcedRun(runForm.run_type) ? (
                 <p className="field-hint">
                   {chargeSizeMode === 'finished'
-                    ? 'Spirit pulled from the tank. Final volume mode below replaces this pull when you save.'
-                    : 'Gallons of spirit drawn from the tank, before any proofing water.'}
+                    ? 'Spirit pulled from the tanks. Final volume mode below replaces this pull when you save.'
+                    : 'Total gallons drawn from the tanks above, before any proofing water.'}
                 </p>
-              ) : null}
+              ) : (
+                <p className="field-hint">
+                  Collected alcohol is checked against the alcohol in this wash. The difference is recorded as loss.
+                </p>
+              )}
               {selectedStill && selectedStill.capacity_gal > 0 && (
                 <p className="field-hint">
                   {selectedStill.name} holds {selectedStill.capacity_gal} gal
                   {spiritProofPlan?.maxSpiritGal != null
-                    ? `. At this target proof, charge at most ${spiritProofPlan.maxSpiritGal.toFixed(1)} gal of tails.`
+                    ? `. At this target proof, charge at most ${spiritProofPlan.maxSpiritGal.toFixed(1)} gal.`
                     : '.'}
                 </p>
               )}
             </div>
+            {isFermenterSourcedRun(runForm.run_type) && (
+              <div className="form-group">
+                <label htmlFor="wash-charge-abv">Wash ABV (%)</label>
+                <input
+                  id="wash-charge-abv"
+                  type="number"
+                  step="0.1"
+                  min={0}
+                  max={MAX_ENTERED_ABV}
+                  value={runForm.charge_abv ?? ''}
+                  onChange={(e) => {
+                    const limited = limitAbvInput(e.target.value);
+                    setRunForm({
+                      ...runForm,
+                      charge_abv: limited.trim() === '' ? null : parseFloat(limited) || 0,
+                    });
+                  }}
+                />
+                <p className="field-hint">
+                  Alcohol in the wash being distilled. Filled from start and current Brix when those are logged. Change it if you measured the wash.
+                </p>
+              </div>
+            )}
             {isTankSourcedRun(runForm.run_type) && (
               <div className="form-group full-width">
                 <AbvTemperatureInput
-                  abvLabel="Tails ABV (% at sample temp)"
+                  abvLabel="Charge ABV (% at sample temp)"
                   abvValue={chargeAbvObserved}
                   temperatureValue={chargeTempF}
                   onAbvChange={(value) => syncChargeAbvFromObservation(value, chargeTempF)}
                   onTemperatureChange={(value) => syncChargeAbvFromObservation(chargeAbvObserved, value)}
                   abvPlaceholder={
                     runForm.charge_abv?.toString()
-                    ?? selectedLowWineAvailable?.abv.toFixed(1)
+                    ?? blendedPull.abv?.toFixed(1)
                     ?? undefined
                   }
                 />
@@ -1363,7 +1722,7 @@ export function Distillation() {
                       className="btn btn-sm btn-secondary"
                       data-testid="use-finished-spirit-pull"
                       onClick={() => {
-                        setRunForm({ ...runForm, charge_volume_gal: spiritProofPlan.spiritGal });
+                        setPrimarySpiritPull(spiritProofPlan.spiritGal);
                         setChargeSizeMode('tails');
                       }}
                     >
@@ -1374,12 +1733,9 @@ export function Distillation() {
                     <button
                       type="button"
                       className="btn btn-sm btn-secondary"
-                      onClick={() => setRunForm({
-                        ...runForm,
-                        charge_volume_gal: spiritProofPlan.maxSpiritGal ?? runForm.charge_volume_gal,
-                      })}
+                      onClick={() => setPrimarySpiritPull(spiritProofPlan.maxSpiritGal ?? 0)}
                     >
-                      Use {spiritProofPlan.maxSpiritGal.toFixed(1)} gal of tails
+                      Use {spiritProofPlan.maxSpiritGal.toFixed(1)} gal
                     </button>
                   )}
                 </div>
@@ -1425,12 +1781,15 @@ export function Distillation() {
               <select value={runForm.status} onChange={(e) => handleRunStatusChange(e.target.value as RunStatus)}>
                 {RUN_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
+              <p className="field-hint">The date is logged each time this status changes.</p>
             </div>
+            <StatusDateLog kind="distillation" recordId={editRunId} />
             {runForm.status === 'complete' && runAsksForStillage(runForm.run_type) && (
               <div className="form-group full-width">
                 <label>Stillage left in the still</label>
                 <p className="field-hint">
                   Spent wash left after this {runForm.run_type === 'heavy_rum' ? 'heavy rum' : 'low wine'} run.
+                  The volume starts at the charge minus the gallons collected. Change it if you measured a different amount.
                   Enter 0 if none is left. Store the rest in a stillage tank, or discard it.
                 </p>
                 <div className="form-grid">
@@ -1452,6 +1811,13 @@ export function Distillation() {
                       }}
                       placeholder="Gallons"
                     />
+                    <p className="field-hint">
+                      {runForm.charge_volume_gal.toFixed(1)} gal charged
+                      {' − '}
+                      {collectedCutGal(editRunId).toFixed(1)} gal collected
+                      {' = '}
+                      {suggestedStillageVolumeGal(runForm.charge_volume_gal, collectedCutGal(editRunId)).toFixed(1)} gal
+                    </p>
                   </div>
                   {(runForm.stillage_volume_gal ?? 0) > 0.001 && (
                     <div className="form-group">
@@ -1522,11 +1888,12 @@ export function Distillation() {
                     {' '}The fermenter can stay dirty until it is cleaned; that does not block marking this run complete.
                   </>
                 )}
+                {' '}The fermentation stays fermenting while this run is <strong>planned</strong>. It is marked complete when the run is <strong>running</strong> or <strong>complete</strong>, or when you mark it complete on the Fermentation page.
               </>
             ) : (
               <>
-                Charging draws tails from the source tank. Proof them before the run if they are too hot:
-                blend the water in the tank first, or add it after the tails are in the still.
+                Charging draws spirit from the source tank. Proof it before the run if it is too hot:
+                blend the water in the tank first, or add it after the charge is in the still.
                 The proofed volume cannot exceed the still. Choose
                 {' '}<strong>High Wines Storage Tank</strong> (or a collection vessel) when you record cuts.
               </>
@@ -1534,7 +1901,7 @@ export function Distillation() {
             {' '}A <strong>planned</strong> run is view-only and does not lock the still, fermenter, or tanks. Setting status to <strong>running</strong> marks the still as in use.
           </p>
           <div className="form-actions">
-            <button className="btn btn-secondary" onClick={() => setShowRunForm(false)}>Cancel</button>
+            <button className="btn btn-secondary" onClick={closeRunForm}>Cancel</button>
             <button className="btn btn-primary" onClick={handleSaveRun}>Save Run</button>
           </div>
         </Modal>
@@ -1550,9 +1917,9 @@ export function Distillation() {
               <thead>
                 <tr>
                   <th>Tank</th>
-                  <th>Volume</th>
-                  <th>ABV</th>
-                  <th>Capacity</th>
+                  <th className="num">Volume</th>
+                  <th className="num">ABV</th>
+                  <th className="num">Capacity</th>
                   <th>Status</th>
                 </tr>
               </thead>
@@ -1560,9 +1927,9 @@ export function Distillation() {
                 {tanksWithContents.map((t) => (
                   <tr key={t.id}>
                     <td><strong>{t.name}</strong></td>
-                    <td>{t.volume_gal > 0 ? `${t.volume_gal.toFixed(1)} gal` : '—'}</td>
-                    <td>{t.volume_gal > 0 ? `${t.abv.toFixed(1)}%` : '—'}</td>
-                    <td>{t.capacity_gal > 0 ? `${t.capacity_gal} gal` : '—'}</td>
+                    <td className="num">{t.volume_gal > 0 ? `${t.volume_gal.toFixed(1)} gal` : '—'}</td>
+                    <td className="num">{t.volume_gal > 0 ? `${t.abv.toFixed(1)}%` : '—'}</td>
+                    <td className="num">{t.capacity_gal > 0 ? `${t.capacity_gal} gal` : '—'}</td>
                     <td><StatusBadge status={t.volume_gal > 0 ? 'in_use' : 'empty'} /></td>
                   </tr>
                 ))}
@@ -1632,15 +1999,6 @@ export function Distillation() {
                 temperatureValue={cutForm.sample_temp_f}
                 onAbvChange={(observed_abv) => setCutForm({ ...cutForm, observed_abv })}
                 onTemperatureChange={(sample_temp_f) => setCutForm({ ...cutForm, sample_temp_f })}
-                blendPreview={
-                  selectedTankContents && selectedTankContents.volume_gal > 0
-                    ? {
-                      existingVolumeGal: selectedTankContents.volume_gal,
-                      existingAbv: selectedTankContents.abv,
-                      runCount: selectedTankContents.run_count,
-                    }
-                    : undefined
-                }
               />
             </div>
             <div className="form-group full-width">
@@ -1649,11 +2007,11 @@ export function Distillation() {
             </div>
           </div>
           <p className="form-hint">
-            Any collection vessel can take cuts from a low wine run, spirit run, or heavy rum run.
+            Any collection vessel can take cuts from a low wine run, rum run, vodka run, or heavy rum run.
             A vessel can hold only one cut at a time — heads, hearts, or tails — including from later runs of the same cut.
             Empty it before switching cuts.
             {isSpiritStyleRun(selectedRun?.run_type) && (
-              <> Hearts and tails on a {selectedRun?.run_type === 'gin' ? 'gin' : 'spirit'} run may also go to <strong>High Wines Storage Tank</strong>.</>
+              <> Hearts and tails on a {runTypeLabel(selectedRun?.run_type).replace(/ run$/i, '').toLowerCase()} run may also go to <strong>High Wines Storage Tank</strong>.</>
             )}
             {' '}Heads may be discarded with no vessel. Transfer from collection vessels to holding tanks when ready.
           </p>

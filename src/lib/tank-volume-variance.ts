@@ -15,6 +15,22 @@ export function tankVolumeMatchesRecord(varianceGal: number): boolean {
   return Math.abs(roundThousandths(varianceGal)) < 0.005;
 }
 
+/** A set-volume save changed the gallons or the ABV enough to track. */
+export function tankReadingChanged(
+  bookGal: number,
+  setGal: number,
+  bookAbv: number,
+  setAbv: number,
+): boolean {
+  return Math.abs(tankVolumeVarianceGal(bookGal, setGal)) >= 0.01
+    || Math.abs(setAbv - bookAbv) >= 0.05;
+}
+
+export function volumeChangeReasonError(reason: string): string | null {
+  if (!reason.trim()) return 'Say why this was changed.';
+  return null;
+}
+
 export function formatTankVolumeVariance(varianceGal: number): string {
   const rounded = roundThousandths(varianceGal);
   if (tankVolumeMatchesRecord(rounded)) return '0.00 gal';

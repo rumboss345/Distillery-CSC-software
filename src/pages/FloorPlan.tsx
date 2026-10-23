@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   getFloorPlans,
   getFloorPlan,
   getAllFloorEquipmentWithContext,
   getFloorEquipmentWithContext,
-  getHoldingTanksWithContents,
   addEquipmentType,
   deleteEquipmentType,
   getCustomEquipmentTypes,
@@ -14,7 +14,6 @@ import {
   updateEquipmentPosition,
   moveEquipmentToPlan,
   deleteFloorEquipment,
-  emptyAllHoldingTanks,
   useRefreshKey,
 } from '../db/queries';
 import { FloorCanvas, FloorLegend } from '../components/FloorCanvas';
@@ -22,8 +21,10 @@ import { ProcessEquipmentCanvas } from '../components/equipment/ProcessEquipment
 import { HoldingTankIntakeHistory } from '../components/HoldingTankIntakeHistory';
 import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
+import { StatusDateLog } from '../components/StatusDateLog';
 import { holdingTankIntakeKey } from '../db/queries';
 import { EquipmentIconPicker } from '../components/equipment/EquipmentIconPicker';
+import { useAuth } from '../context/AuthContext';
 import {
   EQUIPMENT_STATUSES,
   equipmentTypeDefaults,
@@ -31,9 +32,10 @@ import {
   isBuiltInEquipmentType,
   isLiquidVesselEquipmentType,
   resolveEquipmentIcon,
+  type EquipmentIcon,
 } from '../lib/equipment';
 import { equipmentTypeDeleteError } from '../lib/equipment-type';
-import type { EquipmentStatus, EquipmentType, FloorEquipment } from '../types';
+import type { EquipmentStatus, FloorEquipment } from '../types';
 
 const emptyEquipment = (planId: number, type = 'fermenter'): Omit<FloorEquipment, 'id' | 'created_at'> => {
   const defaults = equipmentTypeDefaults(type);
@@ -61,13 +63,20 @@ const emptyEquipment = (planId: number, type = 'fermenter'): Omit<FloorEquipment
 };
 
 export function FloorPlanPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const { key, refresh } = useRefreshKey();
   const plans = getFloorPlans();
-  const [activePlanId, setActivePlanId] = useState(plans[0]?.id ?? 1);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [returnedEquipment] = useState(() => {
+    const id = Number(searchParams.get('equipment')) || 0;
+    return id ? getAllFloorEquipmentWithContext().find((e) => e.id === id) ?? null : null;
+  });
+  const [activePlanId, setActivePlanId] = useState(returnedEquipment?.floor_plan_id ?? plans[0]?.id ?? 1);
   const plan = getFloorPlan(activePlanId);
   const equipment = getFloorEquipmentWithContext(activePlanId);
 
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(returnedEquipment?.id ?? null);
   const [showForm, setShowForm] = useState(false);
   const [showPageForm, setShowPageForm] = useState(false);
   const [editId, setEditId] = useState<number | undefined>();
@@ -79,7 +88,7 @@ export function FloorPlanPage() {
   const [viewMode, setViewMode] = useState<'process' | 'classic'>('process');
   const [showTypeForm, setShowTypeForm] = useState(false);
   const [typeName, setTypeName] = useState('');
-  const [typeIcon, setTypeIcon] = useState<EquipmentType>('other');
+  const [typeIcon, setTypeIcon] = useState<EquipmentIcon>('other');
   const [typeError, setTypeError] = useState('');
   const equipmentTypes = getEquipmentTypeOptions();
   const customEquipmentTypes = getCustomEquipmentTypes();
@@ -92,6 +101,13 @@ export function FloorPlanPage() {
     setSelectedId(id);
     setSelectedIntakeKey(null);
   };
+
+  useEffect(() => {
+    if (!searchParams.has('equipment')) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete('equipment');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   useEffect(() => {
     if (!draggingEquipmentId) {
@@ -121,6 +137,7 @@ export function FloorPlanPage() {
   };
 
   const openEdit = (item: FloorEquipment) => {
+    if (!isAdmin) return;
     setEditId(item.id);
     setForm({
       ...item,
@@ -154,8 +171,23 @@ export function FloorPlanPage() {
     });
   };
 
-  const handleIconPick = (icon: EquipmentType) => {
-    if (isBuiltInEquipmentType(form.equipment_type)) {
+  const handleIconPick = (icon: EquipmentIcon) => {
+    if (icon === 'jug') {
+      const alreadyTank = form.equipment_type === 'holding_tank';
+      const defaults = equipmentTypeDefaults('holding_tank');
+      setForm({
+        ...form,
+        equipment_type: 'holding_tank',
+        icon: 'jug',
+        ...(alreadyTank ? {} : {
+          width_ft: defaults.width_ft,
+          depth_ft: defaults.depth_ft,
+          capacity_gal: defaults.capacity_gal,
+        }),
+      });
+      return;
+    }
+    if (isBuiltInEquipmentType(form.equipment_type) && isBuiltInEquipmentType(icon)) {
       handleTypeChange(icon);
       return;
     }
@@ -163,6 +195,7 @@ export function FloorPlanPage() {
   };
 
   const handleSave = () => {
+    if (editId != null && !isAdmin) return;
     saveFloorEquipment(form, editId);
     setShowForm(false);
     refresh();
@@ -261,35 +294,6 @@ export function FloorPlanPage() {
     setDropTargetPlanId(null);
   };
 
-  const tanksWithSpirit = getHoldingTanksWithContents().filter((t) => t.volume_gal > 0);
-
-  const handleEmptyAllTanks = () => {
-    if (tanksWithSpirit.length === 0) {
-      alert('All holding tanks are already empty.');
-      return;
-    }
-    const tankList = tanksWithSpirit
-      .map((t) => `${t.name} (${t.volume_gal.toFixed(1)} gal)`)
-      .join('\n');
-    if (!confirm(
-      `Empty all holding tanks?\n\nThis clears tank spirit from:\n${tankList}\n\n`
-      + 'Distillation cut records stay, but tank volumes, transfers, and blend draws are zeroed. '
-      + 'This cannot be undone.',
-    )) {
-      return;
-    }
-    const result = emptyAllHoldingTanks();
-    selectEquipment(null);
-    refresh();
-    alert(
-      `All holding tanks emptied.\n\n`
-      + `${result.transfersRemoved} transfer(s) removed\n`
-      + `${result.cutsCleared} cut(s) cleared from tanks\n`
-      + `${result.runsCleared} low-wines charge(s) cleared\n`
-      + `${result.blendsCleared} blend draw(s) cleared`,
-    );
-  };
-
   const handleTabDrop = (e: React.DragEvent, targetPlanId: number) => {
     e.preventDefault();
     const raw = e.dataTransfer.getData('text/equipment-id');
@@ -315,9 +319,6 @@ export function FloorPlanPage() {
           <button className="btn btn-secondary" onClick={openTypeForm}>+ Add equipment type</button>
           {viewMode === 'classic' && (
             <button className="btn btn-secondary" onClick={() => { setPageName(''); setShowPageForm(true); }}>+ Add Page</button>
-          )}
-          {tanksWithSpirit.length > 0 && (
-            <button className="btn btn-secondary" onClick={handleEmptyAllTanks}>Empty All Tanks</button>
           )}
         </div>
       </div>
@@ -346,7 +347,7 @@ export function FloorPlanPage() {
             onSelect={selectEquipment}
             refreshKey={key}
             onLayoutChange={refresh}
-            onEditEquipment={selected ? () => openEdit(selected) : undefined}
+            onEditEquipment={isAdmin && selected ? () => openEdit(selected) : undefined}
             onRemoveEquipment={selected ? () => handleDelete(selected.id) : undefined}
           />
         </>
@@ -422,7 +423,11 @@ export function FloorPlanPage() {
                     <dd>
                       {selected.active_volume_gal.toFixed(1)} gal
                       {selected.active_abv != null ? ` @ ${selected.active_abv.toFixed(1)}% ABV` : ''}
-                      {selected.active_run_count ? ` · ${selected.active_run_count} run${selected.active_run_count === 1 ? '' : 's'}` : ''}
+                      {selected.active_liquid_name
+                        ? ` · ${selected.active_liquid_name}`
+                        : selected.active_run_count
+                          ? ` · ${selected.active_run_count} run${selected.active_run_count === 1 ? '' : 's'}`
+                          : ''}
                     </dd>
                   </>
                 )}
@@ -454,7 +459,9 @@ export function FloorPlanPage() {
                 />
               )}
               <div className="floor-sidebar-actions">
-                <button className="btn btn-sm btn-secondary" onClick={() => openEdit(selected)}>Edit</button>
+                {isAdmin && (
+                  <button className="btn btn-sm btn-secondary" onClick={() => openEdit(selected)}>Edit</button>
+                )}
                 <button className="btn btn-sm btn-danger" onClick={() => handleDelete(selected.id)}>Remove</button>
               </div>
             </div>
@@ -489,7 +496,7 @@ export function FloorPlanPage() {
       </>
       )}
 
-      {showForm && (
+      {showForm && (editId == null || isAdmin) && (
         <Modal title={editId ? 'Edit Equipment' : 'Add Equipment'} onClose={() => setShowForm(false)} wide>
           <div className="form-grid">
             <div className="form-group">
@@ -525,7 +532,7 @@ export function FloorPlanPage() {
               <label>Icon</label>
               <EquipmentIconPicker value={resolveEquipmentIcon(form.icon, form.equipment_type)} onChange={handleIconPick} />
               <p className="form-hint">
-                Tanks, fermenters, wash tanks, and stills show how full they are and the liquid inside.
+                Tanks, jugs, fermenters, wash tanks, and stills show how full they are and the liquid inside. A jug keeps holding-tank gallons and ABV.
               </p>
             </div>
             <div className="form-group">
@@ -538,7 +545,9 @@ export function FloorPlanPage() {
                   <option key={s} value={s}>{s.replace('_', ' ')}</option>
                 ))}
               </select>
+              <p className="field-hint">The date is logged each time this status changes.</p>
             </div>
+            <StatusDateLog kind="equipment" recordId={editId} />
             <div className="form-group">
               <label>Capacity (gal)</label>
               <input
@@ -617,7 +626,7 @@ export function FloorPlanPage() {
           {typeError && <div className="auth-error">{typeError}</div>}
           <p className="form-hint">
             The new type is available when you add equipment and gets its own section on the process view.
-            Pick the picture it should use. Tank icons still show how full they are.
+            Pick the picture it should use. Tank and jug pictures show how full they are. A jug acts as a holding tank.
           </p>
           <h4 className="equipment-type-list-title">Added types</h4>
           {customEquipmentTypes.length === 0 ? (

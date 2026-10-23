@@ -33,11 +33,11 @@ export function TankInventoryReport() {
             <th>Tank</th>
             <th>Type</th>
             <th>Status</th>
-            <th>Capacity</th>
-            <th>Volume</th>
-            <th>ABV</th>
-            <th>LAA</th>
-            <th>Fill</th>
+            <th className="num">Capacity</th>
+            <th className="num">Volume</th>
+            <th className="num">ABV</th>
+            <th className="num">LAA</th>
+            <th className="num">Fill</th>
             <th>Last movement</th>
           </tr>
         </thead>
@@ -47,11 +47,11 @@ export function TankInventoryReport() {
               <td><strong>{r.name}</strong></td>
               <td>{r.equipment_type}</td>
               <td>{r.status}</td>
-              <td>{r.capacity_gal > 0 ? `${r.capacity_gal} gal` : '—'}</td>
-              <td>{r.volume_gal > 0 ? `${r.volume_gal.toFixed(1)} gal` : 'Empty'}</td>
-              <td>{r.abv != null ? `${r.abv.toFixed(1)}%` : '—'}</td>
-              <td>{r.laa_gal > 0 ? `${r.laa_gal.toFixed(2)} gal` : '—'}</td>
-              <td>{r.fill_pct != null ? `${r.fill_pct}%` : '—'}</td>
+              <td className="num">{r.capacity_gal > 0 ? `${r.capacity_gal} gal` : '—'}</td>
+              <td className="num">{r.volume_gal > 0 ? `${r.volume_gal.toFixed(1)} gal` : 'Empty'}</td>
+              <td className="num">{r.abv != null ? `${r.abv.toFixed(1)}%` : '—'}</td>
+              <td className="num">{r.laa_gal > 0 ? `${r.laa_gal.toFixed(2)} gal` : '—'}</td>
+              <td className="num">{r.fill_pct != null ? `${r.fill_pct}%` : '—'}</td>
               <td>
                 {r.last_movement_at
                   ? `${formatCalendarDay(r.last_movement_at)} (${r.last_movement_type?.replace(/_/g, ' ')})`

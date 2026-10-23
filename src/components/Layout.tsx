@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { dismissSharedNotice, getSharedNotice, subscribeSharedNotice } from '../db/database';
@@ -73,6 +73,7 @@ export function Layout() {
   const location = useLocation();
   const [navOpen, setNavOpen] = useState(false);
   const sharedNotice = useSyncExternalStore(subscribeSharedNotice, getSharedNotice, () => null);
+  const mainRef = useRef<HTMLElement>(null);
 
   const visibleGroups = navGroups
     .map((group) => ({
@@ -85,6 +86,11 @@ export function Layout() {
 
   useEffect(() => {
     setNavOpen(false);
+  }, [location.pathname]);
+
+  useLayoutEffect(() => {
+    mainRef.current?.scrollTo({ top: 0, left: 0 });
+    window.scrollTo({ top: 0, left: 0 });
   }, [location.pathname]);
 
   useEffect(() => {
@@ -172,7 +178,7 @@ export function Layout() {
           </button>
         </div>
       </aside>
-      <main className="main-content">
+      <main ref={mainRef} className="main-content">
         {sharedNotice && (
           <div className="shared-record-notice" role="status">
             <span>{sharedNotice}</span>

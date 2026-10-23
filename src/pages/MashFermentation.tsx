@@ -20,9 +20,12 @@ import {
 import { MashTunVisual } from '../components/equipment/MashTunVisual';
 import type { EquipmentVisualData } from '../components/equipment/equipment-visual.types';
 import { Modal } from '../components/Modal';
+import { IngredientSelect } from '../components/IngredientSelect';
 import { RecentCompletedNote } from '../components/RecentCompletedNote';
 import { StatusBadge } from '../components/StatusBadge';
+import { StatusDateLog } from '../components/StatusDateLog';
 import { estimateSugarWash } from '../lib/fermentation';
+import { SugarScaleField } from '../components/SugarScaleField';
 import type { MashBatchNutrientInput } from '../types';
 import {
   emptyMashBatchNutrient,
@@ -41,7 +44,8 @@ import { WASH_PAGE_STATUSES, washPageListsBatch } from '../lib/wash-stage';
 import type { MashBatch, MashStatus } from '../types';
 
 const WASH_STATUSES: MashStatus[] = WASH_PAGE_STATUSES;
-const WASH_LIST_STATUSES: MashStatus[] = ['planned', 'mashing', 'fermenting', 'complete', 'discarded'];
+/** Washing and fermenting stay above planned cooks. Finished washes stay last. */
+const WASH_LIST_STATUSES: MashStatus[] = ['mashing', 'fermenting', 'planned', 'complete', 'discarded'];
 
 const STATUS_LABELS: Record<MashStatus, string> = {
   planned: 'planned',
@@ -68,6 +72,8 @@ const emptyBatch = (): Omit<MashBatch, 'id' | 'created_at'> => ({
   yeast_strain: '',
   yeast_lbs: 0,
   start_date: localIsoDate(),
+  fermentation_start_date: null,
+  expected_completion_date: null,
   target_brix: null,
   actual_brix: null,
   target_final_brix: null,
@@ -111,9 +117,12 @@ export function MashFermentation() {
     setForm({ ...form, status, start_date });
   };
 
+  const sugarErrors = useRef({ target: null as string | null, actual: null as string | null, final: null as string | null });
+
   const openNew = (planDate?: string) => {
     setEditId(undefined);
     setPlannedScheduleDate(null);
+    sugarErrors.current = { target: null, actual: null, final: null };
     setForm({
       ...emptyBatch(),
       ...defaultAssignee(user),
@@ -136,11 +145,24 @@ export function MashFermentation() {
     setEditId(batch.id);
     setPlannedScheduleDate(null);
     setForm({ ...batch, yeast_lbs: batch.yeast_lbs ?? 0 });
+    sugarErrors.current = { target: null, actual: null, final: null };
     setBatchNutrients(
       getMashBatchNutrients(batch.id).map((n) => ({ name: n.name, amount: n.amount, unit: n.unit })),
     );
     setShowForm(true);
   };
+
+  const calendarRecordHandled = useRef(false);
+  useEffect(() => {
+    const recordId = Number(searchParams.get('record')) || 0;
+    if (!recordId || calendarRecordHandled.current) return;
+    calendarRecordHandled.current = true;
+    const batch = getMashBatches().find((item) => item.id === recordId);
+    if (batch) openEdit(batch);
+    const next = new URLSearchParams(searchParams);
+    next.delete('record');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const closeBatchForm = () => {
     setShowForm(false);
@@ -149,6 +171,11 @@ export function MashFermentation() {
   const performSave = () => {
     if (!form.assigned_user_id) {
       alert('Select the employee assigned to this wash batch.');
+      return;
+    }
+    const sugarError = sugarErrors.current.target || sugarErrors.current.actual || sugarErrors.current.final;
+    if (sugarError) {
+      alert(sugarError);
       return;
     }
     if (form.status === 'fermenting' || form.status === 'complete') {
@@ -259,7 +286,7 @@ export function MashFermentation() {
               ? 'No wash batches recorded yet.'
               : 'No wash records yet. Discarded fermentations stay on the Fermentation page.'}
           </p>
-          <button className="btn btn-primary" onClick={() => openNew()} style={{ marginTop: '1rem' }}>
+          <button className="btn btn-secondary" onClick={() => openNew()} style={{ marginTop: '1rem' }}>
             Create your first batch
           </button>
         </div>
@@ -291,8 +318,8 @@ export function MashFermentation() {
                     <tr>
                       <th>Batch #</th>
                       <th>Recipe</th>
-                      <th>Sugar (lbs)</th>
-                      <th>Batch Size</th>
+                      <th className="num">Sugar (lbs)</th>
+                      <th className="num">Batch Size</th>
                       <th>Started</th>
                       <th>Assigned to</th>
                       <th></th>
@@ -303,8 +330,8 @@ export function MashFermentation() {
                       <tr key={b.id}>
                         <td><strong>{b.batch_number}</strong></td>
                         <td>{b.recipe_name}</td>
-                        <td>{b.grain_lbs} lbs</td>
-                        <td>{b.water_gal} gal</td>
+                        <td className="num">{b.grain_lbs} lbs</td>
+                        <td className="num">{b.water_gal} gal</td>
                         <td>{formatDateDisplay(b.start_date)}</td>
                         <td><AssigneeCell name={b.assigned_user_name} /></td>
                         <td className="td-actions">
@@ -385,20 +412,21 @@ export function MashFermentation() {
             </div>
             <div className="form-group">
               <label>Sugar Type</label>
-              <select
+              <IngredientSelect
+                testId="wash-sugar"
                 value={form.grain_type}
-                onChange={(e) => setForm({ ...form, grain_type: e.target.value })}
-              >
-                <option value="">— Select sugar from inventory —</option>
-                {sugarItems.map((item) => (
-                  <option key={item.id} value={item.name}>
-                    {item.name} ({item.quantity} {item.unit} on hand)
-                  </option>
-                ))}
-                {form.grain_type && !sugarItems.some((i) => i.name === form.grain_type) && (
-                  <option value={form.grain_type}>{form.grain_type} (not in inventory)</option>
-                )}
-              </select>
+                emptyLabel="— Select sugar from inventory —"
+                noun="sugar"
+                category="sugar"
+                unit="lbs"
+                options={sugarItems.map((item) => ({
+                  value: item.name,
+                  label: `${item.name} (${item.quantity} ${item.unit} on hand)`,
+                }))}
+                orphanLabel={form.grain_type ? `${form.grain_type} (not in inventory)` : undefined}
+                onSelect={(grain_type) => setForm({ ...form, grain_type })}
+                onAdded={(item) => setForm({ ...form, grain_type: item.name })}
+              />
             </div>
             <div className="form-group">
               <label>Sugar (lbs)</label>
@@ -410,20 +438,21 @@ export function MashFermentation() {
             </div>
             <div className="form-group">
               <label>Yeast Strain</label>
-              <select
+              <IngredientSelect
+                testId="wash-yeast"
                 value={form.yeast_strain}
-                onChange={(e) => setForm({ ...form, yeast_strain: e.target.value })}
-              >
-                <option value="">— Select yeast from inventory —</option>
-                {yeastItems.map((item) => (
-                  <option key={item.id} value={item.name}>
-                    {item.name} ({item.quantity} {item.unit} on hand)
-                  </option>
-                ))}
-                {form.yeast_strain && !yeastItems.some((i) => i.name === form.yeast_strain) && (
-                  <option value={form.yeast_strain}>{form.yeast_strain} (not in inventory)</option>
-                )}
-              </select>
+                emptyLabel="— Select yeast from inventory —"
+                noun="yeast"
+                category="yeast"
+                unit="lbs"
+                options={yeastItems.map((item) => ({
+                  value: item.name,
+                  label: `${item.name} (${item.quantity} ${item.unit} on hand)`,
+                }))}
+                orphanLabel={form.yeast_strain ? `${form.yeast_strain} (not in inventory)` : undefined}
+                onSelect={(yeast_strain) => setForm({ ...form, yeast_strain })}
+                onAdded={(item) => setForm({ ...form, yeast_strain: item.name })}
+              />
             </div>
             <div className="form-group">
               <label>Yeast (lbs)</label>
@@ -435,23 +464,25 @@ export function MashFermentation() {
                 <div className="form-grid" style={{ marginBottom: 0 }}>
                   <div className="form-group">
                     <label>{index === 0 ? 'Nutrient' : `Nutrient ${index + 1}`}</label>
-                    <select
+                    <IngredientSelect
+                      testId={`wash-nutrient-${index}`}
                       value={row.name}
-                      onChange={(e) => {
-                        const name = e.target.value;
+                      emptyLabel="— Select nutrient from inventory —"
+                      noun="nutrient"
+                      category="nutrients"
+                      unit={normalizeNutrientUnit(row.unit)}
+                      options={nutrientItems.map((item) => ({
+                        value: item.name,
+                        label: `${item.name} (${item.quantity} ${item.unit} on hand)`,
+                      }))}
+                      orphanLabel={row.name ? `${row.name} (not in inventory)` : undefined}
+                      onSelect={(name) => {
                         setBatchNutrients((prev) => prev.map((n, i) => (i === index ? { ...n, name } : n)));
                       }}
-                    >
-                      <option value="">— Select nutrient from inventory —</option>
-                      {nutrientItems.map((item) => (
-                        <option key={item.id} value={item.name}>
-                          {item.name} ({item.quantity} {item.unit} on hand)
-                        </option>
-                      ))}
-                      {row.name && !nutrientItems.some((i) => i.name === row.name) && (
-                        <option value={row.name}>{row.name} (not in inventory)</option>
-                      )}
-                    </select>
+                      onAdded={(item) => {
+                        setBatchNutrients((prev) => prev.map((n, i) => (i === index ? { ...n, name: item.name } : n)));
+                      }}
+                    />
                   </div>
                   <div className="form-group">
                     <label>Amount</label>
@@ -537,12 +568,15 @@ export function MashFermentation() {
               <select value={form.status} onChange={(e) => handleStatusChange(e.target.value as MashStatus)}>
                 {WASH_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
               </select>
+              <p className="field-hint">The date is logged each time this status changes.</p>
               {washTankBlocksSave && (
                 <p className="field-hint" style={{ color: 'var(--danger, #dc2626)' }}>
                   {washTank?.name} is marked out of service on Equipment Maintenance. Return it to service or save as planned until the wash tank is available.
                 </p>
               )}
             </div>
+
+            <StatusDateLog kind="wash" recordId={editId} />
 
             {washTankPreview && (
               <div className="form-group full-width wash-tank-form-preview">
@@ -579,18 +613,27 @@ export function MashFermentation() {
               )}
             </div>
 
-            <div className="form-group">
-              <label>Target Start Brix</label>
-              <input type="number" step="0.1" value={form.target_brix ?? ''} onChange={(e) => setForm({ ...form, target_brix: e.target.value ? parseFloat(e.target.value) : null })} />
-            </div>
-            <div className="form-group">
-              <label>Actual Start Brix</label>
-              <input type="number" step="0.1" value={form.actual_brix ?? ''} onChange={(e) => setForm({ ...form, actual_brix: e.target.value ? parseFloat(e.target.value) : null })} />
-            </div>
-            <div className="form-group">
-              <label>Target Final Brix</label>
-              <input type="number" step="0.1" value={form.target_final_brix ?? ''} onChange={(e) => setForm({ ...form, target_final_brix: e.target.value ? parseFloat(e.target.value) : null })} />
-            </div>
+            <SugarScaleField
+              inputId="target-start-brix"
+              label="Target Start Brix"
+              brix={form.target_brix}
+              onBrix={(target_brix) => setForm((current) => ({ ...current, target_brix }))}
+              onError={(target) => { sugarErrors.current.target = target; }}
+            />
+            <SugarScaleField
+              inputId="actual-start-brix"
+              label="Actual Start Brix"
+              brix={form.actual_brix}
+              onBrix={(actual_brix) => setForm((current) => ({ ...current, actual_brix }))}
+              onError={(actual) => { sugarErrors.current.actual = actual; }}
+            />
+            <SugarScaleField
+              inputId="target-final-brix"
+              label="Target Final Brix"
+              brix={form.target_final_brix}
+              onBrix={(target_final_brix) => setForm((current) => ({ ...current, target_final_brix }))}
+              onError={(final) => { sugarErrors.current.final = final; }}
+            />
             <div className="form-group full-width">
               <label>Notes</label>
               <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />

@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { differenceInDays, parseISO } from 'date-fns';
 import {
+  barrelBlendProductName,
   createBarrelFromHoldingTank,
+  holdingTankProductName,
   deleteBarrel,
   deleteWarehouseLocation,
   getBarrels,
@@ -16,6 +18,7 @@ import {
 import { DatePicker } from '../components/DatePicker';
 import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
+import { StatusDateLog } from '../components/StatusDateLog';
 import { BarrelVisual } from '../components/barrels/BarrelVisual';
 import { limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
 import { BARREL_STOCK_ITEM_NAME } from '../lib/barrel-inventory';
@@ -23,6 +26,7 @@ import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-p
 import { formatDateDisplay, isIsoDate } from '../lib/date-input';
 import { localIsoDate } from '../lib/planned-event-date';
 import { formatGal } from '../components/equipment/equipment-visual-shared';
+import { tankDropdownLabel } from '../lib/tank-menu-label';
 import {
   UNASSIGNED_WAREHOUSE_LOCATION,
   groupBarrelsByLocation,
@@ -52,6 +56,10 @@ const emptyBarrel = (): Omit<Barrel, 'id' | 'created_at'> => ({
 function barrelAgeDays(fillDate: string): number | null {
   if (!isIsoDate(fillDate)) return null;
   return differenceInDays(new Date(), parseISO(fillDate));
+}
+
+function barrelContents(barrel: Barrel): string {
+  return barrelBlendProductName(barrel.id) || barrel.spirit_type;
 }
 
 function barrelVolumeLabel(barrel: Barrel): string {
@@ -85,6 +93,7 @@ export function Barrels() {
   const visibleBarrels = barrelQuery
     ? barrels.filter((barrel) => (
       barrel.barrel_number.toLocaleLowerCase().includes(barrelQuery)
+      || barrelContents(barrel).toLocaleLowerCase().includes(barrelQuery)
       || barrel.spirit_type.toLocaleLowerCase().includes(barrelQuery)
       || barrel.wood_type.toLocaleLowerCase().includes(barrelQuery)
       || barrel.warehouse_location.toLocaleLowerCase().includes(barrelQuery)
@@ -92,6 +101,7 @@ export function Barrels() {
     : barrels;
   const groups = groupBarrelsByLocation(visibleBarrels, barrelQuery ? [] : locations);
   const selected = barrels.find((barrel) => barrel.id === selectedId) ?? null;
+  const selectedContents = selected ? barrelContents(selected) : '';
 
   void key;
 
@@ -117,6 +127,7 @@ export function Barrels() {
       fill_date: planDate ?? emptyBarrel().fill_date,
       warehouse_location: warehouseLocation ?? '',
       source_holding_tank_equipment_id: firstTank?.id ?? null,
+      spirit_type: firstTank ? (holdingTankProductName(firstTank.id, firstTank.volume_gal) ?? '') : '',
       initial_abv: firstTank?.abv ?? 0,
       current_volume_gal: firstTank
         ? Math.min(firstTank.volume_gal, 53)
@@ -127,6 +138,15 @@ export function Barrels() {
 
   useEffect(() => {
     if (calendarPlanHandled.current) return;
+    const recordId = Number(searchParams.get('record')) || 0;
+    if (recordId) {
+      calendarPlanHandled.current = true;
+      setSelectedId(recordId);
+      const next = new URLSearchParams(searchParams);
+      next.delete('record');
+      setSearchParams(next, { replace: true });
+      return;
+    }
     const plan = readCalendarPlanQuery(searchParams);
     if (!plan || plan.transfer) return;
     calendarPlanHandled.current = true;
@@ -228,14 +248,14 @@ export function Barrels() {
     <div>
       <div className="page-header">
         <h2>Barrel Aging</h2>
-        <p>Locations group the barrels. Each barrel shows only its head, and the oldest barrels sit at the top of a location.</p>
+        <p>Locations group the barrels. A barrel with liquid starts light gold and darkens each month, reaching dark brown at about two years. Empty barrels stay pale.</p>
       </div>
 
       <div className="process-view warehouse-view">
         <div className="process-toolbar">
           <span className="process-toolbar-title">Warehouse</span>
           <span className="process-toolbar-hint">
-            Oldest heads are first in each location. Select one for fill, age, and proof.
+            Oldest heads are first in each location and show the darkest color. Select one for fill, age, and proof.
           </span>
           <input
             className="warehouse-search"
@@ -271,7 +291,7 @@ export function Barrels() {
                 ) : (
                   <>
                     <p>No warehouse locations yet.</p>
-                    <button type="button" className="btn btn-primary" onClick={() => { setLocationName(''); setShowLocationForm(true); }} style={{ marginTop: '1rem' }}>
+                    <button type="button" className="btn btn-secondary" onClick={() => { setLocationName(''); setShowLocationForm(true); }} style={{ marginTop: '1rem' }}>
                       Add a location
                     </button>
                   </>
@@ -316,7 +336,7 @@ export function Barrels() {
                   ) : (
                     <div className="warehouse-barrel-row">
                       {group.barrels.map((barrel) => {
-                        const contents = barrel.spirit_type || barrel.wood_type;
+                        const contents = barrelContents(barrel) || barrel.wood_type;
                         const age = barrelAgeDays(barrel.fill_date);
                         return (
                           <button
@@ -338,6 +358,8 @@ export function Barrels() {
                             <BarrelVisual
                               barrelNumber={barrel.barrel_number}
                               status={barrel.status}
+                              volumeGal={barrel.current_volume_gal}
+                              fillDate={barrel.fill_date}
                             />
                           </button>
                         );
@@ -382,11 +404,10 @@ export function Barrels() {
                 ) : (
                   <>
                     <h4 className="process-panel-title">{selected.barrel_number}</h4>
-                    <p className="process-equipment-detail-code">
-                      {selected.wood_type}
-                      {selected.spirit_type ? ` · ${selected.spirit_type}` : ''}
-                    </p>
+                    <p className="process-equipment-detail-code">{selected.wood_type}</p>
                     <dl className="process-equipment-detail-list">
+                      <dt>Contents</dt>
+                      <dd>{selectedContents || '—'}</dd>
                       <dt>Status</dt>
                       <dd><StatusBadge status={selected.status} /></dd>
                       <dt>Location</dt>
@@ -492,10 +513,12 @@ export function Barrels() {
                   const tank = source_holding_tank_equipment_id
                     ? holdingTanks.find((t) => t.id === source_holding_tank_equipment_id)
                     : undefined;
+                  const product = tank ? holdingTankProductName(tank.id, tank.volume_gal) : null;
                   setForm((prev) => ({
                     ...prev,
                     source_holding_tank_equipment_id,
                     source_run_id: null,
+                    spirit_type: editId ? prev.spirit_type : (product ?? ''),
                     initial_abv: tank?.abv ?? prev.initial_abv,
                     current_volume_gal: tank && !editId
                       ? Math.min(tank.volume_gal, prev.capacity_gal)
@@ -506,7 +529,7 @@ export function Barrels() {
                 <option value="">— None (manual volume / ABV) —</option>
                 {tanksWithSpirit.map((t) => (
                   <option key={t.id} value={t.id}>
-                    {t.name} — {t.volume_gal.toFixed(1)} gal @ {t.abv.toFixed(1)}% ABV
+                    {tankDropdownLabel(t.name, t.id)}
                   </option>
                 ))}
               </select>
@@ -590,7 +613,9 @@ export function Barrels() {
               <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as BarrelStatus })}>
                 {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
+              <p className="field-hint">The date is logged each time this status changes.</p>
             </div>
+            <StatusDateLog kind="barrel" recordId={editId} />
             <div className="form-group full-width">
               <label>Notes</label>
               <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />

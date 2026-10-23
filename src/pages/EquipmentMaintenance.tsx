@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { useEquipmentReturn } from '../lib/equipment-return';
+import { CollapsibleSection } from '../components/CollapsibleSection';
 import {
   getAllEquipmentMaintenanceLog,
   getAllFloorEquipment,
   getEquipmentMaintenanceLog,
   getFloorPlans,
+  markEquipmentCleaned,
   updateEquipmentMaintenance,
   useRefreshKey,
 } from '../db/queries';
@@ -31,6 +34,7 @@ const emptyAssignee = (): AssignedEmployee => ({
 
 export function EquipmentMaintenance() {
   const [searchParams] = useSearchParams();
+  const { returnToEquipment } = useEquipmentReturn();
   const focusEquipmentId = Number(searchParams.get('equipment')) || 0;
   const { key, refresh } = useRefreshKey();
   const equipment = getAllFloorEquipment();
@@ -54,6 +58,7 @@ export function EquipmentMaintenance() {
     [key],
   );
 
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set());
   const [editItem, setEditItem] = useState<FloorEquipment | null>(null);
   const [status, setStatus] = useState<EquipmentMaintenanceStatus>('broken');
   const [notes, setNotes] = useState('');
@@ -61,6 +66,9 @@ export function EquipmentMaintenance() {
 
   const [returnItem, setReturnItem] = useState<FloorEquipment | null>(null);
   const [returnRecordedBy, setReturnRecordedBy] = useState<AssignedEmployee>(emptyAssignee());
+
+  const [cleanItem, setCleanItem] = useState<FloorEquipment | null>(null);
+  const [cleanedBy, setCleanedBy] = useState<AssignedEmployee>(emptyAssignee());
 
   const [historyItem, setHistoryItem] = useState<FloorEquipment | null>(null);
   const historyEntries = historyItem ? getEquipmentMaintenanceLog(historyItem.id, 200) : [];
@@ -90,8 +98,28 @@ export function EquipmentMaintenance() {
       );
       closeEdit();
       refresh();
+      returnToEquipment();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Could not save maintenance.');
+    }
+  };
+
+  const handleMarkCleaned = () => {
+    if (!cleanItem || !cleanedBy.assigned_user_id) {
+      alert('Select who cleaned this equipment.');
+      return;
+    }
+    try {
+      markEquipmentCleaned(
+        cleanItem.id,
+        cleanedBy.assigned_user_id,
+        cleanedBy.assigned_user_name ?? '',
+      );
+      setCleanItem(null);
+      refresh();
+      returnToEquipment();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Could not mark equipment clean.');
     }
   };
 
@@ -110,6 +138,7 @@ export function EquipmentMaintenance() {
       );
       setReturnItem(null);
       refresh();
+      returnToEquipment();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Could not return to service.');
     }
@@ -121,17 +150,36 @@ export function EquipmentMaintenance() {
         <h2>Equipment Maintenance</h2>
         <p>
           Mark equipment broken or under maintenance to block production use and show a red X on the process view.
-          After use, emptied equipment shows a mop on the process view until someone marks it cleaned.
+          After use, emptied equipment shows a mop on the process view until someone marks it cleaned here or on the process view.
           The log below keeps the latest 10 events. The full history is on{' '}
           <Link to="/reports/maintenance">Reports</Link>.
         </p>
       </div>
 
-      {groups.map((group) => (
-        <section key={group.type} className="card equipment-maintenance-section">
-          <h3 className="equipment-maintenance-category">{group.label}</h3>
+      {groups.map((group) => {
+        const needsAttention = (item: FloorEquipment) => Boolean(item.maintenance_status) || equipmentNeedsCleaning(item);
+        const attention = group.items.filter(needsAttention).length;
+        const showAll = attention === 0 || expandedGroups.has(group.type);
+        const shownItems = showAll
+          ? group.items
+          : group.items.filter((item) => needsAttention(item) || item.id === focusEquipmentId);
+        const hiddenCount = group.items.length - shownItems.length;
+        return (
+        <CollapsibleSection
+          key={group.type}
+          className="card equipment-maintenance-section"
+          headingClassName="equipment-maintenance-category"
+          title={group.label}
+          summary={attention > 0 ? (
+            <span className="collapsible-section-summary--alert">
+              {attention} need{attention === 1 ? 's' : ''} attention · {group.items.length}
+            </span>
+          ) : `${group.items.length}`}
+          defaultOpen={attention > 0}
+          forceOpen={group.items.some((item) => item.id === focusEquipmentId)}
+        >
           <ul className="equipment-maintenance-list">
-            {group.items.map((item) => {
+            {shownItems.map((item) => {
               const blocked = equipmentBlocksProduction(item);
               const dirty = equipmentNeedsCleaning(item);
               const statusLabel = dirty
@@ -178,6 +226,19 @@ export function EquipmentMaintenance() {
                     >
                       History
                     </button>
+                    {dirty && (
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-secondary"
+                        data-testid={`mark-clean-${item.id}`}
+                        onClick={() => {
+                          setCleanItem(item);
+                          setCleanedBy(emptyAssignee());
+                        }}
+                      >
+                        Mark clean
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="btn btn-sm btn-secondary"
@@ -202,11 +263,32 @@ export function EquipmentMaintenance() {
               );
             })}
           </ul>
-        </section>
-      ))}
+          {(hiddenCount > 0 || (attention > 0 && expandedGroups.has(group.type))) && (
+            <button
+              type="button"
+              className="btn btn-sm btn-ghost"
+              data-testid={`maintenance-show-all-${group.type}`}
+              onClick={() => setExpandedGroups((prev) => {
+                const next = new Set(prev);
+                if (next.has(group.type)) next.delete(group.type);
+                else next.add(group.type);
+                return next;
+              })}
+            >
+              {hiddenCount > 0 ? `Show all ${group.items.length}` : 'Show only items needing attention'}
+            </button>
+          )}
+        </CollapsibleSection>
+        );
+      })}
 
-      <section className="card" style={{ marginTop: '1.5rem' }}>
-        <h3>Maintenance &amp; cleaning log</h3>
+      <CollapsibleSection
+        className="card"
+        title="Maintenance & cleaning log"
+        summary={recentLog.total}
+        defaultOpen={false}
+        storageKey="equipment-maintenance-log"
+      >
         <p className="field-hint" style={{ marginTop: 0 }}>
           Newest first — includes automatic “needs cleaning” after production use and manual clean / repair entries.
         </p>
@@ -216,7 +298,7 @@ export function EquipmentMaintenance() {
           label="events"
         />
         <EquipmentMaintenanceLogTable entries={recentLog.shown} showEquipment />
-      </section>
+      </CollapsibleSection>
 
       {editItem && (
         <Modal title={`Maintenance — ${editItem.name}`} onClose={closeEdit}>
@@ -255,6 +337,31 @@ export function EquipmentMaintenance() {
             </button>
             <button type="button" className="btn btn-primary" onClick={handleSave}>
               Save
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {cleanItem && (
+        <Modal title={`Mark clean — ${cleanItem.name}`} onClose={() => setCleanItem(null)}>
+          <p className="field-hint">
+            {cleanItem.name} needs cleaning. Recording who cleaned it returns the equipment to empty and takes it off the calendar.
+          </p>
+          <div className="form-group full-width">
+            <label>Cleaned by</label>
+            <AssigneeSelect value={cleanedBy} onChange={setCleanedBy} required />
+          </div>
+          <div className="form-actions">
+            <button type="button" className="btn btn-secondary" onClick={() => setCleanItem(null)}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              data-testid="mark-clean-save"
+              onClick={handleMarkCleaned}
+            >
+              Mark as cleaned
             </button>
           </div>
         </Modal>

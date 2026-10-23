@@ -14,6 +14,7 @@ const PRESETS: { value: ReportPeriodPreset; label: string }[] = [
   { value: 'yesterday', label: 'Yesterday' },
   { value: 'week', label: 'This week' },
   { value: 'month', label: 'This month' },
+  { value: 'lastMonth', label: 'Last month' },
   { value: 'all', label: 'All time' },
   { value: 'custom', label: 'Custom' },
 ];

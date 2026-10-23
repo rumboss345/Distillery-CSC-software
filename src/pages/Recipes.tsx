@@ -1,20 +1,24 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   getBlendRecipes,
   getGinRecipes,
   getRecipes,
   getInventoryByCategory,
+  saveBlendRecipe,
+  saveGinRecipe,
   saveRecipe,
   deleteRecipe,
   useRefreshKey,
 } from '../db/queries';
 import { Modal } from '../components/Modal';
+import { IngredientSelect } from '../components/IngredientSelect';
 import { BlendDesigner } from '../components/BlendDesigner';
 import { BlendRecipesTab } from '../components/BlendRecipesTab';
 import { GinRecipesTab } from '../components/GinRecipesTab';
 import { useAuth } from '../context/AuthContext';
-import { RECIPE_EXPORT_HEADERS, buildRecipeExportRows } from '../lib/recipe-export';
+import { importRecipeCsv } from '../lib/recipe-import';
+import { buildRecipeExport } from '../lib/recipe-export';
 import { downloadCsv, rowsToCsv } from '../lib/reporting/csv';
 import {
   emptyRecipeNutrient,
@@ -54,11 +58,14 @@ export function Recipes() {
   const [tab, setTab] = useState<RecipeTab>(defaultTab);
   const [showDesigner, setShowDesigner] = useState(false);
   const [openBlendForm, setOpenBlendForm] = useState(false);
+  const [openGinForm, setOpenGinForm] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<number | undefined>();
   const [form, setForm] = useState(emptyRecipe());
   const [nutrients, setNutrients] = useState<RecipeNutrientInput[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [importNote, setImportNote] = useState('');
+  const importFileRef = useRef<HTMLInputElement>(null);
 
   void key;
 
@@ -121,16 +128,77 @@ export function Recipes() {
   };
 
   const exportRecipes = () => {
-    const rows = buildRecipeExportRows({
+    const sheet = buildRecipeExport({
       wash: canWash ? recipes : [],
       gin: canGin ? getGinRecipes() : [],
       blend: canBlend ? getBlendRecipes() : [],
     });
-    if (rows.length === 0) {
+    if (sheet.rows.length === 0) {
       alert('No recipes to export.');
       return;
     }
-    downloadCsv('recipes', rowsToCsv([...RECIPE_EXPORT_HEADERS], rows));
+    downloadCsv('recipes', rowsToCsv(sheet.headers, sheet.rows));
+  };
+
+  const importRecipes = async (file: File) => {
+    const imported = importRecipeCsv(await file.text());
+    const errors = [...imported.errors];
+    let added = 0;
+    let updated = 0;
+
+    if (canWash) {
+      const existing = new Map(getRecipes().map((recipe) => [recipe.name.trim().toLowerCase(), recipe.id]));
+      for (const recipe of imported.wash) {
+        const id = existing.get(recipe.name.trim().toLowerCase());
+        const savedId = saveRecipe(recipe, id, recipe.nutrients);
+        existing.set(recipe.name.trim().toLowerCase(), savedId);
+        if (id) updated += 1;
+        else added += 1;
+      }
+    } else if (imported.wash.length > 0) {
+      errors.push('Wash recipes were skipped. This account cannot edit them.');
+    }
+
+    if (canGin) {
+      const existing = new Map(getGinRecipes().map((recipe) => [recipe.name.trim().toLowerCase(), recipe.id]));
+      for (const recipe of imported.gin) {
+        const id = existing.get(recipe.name.trim().toLowerCase());
+        try {
+          const savedId = saveGinRecipe({ name: recipe.name, notes: recipe.notes }, id, recipe.botanicals);
+          existing.set(recipe.name.trim().toLowerCase(), savedId);
+          if (id) updated += 1;
+          else added += 1;
+        } catch (error) {
+          errors.push(error instanceof Error ? error.message : `Could not save ${recipe.name}.`);
+        }
+      }
+    } else if (imported.gin.length > 0) {
+      errors.push('Gin recipes were skipped. This account cannot edit them.');
+    }
+
+    if (canBlend) {
+      const existing = new Map(getBlendRecipes().map((recipe) => [recipe.name.trim().toLowerCase(), recipe.id]));
+      for (const recipe of imported.blend) {
+        const id = existing.get(recipe.name.trim().toLowerCase());
+        try {
+          const savedId = saveBlendRecipe(recipe, recipe.spirit_sources, recipe.ingredients, id);
+          existing.set(recipe.name.trim().toLowerCase(), savedId);
+          if (id) updated += 1;
+          else added += 1;
+        } catch (error) {
+          errors.push(error instanceof Error ? error.message : `Could not save ${recipe.name}.`);
+        }
+      }
+    } else if (imported.blend.length > 0) {
+      errors.push('Blend recipes were skipped. This account cannot edit them.');
+    }
+
+    const summary: string[] = [];
+    if (added > 0) summary.push(`Added ${added} ${added === 1 ? 'recipe' : 'recipes'}.`);
+    if (updated > 0) summary.push(`Updated ${updated} existing ${updated === 1 ? 'recipe' : 'recipes'}.`);
+    if (added === 0 && updated === 0 && errors.length === 0) summary.push('The file has no recipes.');
+    setImportNote([...summary, ...errors].join(' '));
+    if (added > 0 || updated > 0) refresh();
   };
 
   const handleDelete = (id: number) => {
@@ -146,81 +214,127 @@ export function Recipes() {
       <div className="page-header">
         <h2>Recipes</h2>
         <p>Saved wash, gin, and blend formulas you can run again</p>
-        <div className="page-actions">
-          {tab === 'wash' && canWash && !showDesigner && (
-            <button type="button" className="btn btn-primary" onClick={openNew}>
-              + Add Wash Recipe
-            </button>
-          )}
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={exportRecipes}
-            data-testid="export-recipes"
-          >
-            Export recipes
-          </button>
-        </div>
       </div>
 
-      {canBlend && (
-        <div className="page-actions recipe-blend-actions">
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={openBlendRecipe}
-            data-testid="add-blend-recipe"
-          >
-            + Add blend recipe
-          </button>
-          <button
-            type="button"
-            className={`btn ${showDesigner ? 'btn-primary' : 'btn-secondary'}`}
-            aria-pressed={showDesigner}
-            onClick={() => setShowDesigner((open) => !open)}
-            data-testid="blend-designer"
-          >
-            Blend designer
-          </button>
-        </div>
-      )}
+      <div className="recipe-page-bar">
+        {[canWash, canGin, canBlend].filter(Boolean).length > 1 && (
+          <div className="recipe-tabs" role="tablist" aria-label="Recipe type">
+            {canWash && (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={!showDesigner && tab === 'wash'}
+                className={`recipe-tab${!showDesigner && tab === 'wash' ? ' active' : ''}`}
+                onClick={() => selectTab('wash')}
+              >
+                Wash &amp; Fermentation
+              </button>
+            )}
+            {canGin && (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={!showDesigner && tab === 'gin'}
+                className={`recipe-tab${!showDesigner && tab === 'gin' ? ' active' : ''}`}
+                onClick={() => selectTab('gin')}
+              >
+                Gin
+              </button>
+            )}
+            {canBlend && (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={!showDesigner && tab === 'blend'}
+                className={`recipe-tab${!showDesigner && tab === 'blend' ? ' active' : ''}`}
+                onClick={() => selectTab('blend')}
+              >
+                Blending
+              </button>
+            )}
+          </div>
+        )}
 
-      {[canWash, canGin, canBlend].filter(Boolean).length > 1 && (
-        <div className="recipe-tabs" role="tablist" aria-label="Recipe type">
-          {canWash && (
+        <div className="recipe-action-row">
+          {!showDesigner && tab === 'wash' && canWash && (
+            <div className="recipe-action-cluster">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={openNew}
+                data-testid="add-wash-recipe"
+              >
+                + Add Wash Recipe
+              </button>
+            </div>
+          )}
+          {!showDesigner && tab === 'gin' && canGin && (
+            <div className="recipe-action-cluster">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => setOpenGinForm(true)}
+                data-testid="add-gin-recipe"
+              >
+                + Add Gin Recipe
+              </button>
+            </div>
+          )}
+          {(showDesigner || tab === 'blend') && canBlend && (
+            <div className="recipe-action-cluster">
+              <button
+                type="button"
+                className={`btn ${showDesigner ? 'btn-secondary' : 'btn-primary'}`}
+                onClick={openBlendRecipe}
+                data-testid="add-blend-recipe"
+              >
+                + Add blend recipe
+              </button>
+              <button
+                type="button"
+                className={`btn btn-secondary${showDesigner ? ' is-on' : ''}`}
+                aria-pressed={showDesigner}
+                onClick={() => setShowDesigner((open) => !open)}
+                data-testid="blend-designer"
+              >
+                Blend designer
+              </button>
+            </div>
+          )}
+          <div className="recipe-action-cluster recipe-action-cluster--end">
             <button
               type="button"
-              role="tab"
-              aria-selected={!showDesigner && tab === 'wash'}
-              className={`recipe-tab${!showDesigner && tab === 'wash' ? ' active' : ''}`}
-              onClick={() => selectTab('wash')}
+              className="recipe-io-btn"
+              onClick={exportRecipes}
+              data-testid="export-recipes"
             >
-              Wash &amp; Fermentation
+              Export recipes
             </button>
-          )}
-          {canGin && (
             <button
               type="button"
-              role="tab"
-              aria-selected={!showDesigner && tab === 'gin'}
-              className={`recipe-tab${!showDesigner && tab === 'gin' ? ' active' : ''}`}
-              onClick={() => selectTab('gin')}
+              className="recipe-io-btn"
+              onClick={() => importFileRef.current?.click()}
+              data-testid="import-recipes"
             >
-              Gin
+              Import recipes
             </button>
-          )}
-          {canBlend && (
-            <button
-              type="button"
-              role="tab"
-              aria-selected={!showDesigner && tab === 'blend'}
-              className={`recipe-tab${!showDesigner && tab === 'blend' ? ' active' : ''}`}
-              onClick={() => selectTab('blend')}
-            >
-              Blending
-            </button>
-          )}
+            <input
+              ref={importFileRef}
+              type="file"
+              accept=".csv,text/csv"
+              hidden
+              data-testid="import-recipes-file"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = '';
+                if (file) void importRecipes(file);
+              }}
+            />
+          </div>
         </div>
+      </div>
+      {importNote && (
+        <p className="field-hint" role="status" data-testid="import-recipes-result">{importNote}</p>
       )}
 
       {showDesigner && canBlend ? (
@@ -241,10 +355,10 @@ export function Recipes() {
                     <th>Recipe</th>
                     <th>Spirit Type</th>
                     <th>Sugar</th>
-                    <th>Sugar (lbs)</th>
-                    <th>Batch Size (gal)</th>
+                    <th className="num">Sugar (lbs)</th>
+                    <th className="num">Batch Size (gal)</th>
                     <th>Yeast</th>
-                    <th>Target Brix</th>
+                    <th className="num">Target Brix</th>
                     <th>Nutrients</th>
                     <th>Actions</th>
                   </tr>
@@ -260,10 +374,10 @@ export function Recipes() {
                       <td><strong>{r.name}</strong></td>
                       <td>{r.spirit_type || '—'}</td>
                       <td>{r.grain_type || '—'}</td>
-                      <td>{r.grain_lbs || '—'}</td>
-                      <td>{r.water_gal || '—'}</td>
+                      <td className="num">{r.grain_lbs || '—'}</td>
+                      <td className="num">{r.water_gal || '—'}</td>
                       <td>{r.yeast_strain || '—'}</td>
-                      <td>{r.target_brix ?? '—'}</td>
+                      <td className="num">{r.target_brix ?? '—'}</td>
                       <td>{r.nutrients.length ? formatRecipeNutrientsSummary(r.nutrients) : '—'}</td>
                       <td className="table-actions" onClick={(e) => e.stopPropagation()}>
                         <button type="button" className="btn btn-secondary btn-sm" onClick={() => openEdit(r)}>
@@ -313,7 +427,9 @@ export function Recipes() {
         </>
       )}
 
-      {!showDesigner && tab === 'gin' && canGin && <GinRecipesTab />}
+      {!showDesigner && tab === 'gin' && canGin && (
+        <GinRecipesTab openForm={openGinForm} onFormOpened={() => setOpenGinForm(false)} />
+      )}
 
       {!showDesigner && tab === 'blend' && canBlend && (
         <BlendRecipesTab openForm={openBlendForm} onFormOpened={() => setOpenBlendForm(false)} />
@@ -340,18 +456,18 @@ export function Recipes() {
             </div>
             <div className="form-group">
               <label>Sugar Type</label>
-              <select
+              <IngredientSelect
+                testId="wash-recipe-sugar"
                 value={form.grain_type}
-                onChange={(e) => setForm({ ...form, grain_type: e.target.value })}
-              >
-                <option value="">— Select sugar from inventory —</option>
-                {sugarItems.map((item) => (
-                  <option key={item.id} value={item.name}>{item.name}</option>
-                ))}
-                {form.grain_type && !sugarItems.some((i) => i.name === form.grain_type) && (
-                  <option value={form.grain_type}>{form.grain_type}</option>
-                )}
-              </select>
+                emptyLabel="— Select sugar from inventory —"
+                noun="sugar"
+                category="sugar"
+                unit="lbs"
+                options={sugarItems.map((item) => ({ value: item.name, label: item.name }))}
+                orphanLabel={form.grain_type || undefined}
+                onSelect={(grain_type) => setForm({ ...form, grain_type })}
+                onAdded={(item) => setForm({ ...form, grain_type: item.name })}
+              />
             </div>
             <div className="form-group">
               <label>Sugar (lbs)</label>
@@ -375,18 +491,18 @@ export function Recipes() {
             </div>
             <div className="form-group">
               <label>Yeast Strain</label>
-              <select
+              <IngredientSelect
+                testId="wash-recipe-yeast"
                 value={form.yeast_strain}
-                onChange={(e) => setForm({ ...form, yeast_strain: e.target.value })}
-              >
-                <option value="">— Select yeast from inventory —</option>
-                {yeastItems.map((item) => (
-                  <option key={item.id} value={item.name}>{item.name}</option>
-                ))}
-                {form.yeast_strain && !yeastItems.some((i) => i.name === form.yeast_strain) && (
-                  <option value={form.yeast_strain}>{form.yeast_strain}</option>
-                )}
-              </select>
+                emptyLabel="— Select yeast from inventory —"
+                noun="yeast"
+                category="yeast"
+                unit="lbs"
+                options={yeastItems.map((item) => ({ value: item.name, label: item.name }))}
+                orphanLabel={form.yeast_strain || undefined}
+                onSelect={(yeast_strain) => setForm({ ...form, yeast_strain })}
+                onAdded={(item) => setForm({ ...form, yeast_strain: item.name })}
+              />
             </div>
             <div className="form-group">
               <label>Yeast (lbs)</label>
@@ -404,18 +520,18 @@ export function Recipes() {
                 <div className="form-grid" style={{ marginBottom: 0 }}>
                   <div className="form-group">
                     <label>{index === 0 ? 'Nutrient' : `Nutrient ${index + 1}`}</label>
-                    <select
+                    <IngredientSelect
+                      testId={`nutrient-${index}`}
                       value={row.name}
-                      onChange={(e) => updateNutrient(index, { name: e.target.value })}
-                    >
-                      <option value="">— Select nutrient from inventory —</option>
-                      {nutrientItems.map((item) => (
-                        <option key={item.id} value={item.name}>{item.name}</option>
-                      ))}
-                      {row.name && !nutrientItems.some((i) => i.name === row.name) && (
-                        <option value={row.name}>{row.name}</option>
-                      )}
-                    </select>
+                      emptyLabel="— Select nutrient from inventory —"
+                      noun="nutrient"
+                      category="nutrients"
+                      unit={normalizeNutrientUnit(row.unit)}
+                      options={nutrientItems.map((item) => ({ value: item.name, label: item.name }))}
+                      orphanLabel={row.name || undefined}
+                      onSelect={(name) => updateNutrient(index, { name })}
+                      onAdded={(item) => updateNutrient(index, { name: item.name })}
+                    />
                   </div>
                   <div className="form-group">
                     <label>Amount</label>

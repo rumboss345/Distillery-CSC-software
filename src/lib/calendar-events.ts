@@ -3,18 +3,16 @@ import {
   format,
   parseISO,
 } from 'date-fns';
-import { localCalendarDayKey } from './date-input';
+import { formatDateDisplay, localCalendarDayKey } from './date-input';
+import { localIsoDate } from './planned-event-date';
 import {
   getMashBatches,
   getDistillationRuns,
-  getBarrels,
   getBottlingRuns,
   getBlendProducts,
-  getHoldingTankTransfers,
   getAllFermentationLogs,
 } from '../db/queries';
 import { formatLinesSummary } from './bottling-lines';
-import { washRecordPath } from './wash-stage';
 import type {
   Barrel,
   BlendProduct,
@@ -27,11 +25,13 @@ import type {
 
 export type CalendarActivityKind =
   | 'wash'
+  | 'fermentation'
   | 'distillation'
   | 'barrel'
   | 'bottling'
   | 'blend'
-  | 'transfer';
+  | 'transfer'
+  | 'cleaning';
 
 export type CalendarStatusCategory =
   | 'planned'
@@ -43,21 +43,25 @@ export type CalendarStatusCategory =
   | 'other';
 
 export const CALENDAR_KIND_LABELS: Record<CalendarActivityKind, string> = {
-  wash: 'Wash & Ferment',
+  wash: 'Wash',
+  fermentation: 'Fermentation',
   distillation: 'Distillation',
   barrel: 'Barrel Aging',
   bottling: 'Bottling',
   blend: 'Blending',
   transfer: 'Tank Transfer',
+  cleaning: 'Cleaning',
 };
 
 export const CALENDAR_KIND_ROUTES: Record<CalendarActivityKind, string> = {
   wash: '/wash',
+  fermentation: '/fermentation',
   distillation: '/distillation',
   barrel: '/barrels',
   bottling: '/bottling',
   blend: '/blending',
   transfer: '/tank-transfer',
+  cleaning: '/equipment-maintenance',
 };
 
 export const CALENDAR_STATUS_LABELS: Record<CalendarStatusCategory, string> = {
@@ -72,11 +76,10 @@ export const CALENDAR_STATUS_LABELS: Record<CalendarStatusCategory, string> = {
 
 export const ALL_CALENDAR_KINDS: CalendarActivityKind[] = [
   'wash',
+  'fermentation',
   'distillation',
-  'barrel',
   'bottling',
   'blend',
-  'transfer',
 ];
 
 export const ALL_CALENDAR_STATUS_CATEGORIES: CalendarStatusCategory[] = [
@@ -100,14 +103,25 @@ export const ALL_CALENDAR_STATUS_CATEGORIES: CalendarStatusCategory[] = [
  * - BottlingRun / BlendProduct: single blend_date / bottling_date only.
  */
 export const CALENDAR_DATA_LIMITATIONS = [
-  'Wash batches have no planned end date or completion date field — multi-day spans use fermentation log dates only when status is complete or discarded.',
-  'In-progress wash/fermentation batches remain single-day unless completed with log history.',
-  'Barrel fill dates are shown; empty/dumped barrels have no separate event date in the database.',
-  'Distillation, bottling, blending, and transfers are single-day events based on their recorded dates.',
+  'A fermentation with an expected completion date stays on the calendar from the day it starts through that date. If it is still running after that date, it stays through today.',
+  'Washes that are still being made, runs, and blends that are in progress stay on the calendar from their start through today.',
+  'Barrel aging and tank transfers are not shown on the calendar.',
+  'Distillation, bottling, and blending are dated from their recorded dates.',
 ] as const;
+
+export type CalendarProgress = 'upcoming' | 'in_progress' | 'done';
+
+export const CALENDAR_PROGRESS_LABELS: Record<CalendarProgress, string> = {
+  upcoming: 'Upcoming',
+  in_progress: 'In progress',
+  done: 'Done',
+};
+
+export const ALL_CALENDAR_PROGRESS: CalendarProgress[] = ['upcoming', 'in_progress', 'done'];
 
 export interface CalendarEvent {
   id: string;
+  recordId?: number;
   startDate: string;
   endDate?: string;
   allDay?: boolean;
@@ -116,7 +130,12 @@ export interface CalendarEvent {
   /** Raw status value from the production record. */
   status: string;
   statusCategory: CalendarStatusCategory;
+  assignee?: string;
   detail?: string;
+  /** Fermentation page, rather than the wash page, owns this wash record. */
+  washOnFermentation?: boolean;
+  /** Dirty equipment stays on every later day until it is cleaned. */
+  continuesUntilCleaned?: boolean;
 }
 
 export interface CalendarProductionData {
@@ -134,9 +153,33 @@ function toDateOnly(value: string | null | undefined): string | undefined {
   return day || undefined;
 }
 
-export function calendarEventPath(event: Pick<CalendarEvent, 'kind' | 'status'>): string {
-  if (event.kind === 'wash') return washRecordPath(event.status);
-  return CALENDAR_KIND_ROUTES[event.kind];
+export function calendarEventPath(event: Pick<CalendarEvent, 'kind' | 'recordId'>): string {
+  if (event.kind === 'cleaning') {
+    if (event.recordId == null) return CALENDAR_KIND_ROUTES.cleaning;
+    return `${CALENDAR_KIND_ROUTES.cleaning}?equipment=${event.recordId}`;
+  }
+  const base = CALENDAR_KIND_ROUTES[event.kind];
+  if (event.recordId == null) return base;
+  return `${base}?record=${event.recordId}`;
+}
+
+/** In-progress work stays on the calendar from its start through today. */
+export function spanThroughToday(startDate: string, today: string): string | undefined {
+  return startDate < today ? today : undefined;
+}
+
+export function calendarProgress(category: CalendarStatusCategory): CalendarProgress {
+  if (category === 'in_progress' || category === 'hold') return 'in_progress';
+  if (category === 'complete' || category === 'cancelled' || category === 'other') return 'done';
+  return 'upcoming';
+}
+
+/** Running work stays above planned work. Finished work stays last. */
+export function calendarProgressRank(category: CalendarStatusCategory): number {
+  const progress = calendarProgress(category);
+  if (progress === 'in_progress') return 0;
+  if (progress === 'upcoming') return 1;
+  return 2;
 }
 
 export function isMultiDayEvent(event: CalendarEvent): boolean {
@@ -145,6 +188,13 @@ export function isMultiDayEvent(event: CalendarEvent): boolean {
 
 export function eventEndDate(event: CalendarEvent): string {
   return event.endDate ?? event.startDate;
+}
+
+/** True when this event occupies the given day. Open cleaning has no end date. */
+export function eventOccursOnDate(event: CalendarEvent, date: string): boolean {
+  if (!date) return false;
+  if (event.continuesUntilCleaned) return event.startDate <= date;
+  return event.startDate <= date && date <= eventEndDate(event);
 }
 
 /** Primary sort/display date — preserved for callers that used the legacy `date` field. */
@@ -176,19 +226,6 @@ export function mapRunStatus(status: DistillationRun['status']): CalendarStatusC
       return 'in_progress';
     case 'complete':
       return 'complete';
-    default:
-      return 'other';
-  }
-}
-
-export function mapBarrelStatus(status: Barrel['status']): CalendarStatusCategory {
-  switch (status) {
-    case 'aging':
-      return 'in_progress';
-    case 'empty':
-      return 'complete';
-    case 'dumped':
-      return 'cancelled';
     default:
       return 'other';
   }
@@ -239,38 +276,91 @@ export function deriveFermentationEndDate(
   return logDates[logDates.length - 1];
 }
 
+function fermentationHasStarted(batch: MashBatch, logs: FermentationLog[]): boolean {
+  if (batch.status === 'fermenting' || batch.status === 'complete') return true;
+  if (toDateOnly(batch.fermentation_start_date)) return true;
+  return batch.status === 'discarded' && fermentationLogsForBatch(logs, batch.id).length > 0;
+}
+
+/** The wash cook, separate from the fermentation that follows it. */
 export function buildWashCalendarEvent(
   batch: MashBatch,
-  logs: FermentationLog[],
+  _logs: FermentationLog[] = [],
+  today: string = localIsoDate(),
 ): CalendarEvent | null {
   const startDate = toDateOnly(batch.start_date);
   if (!startDate) return null;
 
-  const endFromLogs = deriveFermentationEndDate(batch, logs);
-  const endDate =
-    endFromLogs && endFromLogs > startDate ? endFromLogs : undefined;
+  const washing = batch.status === 'mashing';
+  const washFinished = batch.status === 'fermenting' || batch.status === 'complete';
+  const washStatus = washFinished ? 'complete' : batch.status;
 
   return {
     id: `wash-${batch.id}`,
+    recordId: batch.id,
     startDate,
-    endDate,
+    endDate: washing ? spanThroughToday(startDate, today) : undefined,
     allDay: true,
     kind: 'wash',
-    title: batch.batch_number,
-    status: batch.status,
-    statusCategory: mapWashStatus(batch.status),
-    detail: [batch.recipe_name || batch.grain_type, batch.assigned_user_name]
-      .filter(Boolean)
-      .join(' · '),
+    title: `Wash ${batch.batch_number}`,
+    status: washStatus,
+    statusCategory: mapWashStatus(washStatus),
+    assignee: batch.assigned_user_name || undefined,
+    detail: [batch.recipe_name || batch.grain_type, 'Wash'].filter(Boolean).join(' · ') || undefined,
   };
 }
 
-export function buildCalendarEventsFromData(data: CalendarProductionData): CalendarEvent[] {
+/** The fermentation, from the day it starts through the expected completion. */
+export function buildFermentationCalendarEvent(
+  batch: MashBatch,
+  logs: FermentationLog[],
+  today: string = localIsoDate(),
+): CalendarEvent | null {
+  if (!fermentationHasStarted(batch, logs)) return null;
+  const washStart = toDateOnly(batch.start_date);
+  const fermentStart = toDateOnly(batch.fermentation_start_date ?? '') || washStart;
+  if (!fermentStart) return null;
+
+  const expected = toDateOnly(batch.expected_completion_date ?? '');
+  const endFromLogs = deriveFermentationEndDate(batch, logs);
+  const active = batch.status === 'fermenting';
+  let endDate: string | undefined;
+  if (active && expected && expected > fermentStart) {
+    endDate = expected < today && today > fermentStart ? today : expected;
+  } else if (active) {
+    endDate = spanThroughToday(fermentStart, today);
+  } else if (endFromLogs && endFromLogs > fermentStart) {
+    endDate = endFromLogs;
+  }
+  const expectedLabel = expected ? `Expected done ${formatDateDisplay(expected)}` : 'Fermentation';
+
+  return {
+    id: `ferment-${batch.id}`,
+    recordId: batch.id,
+    startDate: fermentStart,
+    endDate,
+    allDay: true,
+    kind: 'fermentation',
+    title: `Ferment ${batch.batch_number}`,
+    status: batch.status,
+    statusCategory: mapWashStatus(batch.status),
+    assignee: batch.assigned_user_name || undefined,
+    detail: [batch.recipe_name || batch.grain_type, expectedLabel].filter(Boolean).join(' · ') || undefined,
+    washOnFermentation: true,
+  };
+}
+
+export function buildCalendarEventsFromData(
+  data: CalendarProductionData,
+  today: string = localIsoDate(),
+): CalendarEvent[] {
   const events: CalendarEvent[] = [];
 
   for (const batch of data.mashes) {
-    const event = buildWashCalendarEvent(batch, data.fermentationLogs);
-    if (event) events.push(event);
+    const wash = buildWashCalendarEvent(batch, data.fermentationLogs, today);
+    if (wash) events.push(wash);
+    const fermentation = buildFermentationCalendarEvent(batch, data.fermentationLogs, today);
+    if (fermentation) events.push(fermentation);
   }
 
   for (const run of data.runs) {
@@ -278,28 +368,16 @@ export function buildCalendarEventsFromData(data: CalendarProductionData): Calen
     if (!startDate) continue;
     events.push({
       id: `run-${run.id}`,
+      recordId: run.id,
       startDate,
+      endDate: run.status === 'running' ? spanThroughToday(startDate, today) : undefined,
       allDay: true,
       kind: 'distillation',
       title: run.batch_number,
       status: run.status,
       statusCategory: mapRunStatus(run.status),
-      detail: [run.still_name, run.assigned_user_name].filter(Boolean).join(' · '),
-    });
-  }
-
-  for (const barrel of data.barrels) {
-    const startDate = toDateOnly(barrel.fill_date);
-    if (!startDate) continue;
-    events.push({
-      id: `barrel-fill-${barrel.id}`,
-      startDate,
-      allDay: true,
-      kind: 'barrel',
-      title: barrel.barrel_number,
-      status: barrel.status,
-      statusCategory: mapBarrelStatus(barrel.status),
-      detail: `${barrel.spirit_type} — fill`,
+      assignee: run.assigned_user_name || undefined,
+      detail: run.still_name || undefined,
     });
   }
 
@@ -308,6 +386,7 @@ export function buildCalendarEventsFromData(data: CalendarProductionData): Calen
     if (!startDate) continue;
     events.push({
       id: `bottling-${bottling.id}`,
+      recordId: bottling.id,
       startDate,
       allDay: true,
       kind: 'bottling',
@@ -325,28 +404,16 @@ export function buildCalendarEventsFromData(data: CalendarProductionData): Calen
     if (!startDate) continue;
     events.push({
       id: `blend-${blend.id}`,
+      recordId: blend.id,
       startDate,
+      endDate: blend.status === 'approved' ? spanThroughToday(startDate, today) : undefined,
       allDay: true,
       kind: 'blend',
       title: blend.product_name || blend.batch_number,
       status: blend.status,
       statusCategory: mapBlendStatus(blend.status),
-      detail: [blend.batch_number, blend.assigned_user_name].filter(Boolean).join(' · '),
-    });
-  }
-
-  for (const transfer of data.transfers) {
-    const startDate = toDateOnly(transfer.transfer_date);
-    if (!startDate) continue;
-    events.push({
-      id: `transfer-${transfer.id}`,
-      startDate,
-      allDay: true,
-      kind: 'transfer',
-      title: `${transfer.source_tank_name ?? 'Tank'} → ${transfer.dest_tank_name ?? 'Tank'}`,
-      status: 'transfer',
-      statusCategory: 'other',
-      detail: `${transfer.volume_gal.toFixed(1)} gal @ ${transfer.abv.toFixed(1)}%`,
+      assignee: blend.assigned_user_name || undefined,
+      detail: blend.product_name ? blend.batch_number : undefined,
     });
   }
 
@@ -358,10 +425,10 @@ export function buildCalendarEvents(): CalendarEvent[] {
     mashes: getMashBatches(),
     fermentationLogs: getAllFermentationLogs(),
     runs: getDistillationRuns(),
-    barrels: getBarrels(),
+    barrels: [],
     bottlings: getBottlingRuns(),
     blends: getBlendProducts(),
-    transfers: getHoldingTankTransfers(),
+    transfers: [],
   });
 }
 
@@ -385,12 +452,6 @@ export function enumerateEventDates(event: CalendarEvent): string[] {
     return [event.startDate];
   }
   return eachDayOfInterval({ start, end }).map((day) => format(day, 'yyyy-MM-dd'));
-}
-
-export function eventOccursOnDate(event: CalendarEvent, date: string): boolean {
-  if (!date) return false;
-  const end = eventEndDate(event);
-  return event.startDate <= date && date <= end;
 }
 
 export function filterEventsByKind(
@@ -425,15 +486,80 @@ export function filterEventsByStatusCategory(
   return events.filter((event) => matchesStatusCategoryFilter(event, enabledCategories));
 }
 
+export function filterEventsByProgress(
+  events: CalendarEvent[],
+  enabled: Set<CalendarProgress>,
+): CalendarEvent[] {
+  if (enabled.size === 0) return [];
+  return events.filter((event) => enabled.has(calendarProgress(event.statusCategory)));
+}
+
 export function filterCalendarEvents(
   events: CalendarEvent[],
   enabledKinds: Set<CalendarActivityKind>,
-  enabledStatusCategories: Set<CalendarStatusCategory>,
+  enabledProgress: Set<CalendarProgress>,
 ): CalendarEvent[] {
-  return filterEventsByStatusCategory(
-    filterEventsByKind(events, enabledKinds),
-    enabledStatusCategories,
-  );
+  return filterEventsByProgress(filterEventsByKind(events, enabledKinds), enabledProgress);
+}
+
+export interface CalendarWeekSpan {
+  event: CalendarEvent;
+  startCol: number;
+  endCol: number;
+  lane: number;
+  continuesBefore: boolean;
+  continuesAfter: boolean;
+}
+
+/** Place events on one week so a multi-day process occupies one bar, not a box per day. */
+export function layoutCalendarWeek(dayKeys: string[], events: CalendarEvent[]): CalendarWeekSpan[] {
+  if (dayKeys.length === 0) return [];
+  const weekStart = dayKeys[0];
+  const weekEnd = dayKeys[dayKeys.length - 1];
+  const indexOf = new Map(dayKeys.map((key, index) => [key, index]));
+
+  const segments: CalendarWeekSpan[] = [];
+  for (const event of events) {
+    const open = event.continuesUntilCleaned === true;
+    const eventEnd = open ? weekEnd : eventEndDate(event);
+    if (eventEnd < weekStart || event.startDate > weekEnd) continue;
+    const visibleStart = event.startDate < weekStart ? weekStart : event.startDate;
+    const visibleEnd = eventEnd > weekEnd ? weekEnd : eventEnd;
+    const startCol = indexOf.get(visibleStart);
+    const endCol = indexOf.get(visibleEnd);
+    if (startCol == null || endCol == null) continue;
+    segments.push({
+      event,
+      startCol,
+      endCol,
+      lane: 0,
+      continuesBefore: event.startDate < weekStart,
+      continuesAfter: open || eventEnd > weekEnd,
+    });
+  }
+
+  segments.sort((a, b) => {
+    const byProgress = calendarProgressRank(a.event.statusCategory) - calendarProgressRank(b.event.statusCategory);
+    if (byProgress !== 0) return byProgress;
+    if (a.startCol !== b.startCol) return a.startCol - b.startCol;
+    const byLength = (b.endCol - b.startCol) - (a.endCol - a.startCol);
+    if (byLength !== 0) return byLength;
+    return a.event.title.localeCompare(b.event.title);
+  });
+
+  const lanes: CalendarWeekSpan[][] = [];
+  for (const segment of segments) {
+    let lane = lanes.findIndex((row) => row.every((item) => (
+      item.endCol < segment.startCol || item.startCol > segment.endCol
+    )));
+    if (lane === -1) {
+      lane = lanes.length;
+      lanes.push([]);
+    }
+    segment.lane = lane;
+    lanes[lane].push(segment);
+  }
+  return segments;
 }
 
 export function groupEventsByDate(events: CalendarEvent[]): Map<string, CalendarEvent[]> {
@@ -456,12 +582,15 @@ export function eventsInRange(
   rangeStart: string,
   rangeEnd: string,
 ): CalendarEvent[] {
-  return events.filter(
-    (event) => event.startDate <= rangeEnd && eventEndDate(event) >= rangeStart,
-  );
+  return events.filter((event) => {
+    if (event.continuesUntilCleaned) return event.startDate <= rangeEnd;
+    return event.startDate <= rangeEnd && eventEndDate(event) >= rangeStart;
+  });
 }
 
 export function formatEventDateRange(event: CalendarEvent): string {
-  if (!isMultiDayEvent(event)) return event.startDate;
-  return `${event.startDate} → ${event.endDate}`;
+  const start = formatDateDisplay(event.startDate);
+  if (event.continuesUntilCleaned) return `${start} until cleaned`;
+  if (!isMultiDayEvent(event) || !event.endDate) return start;
+  return `${start} – ${formatDateDisplay(event.endDate)}`;
 }

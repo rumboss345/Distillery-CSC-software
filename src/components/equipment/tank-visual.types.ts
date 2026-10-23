@@ -29,6 +29,8 @@ export interface TankVisualData {
 
 export interface TankVisualProps {
   tank: TankVisualData;
+  /** Stainless vessel drawing. Holding, stillage, and collection tanks each have their own shape. */
+  shape?: 'holding' | 'stillage' | 'collection';
   selected?: boolean;
   size?: 'sm' | 'md' | 'lg';
   scaleMultiplier?: number;

@@ -30,6 +30,32 @@
   color: #0f172a;
 }
 
+/* The right panel is light. Site outline buttons use cream text and disappear on it. */
+.warehouse-view .process-sidebar .btn-secondary,
+.warehouse-view .process-sidebar .btn-outline {
+  background: var(--bg-hover);
+  color: var(--text);
+  border: 1px solid #6f665d;
+}
+
+.warehouse-view .process-sidebar .btn-secondary:hover,
+.warehouse-view .process-sidebar .btn-outline:hover {
+  background: var(--border);
+  color: var(--text);
+  border-color: #6f665d;
+}
+
+.warehouse-view .process-sidebar .btn-ghost {
+  background: #fff;
+  color: #1e293b;
+  border: 1px solid #94a3b8;
+}
+
+.warehouse-view .process-sidebar .btn-ghost:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
 .warehouse-view .process-viewport .empty-state {
   color: #334155;
   background: transparent;
@@ -80,13 +106,16 @@
 }
 
 .warehouse-search {
+  flex: 0 0 auto;
+  width: 14rem;
+  min-height: 2.5rem;
   background: #1f2937;
   color: #f8fafc;
   border: 1px solid #64748b;
   border-radius: 6px;
-  padding: 0.28rem 0.55rem;
-  font-size: 0.8rem;
-  min-width: 11rem;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.875rem;
+  font-family: var(--font);
 }
 
 .warehouse-search::placeholder {

@@ -54,7 +54,7 @@ Everyone who is signed in shares **one** distillery record on the server (`disti
 
 The first signed-in browser that connects while the server record is empty uploads its copy and that becomes the shared record. Sign in first on the computer that already has the real production records. After the server has a record, that record is what every browser shows. Two full databases are not merged. If two people save in the same moment, the later save is replaced by the one the server already kept, and the screen says so.
 
-An admin can clear the shared record from the dashboard. That clears it for everyone. A cleared record is not refilled by another browser’s old copy.
+An admin can clear the shared record from Administration. That clears it for everyone. A cleared record is not refilled by another browser’s old copy. Restoring a backup replaces the shared record for everyone.
 
 ## License
 

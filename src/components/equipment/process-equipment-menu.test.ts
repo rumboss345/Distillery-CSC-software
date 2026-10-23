@@ -28,10 +28,10 @@ describe('buildProcessEquipmentContextMenu', () => {
       volumeGal: 112.5,
     }));
 
-    expect(labels(menu.next)).toEqual(['Low wine run', 'Heavy rum', 'Transfer']);
-    expect(menu.next[0]?.to).toBe('/distillation?chargeFermenter=7&runType=wash');
-    expect(labels(menu.records)).toEqual(['Add logs']);
-    expect(menu.records[0]?.to).toBe('/fermentation?logsEquipment=7');
+    expect(labels(menu.next)).toEqual(['Logs', 'Low wine run', 'Heavy rum', 'Transfer']);
+    expect(menu.next[0]?.to).toBe('/fermentation?logsEquipment=7');
+    expect(menu.next[1]?.to).toBe('/distillation?chargeFermenter=7&runType=wash');
+    expect(menu.records).toEqual([]);
     expect(menu.maintenance.to).toBe('/equipment-maintenance?equipment=7');
     expect(menu.hint).toContain('12.4');
   });
@@ -76,7 +76,8 @@ describe('buildProcessEquipmentContextMenu', () => {
       abv: 28,
       liquidName: 'Low wine',
     }));
-    expect(labels(spirit.next)).toEqual(['Transfer', 'Spirit run', 'Blend', 'Bottle']);
+    expect(labels(spirit.next)).toEqual(['Transfer', 'Water down', 'Spirit run', 'Blend', 'Bottle']);
+    expect(spirit.next.find((item) => item.key === 'water-down')?.to).toBe('/tank-transfer?waterDown=9');
 
     const stillage = buildProcessEquipmentContextMenu(source({
       id: 10,
@@ -89,18 +90,42 @@ describe('buildProcessEquipmentContextMenu', () => {
     expect(labels(stillage.next)).toEqual(['Transfer']);
   });
 
-  it('offers add cuts for a still with an open run, and maintenance when idle', () => {
+  it('offers water down for spirit already in a collection vessel', () => {
+    const menu = buildProcessEquipmentContextMenu(source({
+      id: 12,
+      name: 'Latina 500L',
+      equipment_type: 'collection_vessel',
+      volumeGal: 3.4,
+      abv: 78,
+      liquidName: 'Heads',
+    }));
+    expect(labels(menu.next)).toEqual(['Transfer', 'Water down']);
+    expect(menu.next[1]?.to).toBe('/tank-transfer?waterDown=12');
+  });
+
+  it('offers cuts in next step only while a still is distilling', () => {
     const running = buildProcessEquipmentContextMenu(source({
       id: 4,
       name: 'Vendome',
       equipment_type: 'pot_still',
       distillationRunId: 15,
+      distillationRunStatus: 'running',
     }));
-    expect(running.next).toEqual([]);
-    expect(running.records).toEqual([
-      { key: 'cuts', label: 'Add cuts', to: '/distillation?cutsRun=15' },
+    expect(running.next).toEqual([
+      { key: 'cuts', label: 'Cuts', to: '/distillation?cutsRun=15' },
     ]);
+    expect(running.records).toEqual([]);
     expect(running.maintenance.label).toBe('Equipment Maintenance');
+
+    const planned = buildProcessEquipmentContextMenu(source({
+      id: 4,
+      name: 'Vendome',
+      equipment_type: 'pot_still',
+      distillationRunId: 16,
+      distillationRunStatus: 'planned',
+    }));
+    expect(planned.next).toEqual([]);
+    expect(planned.records).toEqual([]);
 
     const idle = buildProcessEquipmentContextMenu(source({
       id: 4,

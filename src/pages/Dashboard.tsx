@@ -1,8 +1,13 @@
 import { useEffect, useState } from 'react';
-import { getProductionSummary, getMashBatches, getDistillationRuns, getBarrels, getInventoryItems, resetAllData, useRefreshKey } from '../db/queries';
+import { format } from 'date-fns';
+import { Link } from 'react-router-dom';
+import { getProductionSummary, getMashBatches, getDistillationRuns, getBarrels, getInventoryItems, barrelBlendProductName, getAllMashFermenterAssignments, useRefreshKey } from '../db/queries';
 import { StatusBadge } from '../components/StatusBadge';
 import { useAuth } from '../context/AuthContext';
+import { inventoryCategoryLabel } from '../lib/inventory-units';
 import { formatDateDisplay } from '../lib/date-input';
+import { fermentationDaysOverdue, formatDaysOverdue, listOverdueFermentations } from '../lib/fermentation';
+import { localIsoDate } from '../lib/planned-event-date';
 import { PROCESS_STAGE_LABELS } from '../lib/permissions';
 
 export function Dashboard() {
@@ -10,23 +15,15 @@ export function Dashboard() {
   const { key: sharedKey } = useRefreshKey();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
-  const summary = getProductionSummary();
-  const recentMashes = getMashBatches().slice(0, 3);
+  const month = format(new Date(), 'yyyy-MM');
+  const summary = getProductionSummary(month, month);
+  const today = localIsoDate();
+  const mashes = getMashBatches();
+  const recentMashes = mashes.slice(0, 3);
+  const overdueFermentations = listOverdueFermentations(getAllMashFermenterAssignments(), mashes, today);
   const recentRuns = getDistillationRuns().slice(0, 3);
   const agingBarrels = getBarrels().filter((b) => b.status === 'aging').slice(0, 3);
   const lowStock = getInventoryItems().filter((i) => i.quantity <= i.reorder_level);
-
-  const handleClearAllData = () => {
-    if (!confirm('Clear the shared distillery record for everyone? This removes washes, runs, blends, barrels, bottling, inventory, and floor plan records.')) {
-      return;
-    }
-    if (!confirm('This cannot be undone. Clear the shared record and reset it to sample data?')) {
-      return;
-    }
-    void resetAllData().catch((error: unknown) => {
-      window.alert(error instanceof Error ? error.message : 'Could not clear the shared distillery record.');
-    });
-  };
 
   return (
     <div data-shared-refresh={sharedKey}>
@@ -50,7 +47,14 @@ export function Dashboard() {
         <div className="stat-card">
           <div className="label">Active Fermentations</div>
           <div className="value accent">{summary.activeFermentations}</div>
-          <div className="sub">One per fermenter</div>
+          <div className="sub">
+            One per fermenter
+            {overdueFermentations.length > 0 && (
+              <span className="stat-card-alert" data-testid="dashboard-overdue-count">
+                {' '}· {overdueFermentations.length} overdue
+              </span>
+            )}
+          </div>
         </div>
         <div className="stat-card">
           <div className="label">Distillation Runs</div>
@@ -65,12 +69,24 @@ export function Dashboard() {
         <div className="stat-card">
           <div className="label">Total Hearts</div>
           <div className="value">{summary.totalHeartsGal.toFixed(1)} gal</div>
-          <div className="sub">Collected across all runs</div>
+          <div className="sub">Collected this month</div>
         </div>
-        <div className="stat-card">
+        <div className="stat-card" data-testid="dashboard-bottled-month">
           <div className="label">Bottled This Month</div>
-          <div className="value">{summary.bottlesThisMonth}</div>
-          <div className="sub">Bottles filled</div>
+          {summary.bottlesBySize.length === 0 ? (
+            <>
+              <div className="value">0</div>
+              <div className="sub">No bottles this month</div>
+            </>
+          ) : (
+            <div className="dashboard-bottle-sizes" data-testid="dashboard-bottle-sizes">
+              {summary.bottlesBySize.map((size) => (
+                <div key={size.sizeMl} data-testid={`dashboard-bottle-size-${size.sizeMl}`}>
+                  {size.count.toLocaleString()} × {size.sizeMl} ml
+                </div>
+              ))}
+            </div>
+          )}
         </div>
         <div className="stat-card">
           <div className="label">Low Stock Alerts</div>
@@ -80,6 +96,40 @@ export function Dashboard() {
           <div className="sub">Items at or below reorder level</div>
         </div>
       </div>
+
+      {overdueFermentations.length > 0 && (
+        <div className="section" data-testid="dashboard-overdue-fermentations">
+          <h3 className="section-title">Overdue Fermentations</h3>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Wash batch</th>
+                  <th>Fermenter</th>
+                  <th>Expected done</th>
+                  <th>Overdue</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {overdueFermentations.map((row) => (
+                  <tr key={`${row.batchId}-${row.equipmentId}`} className="row-overdue">
+                    <td><strong>{row.batchNumber}</strong></td>
+                    <td>{row.equipmentName}</td>
+                    <td>{formatDateDisplay(row.expectedCompletionDate)}</td>
+                    <td><span className="badge badge-overdue">{formatDaysOverdue(row.daysOverdue)}</span></td>
+                    <td className="td-actions">
+                      <Link className="btn btn-sm btn-secondary" to={`/fermentation?logsEquipment=${row.equipmentId}`}>
+                        Logs
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div className="section">
         <h3 className="section-title">Recent Wash Batches</h3>
@@ -92,21 +142,27 @@ export function Dashboard() {
                 <tr>
                   <th>Batch</th>
                   <th>Recipe</th>
-                  <th>Sugar (lbs)</th>
+                  <th className="num">Sugar (lbs)</th>
                   <th>Started</th>
                   <th>Status</th>
                 </tr>
               </thead>
               <tbody>
-                {recentMashes.map((m) => (
-                  <tr key={m.id}>
-                    <td><strong>{m.batch_number}</strong></td>
-                    <td>{m.recipe_name}</td>
-                    <td>{m.grain_lbs} lbs · {m.grain_type}</td>
-                    <td>{formatDateDisplay(m.start_date)}</td>
-                    <td><StatusBadge status={m.status} /></td>
-                  </tr>
-                ))}
+                {recentMashes.map((m) => {
+                  const daysOverdue = fermentationDaysOverdue(m.status, m.expected_completion_date, today);
+                  return (
+                    <tr key={m.id} className={daysOverdue > 0 ? 'row-overdue' : undefined}>
+                      <td><strong>{m.batch_number}</strong></td>
+                      <td>{m.recipe_name}</td>
+                      <td className="num">{m.grain_lbs} lbs · {m.grain_type}</td>
+                      <td>{formatDateDisplay(m.start_date)}</td>
+                      <td>
+                        <StatusBadge status={m.status} />
+                        {daysOverdue > 0 && <> <span className="badge badge-overdue">{formatDaysOverdue(daysOverdue)}</span></>}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -125,7 +181,7 @@ export function Dashboard() {
                   <th>Run</th>
                   <th>Still</th>
                   <th>Date</th>
-                  <th>Charge</th>
+                  <th className="num">Charge</th>
                   <th>Status</th>
                 </tr>
               </thead>
@@ -135,7 +191,7 @@ export function Dashboard() {
                     <td><strong>{r.batch_number}</strong></td>
                     <td>{r.still_name}</td>
                     <td>{formatDateDisplay(r.run_date)}</td>
-                    <td>{r.charge_volume_gal} gal</td>
+                    <td className="num">{r.charge_volume_gal} gal</td>
                     <td><StatusBadge status={r.status} /></td>
                   </tr>
                 ))}
@@ -155,7 +211,7 @@ export function Dashboard() {
                   <th>Barrel</th>
                   <th>Spirit</th>
                   <th>Fill Date</th>
-                  <th>Volume</th>
+                  <th className="num">Volume</th>
                   <th>Location</th>
                 </tr>
               </thead>
@@ -163,9 +219,9 @@ export function Dashboard() {
                 {agingBarrels.map((b) => (
                   <tr key={b.id}>
                     <td><strong>{b.barrel_number}</strong></td>
-                    <td>{b.spirit_type} @ {b.initial_abv}%</td>
+                    <td>{barrelBlendProductName(b.id) || b.spirit_type} @ {b.initial_abv}%</td>
                     <td>{formatDateDisplay(b.fill_date)}</td>
-                    <td>{b.current_volume_gal} gal</td>
+                    <td className="num">{b.current_volume_gal} gal</td>
                     <td>{b.warehouse_location}</td>
                   </tr>
                 ))}
@@ -184,17 +240,17 @@ export function Dashboard() {
                 <tr>
                   <th>Item</th>
                   <th>Category</th>
-                  <th>On Hand</th>
-                  <th>Reorder Level</th>
+                  <th className="num">On Hand</th>
+                  <th className="num">Reorder Level</th>
                 </tr>
               </thead>
               <tbody>
                 {lowStock.map((i) => (
                   <tr key={i.id}>
                     <td><strong>{i.name}</strong></td>
-                    <td>{i.category}</td>
-                    <td className="low-stock">{i.quantity} {i.unit}</td>
-                    <td>{i.reorder_level} {i.unit}</td>
+                    <td>{inventoryCategoryLabel(i.category)}</td>
+                    <td className="low-stock num">{i.quantity} {i.unit}</td>
+                    <td className="num">{i.reorder_level} {i.unit}</td>
                   </tr>
                 ))}
               </tbody>
@@ -203,17 +259,6 @@ export function Dashboard() {
         </div>
       )}
 
-      {user?.role === 'admin' && (
-        <div className="section data-management-section">
-          <h3 className="section-title">Data Management</h3>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1rem' }}>
-            Reset the shared distillery record to fresh sample data. Everyone signed in will see that reset.
-          </p>
-          <button type="button" className="btn btn-secondary" onClick={handleClearAllData}>
-            Clear all data
-          </button>
-        </div>
-      )}
     </div>
   );
 }

@@ -1,8 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRefreshKey } from '../db/queries';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { DatePicker } from '../components/DatePicker';
 import {
   addDays,
   addMonths,
@@ -19,34 +18,45 @@ import {
   subMonths,
   subWeeks,
 } from 'date-fns';
+import { DatePicker } from '../components/DatePicker';
 import { StatusBadge } from '../components/StatusBadge';
+import { getTankCleaningLog } from '../db/queries';
+import { isIsoDate } from '../lib/date-input';
+import { tankCleaningCalendarEvents } from '../lib/tank-cleaning-staff';
 import {
   ALL_CALENDAR_KINDS,
-  ALL_CALENDAR_STATUS_CATEGORIES,
+  ALL_CALENDAR_PROGRESS,
   buildCalendarEvents,
-  CALENDAR_DATA_LIMITATIONS,
   CALENDAR_KIND_LABELS,
+  CALENDAR_PROGRESS_LABELS,
   calendarEventPath,
-  CALENDAR_STATUS_LABELS,
+  calendarProgress,
   eventEndDate,
   eventOccursOnDate,
   filterCalendarEvents,
   formatEventDateRange,
-  groupEventsByDate,
-  isMultiDayEvent,
+  layoutCalendarWeek,
   type CalendarActivityKind,
   type CalendarEvent,
-  type CalendarStatusCategory,
+  type CalendarProgress,
 } from '../lib/calendar-events';
 import {
   CALENDAR_PLAN_ACTIVITY_KINDS,
   CALENDAR_PLAN_PERMISSION,
   calendarPlanPath,
 } from '../lib/calendar-planning';
+import { compareDayEvents, groupEventsByStaff } from '../lib/today-staff-sheet';
 
 type CalendarViewMode = 'month' | 'week' | 'day';
 
+const VIEW_LABELS: Record<CalendarViewMode, string> = {
+  month: 'Month',
+  week: 'Week',
+  day: 'Day',
+};
+
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MAX_SPAN_LANES = 3;
 
 function dateKey(date: Date): string {
   return format(date, 'yyyy-MM-dd');
@@ -55,23 +65,30 @@ function dateKey(date: Date): string {
 export function Calendar() {
   const { hasPermission } = useAuth();
   const { key: sharedKey } = useRefreshKey();
-  const [viewMode, setViewMode] = useState<CalendarViewMode>('month');
+  const planRef = useRef<HTMLDivElement>(null);
+  const [viewMode, setViewMode] = useState<CalendarViewMode>('day');
   const [anchorDate, setAnchorDate] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState<string>(() => dateKey(new Date()));
+  const [planOpen, setPlanOpen] = useState(false);
   const [enabledKinds, setEnabledKinds] = useState<Set<CalendarActivityKind>>(
     () => new Set(ALL_CALENDAR_KINDS),
   );
-  const [enabledStatusCategories, setEnabledStatusCategories] = useState<
-    Set<CalendarStatusCategory>
-  >(() => new Set(ALL_CALENDAR_STATUS_CATEGORIES));
+  const [enabledProgress, setEnabledProgress] = useState<Set<CalendarProgress>>(
+    () => new Set(ALL_CALENDAR_PROGRESS),
+  );
 
   const allEvents = useMemo(() => buildCalendarEvents(), [sharedKey]);
-  const filteredEvents = useMemo(
-    () => filterCalendarEvents(allEvents, enabledKinds, enabledStatusCategories),
-    [allEvents, enabledKinds, enabledStatusCategories],
+  const cleaningEvents = useMemo(
+    () => tankCleaningCalendarEvents(getTankCleaningLog()),
+    [selectedDate, sharedKey],
   );
-  const eventsByDate = useMemo(() => groupEventsByDate(filteredEvents), [filteredEvents]);
-
+  const filteredEvents = useMemo(
+    () => [
+      ...filterCalendarEvents(allEvents, enabledKinds, enabledProgress),
+      ...cleaningEvents.filter((event) => enabledProgress.has(calendarProgress(event.statusCategory))),
+    ],
+    [allEvents, cleaningEvents, enabledKinds, enabledProgress],
+  );
   const monthStart = startOfMonth(anchorDate);
   const weekStart = startOfWeek(anchorDate, { weekStartsOn: 0 });
 
@@ -91,31 +108,50 @@ export function Calendar() {
     [filteredEvents, selectedDate],
   );
 
+  const weekRange = useMemo(() => {
+    const start = dateKey(weekStart);
+    const end = dateKey(addDays(weekStart, 6));
+    return { start, end };
+  }, [weekStart]);
+
+  const dayEvents = selectedEvents;
+
   const periodLabel = useMemo(() => {
+    if (viewMode === 'day') return format(parseISO(selectedDate), 'EEEE, MMMM d, yyyy');
     if (viewMode === 'month') return format(monthStart, 'MMMM yyyy');
-    if (viewMode === 'week') {
-      const weekEnd = addDays(weekStart, 6);
-      return `${format(weekStart, 'MMM d')} – ${format(weekEnd, 'MMM d, yyyy')}`;
-    }
-    return format(parseISO(selectedDate), 'EEEE, MMMM d, yyyy');
+    const weekEnd = addDays(weekStart, 6);
+    return `${format(weekStart, 'MMM d')} – ${format(weekEnd, 'MMM d, yyyy')}`;
   }, [viewMode, monthStart, weekStart, selectedDate]);
 
   const periodEventCount = useMemo(() => {
+    if (viewMode === 'day') return dayEvents.length;
     if (viewMode === 'month') {
       const prefix = format(monthStart, 'yyyy-MM');
-      return filteredEvents.filter(
-        (e) => e.startDate.startsWith(prefix) || eventEndDate(e).startsWith(prefix),
-      ).length;
+      const monthEnd = format(endOfMonth(monthStart), 'yyyy-MM-dd');
+      return filteredEvents.filter((event) => {
+        if (event.continuesUntilCleaned) return event.startDate <= monthEnd;
+        return event.startDate.startsWith(prefix) || eventEndDate(event).startsWith(prefix);
+      }).length;
     }
-    if (viewMode === 'week') {
-      const start = dateKey(weekStart);
-      const end = dateKey(addDays(weekStart, 6));
-      return filteredEvents.filter(
-        (e) => e.startDate <= end && eventEndDate(e) >= start,
-      ).length;
-    }
-    return selectedEvents.length;
-  }, [viewMode, monthStart, weekStart, filteredEvents, selectedEvents.length]);
+    return filteredEvents.filter((event) => (
+      event.continuesUntilCleaned
+        ? event.startDate <= weekRange.end
+        : event.startDate <= weekRange.end && eventEndDate(event) >= weekRange.start
+    )).length;
+  }, [viewMode, monthStart, filteredEvents, weekRange, dayEvents.length]);
+
+  const planKinds = CALENDAR_PLAN_ACTIVITY_KINDS.filter((kind) => (
+    hasPermission(CALENDAR_PLAN_PERMISSION[kind])
+  ));
+
+  useEffect(() => {
+    if (!planOpen) return;
+    const close = (event: MouseEvent) => {
+      if (!planRef.current?.contains(event.target as Node)) setPlanOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [planOpen]);
 
   const toggleKind = (kind: CalendarActivityKind) => {
     setEnabledKinds((prev) => {
@@ -126,11 +162,11 @@ export function Calendar() {
     });
   };
 
-  const toggleStatusCategory = (category: CalendarStatusCategory) => {
-    setEnabledStatusCategories((prev) => {
+  const toggleProgress = (progress: CalendarProgress) => {
+    setEnabledProgress((prev) => {
       const next = new Set(prev);
-      if (next.has(category)) next.delete(category);
-      else next.add(category);
+      if (next.has(progress)) next.delete(progress);
+      else next.add(progress);
       return next;
     });
   };
@@ -141,28 +177,26 @@ export function Calendar() {
   };
 
   const goToday = () => {
-    const today = new Date();
-    setAnchorDate(today);
-    setSelectedDate(dateKey(today));
+    selectDay(new Date());
   };
 
   const goPrevious = () => {
-    if (viewMode === 'month') setAnchorDate((d) => subMonths(d, 1));
-    else if (viewMode === 'week') setAnchorDate((d) => subWeeks(d, 1));
-    else setAnchorDate((d) => addDays(d, -1));
+    if (viewMode === 'month') setAnchorDate((date) => subMonths(date, 1));
+    else if (viewMode === 'week') setAnchorDate((date) => subWeeks(date, 1));
+    else selectDay(addDays(parseISO(selectedDate), -1));
   };
 
   const goNext = () => {
-    if (viewMode === 'month') setAnchorDate((d) => addMonths(d, 1));
-    else if (viewMode === 'week') setAnchorDate((d) => addWeeks(d, 1));
-    else setAnchorDate((d) => addDays(d, 1));
+    if (viewMode === 'month') setAnchorDate((date) => addMonths(date, 1));
+    else if (viewMode === 'week') setAnchorDate((date) => addWeeks(date, 1));
+    else selectDay(addDays(parseISO(selectedDate), 1));
   };
 
   return (
     <div>
       <div className="page-header">
         <h2>Production Calendar</h2>
-        <p>View production activity by date, filter by status, and plan new batches on a selected day</p>
+        <p>See what is running, open the record, and plan the selected day.</p>
       </div>
 
       <div className="calendar-toolbar">
@@ -170,7 +204,20 @@ export function Calendar() {
           <button type="button" className="btn btn-secondary btn-sm" onClick={goPrevious} aria-label="Previous">
             ←
           </button>
-          <h3 className="calendar-month-label">{periodLabel}</h3>
+          {viewMode === 'day' ? (
+            <div className="calendar-day-picker">
+              <DatePicker
+                id="calendar-day"
+                value={selectedDate}
+                onChange={(value) => {
+                  if (!isIsoDate(value)) return;
+                  selectDay(parseISO(value));
+                }}
+              />
+            </div>
+          ) : (
+            <h3 className="calendar-month-label">{periodLabel}</h3>
+          )}
           <button type="button" className="btn btn-secondary btn-sm" onClick={goNext} aria-label="Next">
             →
           </button>
@@ -179,14 +226,14 @@ export function Calendar() {
           </button>
         </div>
         <div className="calendar-view-toggle">
-          {(['month', 'week', 'day'] as CalendarViewMode[]).map((mode) => (
+          {(['day', 'week', 'month'] as CalendarViewMode[]).map((mode) => (
             <button
               key={mode}
               type="button"
               className={`btn btn-sm btn-secondary${viewMode === mode ? ' active' : ''}`}
               onClick={() => setViewMode(mode)}
             >
-              {mode.charAt(0).toUpperCase() + mode.slice(1)}
+              {VIEW_LABELS[mode]}
             </button>
           ))}
         </div>
@@ -207,14 +254,14 @@ export function Calendar() {
 
       <div className="calendar-filters calendar-status-filters">
         <span className="calendar-filter-heading">Status</span>
-        {ALL_CALENDAR_STATUS_CATEGORIES.map((category) => (
-          <label key={category} className={`calendar-filter-chip calendar-status-${category}`}>
+        {ALL_CALENDAR_PROGRESS.map((progress) => (
+          <label key={progress} className="calendar-filter-chip">
             <input
               type="checkbox"
-              checked={enabledStatusCategories.has(category)}
-              onChange={() => toggleStatusCategory(category)}
+              checked={enabledProgress.has(progress)}
+              onChange={() => toggleProgress(progress)}
             />
-            {CALENDAR_STATUS_LABELS[category]}
+            {CALENDAR_PROGRESS_LABELS[progress]}
           </label>
         ))}
       </div>
@@ -228,15 +275,15 @@ export function Calendar() {
                   <div key={label} className="calendar-weekday">{label}</div>
                 ))}
               </div>
-              <div className="calendar-grid">
-                {calendarDays.map((day) => (
-                  <CalendarDayCell
-                    key={dateKey(day)}
-                    day={day}
-                    inMonth={isSameMonth(day, monthStart)}
-                    selected={dateKey(day) === selectedDate}
-                    events={eventsByDate.get(dateKey(day)) ?? []}
-                    onSelect={() => selectDay(day)}
+              <div className="calendar-month">
+                {chunkWeeks(calendarDays).map((week) => (
+                  <CalendarSpanWeek
+                    key={dateKey(week[0])}
+                    days={week}
+                    events={filteredEvents}
+                    month={monthStart}
+                    selectedDate={selectedDate}
+                    onSelectDay={selectDay}
                   />
                 ))}
               </div>
@@ -244,42 +291,17 @@ export function Calendar() {
           )}
 
           {viewMode === 'week' && (
-            <div className="calendar-week-view">
-              {weekDays.map((day) => (
-                <div key={dateKey(day)} className="calendar-week-column">
-                  <button
-                    type="button"
-                    className={[
-                      'calendar-week-column-header',
-                      isToday(day) && 'calendar-day-today',
-                      dateKey(day) === selectedDate && 'calendar-day-selected',
-                    ].filter(Boolean).join(' ')}
-                    onClick={() => selectDay(day)}
-                  >
-                    <span className="calendar-weekday">{format(day, 'EEE')}</span>
-                    <span className="calendar-day-number">{format(day, 'd')}</span>
-                  </button>
-                  <div className="calendar-week-events">
-                    {(eventsByDate.get(dateKey(day)) ?? []).map((event) => (
-                      <WeekEventChip key={`${event.id}-${dateKey(day)}`} event={event} day={day} />
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
+            <CalendarSpanWeek
+              days={weekDays}
+              events={filteredEvents}
+              selectedDate={selectedDate}
+              onSelectDay={selectDay}
+              showWeekday
+            />
           )}
 
           {viewMode === 'day' && (
-            <div className="calendar-day-view">
-              <DayViewList
-                date={selectedDate}
-                events={selectedEvents}
-                onSelectDate={(next) => {
-                  setSelectedDate(next);
-                  setAnchorDate(parseISO(next));
-                }}
-              />
-            </div>
+            <TodayStaffSheet events={dayEvents} day={parseISO(selectedDate)} />
           )}
         </div>
 
@@ -291,157 +313,229 @@ export function Calendar() {
             <p className="text-muted">No activities on this date.</p>
           ) : (
             <ul className="calendar-detail-list">
-              {selectedEvents.map((event) => (
+              {[...selectedEvents].sort(compareDayEvents).map((event) => (
                 <CalendarDetailItem key={event.id} event={event} />
               ))}
             </ul>
           )}
 
-          {CALENDAR_PLAN_ACTIVITY_KINDS.some((kind) => hasPermission(CALENDAR_PLAN_PERMISSION[kind])) && (
+          {planKinds.length > 0 && (
             <div className="calendar-plan-section">
               <h4 className="calendar-plan-title">Plan production</h4>
               <p className="text-muted calendar-plan-hint">
-                Start a planned record dated {format(parseISO(selectedDate), 'MMM d, yyyy')}. You can fill in recipes, volumes, and assignments on the next screen.
+                Start a planned record dated {format(parseISO(selectedDate), 'MMM d, yyyy')}. Recipes, volumes, and assignments are on the next screen.
               </p>
-              <div className="calendar-plan-actions">
-                {CALENDAR_PLAN_ACTIVITY_KINDS.map((kind) => {
-                  const permission = CALENDAR_PLAN_PERMISSION[kind];
-                  if (!hasPermission(permission)) return null;
-                  return (
-                    <Link
-                      key={kind}
-                      to={calendarPlanPath(kind, selectedDate)}
-                      className={`btn btn-sm btn-secondary calendar-plan-btn calendar-kind-${kind}`}
-                    >
-                      + {CALENDAR_KIND_LABELS[kind]}
-                    </Link>
-                  );
-                })}
+              <div className="calendar-plan-menu" ref={planRef}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  aria-expanded={planOpen}
+                  aria-haspopup="menu"
+                  onClick={() => setPlanOpen((open) => !open)}
+                >
+                  Plan this day
+                </button>
+                {planOpen && (
+                  <div className="calendar-plan-choices" role="menu">
+                    {planKinds.map((kind) => (
+                      <Link
+                        key={kind}
+                        to={calendarPlanPath(kind, selectedDate)}
+                        className="calendar-plan-choice"
+                        role="menuitem"
+                        onClick={() => setPlanOpen(false)}
+                      >
+                        <span className={`calendar-event-dot calendar-kind-${kind}`} />
+                        {CALENDAR_KIND_LABELS[kind]}
+                      </Link>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}
         </aside>
       </div>
-
-      <div className="calendar-legend card">
-        <h3 className="section-title" style={{ marginTop: 0 }}>Activity types</h3>
-        <div className="calendar-legend-items">
-          {ALL_CALENDAR_KINDS.map((kind) => (
-            <span key={kind} className="calendar-legend-item">
-              <span className={`calendar-event-dot calendar-kind-${kind}`} />
-              {CALENDAR_KIND_LABELS[kind]}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      <div className="card calendar-limitations">
-        <h3 className="section-title" style={{ marginTop: 0 }}>Date range notes</h3>
-        <ul className="calendar-limitations-list">
-          {CALENDAR_DATA_LIMITATIONS.map((note) => (
-            <li key={note}>{note}</li>
-          ))}
-        </ul>
-      </div>
     </div>
   );
 }
 
-function CalendarDayCell({
-  day,
-  inMonth,
-  selected,
+function chunkWeeks(days: Date[]): Date[][] {
+  const weeks: Date[][] = [];
+  for (let index = 0; index < days.length; index += 7) {
+    weeks.push(days.slice(index, index + 7));
+  }
+  return weeks;
+}
+
+function CalendarSpanWeek({
+  days,
   events,
-  onSelect,
+  month,
+  selectedDate,
+  onSelectDay,
+  showWeekday = false,
 }: {
-  day: Date;
-  inMonth: boolean;
-  selected: boolean;
+  days: Date[];
   events: CalendarEvent[];
-  onSelect: () => void;
+  month?: Date;
+  selectedDate: string;
+  onSelectDay: (day: Date) => void;
+  showWeekday?: boolean;
 }) {
-  const key = dateKey(day);
+  const keys = days.map(dateKey);
+  const spans = layoutCalendarWeek(keys, events);
+  const visible = spans.filter((span) => span.lane < MAX_SPAN_LANES);
+  const hiddenByCol = keys.map((_, column) => spans.filter((span) => (
+    span.lane >= MAX_SPAN_LANES && span.startCol <= column && column <= span.endCol
+  )).length);
+  const laneCount = visible.reduce((max, span) => Math.max(max, span.lane + 1), 0);
+  const showMore = hiddenByCol.some((count) => count > 0);
+
   return (
-    <button
-      type="button"
-      className={[
-        'calendar-day',
-        !inMonth && 'calendar-day-outside',
-        selected && 'calendar-day-selected',
-        isToday(day) && 'calendar-day-today',
-      ].filter(Boolean).join(' ')}
-      onClick={onSelect}
+    <div
+      className={showWeekday ? 'calendar-span-week calendar-span-week--labeled' : 'calendar-span-week'}
+      style={{
+        gridTemplateRows: `auto repeat(${laneCount}, 1.2rem)${showMore ? ' auto' : ''}`,
+      }}
     >
-      <span className="calendar-day-number">{format(day, 'd')}</span>
-      {events.length > 0 && (
-        <div className="calendar-day-events">
-          {events.slice(0, 3).map((event) => (
-            <span
-              key={`${event.id}-${key}`}
-              className={[
-                'calendar-event-pill',
-                `calendar-kind-${event.kind}`,
-                isMultiDayEvent(event) && event.startDate !== key && 'calendar-event-continued',
-              ].filter(Boolean).join(' ')}
-              title={`${CALENDAR_KIND_LABELS[event.kind]}: ${event.title}`}
-            />
-          ))}
-          {events.length > 3 && (
-            <span className="calendar-event-more">+{events.length - 3}</span>
-          )}
+      {days.map((day, index) => {
+        const key = keys[index];
+        return (
+          <div
+            key={key}
+            role="button"
+            tabIndex={0}
+            className={[
+              'calendar-day',
+              month && !isSameMonth(day, month) && 'calendar-day-outside',
+              key === selectedDate && 'calendar-day-selected',
+              isToday(day) && 'calendar-day-today',
+            ].filter(Boolean).join(' ')}
+            style={{ gridColumn: index + 1, gridRow: '1 / -1' }}
+            onClick={() => onSelectDay(day)}
+            onKeyDown={(event) => {
+              if (event.target !== event.currentTarget) return;
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                onSelectDay(day);
+              }
+            }}
+          />
+        );
+      })}
+      {days.map((day, index) => (
+        <span
+          key={`label-${keys[index]}`}
+          className={[
+            'calendar-day-label',
+            month && !isSameMonth(day, month) && 'calendar-day-outside',
+            isToday(day) && 'calendar-day-today',
+          ].filter(Boolean).join(' ')}
+          style={{ gridColumn: index + 1, gridRow: 1 }}
+        >
+          {showWeekday && <span className="calendar-weekday">{format(day, 'EEE')}</span>}
+          <span className="calendar-day-number">{format(day, 'd')}</span>
+        </span>
+      ))}
+      {visible.map((span) => (
+        <Link
+          key={`${span.event.id}-${keys[span.startCol]}`}
+          to={calendarEventPath(span.event)}
+          className={[
+            'calendar-span-bar',
+            `calendar-kind-${span.event.kind}`,
+            span.continuesBefore && 'calendar-span-continues-before',
+            span.continuesAfter && 'calendar-span-continues-after',
+          ].filter(Boolean).join(' ')}
+          style={{
+            gridColumn: `${span.startCol + 1} / ${span.endCol + 2}`,
+            gridRow: span.lane + 2,
+          }}
+          title={[
+            CALENDAR_KIND_LABELS[span.event.kind],
+            span.event.title,
+            formatEventDateRange(span.event),
+          ].filter(Boolean).join(' · ')}
+          onClick={(eventClick) => eventClick.stopPropagation()}
+        >
+          <span className="calendar-span-title">{span.event.title}</span>
+        </Link>
+      ))}
+      {hiddenByCol.map((count, index) => count > 0 ? (
+        <button
+          key={`more-${keys[index]}`}
+          type="button"
+          className="calendar-event-more"
+          style={{ gridColumn: index + 1, gridRow: laneCount + 2 }}
+          onClick={(event) => {
+            event.stopPropagation();
+            onSelectDay(days[index]);
+          }}
+        >
+          +{count}
+        </button>
+      ) : null)}
+    </div>
+  );
+}
+
+function TodayStaffSheet({ events, day }: { events: CalendarEvent[]; day: Date }) {
+  const groups = groupEventsByStaff(events);
+
+  return (
+    <div className="today-staff-sheet">
+      <header className="today-staff-sheet-header">
+        <div>
+          <p className="today-staff-sheet-kicker">Daily work sheet</p>
+          <h3 className="today-staff-sheet-title">{format(day, 'EEEE, MMMM d, yyyy')}</h3>
         </div>
-      )}
-    </button>
-  );
-}
-
-function WeekEventChip({ event, day }: { event: CalendarEvent; day: Date }) {
-  const key = dateKey(day);
-  const isStart = event.startDate === key;
-  const isEnd = eventEndDate(event) === key;
-  const continued = isMultiDayEvent(event) && !isStart;
-
-  return (
-    <Link
-      to={calendarEventPath(event)}
-      className={[
-        'calendar-week-event',
-        `calendar-kind-${event.kind}`,
-        continued && 'calendar-event-continued',
-        isStart && 'calendar-event-start',
-        isEnd && 'calendar-event-end',
-      ].filter(Boolean).join(' ')}
-      title={formatEventDateRange(event)}
-    >
-      <span className="calendar-week-event-title">{event.title}</span>
-      {isStart && <StatusBadge status={event.status} />}
-    </Link>
-  );
-}
-
-function DayViewList({
-  date,
-  events,
-  onSelectDate,
-}: {
-  date: string;
-  events: CalendarEvent[];
-  onSelectDate: (date: string) => void;
-}) {
-  return (
-    <div className="calendar-day-view-inner">
-      <label className="calendar-day-picker">
-        <span>Select date</span>
-        <DatePicker value={date} onChange={onSelectDate} />
-      </label>
-      {events.length === 0 ? (
-        <p className="text-muted">No activities on this date with the current filters.</p>
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm no-print"
+          onClick={() => window.print()}
+        >
+          Print staff sheet
+        </button>
+      </header>
+      {groups.length === 0 ? (
+        <p className="text-muted">Nothing is scheduled for this day.</p>
       ) : (
-        <ul className="calendar-detail-list">
-          {events.map((event) => (
-            <CalendarDetailItem key={event.id} event={event} />
-          ))}
-        </ul>
+        groups.map((group) => (
+          <section key={group.name} className="today-staff-person">
+            <h4>{group.name}</h4>
+            <div className="today-staff-table-wrap">
+              <table className="today-staff-table">
+                <thead>
+                  <tr>
+                    <th className="today-sheet-check-col">Done</th>
+                    <th>Work</th>
+                    <th>What</th>
+                    <th>Status</th>
+                    <th>Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {group.events.map((event) => (
+                    <tr key={event.id}>
+                      <td className="today-sheet-check-col">
+                        <span className="today-sheet-check" aria-hidden="true" />
+                      </td>
+                      <td>{CALENDAR_KIND_LABELS[event.kind]}</td>
+                      <td>
+                        <Link to={calendarEventPath(event)} className="today-sheet-link">
+                          {event.title}
+                        </Link>
+                      </td>
+                      <td><StatusBadge status={event.status} /></td>
+                      <td>{event.detail || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ))
       )}
     </div>
   );
@@ -451,7 +545,8 @@ function CalendarDetailItem({ event }: { event: CalendarEvent }) {
   return (
     <li className="calendar-detail-item">
       <div className="calendar-detail-header">
-        <span className={`calendar-kind-label calendar-kind-${event.kind}`}>
+        <span className="calendar-kind-label">
+          <span className={`calendar-event-dot calendar-kind-${event.kind}`} />
           {CALENDAR_KIND_LABELS[event.kind]}
         </span>
         <StatusBadge status={event.status} />
@@ -459,9 +554,9 @@ function CalendarDetailItem({ event }: { event: CalendarEvent }) {
       <Link to={calendarEventPath(event)} className="calendar-detail-title">
         {event.title}
       </Link>
+      <p className="calendar-detail-meta text-muted">{formatEventDateRange(event)}</p>
       <p className="calendar-detail-meta text-muted">
-        {formatEventDateRange(event)}
-        {isMultiDayEvent(event) ? ' · multi-day' : ''}
+        {event.assignee?.trim() ? `Assigned to ${event.assignee.trim()}` : 'Unassigned'}
       </p>
       {event.detail && <p className="calendar-detail-meta text-muted">{event.detail}</p>}
     </li>

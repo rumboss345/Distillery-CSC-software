@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   formatTankVolumeVariance,
+  tankReadingChanged,
   tankVolumeMatchesRecord,
   tankVolumeVarianceGal,
+  volumeChangeReasonError,
 } from './tank-volume-variance';
 
 describe('tank volume variance', () => {
@@ -25,5 +27,16 @@ describe('tank volume variance', () => {
 
   it('keeps a thousandth of a gallon', () => {
     expect(tankVolumeVarianceGal(1.2344, 2)).toBe(0.766);
+  });
+
+  it('requires a reason when a volume or ABV reading is changed', () => {
+    expect(volumeChangeReasonError('  ')).toBe('Say why this was changed.');
+    expect(volumeChangeReasonError('Gauge was short')).toBeNull();
+  });
+
+  it('treats an ABV change as a tracked reading even when the gallons match', () => {
+    expect(tankReadingChanged(100, 100, 40, 40)).toBe(false);
+    expect(tankReadingChanged(100, 100.2, 40, 40)).toBe(true);
+    expect(tankReadingChanged(100, 100, 40, 41)).toBe(true);
   });
 });

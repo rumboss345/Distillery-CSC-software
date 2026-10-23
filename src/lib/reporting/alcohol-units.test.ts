@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   laaGalFromVolumeAbv,
+  roundAbv,
   roundAlcohol,
   roundVolume,
   safePercent,
@@ -17,6 +18,12 @@ describe('alcohol-units', () => {
   it('rounds alcohol and volume', () => {
     expect(roundAlcohol(1.23456789)).toBe(1.2346);
     expect(roundVolume(1.23456)).toBe(1.235);
+  });
+
+  it('rounds ABV to two decimal places', () => {
+    expect(roundAbv(37.690000000000076)).toBe(37.69);
+    expect(roundAbv(37.690000000000076).toFixed(2)).toBe('37.69');
+    expect(roundAbv(40)).toBe(40);
   });
 
   it('inverts LAA to volume', () => {

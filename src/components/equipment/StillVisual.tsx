@@ -10,13 +10,16 @@ const COLUMN_STILL_LIQUID = {
 } as const;
 
 const COLUMN_VAPOR_DOTS = [
-  { cx: 54, r: 2.2, delay: 0 },
-  { cx: 60, r: 1.7, delay: 0.55 },
-  { cx: 66, r: 2, delay: 1.1 },
-  { cx: 57, r: 1.4, delay: 1.65 },
-  { cx: 63, r: 1.8, delay: 2.05 },
+  { cx: 56, r: 2.2, delay: 0 },
+  { cx: 62, r: 1.7, delay: 0.55 },
+  { cx: 68, r: 2, delay: 1.1 },
+  { cx: 59, r: 1.4, delay: 1.65 },
+  { cx: 65, r: 1.8, delay: 2.05 },
 ] as const;
 
+const COLUMN_PLATES = [48, 68, 88, 108, 128] as const;
+
+/** Copper pot still, or a plated column still with a reboiler. */
 export function StillVisual(props: EquipmentVisualProps) {
   const { data } = props;
   const uid = useId().replace(/:/g, '');
@@ -30,8 +33,8 @@ export function StillVisual(props: EquipmentVisualProps) {
   }, [isColumn, isRunning, data.fillPercent]);
 
   const columnInner = useMemo(() => {
-    const bottomY = 162;
-    const innerHeight = 124;
+    const bottomY = 148;
+    const innerHeight = 110;
     const fillH = (columnFillPercent / 100) * innerHeight;
     return { bottomY, innerHeight, surfaceY: bottomY - fillH, fillH };
   }, [columnFillPercent]);
@@ -41,26 +44,45 @@ export function StillVisual(props: EquipmentVisualProps) {
       <svg viewBox={`0 0 ${isColumn ? 120 : 150} 200`} width="100%" height="100%" aria-hidden>
         <defs>
           <linearGradient id={`${uid}-copper`} x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#5a3010" />
-            <stop offset="30%" stopColor="#b87333" />
-            <stop offset="50%" stopColor="#e8a862" />
-            <stop offset="100%" stopColor="#6b3a12" />
+            <stop offset="0%" stopColor="#4a240c" />
+            <stop offset="22%" stopColor="#a15a22" />
+            <stop offset="42%" stopColor="#f0c07a" />
+            <stop offset="58%" stopColor="#c47a38" />
+            <stop offset="100%" stopColor="#5c2e10" />
           </linearGradient>
-          <linearGradient id={`${uid}-column`} x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#2a3038" />
-            <stop offset="40%" stopColor="#5a6270" />
-            <stop offset="55%" stopColor="#9aa3b0" />
-            <stop offset="100%" stopColor="#3a424c" />
+          <linearGradient id={`${uid}-copper-head`} x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#f6d7a8" />
+            <stop offset="55%" stopColor="#c4843a" />
+            <stop offset="100%" stopColor="#6a3412" />
           </linearGradient>
+          <linearGradient id={`${uid}-steel`} x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#1b2128" />
+            <stop offset="18%" stopColor="#5e6874" />
+            <stop offset="40%" stopColor="#c5ced8" />
+            <stop offset="52%" stopColor="#f4f7fb" />
+            <stop offset="68%" stopColor="#8e99a6" />
+            <stop offset="100%" stopColor="#2a313a" />
+          </linearGradient>
+          <linearGradient id={`${uid}-head`} x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#f7f9fc" />
+            <stop offset="50%" stopColor="#b7c0cb" />
+            <stop offset="100%" stopColor="#5c6672" />
+          </linearGradient>
+          <filter id={`${uid}-shadow`} x="-20%" y="-8%" width="140%" height="124%">
+            <feDropShadow dx="0" dy="2.5" stdDeviation="2" floodColor="#000" floodOpacity="0.38" />
+          </filter>
           {!isColumn && (
             <clipPath id={`${uid}-pot-clip`}>
-              <ellipse cx="75" cy="130" rx="38" ry="28" />
+              <ellipse cx="58" cy="136" rx="30" ry="24" />
             </clipPath>
           )}
           {isColumn && (
             <>
               <clipPath id={`${uid}-column-clip`}>
-                <rect x="50" y="38" width="20" height="124" rx="3" />
+                <rect x="48" y="38" width="24" height="110" rx="2" />
+              </clipPath>
+              <clipPath id={`${uid}-boiler-clip`}>
+                <path d="M 24 156 H 96 V 168 C 96 182 24 182 24 168 Z" />
               </clipPath>
               <linearGradient id={`${uid}-column-liq`} x1="0%" y1="0%" x2="100%" y2="0%">
                 <stop offset="0%" stopColor={COLUMN_STILL_LIQUID.edge} />
@@ -76,20 +98,26 @@ export function StillVisual(props: EquipmentVisualProps) {
           )}
         </defs>
         {isColumn ? (
-          <g>
-            <rect x="48" y="30" width="24" height="140" rx="4" fill={`url(#${uid}-column)`} stroke="#1a1f26" />
-            {[50, 70, 90, 110, 130, 150].map((y) => (
-              <line key={y} x1="46" y1={y} x2="74" y2={y} stroke="#1a1f26" strokeWidth="1.2" opacity="0.35" />
-            ))}
+          <g filter={`url(#${uid}-shadow)`}>
+            <path d="M 28 172 L 18 192 H 34 Z" fill="#3a424c" />
+            <path d="M 92 172 L 86 192 H 102 Z" fill="#3a424c" />
+            <path d="M 22 150 H 98 V 168 C 98 184 22 184 22 168 Z" fill={`url(#${uid}-steel)`} stroke="#1a1f26" strokeWidth="1.1" />
+            <ellipse cx="60" cy="150" rx="38" ry="10" fill={`url(#${uid}-head)`} stroke="#1a1f26" strokeWidth="0.8" />
+            {isRunning && (
+              <g clipPath={`url(#${uid}-boiler-clip)`}>
+                <rect x="22" y="162" width="76" height="22" fill={`url(#${uid}-column-liq)`} opacity="0.9" />
+                <ellipse cx="60" cy="162" rx="28" ry="5" fill={`url(#${uid}-column-surf)`} />
+              </g>
+            )}
+            <rect x="46" y="34" width="28" height="118" rx="3" fill={`url(#${uid}-steel)`} stroke="#1a1f26" strokeWidth="1.1" />
             {isRunning && columnFillPercent > 0 && (
               <g clipPath={`url(#${uid}-column-clip)`}>
                 <rect
                   className="column-still-liquid"
-                  x="50"
+                  x="48"
                   y={columnInner.surfaceY}
-                  width="20"
+                  width="24"
                   height={columnInner.fillH}
-                  rx="3"
                   fill={`url(#${uid}-column-liq)`}
                 />
                 {columnFillPercent > 8 && (
@@ -97,8 +125,8 @@ export function StillVisual(props: EquipmentVisualProps) {
                     className="column-still-liquid-surface"
                     cx="60"
                     cy={columnInner.surfaceY}
-                    rx="8"
-                    ry="3"
+                    rx="10"
+                    ry="3.2"
                     fill={`url(#${uid}-column-surf)`}
                   />
                 )}
@@ -108,7 +136,7 @@ export function StillVisual(props: EquipmentVisualProps) {
                       key={index}
                       className="column-still-vapor-dot"
                       cx={dot.cx}
-                      cy={columnInner.bottomY - 8}
+                      cy={columnInner.bottomY - 10}
                       r={dot.r}
                       style={{ animationDelay: `${dot.delay}s` }}
                     />
@@ -116,33 +144,51 @@ export function StillVisual(props: EquipmentVisualProps) {
                 </g>
               </g>
             )}
-            <rect x="52" y="34" width="6" height="130" fill="#fff" opacity="0.1" />
-            <ellipse cx="60" cy="30" rx="14" ry="6" fill="#6b7380" stroke="#1a1f26" />
-            <rect x="54" y="168" width="12" height="10" rx="2" fill="#5a6270" />
+            {COLUMN_PLATES.map((y) => (
+              <g key={y}>
+                <rect x="40" y={y} width="40" height="5" rx="1.5" fill={`url(#${uid}-head)`} stroke="#1a1f26" strokeWidth="0.6" />
+              </g>
+            ))}
+            <rect x="56" y="40" width="5" height="108" fill="#fff" opacity="0.16" />
+            <ellipse cx="60" cy="34" rx="18" ry="7" fill={`url(#${uid}-head)`} stroke="#1a1f26" strokeWidth="0.9" />
+            <rect x="54" y="18" width="12" height="12" rx="2" fill={`url(#${uid}-steel)`} stroke="#1a1f26" strokeWidth="0.7" />
+            <path d="M 78 36 H 98 V 42 H 92 V 70 H 86 V 42 H 78 Z" fill={`url(#${uid}-steel)`} stroke="#1a1f26" strokeWidth="0.7" />
+            <rect x="56" y="176" width="8" height="8" rx="1.5" fill="#5a6270" stroke="#2a3038" />
           </g>
         ) : (
-          <g>
+          <g filter={`url(#${uid}-shadow)`}>
             {isRunning && (
               <g className="still-flame">
-                <ellipse cx="75" cy="192" rx="16" ry="6" fill="#ff6600" opacity="0.25" />
-                <path d="M 68 192 Q 75 168 82 192 Q 75 180 68 192" fill="#ff8800" opacity="0.9" />
-                <path d="M 72 192 Q 75 176 78 192 Q 75 184 72 192" fill="#ffcc00" opacity="0.85" />
+                <ellipse cx="58" cy="186" rx="16" ry="5" fill="#ff6600" opacity="0.28" />
+                <path d="M 50 186 Q 58 162 66 186 Q 58 174 50 186" fill="#ff8800" opacity="0.9" />
+                <path d="M 54 186 Q 58 170 62 186 Q 58 178 54 186" fill="#ffcc00" opacity="0.85" />
               </g>
             )}
-            <ellipse cx="75" cy="130" rx="42" ry="32" fill={`url(#${uid}-copper)`} stroke="#3a2010" strokeWidth="1.2" />
-            <g clipPath={`url(#${uid}-pot-clip)`}>
-              <LiquidFill x={37} y={0} width={76} height={0} fillPercent={data.fillPercent} status={data.status} innerHeight={56} bottomY={158} rx={8} />
-            </g>
-            <path d="M 62 98 Q 75 72 88 98 L 85 102 L 65 102 Z" fill={`url(#${uid}-column)`} stroke="#1a1f26" strokeWidth="0.8" />
-            <rect x="70" y="55" width="10" height="45" fill={`url(#${uid}-column)`} stroke="#1a1f26" strokeWidth="0.6" />
-            {[62, 78, 92].map((y) => (
-              <line key={y} x1="68" y1={y} x2="82" y2={y} stroke="#1a1f26" strokeWidth="1" opacity="0.4" />
+            <path d="M 36 154 L 24 190 H 40 Z" fill="#3a2414" />
+            <path d="M 80 154 L 76 190 H 92 Z" fill="#3a2414" />
+            <ellipse cx="58" cy="140" rx="36" ry="30" fill={`url(#${uid}-copper)`} stroke="#3a2010" strokeWidth="1.15" />
+            <ellipse cx="58" cy="118" rx="22" ry="8" fill={`url(#${uid}-copper-head)`} stroke="#3a2010" strokeWidth="0.7" />
+            <path d="M 42 116 C 36 92 46 78 58 74 C 70 78 80 92 74 116 Z" fill={`url(#${uid}-copper)`} stroke="#3a2010" strokeWidth="1" />
+            <path
+              d="M 54 76 C 54 52 86 40 102 54 C 112 64 110 78 106 90 L 114 92 C 120 76 122 58 108 46 C 88 28 50 42 50 76 Z"
+              fill={`url(#${uid}-copper)`}
+              stroke="#3a2010"
+              strokeWidth="1"
+              strokeLinejoin="round"
+            />
+            <rect x="100" y="84" width="18" height="58" rx="4" fill={`url(#${uid}-steel)`} stroke="#1a1f26" strokeWidth="0.9" />
+            {[96, 108, 120, 132].map((y) => (
+              <path key={y} d={`M 102 ${y} Q 109 ${y + 4} 116 ${y}`} fill="none" stroke="#1a1f26" strokeWidth="0.8" opacity="0.55" />
             ))}
-            <ellipse cx="75" cy="55" rx="18" ry="8" fill="#6b7380" stroke="#1a1f26" />
-            <rect x="71" y="162" width="8" height="14" fill="#3a424c" />
+            <rect x="106" y="140" width="6" height="10" rx="1" fill="#5a6270" />
+            <g clipPath={`url(#${uid}-pot-clip)`}>
+              <LiquidFill x={26} y={0} width={64} height={0} fillPercent={data.fillPercent} status={data.status} innerHeight={44} bottomY={160} rx={8} />
+            </g>
+            <ellipse cx="46" cy="128" rx="6" ry="16" fill="#fff" opacity="0.16" />
+            <rect x="54" y="168" width="8" height="8" rx="1.5" fill="#5a4030" stroke="#3a2010" />
           </g>
         )}
-        <circle cx={isColumn ? 95 : 118} cy="42" r="4.5" className={`equipment-status-dot equipment-status-dot--${data.status}`} />
+        <circle cx={isColumn ? 108 : 132} cy="28" r="4.5" className={`equipment-status-dot equipment-status-dot--${data.status}`} />
       </svg>
     </EquipmentVisualFrame>
   );

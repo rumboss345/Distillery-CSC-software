@@ -9,6 +9,7 @@ import {
   SharedRecordConflict,
 } from '../lib/shared-distillery-db';
 import { buildBlendRecipeSnapshot } from '../lib/blend-recipe-version';
+import { isSqliteFile, missingBackupTablesError } from '../lib/database-backup';
 import { buildCscFloorEquipmentRows, CSC_FLOOR_PLAN_SIZE } from '../lib/csc-floor-equipment';
 import { PACKAGING_BOTTLES } from '../lib/packaging-bottles';
 import type { BlendIngredientInput } from '../types';
@@ -637,6 +638,7 @@ function runMigrations(): void {
   migratePackagingBottleColumn();
   migrateBottlingTankSourceColumns();
   migrateBottlingVolumeVarianceColumns();
+  migrateBottlingAlcoholVarianceColumns();
   migrateBottlingRunLines();
   migrateBlendRecipes();
   migrateBarrelBlendRecipes();
@@ -645,13 +647,17 @@ function runMigrations(): void {
   migrateFloorPlanPages();
   migrateAdvancedBlending();
   migrateAssignedEmployee();
+  migrateFermentationSchedule();
+  migrateProductionStatusLogs();
   migrateRecipeNutrients();
   migrateMashBatchNutrients();
   migrateBlendRecipeVersions();
   clearAllBlendRecipesOnce();
   migrateStillageDiscardTransfers();
   migrateHoldingTankVolumeVariances();
+  migrateHoldingTankDilutions();
   migrateGinRuns();
+  migrateDistillationTankSources();
   db.run(`
     UPDATE floor_equipment
     SET equipment_type = 'stillage_tank'
@@ -659,6 +665,22 @@ function runMigrations(): void {
       AND name LIKE '%stillage%' COLLATE NOCASE
   `);
   persistDb();
+}
+
+function migrateDistillationTankSources(): void {
+  if (!db) return;
+  db.run(`
+    CREATE TABLE IF NOT EXISTS distillation_run_tank_sources (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      distillation_run_id INTEGER NOT NULL REFERENCES distillation_runs(id) ON DELETE CASCADE,
+      holding_tank_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
+      volume_gal REAL NOT NULL,
+      abv REAL NOT NULL DEFAULT 0,
+      sort_order INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+  db.run('CREATE INDEX IF NOT EXISTS idx_distillation_tank_sources_run ON distillation_run_tank_sources(distillation_run_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_distillation_tank_sources_tank ON distillation_run_tank_sources(holding_tank_equipment_id)');
 }
 
 function migrateGinRuns(): void {
@@ -671,6 +693,7 @@ function migrateGinRuns(): void {
       amount REAL NOT NULL DEFAULT 0,
       weight REAL NOT NULL DEFAULT 0,
       weight_unit TEXT NOT NULL DEFAULT 'g',
+      place TEXT,
       sort_order INTEGER NOT NULL DEFAULT 0
     )
   `);
@@ -692,10 +715,13 @@ function migrateGinRuns(): void {
       amount REAL NOT NULL DEFAULT 0,
       weight REAL NOT NULL DEFAULT 0,
       weight_unit TEXT NOT NULL DEFAULT 'g',
+      place TEXT,
       sort_order INTEGER NOT NULL DEFAULT 0
     )
   `);
   db.run('CREATE INDEX IF NOT EXISTS idx_gin_recipe_botanicals_recipe ON gin_recipe_botanicals(gin_recipe_id)');
+  addColumnIfMissing('distillation_run_botanicals', 'place', 'TEXT');
+  addColumnIfMissing('gin_recipe_botanicals', 'place', 'TEXT');
   db.run(`INSERT OR IGNORE INTO inventory_categories (name) VALUES ('botanicals')`);
   const botanicals = [
     'Juniper berries',
@@ -719,6 +745,28 @@ function migrateGinRuns(): void {
 }
 
 /** Stillage leaving a stillage tank can be discarded, so the destination tank is optional. */
+/** Water added to alcohol that stays in the same tank. */
+function migrateHoldingTankDilutions(): void {
+  if (!db) return;
+  db.run(`
+    CREATE TABLE IF NOT EXISTS holding_tank_dilutions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tank_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
+      spirit_volume_gal REAL NOT NULL,
+      spirit_abv REAL NOT NULL,
+      water_gal REAL NOT NULL,
+      finished_volume_gal REAL NOT NULL,
+      finished_abv REAL NOT NULL,
+      recorded_at TEXT NOT NULL,
+      notes TEXT NOT NULL DEFAULT '',
+      changed_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  db.run('CREATE INDEX IF NOT EXISTS idx_tank_dilutions_tank ON holding_tank_dilutions(tank_equipment_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_tank_dilutions_date ON holding_tank_dilutions(recorded_at)');
+}
+
 function migrateHoldingTankVolumeVariances(): void {
   if (!db) return;
   db.run(`
@@ -833,6 +881,32 @@ function migrateRecipeNutrients(): void {
       );
     }
   }
+}
+
+function migrateFermentationSchedule(): void {
+  if (!db) return;
+  addColumnIfMissing('mash_batches', 'fermentation_start_date', 'TEXT');
+  addColumnIfMissing('mash_batches', 'expected_completion_date', 'TEXT');
+}
+
+function migrateProductionStatusLogs(): void {
+  if (!db) return;
+  db.run(`
+    CREATE TABLE IF NOT EXISTS production_status_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      record_kind TEXT NOT NULL,
+      record_id INTEGER NOT NULL,
+      floor_equipment_id INTEGER,
+      previous_status TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL,
+      changed_at TEXT NOT NULL DEFAULT (datetime('now')),
+      changed_by TEXT NOT NULL DEFAULT ''
+    )
+  `);
+  db.run(`
+    CREATE INDEX IF NOT EXISTS idx_production_status_logs_record
+      ON production_status_logs(record_kind, record_id, changed_at)
+  `);
 }
 
 function migrateAssignedEmployee(): void {
@@ -1093,6 +1167,24 @@ function migrateBottlingVolumeVarianceColumns(): void {
   }
 }
 
+function migrateBottlingAlcoholVarianceColumns(): void {
+  if (!db) return;
+  const hasSourceAbv = queryOne<{ name: string }>(
+    "SELECT name FROM pragma_table_info('bottling_runs') WHERE name='source_abv'",
+  );
+  if (!hasSourceAbv) {
+    db.run('ALTER TABLE bottling_runs ADD COLUMN source_abv REAL');
+    persistDb();
+  }
+  const hasAlcohol = queryOne<{ name: string }>(
+    "SELECT name FROM pragma_table_info('bottling_runs') WHERE name='alcohol_variance_gal'",
+  );
+  if (!hasAlcohol) {
+    db.run('ALTER TABLE bottling_runs ADD COLUMN alcohol_variance_gal REAL');
+    persistDb();
+  }
+}
+
 function migrateBottlingRunLines(): void {
   if (!db) return;
   db.run(`
@@ -1184,6 +1276,7 @@ function migrateBarrelBlendRecipes(): void {
   if (!hasBlendBarrel) {
     db.run(`ALTER TABLE blend_spirit_sources ADD COLUMN barrel_id INTEGER REFERENCES barrels(id)`);
   }
+  addColumnIfMissing('blend_spirit_sources', 'emptied_volume_gal', 'REAL');
 }
 
 function migrateBarrelFills(): void {
@@ -1202,6 +1295,7 @@ function migrateBarrelFills(): void {
   `);
   db.run(`CREATE INDEX IF NOT EXISTS idx_barrel_fills_barrel ON barrel_fills(barrel_id)`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_barrel_fills_tank ON barrel_fills(source_holding_tank_equipment_id)`);
+  addColumnIfMissing('barrel_fills', 'created_at', "TEXT NOT NULL DEFAULT ''");
 }
 
 function migrateBarrelSourceHoldingTank(): void {
@@ -1290,6 +1384,7 @@ function migrateAdvancedBlending(): void {
       blend_product_id INTEGER NOT NULL REFERENCES blend_products(id) ON DELETE CASCADE,
       holding_tank_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
       volume_gal REAL NOT NULL DEFAULT 0,
+      emptied_volume_gal REAL,
       abv REAL NOT NULL DEFAULT 0,
       sort_order INTEGER NOT NULL DEFAULT 0
     )
@@ -1363,6 +1458,60 @@ function migrateAdvancedBlending(): void {
     db.run("ALTER TABLE equipment_types ADD COLUMN icon TEXT NOT NULL DEFAULT 'other'");
     persistDb();
   }
+
+  migrateVolumeChangeAuditColumns();
+  migrateDistillationAlcoholLossColumns();
+  migrateBottlingReturnTankColumns();
+  migrateBottlingRunReturns();
+}
+
+/** Product left after bottling can be sent to another tank. Existing runs stay blank. */
+function migrateBottlingReturnTankColumns(): void {
+  if (!db) return;
+  addColumnIfMissing('bottling_runs', 'return_holding_tank_equipment_id', 'INTEGER');
+  addColumnIfMissing('bottling_runs', 'return_volume_gal', 'REAL');
+}
+
+/** One bottling run can send leftover spirit to more than one tank. */
+function migrateBottlingRunReturns(): void {
+  if (!db) return;
+  db.run(`
+    CREATE TABLE IF NOT EXISTS bottling_run_returns (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      bottling_run_id INTEGER NOT NULL REFERENCES bottling_runs(id) ON DELETE CASCADE,
+      holding_tank_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
+      volume_gal REAL NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+  db.run('CREATE INDEX IF NOT EXISTS idx_bottling_run_returns_run ON bottling_run_returns(bottling_run_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_bottling_run_returns_tank ON bottling_run_returns(holding_tank_equipment_id)');
+  db.run(`
+    INSERT INTO bottling_run_returns (bottling_run_id, holding_tank_equipment_id, volume_gal, sort_order)
+    SELECT id, return_holding_tank_equipment_id, return_volume_gal, 0
+    FROM bottling_runs
+    WHERE return_holding_tank_equipment_id IS NOT NULL
+      AND COALESCE(return_volume_gal, 0) > 0
+      AND id NOT IN (SELECT bottling_run_id FROM bottling_run_returns)
+  `);
+}
+
+/** Who made a volume or ABV correction, and why. Existing rows stay blank. */
+function migrateVolumeChangeAuditColumns(): void {
+  if (!db) return;
+  addColumnIfMissing('discarded_fermentations', 'changed_by', 'TEXT');
+  addColumnIfMissing('holding_tank_volume_variances', 'changed_by', 'TEXT');
+  addColumnIfMissing('bottling_runs', 'variance_reason', 'TEXT');
+  addColumnIfMissing('bottling_runs', 'variance_changed_by', 'TEXT');
+}
+
+/** Alcohol charged, alcohol collected, and the loss. Existing runs stay blank until the next save. */
+function migrateDistillationAlcoholLossColumns(): void {
+  if (!db) return;
+  addColumnIfMissing('distillation_runs', 'alcohol_charged_gal', 'REAL');
+  addColumnIfMissing('distillation_runs', 'alcohol_collected_gal', 'REAL');
+  addColumnIfMissing('distillation_runs', 'alcohol_loss_gal', 'REAL');
+  addColumnIfMissing('distillation_runs', 'alcohol_charge_basis', 'TEXT');
 }
 
 const DB_STORAGE_KEY = 'distillery-tracker-db-v5';
@@ -1739,12 +1888,59 @@ export async function clearAllData(): Promise<void> {
   await initDatabase();
 }
 
+/** Replace the shared record with a backup. A signed-in browser saves it for everyone. */
+export async function replaceSharedDatabase(data: Uint8Array): Promise<void> {
+  await initDatabase();
+  const payload = toBase64(data);
+  if (!getStoredToken()) {
+    importDatabase(data);
+    return;
+  }
+  let baseRevision = serverRevision;
+  try {
+    const remote = await fetchSharedRevision();
+    baseRevision = remote.revision;
+  } catch {
+    // Use the revision this browser last saved.
+  }
+  try {
+    serverRevision = await putSharedRecord(baseRevision, payload);
+  } catch (error) {
+    if (!(error instanceof SharedRecordConflict)) throw error;
+    serverRevision = await putSharedRecord(error.record.revision, payload);
+  }
+  lastSyncedPayload = payload;
+  localDirty = false;
+  localStorage.setItem(DB_STORAGE_KEY, payload);
+}
+
 export function exportDatabase(): Uint8Array {
   return new Uint8Array(getDb().export());
 }
 
 export function importDatabase(data: Uint8Array): void {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = null;
+  localStorage.setItem(DB_STORAGE_KEY, toBase64(data));
   if (db) db.close();
   db = null;
-  localStorage.setItem(DB_STORAGE_KEY, toBase64(data));
+}
+
+/** Error message when `data` is not a distillery backup, or null when it can be restored. */
+export async function backupFileError(data: Uint8Array): Promise<string | null> {
+  if (!isSqliteFile(data)) return 'This file is not a distillery backup.';
+  const SQL = await initSqlJs({ locateFile: () => wasmUrl });
+  let candidate: Database | null = null;
+  try {
+    candidate = new SQL.Database(data);
+    const stmt = candidate.prepare("SELECT name FROM sqlite_master WHERE type = 'table'");
+    const tables: string[] = [];
+    while (stmt.step()) tables.push(String(stmt.get()[0]));
+    stmt.free();
+    return missingBackupTablesError(tables);
+  } catch {
+    return 'This backup file could not be read.';
+  } finally {
+    candidate?.close();
+  }
 }

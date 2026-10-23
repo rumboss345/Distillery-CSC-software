@@ -37,8 +37,8 @@ export function WashReport() {
           <tr>
             <th>Wash batch</th>
             <th>Recipe</th>
-            <th>Sugar</th>
-            <th>Batch size</th>
+            <th className="num">Sugar</th>
+            <th className="num">Batch size</th>
             <th>Started</th>
             <th>Status</th>
             <th>Operator</th>
@@ -49,8 +49,8 @@ export function WashReport() {
             <tr key={row.key}>
               <td><strong>{row.batch_number}</strong></td>
               <td>{row.recipe_name}</td>
-              <td>{row.sugar_lbs} lbs</td>
-              <td>{row.volume_gal} gal</td>
+              <td className="num">{row.sugar_lbs} lbs</td>
+              <td className="num">{row.volume_gal} gal</td>
               <td>{formatDateDisplay(row.start_date)}</td>
               <td>{washStatusLabel(row.status)}</td>
               <td>{row.operator}</td>

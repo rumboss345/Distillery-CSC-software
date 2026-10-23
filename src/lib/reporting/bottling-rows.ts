@@ -1,6 +1,6 @@
 import { getBottlingRuns } from '../../db/queries';
 import { compareStoredDatesDesc } from '../date-input';
-import { totalVolumeGal } from '../bottling-lines';
+import { bottleSizeCounts, formatBottleSizes, reportedBottlingAlcoholVarianceGal, reportedBottlingVarianceGal, totalVolumeGal, type BottleSizeCount } from '../bottling-lines';
 import { laaGalFromVolumeAbv, roundVolume } from './alcohol-units';
 import { eventInReportRange, type ReportDateRange } from './period';
 
@@ -17,15 +17,12 @@ export interface BottlingReportRow {
   final_abv: number;
   bottled_laa_gal: number;
   bottle_count: number;
+  bottle_sizes: BottleSizeCount[];
   packaging_summary: string;
   volume_variance_gal: number | null;
-}
-
-function packagingSummary(lines: { packaging_bottle: string; bottle_count: number; bottle_size_ml: number }[]): string {
-  if (lines.length === 0) return '—';
-  return lines
-    .map((l) => `${l.bottle_count}× ${l.packaging_bottle || 'bottle'} (${l.bottle_size_ml} ml)`)
-    .join('; ');
+  alcohol_variance_gal: number | null;
+  variance_reason: string | null;
+  variance_changed_by: string | null;
 }
 
 export function buildBottlingReportRows(range: ReportDateRange): BottlingReportRow[] {
@@ -65,8 +62,12 @@ export function buildBottlingReportRows(range: ReportDateRange): BottlingReportR
       final_abv: run.final_abv,
       bottled_laa_gal: laaGalFromVolumeAbv(bottled, run.final_abv),
       bottle_count: run.lines.reduce((s, l) => s + l.bottle_count, 0) || run.bottle_count,
-      packaging_summary: packagingSummary(run.lines),
-      volume_variance_gal: run.volume_variance_gal,
+      bottle_sizes: bottleSizeCounts(run.lines),
+      packaging_summary: formatBottleSizes(run.lines),
+      volume_variance_gal: reportedBottlingVarianceGal(run),
+      alcohol_variance_gal: reportedBottlingAlcoholVarianceGal(run),
+      variance_reason: run.variance_reason?.trim() || null,
+      variance_changed_by: run.variance_changed_by?.trim() || null,
     });
   }
 

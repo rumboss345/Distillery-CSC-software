@@ -15,8 +15,17 @@ export const EQUIPMENT_TYPES: { value: EquipmentType; label: string }[] = [
   { value: 'other', label: 'Other' },
 ];
 
-/** Pictures you can assign when adding or editing equipment. */
-export const EQUIPMENT_ICONS = EQUIPMENT_TYPES;
+/** Pictures you can assign when adding or editing equipment. A jug is a holding tank with its own picture. */
+export type EquipmentIcon = EquipmentType | 'jug';
+
+export const EQUIPMENT_ICONS: { value: EquipmentIcon; label: string }[] = [
+  ...EQUIPMENT_TYPES,
+  { value: 'jug', label: 'Jug' },
+];
+
+export function isEquipmentIcon(icon: string): icon is EquipmentIcon {
+  return EQUIPMENT_ICONS.some((item) => item.value === icon);
+}
 
 export const EQUIPMENT_STATUSES: EquipmentStatus[] = [
   'empty', 'in_use', 'cleaning', 'offline',
@@ -97,11 +106,12 @@ export function isBuiltInEquipmentType(type: string): type is EquipmentType {
   return EQUIPMENT_TYPES.some((item) => item.value === type);
 }
 
-/** Tank, fermenter, wash tank, and still pictures show a fill level and liquid. */
+/** Tank, fermenter, wash tank, still, and jug pictures show a fill level and liquid. */
 export function equipmentIconShowsVolume(icon: string): boolean {
   return icon === 'fermenter'
     || icon === 'mash_tun'
     || icon === 'holding_tank'
+    || icon === 'jug'
     || icon === 'stillage_tank'
     || icon === 'collection_vessel'
     || icon === 'pot_still'
@@ -109,15 +119,17 @@ export function equipmentIconShowsVolume(icon: string): boolean {
 }
 
 /** Saved icon, otherwise the equipment type when that type has a picture. */
-export function resolveEquipmentIcon(icon: string | null | undefined, equipmentType: string): EquipmentType {
+export function resolveEquipmentIcon(icon: string | null | undefined, equipmentType: string): EquipmentIcon {
   const chosen = (icon ?? '').trim();
-  if (isBuiltInEquipmentType(chosen)) return chosen;
+  if (isEquipmentIcon(chosen)) return chosen;
   if (isBuiltInEquipmentType(equipmentType)) return equipmentType;
   return 'other';
 }
 
 export function equipmentTypeLabel(type: string): string {
-  return EQUIPMENT_TYPES.find((t) => t.value === type)?.label ?? type;
+  return EQUIPMENT_ICONS.find((t) => t.value === type)?.label
+    ?? EQUIPMENT_TYPES.find((t) => t.value === type)?.label
+    ?? type;
 }
 
 export function isLiquidVesselEquipmentType(type: string): boolean {

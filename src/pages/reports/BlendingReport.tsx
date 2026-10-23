@@ -35,9 +35,9 @@ export function BlendingReport() {
             <th>Product</th>
             <th>Date</th>
             <th>Status</th>
-            <th>Spirit draw</th>
-            <th>Final</th>
-            <th>Theo Δ vol</th>
+            <th className="num">Spirit draw</th>
+            <th className="num">Final</th>
+            <th className="num">Theo Δ vol</th>
             <th>Output tank</th>
             <th>Operator</th>
           </tr>
@@ -49,9 +49,9 @@ export function BlendingReport() {
               <td>{r.product_name}</td>
               <td>{formatCalendarDay(r.executed_at ?? r.blend_date)}</td>
               <td>{r.status}</td>
-              <td>{r.spirit_draw_gal.toFixed(1)} gal · {r.spirit_laa_gal.toFixed(2)} LAA</td>
-              <td>{r.final_volume_gal.toFixed(1)} gal @ {r.final_abv.toFixed(1)}%</td>
-              <td>
+              <td className="num">{r.spirit_draw_gal.toFixed(1)} gal · {r.spirit_laa_gal.toFixed(2)} LAA</td>
+              <td className="num">{r.final_volume_gal.toFixed(1)} gal @ {r.final_abv.toFixed(1)}%</td>
+              <td className="num">
                 {r.volume_variance_pct != null
                   ? `${r.volume_variance_pct > 0 ? '+' : ''}${r.volume_variance_pct}%`
                   : '—'}

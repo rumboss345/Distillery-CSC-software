@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   deleteGinRecipe,
   getGinRecipes,
@@ -11,7 +11,13 @@ import { Modal } from './Modal';
 import { botanicalsFromRecipe, emptyGinBotanical, formatGinBotanicalsSummary } from '../lib/gin-botanicals';
 import type { GinBotanicalInput, GinRecipe } from '../types';
 
-export function GinRecipesTab() {
+export function GinRecipesTab({
+  openForm = false,
+  onFormOpened,
+}: {
+  openForm?: boolean;
+  onFormOpened?: () => void;
+}) {
   const { key, refresh } = useRefreshKey();
   const recipes = getGinRecipes();
   void key;
@@ -32,6 +38,12 @@ export function GinRecipesTab() {
     setLines([emptyGinBotanical()]);
     setShowForm(true);
   };
+
+  useEffect(() => {
+    if (!openForm) return;
+    openNew();
+    onFormOpened?.();
+  }, [openForm]);
 
   const openEdit = (recipe: GinRecipe) => {
     setEditId(recipe.id);
@@ -60,11 +72,6 @@ export function GinRecipesTab() {
 
   return (
     <>
-      <div className="page-actions" style={{ marginBottom: '1rem' }}>
-        <button type="button" className="btn btn-primary" onClick={openNew}>
-          + Add Gin Recipe
-        </button>
-      </div>
       {recipes.length === 0 ? (
         <div className="empty-state card">
           <p>No gin recipes yet. Save a botanical formula here, then load it on a gin run.</p>

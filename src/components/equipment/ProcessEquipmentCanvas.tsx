@@ -22,6 +22,8 @@ import {
 } from './process-layout';
 import { EquipmentVisual } from './EquipmentVisual';
 import { ProcessEquipmentDetailPanel } from './ProcessEquipmentDetailPanel';
+import { fermentationDaysOverdue, formatDaysOverdue } from '../../lib/fermentation';
+import { localIsoDate } from '../../lib/planned-event-date';
 import { isEquipmentContextMenuPointer } from './process-equipment-gesture';
 import { processEquipmentVisualScale } from './process-visual-scale';
 import type { EquipmentVisualData } from './equipment-visual.types';
@@ -55,6 +57,7 @@ export function ProcessEquipmentCanvas({
   onEditEquipment,
   onRemoveEquipment,
 }: ProcessEquipmentCanvasProps) {
+  const today = localIsoDate();
   const viewportRef = useRef<HTMLDivElement>(null);
   const [viewportSize, setViewportSize] = useState({ width: 800, height: 520 });
   const [scale, setScale] = useState(1);
@@ -170,6 +173,9 @@ export function ProcessEquipmentCanvas({
       liquidName: visualById.get(contextMenuEquipment.id)?.liquidName ?? null,
       distillationRunId: (contextMenuEquipment.equipment_type === 'pot_still' || contextMenuEquipment.equipment_type === 'column_still')
         ? getDistillationRunForCuts(contextMenuEquipment.name)?.id ?? null
+        : null,
+      distillationRunStatus: (contextMenuEquipment.equipment_type === 'pot_still' || contextMenuEquipment.equipment_type === 'column_still')
+        ? getDistillationRunForCuts(contextMenuEquipment.name)?.status ?? null
         : null,
     })
     : null;
@@ -397,11 +403,14 @@ export function ProcessEquipmentCanvas({
               const needsCleaning = equipmentNeedsCleaning(item);
               const repairNote = equipmentShowsRepairNoteIndicator(item);
               const hasMaintenanceTag = equipmentHasMaintenanceTag(item);
+              const daysOverdue = item.equipment_type === 'fermenter'
+                ? fermentationDaysOverdue(item.active_mash_status, item.active_expected_completion_date, today)
+                : 0;
 
               return (
                 <div
                   key={item.id}
-                  className={`process-equipment-node${isDragging ? ' process-equipment-node--dragging' : ''}${selectedId === item.id ? ' process-equipment-node--selected' : ''}${visual.isFermenting ? ' process-equipment-node--fermenting' : ''}${outOfService ? ' process-equipment-node--out-of-service' : ''}${needsCleaning ? ' process-equipment-node--needs-cleaning' : ''}${repairNote ? ' process-equipment-node--repair-note' : ''}${hasMaintenanceTag ? ' process-equipment-node--has-maintenance' : ''}`}
+                  className={`process-equipment-node${isDragging ? ' process-equipment-node--dragging' : ''}${selectedId === item.id ? ' process-equipment-node--selected' : ''}${visual.isFermenting ? ' process-equipment-node--fermenting' : ''}${outOfService ? ' process-equipment-node--out-of-service' : ''}${needsCleaning ? ' process-equipment-node--needs-cleaning' : ''}${repairNote ? ' process-equipment-node--repair-note' : ''}${hasMaintenanceTag ? ' process-equipment-node--has-maintenance' : ''}${daysOverdue > 0 ? ' process-equipment-node--overdue' : ''}`}
                   style={{ left: pos.x, top: pos.y }}
                   onPointerDown={(e) => onEquipmentPointerDown(e, item)}
                   onContextMenu={(e) => onEquipmentContextMenu(e, item)}
@@ -412,6 +421,7 @@ export function ProcessEquipmentCanvas({
                     visual.currentVolumeGal > 0 ? `${visual.currentVolumeGal.toFixed(1)} gal` : 'Empty',
                     visual.abv != null && visual.abv > 0 ? `${visual.abv.toFixed(1)}% ABV` : null,
                     visual.fermenterLatestBrix != null ? `${visual.fermenterLatestBrix.toFixed(1)}° Brix` : null,
+                    daysOverdue > 0 ? formatDaysOverdue(daysOverdue) : null,
                     'Right-click for next step, logs, cuts, or maintenance',
                   ].filter(Boolean).join(' · ')}
                 >
@@ -438,6 +448,11 @@ export function ProcessEquipmentCanvas({
                         <path d="M12 3v3M5.5 8.5l2 2M3 14h3M18.5 8.5l-2 2M21 14h-3M8 20h8M9 17h6" />
                         <path d="M7 11c0-2.8 2.2-5 5-5s5 2.2 5 5v2H7v-2z" />
                       </svg>
+                    </div>
+                  )}
+                  {daysOverdue > 0 && (
+                    <div className="process-equipment-overdue-badge" data-testid="process-overdue-badge">
+                      Overdue {daysOverdue}d
                     </div>
                   )}
                   {repairNote && (

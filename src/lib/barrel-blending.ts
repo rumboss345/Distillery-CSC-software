@@ -26,11 +26,36 @@ export function hasDuplicateBarrelSelections(
   return false;
 }
 
-export function formatBarrelInventoryOption(barrel: Barrel): string {
-  const abv = barrel.initial_abv;
-  return `${barrel.barrel_number} — ${barrel.spirit_type} (${barrel.current_volume_gal.toFixed(1)} gal @ ${abv.toFixed(1)}%)`;
+export function barrelShownContents(barrel: Barrel, blendProductName?: string | null): string {
+  return blendProductName?.trim() || barrel.spirit_type;
 }
 
-export function spiritLabelForBarrel(barrel: Barrel): string {
-  return `${barrel.barrel_number} — ${barrel.spirit_type}`;
+export function formatBarrelInventoryOption(barrel: Barrel, blendProductName?: string | null): string {
+  const abv = barrel.initial_abv;
+  const contents = barrelShownContents(barrel, blendProductName);
+  return `${barrel.barrel_number} — ${contents} (${barrel.current_volume_gal.toFixed(1)} gal @ ${abv.toFixed(1)}%)`;
+}
+
+export function spiritLabelForBarrel(barrel: Barrel, blendProductName?: string | null): string {
+  return `${barrel.barrel_number} — ${barrelShownContents(barrel, blendProductName)}`;
+}
+
+/**
+ * Gallons to put back when undoing a blend that emptied this barrel.
+ * Production records the volume that was in the barrel. Older batches only stored the formula pull.
+ */
+export function gallonsRestoredToEmptiedBarrel(
+  sources: readonly {
+    barrel_id?: number | null;
+    volume_gal: number;
+    emptied_volume_gal?: number | null;
+  }[],
+  barrelId: number,
+): number {
+  const rows = sources.filter((source) => source.barrel_id === barrelId);
+  const recorded = rows
+    .map((source) => source.emptied_volume_gal)
+    .filter((volume): volume is number => volume != null && volume > 0);
+  if (recorded.length > 0) return Math.max(...recorded);
+  return rows.reduce((sum, source) => sum + Math.max(0, source.volume_gal), 0);
 }

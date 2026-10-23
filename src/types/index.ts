@@ -14,7 +14,7 @@ export type FermentationAssignmentStatus = 'fermenting' | 'complete' | 'discarde
 
 export type RunStatus = 'planned' | 'running' | 'complete';
 
-export type DistillationRunType = 'wash' | 'low_wines' | 'heavy_rum' | 'gin';
+export type DistillationRunType = 'wash' | 'low_wines' | 'vodka' | 'heavy_rum' | 'gin';
 
 /** Where spirit-run proofing water is mixed. */
 export type SpiritProofPlace = 'before_still' | 'in_still';
@@ -110,11 +110,15 @@ export interface FloorEquipmentView extends FloorEquipment {
   active_volume_gal?: number;
   active_abv?: number;
   active_run_count?: number;
+  /** Blend product name when that finished batch is what the tank holds. */
+  active_liquid_name?: string;
   active_mash_status?: MashStatus;
   /** Latest fermentation log Brix for this fermenter, or mash starting Brix if no logs yet. */
   active_latest_brix?: number | null;
   /** Wash starting gravity (actual or target Brix) for est. ABV on process view. */
   active_start_brix?: number | null;
+  /** Expected done date of the wash in this fermenter. */
+  active_expected_completion_date?: string | null;
 }
 
 export interface InventoryItem {
@@ -190,6 +194,10 @@ export interface MashBatch {
   yeast_strain: string;
   yeast_lbs: number;
   start_date: string;
+  /** Day the wash was moved into a fermenter. Empty until fermentation starts. */
+  fermentation_start_date: string | null;
+  /** Day the operator expects this fermentation to finish. */
+  expected_completion_date: string | null;
   target_brix: number | null;
   actual_brix: number | null;
   target_final_brix: number | null;
@@ -228,6 +236,13 @@ export interface DistillationRun {
   run_date: string;
   charge_volume_gal: number;
   charge_abv: number | null;
+  /** Gallons of pure alcohol charged. Null until a run is saved with a known charge ABV. */
+  alcohol_charged_gal?: number | null;
+  /** Gallons of pure alcohol in the cuts. */
+  alcohol_collected_gal?: number | null;
+  /** Charged alcohol minus collected alcohol. */
+  alcohol_loss_gal?: number | null;
+  alcohol_charge_basis?: 'charge' | 'proofed_spirit' | 'estimated_brix' | null;
   /** Gallons of tails drawn when this charge was proofed. Null when charged as-is. */
   proof_spirit_gal?: number | null;
   /** ABV of the tails before proofing water. */
@@ -253,6 +268,9 @@ export interface DistillationRunView extends DistillationRun {
   stillage_tank_name?: string;
 }
 
+/** Botanicals either steep in the pot or sit in the gin basket. */
+export type BotanicalPlace = 'pot' | 'basket';
+
 export interface GinBotanicalInput {
   name: string;
   /** Count or measure of this botanical, separate from the scale weight. */
@@ -260,6 +278,8 @@ export interface GinBotanicalInput {
   /** Scale weight. */
   weight: number;
   weight_unit: string;
+  /** Where this botanical goes. Empty until the recipe asks. */
+  place?: BotanicalPlace | null;
 }
 
 export interface DistillationRunBotanical extends GinBotanicalInput {
@@ -318,6 +338,10 @@ export interface HoldingTankIntakeEntry {
   notes?: string;
   /** Distillation run this cut or stillage came from. */
   distillationRunId?: number;
+  /** Finished-batch name when this intake is a blend. */
+  productName?: string;
+  /** Tank the spirit came from when this intake is a transfer. */
+  sourceTankId?: number;
 }
 
 export interface HoldingTankTransfer {
@@ -337,6 +361,25 @@ export interface HoldingTankTransferView extends HoldingTankTransfer {
   dest_tank_name?: string;
 }
 
+/** Proofing water mixed into alcohol that stays in the same tank. */
+export interface HoldingTankDilution {
+  id: number;
+  tank_equipment_id: number;
+  spirit_volume_gal: number;
+  spirit_abv: number;
+  water_gal: number;
+  finished_volume_gal: number;
+  finished_abv: number;
+  recorded_at: string;
+  notes: string;
+  changed_by: string | null;
+  created_at: string;
+}
+
+export interface HoldingTankDilutionView extends HoldingTankDilution {
+  tank_name: string;
+}
+
 /** Gallons from a fermenter that cannot be used. The fermentation itself stays. */
 export interface DiscardedFermentation {
   id: number;
@@ -347,6 +390,7 @@ export interface DiscardedFermentation {
   volume_gal: number;
   discarded_date: string;
   notes: string;
+  changed_by?: string | null;
   created_at: string;
 }
 
@@ -391,10 +435,19 @@ export interface BottlingRun {
   source_holding_tank_equipment_id: number | null;
   /** Gallons drawn from source tank (empties tank on save when from tank). */
   source_volume_gal: number | null;
+  /** ABV of the source tank when the run was saved. */
+  source_abv: number | null;
   /** Sum of bottled line volumes (gal). */
   bottled_volume_gal: number | null;
-  /** bottled_volume_gal − source_volume_gal when bottling from a tank. */
+  /** bottled gallons + gallons sent to another tank − source gallons. */
   volume_variance_gal: number | null;
+  /** Pure alcohol in bottles and returns, minus pure alcohol drawn. Positive is a gain. */
+  alcohol_variance_gal: number | null;
+  variance_reason?: string | null;
+  variance_changed_by?: string | null;
+  /** Tank that receives product from this run that was not bottled. */
+  return_holding_tank_equipment_id?: number | null;
+  return_volume_gal?: number | null;
   source_run_id: number | null;
   bottling_date: string;
   packaging_bottle: string;
@@ -422,8 +475,23 @@ export interface BottlingRunLineInput {
   bottle_count: number;
 }
 
+/** Gallons from a bottling run that were not bottled and were sent to a tank. */
+export interface BottlingRunReturn {
+  id: number;
+  bottling_run_id: number;
+  holding_tank_equipment_id: number;
+  volume_gal: number;
+  sort_order: number;
+}
+
+export interface BottlingRunReturnInput {
+  holding_tank_equipment_id: number | null;
+  volume_gal: number | null;
+}
+
 export interface BottlingRunView extends BottlingRun {
   lines: BottlingRunLine[];
+  returns?: BottlingRunReturn[];
 }
 
 export type BlendStatus = 'draft' | 'trial' | 'approved' | 'executed' | 'bottled';
@@ -476,6 +544,8 @@ export interface BlendSpiritSource {
   holding_tank_equipment_id: number;
   barrel_id?: number | null;
   volume_gal: number;
+  /** Gallons that were in the barrel when production emptied it. Null on tank pulls and older batches. */
+  emptied_volume_gal?: number | null;
   abv: number;
   sort_order: number;
   tank_name?: string;
@@ -620,6 +690,8 @@ export interface ProductionSummary {
   barrelsAging: number;
   totalHeartsGal: number;
   bottlesThisMonth: number;
+  /** Bottle counts for the same period as bottlesThisMonth, largest size first. */
+  bottlesBySize: { sizeMl: number; count: number }[];
   lowStockItems: number;
 }
 

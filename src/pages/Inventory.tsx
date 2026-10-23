@@ -9,6 +9,7 @@ import {
   useRefreshKey,
 } from '../db/queries';
 import { Modal } from '../components/Modal';
+import { inventoryCategoryLabel } from '../lib/inventory-units';
 import { packagingItemSizeMl } from '../lib/packaging-bottles';
 import type { InventoryCategory, InventoryItem } from '../types';
 
@@ -146,9 +147,12 @@ export function Inventory() {
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+      <div className="choice-row" role="tablist" aria-label="Inventory categories">
         <button
-          className={`btn btn-sm${filter === 'all' ? ' btn-primary' : ' btn-secondary'}`}
+          type="button"
+          role="tab"
+          aria-selected={filter === 'all'}
+          className={`inventory-category${filter === 'all' ? ' active' : ''}`}
           onClick={() => setFilter('all')}
         >
           All
@@ -156,17 +160,20 @@ export function Inventory() {
         {categories.map((c) => (
           <button
             key={c}
-            className={`btn btn-sm${filter === c ? ' btn-primary' : ' btn-secondary'}`}
+            type="button"
+            role="tab"
+            aria-selected={filter === c}
+            className={`inventory-category${filter === c ? ' active' : ''}`}
             onClick={() => setFilter(c)}
           >
-            {c}
+            {inventoryCategoryLabel(c)}
           </button>
         ))}
       </div>
 
       {filtered.length === 0 ? (
         <div className="empty-state">
-          <p>No inventory items{filter !== 'all' ? ` in category "${filter}"` : ''}.</p>
+          <p>No inventory items{filter !== 'all' ? ` in category "${inventoryCategoryLabel(filter)}"` : ''}.</p>
         </div>
       ) : (
         <div className="table-wrap">
@@ -175,8 +182,8 @@ export function Inventory() {
               <tr>
                 <th>Item</th>
                 <th>Category</th>
-                <th>On Hand</th>
-                <th>Reorder Level</th>
+                <th className="num">On Hand</th>
+                <th className="num">Reorder Level</th>
                 <th>Status</th>
                 <th>Notes</th>
                 <th></th>
@@ -194,9 +201,9 @@ export function Inventory() {
                         <div className="field-hint">{Math.round(i.package_size_ml)} ml</div>
                       )}
                     </td>
-                    <td>{i.category}</td>
-                    <td className={low ? 'low-stock' : ''}>{i.quantity} {i.unit}</td>
-                    <td>{i.reorder_level} {i.unit}</td>
+                    <td>{inventoryCategoryLabel(i.category)}</td>
+                    <td className={low ? 'num low-stock' : 'num'}>{i.quantity} {i.unit}</td>
+                    <td className="num">{i.reorder_level} {i.unit}</td>
                     <td>
                       {negative
                         ? <span className="badge badge-low-stock">Negative</span>
@@ -238,7 +245,7 @@ export function Inventory() {
                   });
                 }}
               >
-                {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+                {categories.map((c) => <option key={c} value={c}>{inventoryCategoryLabel(c)}</option>)}
               </select>
             </div>
             {form.category === 'packaging' && (

@@ -7,10 +7,11 @@ import {
   startOfMonth,
   startOfWeek,
   subDays,
+  subMonths,
 } from 'date-fns';
 import { localCalendarDayKey } from '../date-input';
 
-export type ReportPeriodPreset = 'today' | 'yesterday' | 'week' | 'month' | 'all' | 'custom';
+export type ReportPeriodPreset = 'today' | 'yesterday' | 'week' | 'month' | 'lastMonth' | 'all' | 'custom';
 
 export interface ReportDateRange {
   preset: ReportPeriodPreset;
@@ -57,6 +58,15 @@ export function resolveReportPeriod(
         from: toIsoDate(startOfMonth(today)),
         to: toIsoDate(endOfMonth(today)),
         label: format(today, 'MMMM yyyy'),
+      };
+    }
+    case 'lastMonth': {
+      const previous = subMonths(today, 1);
+      return {
+        preset,
+        from: toIsoDate(startOfMonth(previous)),
+        to: toIsoDate(endOfMonth(previous)),
+        label: format(previous, 'MMMM yyyy'),
       };
     }
     case 'custom': {

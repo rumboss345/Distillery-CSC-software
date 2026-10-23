@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { toLbs } from './blending';
-import { inventoryQuantityDelta } from './inventory-units';
+import { inventoryCategoryLabel, inventoryQuantityDelta } from './inventory-units';
 
 describe('inventory unit conversion', () => {
   it('converts kilograms into pounds before a deduction', () => {
@@ -19,5 +19,13 @@ describe('inventory unit conversion', () => {
 
   it('does not convert weight into volume', () => {
     expect(inventoryQuantityDelta(10, 'lbs', 'gal')).toBeNull();
+  });
+});
+
+describe('inventoryCategoryLabel', () => {
+  it('capitalizes each word of a stored category', () => {
+    expect(inventoryCategoryLabel('botanicals')).toBe('Botanicals');
+    expect(inventoryCategoryLabel('raw sugar')).toBe('Raw Sugar');
+    expect(inventoryCategoryLabel('  yeast ')).toBe('Yeast');
   });
 });

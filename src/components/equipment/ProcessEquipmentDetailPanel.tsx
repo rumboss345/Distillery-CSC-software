@@ -1,14 +1,23 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
+import { equipmentReturnState } from '../../lib/equipment-return';
 import { HoldingTankIntakeHistory } from '../HoldingTankIntakeHistory';
 import { Modal } from '../Modal';
 import { StatusBadge } from '../StatusBadge';
 import { AssigneeSelect } from '../AssigneeSelect';
-import { getHoldingTankVolumeVariances, holdingTankIntakeKey, markEquipmentCleaned } from '../../db/queries';
+import {
+  completeFermenterAssignment,
+  getDistillationRunForCuts,
+  getDistillationRuns,
+  getHoldingTankVolumeVariances,
+  holdingTankIntakeKey,
+  markEquipmentCleaned,
+  saveDistillationRun,
+} from '../../db/queries';
+import { buildProcessEquipmentContextMenu } from './process-equipment-menu';
 import { formatTankVolumeVariance, tankVolumeMatchesRecord } from '../../lib/tank-volume-variance';
 import { STATUS_LABELS, formatGal } from './equipment-visual-shared';
-import { classifyProcessLiquid } from './process-floor-label';
 import type { EquipmentVisualData } from './equipment-visual.types';
 import type { FloorEquipmentView, HoldingTankIntakeEntry } from '../../types';
 import { equipmentCleaningStatusLabel, equipmentNeedsCleaning } from '../../lib/equipment-cleaning';
@@ -16,8 +25,9 @@ import {
   equipmentBlocksProduction,
   maintenanceStatusLabel,
 } from '../../lib/equipment-maintenance';
-import { formatRecordedAt } from '../../lib/date-input';
-import { FERMENTATION_READY_MAX_BRIX, isBrixReadyForDistillation } from '../../lib/fermentation';
+import { formatDateDisplay, formatRecordedAt } from '../../lib/date-input';
+import { FERMENTATION_READY_MAX_BRIX, fermentationDaysOverdue, formatDaysOverdue, isBrixReadyForDistillation } from '../../lib/fermentation';
+import { localIsoDate } from '../../lib/planned-event-date';
 import type { AssignedEmployee } from '../../lib/assignee';
 
 const INTAKE_KIND_LABELS: Record<HoldingTankIntakeEntry['kind'], string> = {
@@ -83,22 +93,52 @@ export function ProcessEquipmentDetailPanel({
   const latestVolumeVariance = isVolumeTank
     ? getHoldingTankVolumeVariances().find((row) => row.tank_equipment_id === equipment.id) ?? null
     : null;
-  const isTransferVessel = equipment.equipment_type === 'holding_tank'
-    || equipment.equipment_type === 'stillage_tank'
-    || equipment.equipment_type === 'collection_vessel';
-  const isHoldingTank = equipment.equipment_type === 'holding_tank';
-  const liquidClass = classifyProcessLiquid(visual.name, visual.liquidName);
-  const canProcessSpirit = isHoldingTank
-    && hasLiquid
-    && (visual.abv ?? 0) > 0
-    && liquidClass !== 'stillage'
-    && liquidClass !== 'dunder';
   const canChargeFermenter = equipment.equipment_type === 'fermenter'
     && !!equipment.active_batch_number
     && hasLiquid;
   const brixNotReady = canChargeFermenter
     && equipment.active_latest_brix != null
     && !isBrixReadyForDistillation(equipment.active_latest_brix);
+
+  const isStill = equipment.equipment_type === 'pot_still' || equipment.equipment_type === 'column_still';
+  const stillRun = isStill ? getDistillationRunForCuts(equipment.name) ?? null : null;
+  const fermenting = equipment.equipment_type === 'fermenter' && equipment.active_mash_status === 'fermenting';
+  const daysOverdue = equipment.equipment_type === 'fermenter'
+    ? fermentationDaysOverdue(equipment.active_mash_status, equipment.active_expected_completion_date, localIsoDate())
+    : 0;
+  const distilling = stillRun?.status === 'running';
+  const nextMenu = buildProcessEquipmentContextMenu({
+    id: equipment.id,
+    name: equipment.name,
+    equipment_type: equipment.equipment_type,
+    active_batch_number: equipment.active_batch_number,
+    active_latest_brix: equipment.active_latest_brix,
+    active_mash_status: equipment.active_mash_status,
+    linked_mash_batch_id: equipment.linked_mash_batch_id,
+    volumeGal: visual.currentVolumeGal,
+    abv: visual.abv ?? equipment.active_abv ?? null,
+    liquidName: visual.liquidName,
+    distillationRunId: stillRun?.id ?? null,
+    distillationRunStatus: stillRun?.status ?? null,
+  });
+  const showNextStep = nextMenu.next.length > 0 || fermenting || distilling;
+
+  const handleMarkComplete = () => {
+    try {
+      if (fermenting) {
+        if (!confirm(`Mark the fermentation in ${equipment.name} complete?`)) return;
+        completeFermenterAssignment(equipment.id);
+      } else if (distilling && stillRun) {
+        const run = getDistillationRuns().find((item) => item.id === stillRun.id);
+        if (!run) throw new Error('Distillation run not found.');
+        if (!confirm(`Mark ${run.batch_number} on ${equipment.name} complete?`)) return;
+        saveDistillationRun({ ...run, status: 'complete' }, run.id);
+      }
+      onEquipmentUpdated?.();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Could not mark this complete.');
+    }
+  };
 
   const handleMarkCleaned = () => {
     if (!cleanedBy.assigned_user_id) {
@@ -122,12 +162,25 @@ export function ProcessEquipmentDetailPanel({
       <h4 className="process-panel-title">{visual.name}</h4>
       <p className="process-equipment-detail-code">{visual.code} · {visual.typeLabel}</p>
 
+      {(hasLiquid || visual.liquidName) && (
+        <div className="process-contents-card" data-testid="process-tank-contents">
+          <div className="process-contents-kicker">In this tank</div>
+          <strong>{visual.liquidName || (visual.isFermenting ? 'Fermenting wash' : equipment.name)}</strong>
+          <p>
+            {formatGal(visual.currentVolumeGal)} gal
+            {visual.estimatedAbv != null ? ` · est. ${visual.estimatedAbv.toFixed(1)}% ABV` : ''}
+            {visual.estimatedAbv == null && visual.abv != null && visual.abv > 0 ? ` · ${visual.abv.toFixed(1)}% ABV` : ''}
+            {visual.capacityGal > 0 ? ` · ${Math.round(visual.fillPercent)}% full` : ''}
+          </p>
+        </div>
+      )}
+
       {dirty && (
         <div className="process-equipment-cleaning-banner" role="status">
           <strong>{equipmentCleaningStatusLabel()}</strong>
           <p className="field-hint" style={{ margin: '0.35rem 0 0' }}>
-            Mark clean before the next batch. Full maintenance history lives on{' '}
-            <Link to="/equipment-maintenance">Equipment Maintenance</Link>.
+            Mark clean before the next batch, here or on{' '}
+            <Link to={`/equipment-maintenance?equipment=${equipment.id}`} state={equipmentReturnState(equipment.id)}>Equipment Maintenance</Link>.
           </p>
         </div>
       )}
@@ -190,6 +243,18 @@ export function ProcessEquipmentDetailPanel({
           </>
         )}
 
+        {equipment.equipment_type === 'fermenter' && equipment.active_batch_number && equipment.active_expected_completion_date && (
+          <>
+            <dt>Expected done</dt>
+            <dd>
+              {formatDateDisplay(equipment.active_expected_completion_date)}
+              {daysOverdue > 0 && (
+                <> <span className="badge badge-overdue" data-testid="panel-overdue">{formatDaysOverdue(daysOverdue)}</span></>
+              )}
+            </dd>
+          </>
+        )}
+
         {(equipment.equipment_type === 'fermenter' && visual.isFermenting) || (visual.detail && visual.detail !== visual.liquidName) ? (
           <>
             <dt>Activity</dt>
@@ -244,7 +309,7 @@ export function ProcessEquipmentDetailPanel({
         ) : null}
       </dl>
 
-      {(canChargeFermenter || (isTransferVessel && hasLiquid)) && (
+      {showNextStep && (
         <div className="process-next-actions">
           <div className="process-next-actions-label">Next step</div>
           {brixNotReady && (
@@ -253,36 +318,20 @@ export function ProcessEquipmentDetailPanel({
             </p>
           )}
           <div className="process-next-actions-row">
-            {canChargeFermenter && (
-              <>
-                <Link className="btn btn-sm btn-primary" to={`/distillation?chargeFermenter=${equipment.id}&runType=wash`}>
-                  Low wine run
-                </Link>
-                <Link className="btn btn-sm btn-secondary" to={`/distillation?chargeFermenter=${equipment.id}&runType=heavy_rum`}>
-                  Heavy rum
-                </Link>
-                <Link className="btn btn-sm btn-secondary" to={`/tank-transfer?source=${equipment.id}`}>
-                  Transfer
-                </Link>
-              </>
-            )}
-            {isTransferVessel && hasLiquid && (
-              <Link className="btn btn-sm btn-primary" to={`/tank-transfer?source=${equipment.id}`}>
-                Transfer
+            {nextMenu.next.map((action) => (
+              <Link
+                key={action.key}
+                className="btn btn-sm btn-secondary"
+                to={action.to}
+                state={equipmentReturnState(equipment.id)}
+              >
+                {action.label}
               </Link>
-            )}
-            {canProcessSpirit && (
-              <>
-                <Link className="btn btn-sm btn-secondary" to={`/distillation?chargeTank=${equipment.id}`}>
-                  Spirit run
-                </Link>
-                <Link className="btn btn-sm btn-secondary" to={`/blending?tank=${equipment.id}`}>
-                  Blend
-                </Link>
-                <Link className="btn btn-sm btn-secondary" to={`/bottling?tank=${equipment.id}`}>
-                  Bottle
-                </Link>
-              </>
+            ))}
+            {(fermenting || distilling) && (
+              <button type="button" className="btn btn-sm btn-secondary" onClick={handleMarkComplete}>
+                Mark complete
+              </button>
             )}
           </div>
         </div>
@@ -297,7 +346,7 @@ export function ProcessEquipmentDetailPanel({
             onChange={setCleanedBy}
             required
           />
-          <button type="button" className="btn btn-sm btn-primary" onClick={handleMarkCleaned}>
+          <button type="button" className="btn btn-sm btn-secondary" onClick={handleMarkCleaned}>
             Mark as cleaned
           </button>
         </div>
@@ -348,6 +397,7 @@ export function ProcessEquipmentDetailPanel({
               <Link
                 className="btn btn-sm btn-primary"
                 to={`/distillation?cutsRun=${viewedIntake.distillationRunId}`}
+                state={equipmentReturnState(equipment.id)}
                 onClick={() => setViewedIntake(null)}
               >
                 {viewedIntake.kind === 'stillage' ? 'View run' : 'View cuts'}

@@ -9,6 +9,8 @@ export interface VesselInflow {
   cutType: CutType | null;
   /** Spent wash from a distillation, not a spirit cut. */
   stillage?: boolean;
+  /** Water added to alcohol already in the vessel. It raises the gauge and does not change the cut. */
+  proofingWater?: boolean;
 }
 
 /** True when the gallons still in the vessel are stillage and nothing else. */
@@ -23,6 +25,10 @@ export function inflowsAreStillageOnly(
   for (const inflow of inflowsNewestFirst) {
     if (left <= 0.05) break;
     if (!(inflow.volumeGal > 0)) continue;
+    if (inflow.proofingWater) {
+      left -= inflow.volumeGal;
+      continue;
+    }
     const take = Math.min(inflow.volumeGal, left);
     if (take > 0.05) {
       if (inflow.stillage) sawStillage = true;
@@ -44,6 +50,10 @@ export function inflowsIncludeNonStillage(
   for (const inflow of inflowsNewestFirst) {
     if (left <= 0.05) break;
     if (!(inflow.volumeGal > 0)) continue;
+    if (inflow.proofingWater) {
+      left -= inflow.volumeGal;
+      continue;
+    }
     const take = Math.min(inflow.volumeGal, left);
     if (take > 0.05 && !inflow.stillage) return true;
     left -= inflow.volumeGal;
@@ -66,6 +76,10 @@ export function storedCutTypeFromInflows(
   for (const inflow of inflowsNewestFirst) {
     if (left <= 0.05) break;
     if (!(inflow.volumeGal > 0)) continue;
+    if (inflow.proofingWater) {
+      left -= inflow.volumeGal;
+      continue;
+    }
     const take = Math.min(inflow.volumeGal, left);
     if (take > 0.05) types.add(inflow.cutType ?? 'unknown');
     left -= inflow.volumeGal;
@@ -90,8 +104,12 @@ export function collectionVesselContentsLabel(input: {
   volumeGal: number;
   stored: StoredCutType | null;
   stillageGal: number;
+  /** Distillation type and cut already resolved for the gallons still in the vessel. */
+  distillation?: string | null;
 }): string | null {
   if (!(input.volumeGal > 0.05)) return null;
+  const distillation = input.distillation?.trim();
+  if (distillation) return distillation;
   if (input.stored === 'heads' || input.stored === 'hearts' || input.stored === 'tails') {
     return input.stored.charAt(0).toUpperCase() + input.stored.slice(1);
   }

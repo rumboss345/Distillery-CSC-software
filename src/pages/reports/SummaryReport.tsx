@@ -10,10 +10,22 @@ import {
 } from '../../db/queries';
 import { StatusBadge } from '../../components/StatusBadge';
 import { equipmentTypeLabel } from '../../lib/equipment';
-import { totalVolumeGal } from '../../lib/bottling-lines';
+import { bottlingSentToTankGal, formatBottleSizes, formatBottlingAlcoholVariance, reportedBottlingAlcoholVarianceGal, reportedBottlingVarianceGal, totalVolumeGal } from '../../lib/bottling-lines';
 import { queryAll } from '../../db/database';
 import { eventInReportRange } from '../../lib/reporting/period';
+import {
+  buildVolumeChangeRows,
+  formatGpaAfterLossOrGainNote,
+  formatVolumeVarianceAbv,
+  gpaAfterLossOrGain,
+  totalVolumeVarianceAbv,
+  totalVolumeVarianceGal,
+} from '../../lib/reporting/volume-changes';
+import { formatTankVolumeVariance } from '../../lib/tank-volume-variance';
+import { sugarUses, totalSugarProcessedLbs } from '../../lib/reporting/sugar-processed';
 import { useReportContext } from './report-context';
+import { ProductivityChart } from './ProductivityChart';
+import { CollapsibleSection } from '../../components/CollapsibleSection';
 
 export function SummaryReport() {
   const { range } = useReportContext();
@@ -40,6 +52,7 @@ export function SummaryReport() {
 
   const summary = getProductionSummary(monthParam);
   const equipmentReport = getEquipmentVolumeReport();
+  const equipmentWithLiquid = equipmentReport.filter((eq) => eq.volume_gal > 0).length;
   const barrels = getBarrels();
   const bottlings = getBottlingRuns();
 
@@ -49,12 +62,16 @@ export function SummaryReport() {
   const filteredBottlings = bottlings.filter((b) => eventInReportRange(b.bottling_date, range));
 
   const completedMashes = filteredMashes.filter((m) => m.status === 'complete').length;
+  const volumeChanges = buildVolumeChangeRows(range);
+  const volumeVarianceGal = totalVolumeVarianceGal(volumeChanges);
+  const volumeVarianceAbv = totalVolumeVarianceAbv(volumeChanges);
   const completedRuns = filteredRuns.filter((r) => r.status === 'complete').length;
   const avgYield = yields.length > 0
     ? yields.reduce((s, y) => s + y.yieldPercent, 0) / yields.length
     : 0;
   const totalGpa = yields.reduce((s, y) => s + y.gpa, 0);
-  const totalGrain = yields.reduce((s, y) => s + y.grainLbs, 0);
+  const gpaAfterChange = gpaAfterLossOrGain(totalGpa, volumeChanges);
+  const totalSugarProcessed = totalSugarProcessedLbs(sugarUses(), range);
 
   const totalHeartsGal = monthParam
     ? summary.totalHeartsGal
@@ -74,6 +91,11 @@ export function SummaryReport() {
           <div className="label">Completed Washes</div>
           <div className="value">{completedMashes}</div>
         </div>
+        <div className="stat-card" data-testid="summary-volume-variance">
+          <div className="label">Volume variances</div>
+          <div className="value">{formatTankVolumeVariance(volumeVarianceGal)}</div>
+          <div className="sub" data-testid="summary-volume-variance-abv">{formatVolumeVarianceAbv(volumeVarianceAbv)}</div>
+        </div>
         <div className="stat-card">
           <div className="label">Completed Runs</div>
           <div className="value">{completedRuns}</div>
@@ -86,9 +108,15 @@ export function SummaryReport() {
           <div className="label">Total GPA Produced</div>
           <div className="value">{totalGpa.toFixed(1)} gal</div>
         </div>
-        <div className="stat-card">
+        <div className="stat-card" data-testid="summary-gpa-after-loss">
+          <div className="label">GPA after loss or gain</div>
+          <div className="value">{gpaAfterChange.toFixed(1)} gal</div>
+          <div className="sub" data-testid="summary-gpa-after-loss-note">{formatGpaAfterLossOrGainNote(volumeChanges)}</div>
+        </div>
+        <div className="stat-card" data-testid="total-sugar-processed">
           <div className="label">Total Sugar Processed</div>
-          <div className="value">{totalGrain.toFixed(0)} lbs</div>
+          <div className="value">{totalSugarProcessed.toFixed(0)} lbs</div>
+          <div className="sub">Sugar used to make washes</div>
         </div>
         <div className="stat-card">
           <div className="label">Barrels / Bottlings</div>
@@ -96,8 +124,16 @@ export function SummaryReport() {
         </div>
       </div>
 
-      <div className="section">
-        <h3 className="section-title">Equipment & Current Volumes</h3>
+      <ProductivityChart />
+
+      <CollapsibleSection
+        className="section"
+        headingClassName="section-title"
+        title="Equipment & Current Volumes"
+        summary={`${equipmentWithLiquid} holding liquid`}
+        defaultOpen={false}
+        storageKey="report-summary-equipment"
+      >
         <p className="report-section-desc">
           Live snapshot of floor equipment (always current — not filtered by report period).
         </p>
@@ -113,9 +149,9 @@ export function SummaryReport() {
                   <th>Equipment</th>
                   <th>Type</th>
                   <th>Status</th>
-                  <th>Capacity</th>
-                  <th>Current Volume</th>
-                  <th>ABV</th>
+                  <th className="num">Capacity</th>
+                  <th className="num">Current Volume</th>
+                  <th className="num">ABV</th>
                   <th>Contents</th>
                 </tr>
               </thead>
@@ -125,15 +161,15 @@ export function SummaryReport() {
                     <td><strong>{eq.name}</strong></td>
                     <td>{equipmentTypeLabel(eq.equipment_type)}</td>
                     <td><StatusBadge status={eq.status} /></td>
-                    <td>{eq.capacity_gal > 0 ? `${eq.capacity_gal} gal` : '—'}</td>
-                    <td>
+                    <td className="num">{eq.capacity_gal > 0 ? `${eq.capacity_gal} gal` : '—'}</td>
+                    <td className="num">
                       {eq.volume_gal > 0 ? (
                         <strong>{eq.volume_gal.toFixed(1)} gal</strong>
                       ) : (
                         <span style={{ color: 'var(--text-muted)' }}>Empty</span>
                       )}
                     </td>
-                    <td>{eq.abv != null ? `${eq.abv.toFixed(1)}%` : '—'}</td>
+                    <td className="num">{eq.abv != null ? `${eq.abv.toFixed(1)}%` : '—'}</td>
                     <td>{eq.detail || '—'}</td>
                   </tr>
                 ))}
@@ -141,10 +177,15 @@ export function SummaryReport() {
             </table>
           </div>
         )}
-      </div>
+      </CollapsibleSection>
 
-      <div className="section">
-        <h3 className="section-title">Yield by Wash Batch</h3>
+      <CollapsibleSection
+        className="section"
+        headingClassName="section-title"
+        title="Yield by Wash Batch"
+        summary={yields.length}
+        storageKey="report-summary-yield"
+      >
         <p className="report-section-desc">
           GPA = Gallons of Pure Alcohol. Yield % = GPA ÷ sugar (lbs) × 100.
         </p>
@@ -158,36 +199,41 @@ export function SummaryReport() {
               <thead>
                 <tr>
                   <th>Wash Batch</th>
-                  <th>Sugar (lbs)</th>
-                  <th>Wash (gal)</th>
-                  <th>Hearts (gal)</th>
-                  <th>Hearts ABV</th>
-                  <th>GPA</th>
-                  <th>Yield %</th>
+                  <th className="num">Sugar (lbs)</th>
+                  <th className="num">Wash (gal)</th>
+                  <th className="num">Hearts (gal)</th>
+                  <th className="num">Hearts ABV</th>
+                  <th className="num">GPA</th>
+                  <th className="num">Yield %</th>
                 </tr>
               </thead>
               <tbody>
                 {yields.map((y) => (
                   <tr key={y.mashBatchNumber}>
                     <td><strong>{y.mashBatchNumber}</strong></td>
-                    <td>{y.grainLbs}</td>
-                    <td>{y.washVolumeGal}</td>
-                    <td>{y.heartsVolumeGal.toFixed(1)}</td>
-                    <td>{y.heartsAbv.toFixed(1)}%</td>
-                    <td>{y.gpa.toFixed(2)} gal</td>
-                    <td><strong>{y.yieldPercent.toFixed(1)}%</strong></td>
+                    <td className="num">{y.grainLbs}</td>
+                    <td className="num">{y.washVolumeGal}</td>
+                    <td className="num">{y.heartsVolumeGal.toFixed(1)}</td>
+                    <td className="num">{y.heartsAbv.toFixed(1)}%</td>
+                    <td className="num">{y.gpa.toFixed(2)} gal</td>
+                    <td className="num"><strong>{y.yieldPercent.toFixed(1)}%</strong></td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         )}
-      </div>
+      </CollapsibleSection>
 
-      <div className="section">
-        <h3 className="section-title">Bottling</h3>
+      <CollapsibleSection
+        className="section"
+        headingClassName="section-title"
+        title="Bottling"
+        summary={filteredBottlings.length}
+        storageKey="report-summary-bottling"
+      >
         <p className="report-section-desc">
-          Tank bottling empties the source tank on save. Variance is bottled volume minus tank draw.
+          Tank bottling empties the source tank on save. Gallons sent to a tank are not a loss. Variance is bottled gallons plus gallons sent to tanks, minus the tank draw. Alcohol gained or lost compares the pure alcohol bottled and returned with the pure alcohol drawn.
         </p>
         {filteredBottlings.length === 0 ? (
           <div className="empty-state">
@@ -201,30 +247,41 @@ export function SummaryReport() {
                   <th>Batch</th>
                   <th>Product</th>
                   <th>Date</th>
-                  <th>Bottled (gal)</th>
-                  <th>Tank draw (gal)</th>
-                  <th>Variance</th>
+                  <th className="num">Bottled (gal)</th>
+                  <th>Bottle sizes</th>
+                  <th className="num">To tank (gal)</th>
+                  <th className="num">Tank draw (gal)</th>
+                  <th className="num">Variance</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredBottlings.map((run) => {
                   const bottled = run.bottled_volume_gal ?? totalVolumeGal(run.lines);
-                  const variance = run.volume_variance_gal;
+                  const sentGal = bottlingSentToTankGal(run);
+                  const variance = reportedBottlingVarianceGal(run);
+                  const alcoholVariance = reportedBottlingAlcoholVarianceGal(run);
                   return (
                     <tr key={run.id}>
                       <td><strong>{run.batch_number}</strong></td>
                       <td>{run.product_name}</td>
                       <td>{formatDateDisplay(run.bottling_date)}</td>
-                      <td>{bottled.toFixed(2)}</td>
-                      <td>
+                      <td className="num">{bottled.toFixed(2)}</td>
+                      <td>{formatBottleSizes(run.lines)}</td>
+                      <td className="num">{sentGal >= 0.01 ? sentGal.toFixed(2) : '—'}</td>
+                      <td className="num">
                         {run.source_holding_tank_equipment_id && run.source_volume_gal != null
                           ? run.source_volume_gal.toFixed(2)
                           : '—'}
                       </td>
-                      <td>
-                        {variance != null && Math.abs(variance) >= 0.01
-                          ? `${variance > 0 ? '+' : ''}${variance.toFixed(2)}`
-                          : '—'}
+                      <td className="num">
+                        <div>
+                          {variance != null && Math.abs(variance) >= 0.01
+                            ? `${variance > 0 ? '+' : ''}${variance.toFixed(2)}`
+                            : '—'}
+                        </div>
+                        {alcoholVariance != null && Math.abs(alcoholVariance) >= 0.01 && (
+                          <div>{formatBottlingAlcoholVariance(alcoholVariance)}</div>
+                        )}
                       </td>
                     </tr>
                   );
@@ -233,10 +290,14 @@ export function SummaryReport() {
             </table>
           </div>
         )}
-      </div>
+      </CollapsibleSection>
 
-      <div className="section">
-        <h3 className="section-title">Production Pipeline Summary</h3>
+      <CollapsibleSection
+        className="section"
+        headingClassName="section-title"
+        title="Production Pipeline Summary"
+        storageKey="report-summary-pipeline"
+      >
         <div className="card report-pipeline-summary">
           <div>Wash Batches:     {filteredMashes.length} started{monthParam ? '' : ` (${summary.activeMashes} active)`}</div>
           <div>Distillation:     {filteredRuns.length} runs{monthParam ? '' : ` (${summary.activeRuns} active)`}</div>
@@ -245,7 +306,7 @@ export function SummaryReport() {
           <div>Bottled:          {bottlesInRange} bottles</div>
           <div>Low Stock Items:  {summary.lowStockItems} (current)</div>
         </div>
-      </div>
+      </CollapsibleSection>
     </>
   );
 }
