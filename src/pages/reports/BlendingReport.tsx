@@ -1,11 +1,13 @@
 import { formatCalendarDay } from '../../lib/date-input';
 import { buildBlendReportRows } from '../../lib/reporting/blend-rows';
+import { emptyForEmployee, filterRowsByPerson, reportPeriodLabel } from '../../lib/reporting/person';
 import { useReportContext } from './report-context';
 import { ReportTableShell } from './ReportTableShell';
 
 export function BlendingReport() {
-  const { range } = useReportContext();
-  const rows = buildBlendReportRows(range);
+  const { range, employee } = useReportContext();
+  const periodLabel = reportPeriodLabel(range.label, employee);
+  const rows = filterRowsByPerson(buildBlendReportRows(range), (row) => row.operator, employee);
 
   const csvHeaders = [
     'Batch', 'Product', 'Blend date', 'Executed', 'Status', 'Sources', 'Spirit draw gal', 'Spirit LAA gal',
@@ -21,12 +23,12 @@ export function BlendingReport() {
     <ReportTableShell
       title="Blending"
       description="Executed blends with spirit draws and final volume vs theoretical where recorded. The Blending page keeps the latest 10 completed batches."
-      periodLabel={range.label}
+      periodLabel={periodLabel}
       csvFilename={`blending-${range.from ?? 'all'}`}
       csvHeaders={csvHeaders}
       csvRows={csvRows}
       isEmpty={rows.length === 0}
-      emptyMessage="No executed blends in this period."
+      emptyMessage={emptyForEmployee('No executed blends in this period.', employee)}
     >
       <table>
         <thead>

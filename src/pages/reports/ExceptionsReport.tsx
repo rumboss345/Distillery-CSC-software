@@ -1,11 +1,13 @@
 import { formatCalendarDay } from '../../lib/date-input';
 import { buildProductionExceptions } from '../../lib/reporting/exceptions';
+import { emptyForEmployee, filterRowsByPerson, reportPeriodLabel } from '../../lib/reporting/person';
 import { useReportContext } from './report-context';
 import { ReportTableShell } from './ReportTableShell';
 
 export function ExceptionsReport() {
-  const { range } = useReportContext();
-  const rows = buildProductionExceptions(range);
+  const { range, employee } = useReportContext();
+  const periodLabel = reportPeriodLabel(range.label, employee);
+  const rows = filterRowsByPerson(buildProductionExceptions(range), (row) => row.who, employee);
 
   const csvHeaders = ['Severity', 'Category', 'Date', 'Reference', 'Message'];
   const csvRows = rows.map((r) => [
@@ -16,12 +18,12 @@ export function ExceptionsReport() {
     <ReportTableShell
       title="Exceptions"
       description="Operational flags: bottling variance, blend volume drift, tank volume and ABV corrections, fermenter leftovers, missing hearts, and tank overfill. Volume changes also lists every correction with why and who."
-      periodLabel={range.label}
+      periodLabel={periodLabel}
       csvFilename={`exceptions-${range.from ?? 'all'}`}
       csvHeaders={csvHeaders}
       csvRows={csvRows}
       isEmpty={rows.length === 0}
-      emptyMessage="No exceptions detected for this period."
+      emptyMessage={emptyForEmployee('No exceptions detected for this period.', employee)}
     >
       <table>
         <thead>

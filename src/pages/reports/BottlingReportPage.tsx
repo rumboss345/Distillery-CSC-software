@@ -1,12 +1,18 @@
 import { formatDateDisplay } from '../../lib/date-input';
 import { bottleSizeCounts, formatBottlingAlcoholVariance } from '../../lib/bottling-lines';
 import { buildBottlingReportRows } from '../../lib/reporting/bottling-rows';
+import { emptyForEmployee, filterRowsByPerson, reportPeriodLabel } from '../../lib/reporting/person';
 import { useReportContext } from './report-context';
 import { ReportTableShell } from './ReportTableShell';
 
 export function BottlingReportPage() {
-  const { range } = useReportContext();
-  const rows = buildBottlingReportRows(range);
+  const { range, employee } = useReportContext();
+  const periodLabel = reportPeriodLabel(range.label, employee);
+  const rows = filterRowsByPerson(
+    buildBottlingReportRows(range),
+    (row) => row.variance_changed_by,
+    employee,
+  );
   const sizeTotals = bottleSizeCounts(rows.flatMap((row) => (
     row.bottle_sizes.map((size) => ({ bottle_count: size.count, bottle_size_ml: size.sizeMl }))
   )));
@@ -24,13 +30,13 @@ export function BottlingReportPage() {
   return (
     <ReportTableShell
       title="Packaging & bottling"
-      description="Bottling runs with tank draw, bottled volume, LAA, gallon variance, alcohol gained or lost, and each bottle size. Gallons sent to a tank are not a loss. The Bottling page keeps the latest 10 runs."
-      periodLabel={range.label}
+      description={`Bottling runs with tank draw, bottled volume, LAA, gallon variance, alcohol gained or lost, and each bottle size. Gallons sent to a tank are not a loss. The Bottling page keeps the latest 10 runs.${employee ? ` This list keeps runs whose variance was recorded by ${employee.label}.` : ''}`}
+      periodLabel={periodLabel}
       csvFilename={`bottling-${range.from ?? 'all'}`}
       csvHeaders={csvHeaders}
       csvRows={csvRows}
       isEmpty={rows.length === 0}
-      emptyMessage="No bottling runs in this period."
+      emptyMessage={emptyForEmployee('No bottling runs in this period.', employee)}
       tableWrap={false}
     >
       {sizeTotals.length > 0 && (

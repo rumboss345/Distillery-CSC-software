@@ -11,3 +11,4 @@ export * from './blend-rows';
 export * from './bottling-rows';
 export * from './exceptions';
 export * from './traceability';
+export * from './person';

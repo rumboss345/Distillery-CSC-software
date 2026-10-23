@@ -16,6 +16,8 @@ export interface ProductionExceptionRow {
   occurred_at: string;
   reference: string;
   message: string;
+  /** Person recorded on this exception. Null when the record has no employee. */
+  who: string | null;
 }
 
 const VARIANCE_GAL_THRESHOLD = 0.25;
@@ -48,6 +50,7 @@ export function buildProductionExceptions(range: ReportDateRange): ProductionExc
         occurred_at: run.bottling_date,
         reference: run.batch_number,
         message: `Bottling variance is ${parts.join(', ')} (${run.product_name})${why ? `. ${why}` : ''}${who ? ` Changed by ${who}.` : '.'}`,
+        who: who || null,
       });
     }
   }
@@ -64,6 +67,7 @@ export function buildProductionExceptions(range: ReportDateRange): ProductionExc
         occurred_at: blend.executed_at ?? blend.blend_date,
         reference: blend.batch_number,
         message: `Final volume ${blend.volume_variance_pct > 0 ? '+' : ''}${blend.volume_variance_pct}% vs theoretical (${blend.product_name}).`,
+        who: blend.operator === '—' ? null : blend.operator,
       });
     }
   }
@@ -73,8 +77,9 @@ export function buildProductionExceptions(range: ReportDateRange): ProductionExc
     batch_number: string;
     run_date: string;
     still_name: string;
+    assigned_user_name: string | null;
   }>(`
-    SELECT r.id, r.batch_number, r.run_date, r.still_name
+    SELECT r.id, r.batch_number, r.run_date, r.still_name, r.assigned_user_name
     FROM distillation_runs r
     WHERE r.status = 'complete'
       AND NOT EXISTS (
@@ -91,6 +96,7 @@ export function buildProductionExceptions(range: ReportDateRange): ProductionExc
       occurred_at: r.run_date,
       reference: r.batch_number,
       message: `Completed run on ${r.still_name} has no hearts volume recorded.`,
+      who: r.assigned_user_name?.trim() || null,
     });
   }
 
@@ -110,6 +116,7 @@ export function buildProductionExceptions(range: ReportDateRange): ProductionExc
       occurred_at: variance.recorded_at,
       reference: variance.tank_name,
       message: `Set from ${variance.book_volume_gal.toFixed(2)} gal to ${variance.set_volume_gal.toFixed(2)} gal (${formatTankVolumeVariance(variance.variance_gal)})${abvNote}${note ? `. ${note}` : ''}${who ? ` Changed by ${who}.` : '.'}`,
+      who: who || null,
     });
   }
 
@@ -135,6 +142,7 @@ export function buildProductionExceptions(range: ReportDateRange): ProductionExc
       occurred_at: leftover.discarded_date,
       reference: leftover.fermenter_name || leftover.batch_number,
       message: `${leftover.volume_gal.toFixed(1)} gal could not be used${leftover.notes.trim() ? `. ${leftover.notes.trim()}` : ''}${who ? ` Changed by ${who}.` : '.'}`,
+      who: who || null,
     });
   }
 
@@ -149,6 +157,7 @@ export function buildProductionExceptions(range: ReportDateRange): ProductionExc
         occurred_at: localIsoDate(),
         reference: eq.name,
         message: `Current volume ${eq.volume_gal.toFixed(1)} gal exceeds nominal capacity (${pct.toFixed(0)}% of ${eq.capacity_gal} gal).`,
+        who: null,
       });
     }
   }
@@ -157,8 +166,9 @@ export function buildProductionExceptions(range: ReportDateRange): ProductionExc
     id: number;
     batch_number: string;
     run_date: string;
+    assigned_user_name: string | null;
   }>(`
-    SELECT id, batch_number, run_date FROM distillation_runs
+    SELECT id, batch_number, run_date, assigned_user_name FROM distillation_runs
     WHERE status IN ('running', 'complete') AND charge_volume_gal <= 0
   `);
   for (const r of runsMissingCharge) {
@@ -170,6 +180,7 @@ export function buildProductionExceptions(range: ReportDateRange): ProductionExc
       occurred_at: r.run_date,
       reference: r.batch_number,
       message: 'Run is active or complete but charge volume is zero.',
+      who: r.assigned_user_name?.trim() || null,
     });
   }
 
@@ -184,6 +195,7 @@ export function buildProductionExceptions(range: ReportDateRange): ProductionExc
         occurred_at: run.bottling_date,
         reference: run.batch_number,
         message: 'Bottle counts recorded but bottled volume is zero.',
+        who: run.variance_changed_by?.trim() || null,
       });
     }
   }

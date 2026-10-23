@@ -28,6 +28,10 @@ function ReportsLayoutInner() {
     setCustomFrom,
     setCustomTo,
     range,
+    employeeKey,
+    setEmployeeKey,
+    employees,
+    employee,
   } = useReportContext();
 
   return (
@@ -43,6 +47,9 @@ function ReportsLayoutInner() {
             onPresetChange={setPreset}
             onCustomFromChange={setCustomFrom}
             onCustomToChange={setCustomTo}
+            employeeKey={employeeKey}
+            employees={employees}
+            onEmployeeChange={setEmployeeKey}
           />
         </div>
       </div>
@@ -52,6 +59,8 @@ function ReportsLayoutInner() {
         {range.from && range.to && range.from !== range.to && (
           <> ({range.from} – {range.to})</>
         )}
+        {' · '}
+        Employee: <strong>{employee ? employee.label : 'All employees'}</strong>
       </p>
 
       <nav className="reports-subnav" aria-label="Report sections">
