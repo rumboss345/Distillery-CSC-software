@@ -3,6 +3,7 @@ import {
   adjacentSugarBagLbs,
   batchSizeUnitForRecipe,
   formatBatchSizeAmount,
+  formatBlendVolume,
   gallonsFromBatchSizeAmount,
   nearestSugarBagCount,
   scaledRecipeWaterGallons,
@@ -39,6 +40,9 @@ describe('blend-recipe-scale', () => {
   it('lets a batch size be entered in liters', () => {
     expect(formatBatchSizeAmount(0.3, 'gal')).toBe('0.30');
     expect(formatBatchSizeAmount(0.3, 'l')).toBe('1.14');
+    expect(formatBlendVolume(0.3)).toBe('0.30 gal · 1.14 L');
+    expect(formatBlendVolume(10)).toBe('10.00 gal · 37.85 L');
+    expect(formatBlendVolume(0)).toBe('—');
     expect(scaleFactorFromTargetYield(0.3, gallonsFromBatchSizeAmount(1.136, 'l'))).toBe(1);
     expect(scaleFactorFromTargetYield(0.3, gallonsFromBatchSizeAmount(1, 'l'))).toBeCloseTo((1 / 3.785411784) / 0.3, 5);
   });
