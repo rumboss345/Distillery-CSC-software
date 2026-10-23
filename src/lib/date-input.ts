@@ -96,6 +96,16 @@ export function formatDateTimeDisplay(value: DateTimeValue): string {
   return format(parseISO(value), 'MMM d, yyyy h:mm a');
 }
 
+/**
+ * Log timestamps are stored as UTC ISO strings (`toISOString()`) so string
+ * ordering in SQL matches time ordering. Unparseable values are kept as-is.
+ */
+export function toStoredTimestamp(value: string | Date = new Date()): string {
+  if (value instanceof Date) return value.toISOString();
+  const parsed = parseStoredDate(value);
+  return parsed ? parsed.toISOString() : value;
+}
+
 /** Date and time in the browser's local timezone. Date-only values stay on that day. */
 export function formatRecordedAt(value: string | null | undefined): string {
   const trimmed = value?.trim() ?? '';

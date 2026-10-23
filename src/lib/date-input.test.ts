@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { format, parseISO } from 'date-fns';
 import {
+  toStoredTimestamp,
   formatCalendarDay,
   formatDateDisplay,
   formatRecordedAt,
@@ -77,5 +78,23 @@ describe('date-input', () => {
     expect(formatRecordedAt('2025-06-15T08:00:00')).toBe('Jun 15, 2025 08:00');
     expect(formatRecordedAt('')).toBe('—');
     expect(formatRecordedAt(null)).toBe('—');
+  });
+});
+
+describe('toStoredTimestamp', () => {
+  it('stores local wall-clock, SQLite UTC and ISO times as one UTC format', () => {
+    expect(toStoredTimestamp('2025-06-15T08:00:00')).toBe(new Date(2025, 5, 15, 8, 0, 0).toISOString());
+    expect(toStoredTimestamp('2025-06-15 08:00:00')).toBe('2025-06-15T08:00:00.000Z');
+    expect(toStoredTimestamp('2025-06-15T08:00:00.000Z')).toBe('2025-06-15T08:00:00.000Z');
+  });
+
+  it('keeps same-day logs in time order when sorted as text', () => {
+    const seeded = toStoredTimestamp('2026-10-21T08:00:00');
+    const later = toStoredTimestamp(new Date(2026, 9, 21, 9, 30));
+    expect([later, seeded].sort()).toEqual([seeded, later]);
+  });
+
+  it('leaves unreadable values unchanged', () => {
+    expect(toStoredTimestamp('not a date')).toBe('not a date');
   });
 });
