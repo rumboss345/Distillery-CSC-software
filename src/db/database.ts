@@ -630,6 +630,7 @@ function runMigrations(): void {
   migratePackagingBottleColumn();
   migrateBottlingTankSourceColumns();
   migrateBottlingVolumeVarianceColumns();
+  migrateBottlingAlcoholVarianceColumns();
   migrateBottlingRunLines();
   migrateBlendRecipes();
   migrateBarrelBlendRecipes();
@@ -1154,6 +1155,24 @@ function migrateBottlingVolumeVarianceColumns(): void {
       WHERE source_holding_tank_equipment_id IS NOT NULL
         AND source_volume_gal IS NOT NULL
     `);
+    persistDb();
+  }
+}
+
+function migrateBottlingAlcoholVarianceColumns(): void {
+  if (!db) return;
+  const hasSourceAbv = queryOne<{ name: string }>(
+    "SELECT name FROM pragma_table_info('bottling_runs') WHERE name='source_abv'",
+  );
+  if (!hasSourceAbv) {
+    db.run('ALTER TABLE bottling_runs ADD COLUMN source_abv REAL');
+    persistDb();
+  }
+  const hasAlcohol = queryOne<{ name: string }>(
+    "SELECT name FROM pragma_table_info('bottling_runs') WHERE name='alcohol_variance_gal'",
+  );
+  if (!hasAlcohol) {
+    db.run('ALTER TABLE bottling_runs ADD COLUMN alcohol_variance_gal REAL');
     persistDb();
   }
 }

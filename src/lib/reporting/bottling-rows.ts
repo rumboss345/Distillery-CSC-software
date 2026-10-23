@@ -1,6 +1,6 @@
 import { getBottlingRuns } from '../../db/queries';
 import { compareStoredDatesDesc } from '../date-input';
-import { bottleSizeCounts, formatBottleSizes, reportedBottlingVarianceGal, totalVolumeGal, type BottleSizeCount } from '../bottling-lines';
+import { bottleSizeCounts, formatBottleSizes, reportedBottlingAlcoholVarianceGal, reportedBottlingVarianceGal, totalVolumeGal, type BottleSizeCount } from '../bottling-lines';
 import { laaGalFromVolumeAbv, roundVolume } from './alcohol-units';
 import { eventInReportRange, type ReportDateRange } from './period';
 
@@ -20,6 +20,7 @@ export interface BottlingReportRow {
   bottle_sizes: BottleSizeCount[];
   packaging_summary: string;
   volume_variance_gal: number | null;
+  alcohol_variance_gal: number | null;
   variance_reason: string | null;
   variance_changed_by: string | null;
 }
@@ -64,6 +65,7 @@ export function buildBottlingReportRows(range: ReportDateRange): BottlingReportR
       bottle_sizes: bottleSizeCounts(run.lines),
       packaging_summary: formatBottleSizes(run.lines),
       volume_variance_gal: reportedBottlingVarianceGal(run),
+      alcohol_variance_gal: reportedBottlingAlcoholVarianceGal(run),
       variance_reason: run.variance_reason?.trim() || null,
       variance_changed_by: run.variance_changed_by?.trim() || null,
     });

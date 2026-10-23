@@ -10,7 +10,7 @@ import {
 } from '../../db/queries';
 import { StatusBadge } from '../../components/StatusBadge';
 import { equipmentTypeLabel } from '../../lib/equipment';
-import { bottlingSentToTankGal, formatBottleSizes, reportedBottlingVarianceGal, totalVolumeGal } from '../../lib/bottling-lines';
+import { bottlingSentToTankGal, formatBottleSizes, formatBottlingAlcoholVariance, reportedBottlingAlcoholVarianceGal, reportedBottlingVarianceGal, totalVolumeGal } from '../../lib/bottling-lines';
 import { queryAll } from '../../db/database';
 import { eventInReportRange } from '../../lib/reporting/period';
 import {
@@ -233,7 +233,7 @@ export function SummaryReport() {
         storageKey="report-summary-bottling"
       >
         <p className="report-section-desc">
-          Tank bottling empties the source tank on save. Gallons sent to a tank are not a loss. Variance is bottled gallons plus gallons sent to tanks, minus the tank draw.
+          Tank bottling empties the source tank on save. Gallons sent to a tank are not a loss. Variance is bottled gallons plus gallons sent to tanks, minus the tank draw. Alcohol gained or lost compares the pure alcohol bottled and returned with the pure alcohol drawn.
         </p>
         {filteredBottlings.length === 0 ? (
           <div className="empty-state">
@@ -259,6 +259,7 @@ export function SummaryReport() {
                   const bottled = run.bottled_volume_gal ?? totalVolumeGal(run.lines);
                   const sentGal = bottlingSentToTankGal(run);
                   const variance = reportedBottlingVarianceGal(run);
+                  const alcoholVariance = reportedBottlingAlcoholVarianceGal(run);
                   return (
                     <tr key={run.id}>
                       <td><strong>{run.batch_number}</strong></td>
@@ -273,9 +274,14 @@ export function SummaryReport() {
                           : '—'}
                       </td>
                       <td className="num">
-                        {variance != null && Math.abs(variance) >= 0.01
-                          ? `${variance > 0 ? '+' : ''}${variance.toFixed(2)}`
-                          : '—'}
+                        <div>
+                          {variance != null && Math.abs(variance) >= 0.01
+                            ? `${variance > 0 ? '+' : ''}${variance.toFixed(2)}`
+                            : '—'}
+                        </div>
+                        {alcoholVariance != null && Math.abs(alcoholVariance) >= 0.01 && (
+                          <div>{formatBottlingAlcoholVariance(alcoholVariance)}</div>
+                        )}
                       </td>
                     </tr>
                   );

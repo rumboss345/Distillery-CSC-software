@@ -1,4 +1,6 @@
 import { mlToGallons } from '../types';
+import { formatDistillationAlcoholResult } from './distillation-loss';
+import { roundAlcohol } from './reporting/alcohol-units';
 
 /** Rum bottling uses bottle dropdown + size; UI hides the packaging stock card while the form is open. */
 export function isRumBottlingProduct(productName: string): boolean {
@@ -94,6 +96,51 @@ export function bottlingVolumeVarianceGal(sourceGal: number, bottledGal: number,
   return bottledGal + returned - sourceGal;
 }
 
+/**
+ * Pure alcohol in the bottles and in gallons sent back to a tank, minus the pure alcohol drawn.
+ * Positive is a gain. Returns null when the source strength or the bottled strength is not known.
+ * Gallons sent to a tank stay at the bottling ABV, so they are still on hand.
+ */
+export function bottlingAlcoholVarianceGal(input: {
+  sourceGal: number;
+  sourceAbv: number | null | undefined;
+  bottledGal: number;
+  bottledAbv: number | null | undefined;
+  returnGal: number;
+}): number | null {
+  const { sourceGal, sourceAbv, bottledGal, bottledAbv, returnGal } = input;
+  if (sourceAbv == null || !Number.isFinite(sourceAbv) || sourceAbv < 0) return null;
+  if (bottledAbv == null || !Number.isFinite(bottledAbv) || bottledAbv <= 0) return null;
+  if (!Number.isFinite(sourceGal) || sourceGal < 0) return null;
+  if (!Number.isFinite(bottledGal) || bottledGal < 0) return null;
+  const returned = Number.isFinite(returnGal) && returnGal > 0 ? returnGal : 0;
+  const drawn = sourceGal * (sourceAbv / 100);
+  const accounted = (bottledGal + returned) * (bottledAbv / 100);
+  return roundAlcohol(accounted - drawn);
+}
+
+/** "Gain 2.00 gal alcohol" or "Loss 2.00 gal alcohol". Positive variance is a gain. */
+export function formatBottlingAlcoholVariance(varianceGal: number): string {
+  return `${formatDistillationAlcoholResult(-varianceGal)} alcohol`;
+}
+
+export function describeBottlingVarianceChange(input: {
+  volumeVarianceGal: number | null;
+  alcoholVarianceGal: number | null;
+  productName: string;
+}): string {
+  const parts: string[] = [];
+  if (input.volumeVarianceGal != null && Math.abs(input.volumeVarianceGal) >= 0.01) {
+    const gallons = input.volumeVarianceGal;
+    parts.push(`${gallons > 0 ? '+' : ''}${gallons.toFixed(2)} gal vs the tank`);
+  }
+  if (input.alcoholVarianceGal != null && Math.abs(input.alcoholVarianceGal) >= 0.01) {
+    parts.push(formatBottlingAlcoholVariance(input.alcoholVarianceGal));
+  }
+  const detail = parts.length > 0 ? parts.join('. ') : 'No variance';
+  return `${detail} (${input.productName})`;
+}
+
 /** Gallons from a bottling run that were sent to a tank instead of bottled. */
 export function bottlingSentToTankGal(run: {
   returns?: { volume_gal: number }[] | null;
@@ -127,6 +174,38 @@ export function reportedBottlingVarianceGal(run: {
     );
   }
   return run.volume_variance_gal ?? null;
+}
+
+/**
+ * Alcohol gained or lost on a bottling run.
+ * Recomputed when the source strength was stored with the run. Older runs that
+ * never stored that strength stay blank rather than guessing an ABV.
+ */
+export function reportedBottlingAlcoholVarianceGal(run: {
+  source_volume_gal?: number | null;
+  source_abv?: number | null;
+  bottled_volume_gal?: number | null;
+  final_abv?: number | null;
+  alcohol_variance_gal?: number | null;
+  returns?: { volume_gal: number }[] | null;
+  return_volume_gal?: number | null;
+}): number | null {
+  if (
+    run.source_volume_gal != null
+    && run.bottled_volume_gal != null
+    && run.source_abv != null
+    && run.final_abv != null
+  ) {
+    const computed = bottlingAlcoholVarianceGal({
+      sourceGal: run.source_volume_gal,
+      sourceAbv: run.source_abv,
+      bottledGal: run.bottled_volume_gal,
+      bottledAbv: run.final_abv,
+      returnGal: bottlingSentToTankGal(run),
+    });
+    if (computed != null) return computed;
+  }
+  return run.alcohol_variance_gal ?? null;
 }
 
 export interface BottlingReturnCheck {

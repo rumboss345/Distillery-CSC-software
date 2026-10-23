@@ -435,10 +435,14 @@ export interface BottlingRun {
   source_holding_tank_equipment_id: number | null;
   /** Gallons drawn from source tank (empties tank on save when from tank). */
   source_volume_gal: number | null;
+  /** ABV of the source tank when the run was saved. */
+  source_abv: number | null;
   /** Sum of bottled line volumes (gal). */
   bottled_volume_gal: number | null;
   /** bottled gallons + gallons sent to another tank − source gallons. */
   volume_variance_gal: number | null;
+  /** Pure alcohol in bottles and returns, minus pure alcohol drawn. Positive is a gain. */
+  alcohol_variance_gal: number | null;
   variance_reason?: string | null;
   variance_changed_by?: string | null;
   /** Tank that receives product from this run that was not bottled. */

@@ -1,7 +1,7 @@
 import { queryAll } from '../../db/database';
 import { getBlendProducts, getBottlingRuns, getHoldingTankVolumeVariances } from '../../db/queries';
 import { compareStoredDatesDesc } from '../date-input';
-import { reportedBottlingVarianceGal } from '../bottling-lines';
+import { describeBottlingVarianceChange, reportedBottlingAlcoholVarianceGal, reportedBottlingVarianceGal } from '../bottling-lines';
 import { formatDistillationAlcoholResult, stillageResidualAbv } from '../distillation-loss';
 import { roundAlcohol } from './alcohol-units';
 import { formatTankVolumeVariance, tankReadingChanged } from '../tank-volume-variance';
@@ -150,16 +150,23 @@ export function buildVolumeChangeRows(range: ReportDateRange): VolumeChangeRow[]
   for (const run of getBottlingRuns()) {
     if (!eventInReportRange(run.bottling_date, range)) continue;
     const variance = reportedBottlingVarianceGal(run);
-    if (variance != null && Math.abs(variance) >= 0.01) {
+    const alcoholVariance = reportedBottlingAlcoholVarianceGal(run);
+    const volumeNotable = variance != null && Math.abs(variance) >= 0.01;
+    const alcoholNotable = alcoholVariance != null && Math.abs(alcoholVariance) >= 0.01;
+    if (volumeNotable || alcoholNotable) {
       rows.push({
         key: `bottling:${run.id}`,
         occurred_at: run.bottling_date,
         kind: VOLUME_CHANGE_KINDS.bottlingVariance,
         place: run.batch_number,
-        change: `${variance > 0 ? '+' : ''}${variance.toFixed(2)} gal vs the tank (${run.product_name})`,
+        change: describeBottlingVarianceChange({
+          volumeVarianceGal: variance,
+          alcoholVarianceGal: alcoholVariance,
+          productName: run.product_name,
+        }),
         why: shown(run.variance_reason),
         who: shown(run.variance_changed_by),
-        gallons: variance,
+        gallons: volumeNotable ? variance : null,
         abvPoints: null,
       });
     }
