@@ -315,9 +315,13 @@ export function BlendRecipesTab({
 
   const handleDelete = (id: number) => {
     if (!confirm('Delete this blend recipe?')) return;
-    deleteBlendRecipe(id);
-    if (selectedId === id) setSelectedId(null);
-    refresh();
+    try {
+      deleteBlendRecipe(id);
+      if (selectedId === id) setSelectedId(null);
+      refresh();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Could not delete this blend recipe.');
+    }
   };
 
   const updateIngredient = (index: number, patch: Partial<BlendIngredientInput>) => {
