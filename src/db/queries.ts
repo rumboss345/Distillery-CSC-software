@@ -5365,7 +5365,12 @@ export function deleteBlendRecipe(id: number): void {
   const __remote = forwardProductionMutation('deleteBlendRecipe', [id]);
   if (__remote.forwarded) return __remote.value as never;
 
-  runQuery('UPDATE blend_products SET blend_recipe_version_id = NULL WHERE blend_recipe_id = ?', [id]);
+  runQuery(
+    'UPDATE blend_products SET blend_recipe_id = NULL, blend_recipe_version_id = NULL WHERE blend_recipe_id = ?',
+    [id],
+  );
+  runQuery('DELETE FROM blend_recipe_spirit_sources WHERE blend_recipe_id = ?', [id]);
+  runQuery('DELETE FROM blend_recipe_ingredients WHERE blend_recipe_id = ?', [id]);
   runQuery('DELETE FROM blend_recipe_versions WHERE blend_recipe_id = ?', [id]);
   runQuery('DELETE FROM blend_recipes WHERE id = ?', [id]);
 }
@@ -6033,6 +6038,9 @@ export function deleteBlendProduct(id: number): void {
   if (product?.status === 'executed' || product?.status === 'bottled' || product?.status === 'blended') {
     throw new Error('Cannot delete an executed blend.');
   }
+  runQuery('DELETE FROM blend_spirit_sources WHERE blend_product_id = ?', [id]);
+  runQuery('DELETE FROM blend_ingredients WHERE blend_product_id = ?', [id]);
+  runQuery('DELETE FROM blend_formula_versions WHERE blend_product_id = ?', [id]);
   runQuery('DELETE FROM blend_products WHERE id = ?', [id]);
 }
 

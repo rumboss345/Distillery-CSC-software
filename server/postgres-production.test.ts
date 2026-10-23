@@ -480,6 +480,81 @@ describe('PostgreSQL production modules', () => {
     expect(await rowRevision('inventory_items', sugar.id)).toBe(sugarRev);
   });
 
+  it('deletes a blend recipe that still has spirit pulls, additives, and a linked batch', async () => {
+    const recipe = engine.readProduction((api) => api.getBlendRecipes().find((row) => row.name === 'Test Blend Recipe'));
+    const product = engine.readProduction((api) => api.getBlendProducts().find((row) => row.batch_number === 'BL-TEST-001'));
+    expect(recipe?.id).toBeGreaterThan(0);
+    expect(recipe?.spirit_sources.length).toBeGreaterThan(0);
+    expect(product?.id).toBeGreaterThan(0);
+    const versionId = engine.readProduction((api) => api.getBlendRecipeVersions(recipe!.id)[0]?.id ?? null);
+
+    await save('saveBlendRecipe', [{
+      name: recipe!.name,
+      product_name: recipe!.product_name,
+      target_abv: recipe!.target_abv,
+      target_brix: recipe!.target_brix,
+      target_sugar_g_per_l: recipe!.target_sugar_g_per_l,
+      target_volume_gal: recipe!.target_volume_gal,
+      scale_factor: recipe!.scale_factor,
+      source_type: recipe!.source_type,
+      notes: recipe!.notes,
+    }, recipe!.spirit_sources, [{
+      ingredient_type: 'sugar',
+      name: 'Cane sugar',
+      amount: 2,
+      unit: 'lbs',
+      abv: null,
+      notes: '',
+    }], recipe!.id]);
+
+    await save('saveBlendProduct', [{
+      batch_number: product!.batch_number,
+      product_name: product!.product_name,
+      source_holding_tank_equipment_id: product!.source_holding_tank_equipment_id,
+      base_spirit_volume_gal: product!.base_spirit_volume_gal,
+      base_spirit_abv: product!.base_spirit_abv,
+      blend_date: product!.blend_date,
+      target_abv: product!.target_abv,
+      target_brix: product!.target_brix,
+      scale_factor: product!.scale_factor,
+      formula_version: product!.formula_version,
+      formulation_phase: product!.formulation_phase,
+      theoretical_volume_gal: product!.theoretical_volume_gal,
+      theoretical_abv: product!.theoretical_abv,
+      theoretical_density: product!.theoretical_density,
+      theoretical_brix: product!.theoretical_brix,
+      actual_volume_gal: product!.actual_volume_gal,
+      actual_weight_lbs: product!.actual_weight_lbs,
+      actual_abv: product!.actual_abv,
+      actual_density: product!.actual_density,
+      actual_brix: product!.actual_brix,
+      status: product!.status,
+      executed_at: product!.executed_at,
+      output_holding_tank_equipment_id: product!.output_holding_tank_equipment_id,
+      blend_recipe_id: recipe!.id,
+      blend_recipe_version_id: versionId,
+      assigned_user_id: product!.assigned_user_id,
+      assigned_user_name: product!.assigned_user_name,
+      notes: product!.notes,
+    }, [], product!.id]);
+
+    await save('deleteBlendRecipe', [recipe!.id]);
+
+    expect(engine.readProduction((api) => api.getBlendRecipes().some((row) => row.id === recipe!.id))).toBe(false);
+    const kept = engine.readProduction((api) => api.getBlendProducts().find((row) => row.id === product!.id));
+    expect(kept?.batch_number).toBe('BL-TEST-001');
+    expect(kept?.blend_recipe_id).toBeNull();
+    const leftovers = await poolQuery(
+      `SELECT
+         (SELECT count(*) FROM blend_recipes WHERE id = $1) AS recipes,
+         (SELECT count(*) FROM blend_recipe_spirit_sources WHERE blend_recipe_id = $1) AS spirits,
+         (SELECT count(*) FROM blend_recipe_ingredients WHERE blend_recipe_id = $1) AS ingredients,
+         (SELECT count(*) FROM blend_recipe_versions WHERE blend_recipe_id = $1) AS versions`,
+      [recipe!.id],
+    );
+    expect(leftovers.rows[0]).toEqual({ recipes: '0', spirits: '0', ingredients: '0', versions: '0' });
+  });
+
   it('backs up and restores production rows without passwords or sample batches', async () => {
     const backup = await engine.exportProductionBackup();
     const encoded = JSON.stringify(backup);
