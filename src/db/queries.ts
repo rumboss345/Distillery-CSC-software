@@ -3697,10 +3697,41 @@ export function deleteMashBatch(id: number): void {
   const __remote = forwardProductionMutation('deleteMashBatch', [id]);
   if (__remote.forwarded) return __remote.value as never;
 
+  const batch = getMashBatch(id);
+  const nutrients = batch
+    ? getMashBatchNutrients(id).map((nutrient) => ({
+      name: nutrient.name,
+      amount: nutrient.amount,
+      unit: nutrient.unit,
+    }))
+    : [];
+
   releaseWashTankForMashBatch(id);
   releaseFermentersForMash(id);
+  if (batch) {
+    applyMashInventoryUsage(
+      {
+        ...batch,
+        grain_type: '',
+        grain_lbs: 0,
+        yeast_strain: '',
+        yeast_lbs: 0,
+      },
+      batch,
+      nutrients,
+      [],
+    );
+  }
   deleteStatusDateLog('wash', id);
   deleteStatusDateLog('fermentation', id);
+  // sql.js does not enforce foreign keys. Clear children before the parent so
+  // the PostgreSQL snapshot can commit.
+  runQuery('DELETE FROM mash_batch_nutrients WHERE mash_batch_id = ?', [id]);
+  runQuery('DELETE FROM fermentation_logs WHERE mash_batch_id = ?', [id]);
+  runQuery('DELETE FROM mash_fermenter_assignments WHERE mash_batch_id = ?', [id]);
+  runQuery('UPDATE distillation_runs SET source_mash_batch_id = NULL WHERE source_mash_batch_id = ?', [id]);
+  runQuery('UPDATE discarded_fermentations SET mash_batch_id = NULL WHERE mash_batch_id = ?', [id]);
+  runQuery('UPDATE floor_equipment SET linked_mash_batch_id = NULL WHERE linked_mash_batch_id = ?', [id]);
   runQuery('DELETE FROM mash_batches WHERE id = ?', [id]);
 }
 
