@@ -37,8 +37,8 @@ describe('blend-recipe-scale', () => {
   });
 
   it('lets a batch size be entered in liters', () => {
-    expect(formatBatchSizeAmount(0.3, 'gal')).toBe('0.300');
-    expect(formatBatchSizeAmount(0.3, 'l')).toBe('1.136');
+    expect(formatBatchSizeAmount(0.3, 'gal')).toBe('0.30');
+    expect(formatBatchSizeAmount(0.3, 'l')).toBe('1.14');
     expect(scaleFactorFromTargetYield(0.3, gallonsFromBatchSizeAmount(1.136, 'l'))).toBe(1);
     expect(scaleFactorFromTargetYield(0.3, gallonsFromBatchSizeAmount(1, 'l'))).toBeCloseTo((1 / 3.785411784) / 0.3, 5);
   });

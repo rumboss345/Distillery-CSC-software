@@ -1,6 +1,5 @@
 import type { BlendIngredientInput, BlendRecipeSpiritSourceInput } from '../types';
 import { gallonsToUnit, ingredientVolumeGal, ingredientWeightLbs, spiritVolumeGalFromAmount, toGallonsFromVolumeUnit } from './blending';
-import { formatGallonDisplay } from './formulation-quantity';
 
 /** Batch yield can be entered in wine gallons or liters. Scale math stays in gallons. */
 export type BatchSizeUnit = 'gal' | 'l';
@@ -84,9 +83,7 @@ export function scaleFactorFromTargetYield(baseYieldGal: number, targetYieldGal:
 export function formatBatchSizeAmount(gallons: number, unit: BatchSizeUnit): string {
   if (!(gallons > 0)) return '';
   const amount = unit === 'l' ? gallonsToUnit(gallons, 'l') : gallons;
-  if (unit === 'gal' && amount < 1) return formatGallonDisplay(amount);
-  const places = unit === 'l' ? 3 : 1;
-  return amount.toFixed(places);
+  return amount.toFixed(2);
 }
 
 export function gallonsFromBatchSizeAmount(amount: number, unit: BatchSizeUnit): number {
