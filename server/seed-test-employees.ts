@@ -35,7 +35,7 @@ function loadEnvFile() {
 }
 
 loadEnvFile();
-initializeAuthDatabase();
+await initializeAuthDatabase();
 
 const DEFAULT_PASSWORD = process.env.TEST_EMPLOYEE_PASSWORD ?? 'TestEmployee1!';
 
@@ -74,11 +74,11 @@ export const TEST_EMPLOYEE_PROFILES: TestEmployeeProfile[] = [
   },
 ];
 
-export function seedTestEmployees(password = DEFAULT_PASSWORD): void {
+export async function seedTestEmployees(password = DEFAULT_PASSWORD): Promise<void> {
   for (const profile of TEST_EMPLOYEE_PROFILES) {
-    const existing = getUserByEmail(profile.email);
+    const existing = await getUserByEmail(profile.email);
     if (existing) {
-      updateUserByAdmin(existing.id, {
+      await updateUserByAdmin(existing.id, {
         name: profile.name,
         permissions: profile.permissions,
         processAssignments: profile.processAssignments,
@@ -86,7 +86,7 @@ export function seedTestEmployees(password = DEFAULT_PASSWORD): void {
       console.log(`Updated test employee: ${profile.name} <${profile.email}>`);
       continue;
     }
-    createUserByAdmin(
+    await createUserByAdmin(
       profile.email,
       password,
       profile.name,
@@ -98,7 +98,7 @@ export function seedTestEmployees(password = DEFAULT_PASSWORD): void {
 }
 
 if (process.argv[1]?.endsWith('seed-test-employees.ts')) {
-  seedTestEmployees();
+  await seedTestEmployees();
   console.log('');
   console.log('All test employees use password:', DEFAULT_PASSWORD);
   console.log('(override with TEST_EMPLOYEE_PASSWORD in .env)');

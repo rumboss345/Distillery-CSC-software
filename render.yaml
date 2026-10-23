@@ -2,7 +2,8 @@
 # Deploy: Render Dashboard → New → Blueprint → connect this repo
 #
 # Set sensitive values in the Render dashboard (never commit secrets):
-#   JWT_SECRET, ADMIN_EMAIL, ADMIN_PASSWORD, APP_URL
+#   JWT_SECRET, ADMIN_EMAIL, ADMIN_PASSWORD, APP_URL, DATABASE_URL
+# DATABASE_URL must be the Internal Database URL on this web service only.
 
 services:
   - type: web
@@ -30,4 +31,6 @@ services:
       - key: ADMIN_PASSWORD
         sync: false
       - key: APP_URL
+        sync: false
+      - key: DATABASE_URL
         sync: false

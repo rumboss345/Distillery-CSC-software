@@ -33,7 +33,7 @@ import { Register } from './pages/Register';
 import { ApproveUser } from './pages/ApproveUser';
 import { AdminUsers } from './pages/AdminUsers';
 import { SpiritWeightCalculator } from './pages/SpiritWeightCalculator';
-import { useDatabaseReady } from './db/queries';
+import { useDatabaseReady } from './db/client-actions';
 
 function AppContent() {
   const { ready, error } = useDatabaseReady();

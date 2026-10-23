@@ -35,5 +35,5 @@ if (!email || !password) {
   process.exit(1);
 }
 
-resetAdminAccount(email, password);
+await resetAdminAccount(email, password);
 console.log(`Admin account reset for ${email.toLowerCase()}`);
