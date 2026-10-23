@@ -1824,7 +1824,7 @@ export function Blending() {
                       <input
                         type="number"
                         data-testid="batch-size-amount"
-                        step="0.1"
+                        step="0.01"
                         min="0"
                         value={targetYieldInput}
                         onChange={(e) => {
@@ -1868,7 +1868,7 @@ export function Blending() {
                       type="number"
                       step="0.01"
                       min="0.01"
-                      value={form.scale_factor ? Number(form.scale_factor.toFixed(4)) : ''}
+                      value={form.scale_factor ? Number(form.scale_factor.toFixed(2)) : ''}
                       onChange={(e) => setBatchScale(parseFloat(e.target.value) || 1)}
                     />
                   </label>
@@ -1906,12 +1906,12 @@ export function Blending() {
                 {baseYieldGal > 0 && (
                   <p className="field-hint" data-testid="batch-size-summary">
                     Saved recipe: {batchSizeUnit === 'l'
-                      ? `${formatBatchSizeAmount(baseYieldGal, 'l')} L (${baseYieldGal.toFixed(3)} gal)`
-                      : `${baseYieldGal.toFixed(1)} gal`}
+                      ? `${formatBatchSizeAmount(baseYieldGal, 'l')} L (${baseYieldGal.toFixed(2)} gal)`
+                      : `${baseYieldGal.toFixed(2)} gal`}
                     {' → '}
                     this batch: {batchSizeUnit === 'l'
-                      ? `${formatBatchSizeAmount(scaledYieldGal, 'l')} L (${scaledYieldGal.toFixed(3)} gal)`
-                      : `${scaledYieldGal.toFixed(1)} gal`}
+                      ? `${formatBatchSizeAmount(scaledYieldGal, 'l')} L (${scaledYieldGal.toFixed(2)} gal)`
+                      : `${scaledYieldGal.toFixed(2)} gal`}
                     {form.target_abv != null ? ` at ${form.target_abv}%` : ''}
                     {baseSugarLbs > 0
                       ? ` · ${onWholeSugarBags
@@ -2498,7 +2498,7 @@ export function Blending() {
               </table>
             </div>
             {form.scale_factor !== 1 && (
-              <p className="field-hint">Batch sized at {Number(form.scale_factor.toFixed(3))}× the saved recipe.</p>
+              <p className="field-hint">Batch sized at {Number(form.scale_factor.toFixed(2))}× the saved recipe.</p>
             )}
             {contractionGal > 0.05 && (
               <p className="field-hint" data-testid="blend-contraction-note">
@@ -2812,7 +2812,7 @@ export function Blending() {
                     {b.blend_recipe_name ?? '—'}
                     {b.blend_recipe_version_number != null ? ` V${b.blend_recipe_version_number}` : ''}
                   </td>
-                  <td className="num">{b.scale_factor !== 1 ? `${b.scale_factor}×` : '1×'}</td>
+                  <td className="num">{b.scale_factor.toFixed(2)}×</td>
                   <td className="num">{b.target_abv != null ? `${b.target_abv}%` : '—'}</td>
                   <td><AssigneeCell name={b.assigned_user_name} /></td>
                   <td>{stepLabel(b.status, b.target_abv)}</td>
