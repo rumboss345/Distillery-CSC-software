@@ -12,6 +12,11 @@ import {
 import type { ProcessAssignmentEntry, PublicUser, User, UserRole } from './auth-sqlite.js';
 import { getPool } from './pg.js';
 
+function restoredFromSettings(email: string): boolean {
+  const configured = process.env.ADMIN_EMAIL?.trim().toLowerCase();
+  return Boolean(configured && email.toLowerCase() === configured);
+}
+
 function mapUser(row: Record<string, unknown> | undefined): User | undefined {
   if (!row) return undefined;
   return {
@@ -99,6 +104,7 @@ export async function publicUser(user: User): Promise<PublicUser> {
     created_at: user.created_at,
     permissions,
     processAssignments,
+    restoredFromSettings: restoredFromSettings(user.email),
   };
 }
 
@@ -149,7 +155,7 @@ export async function updateUserByAdmin(
   },
 ): Promise<User | null> {
   const user = await getUserById(id);
-  if (!user || user.role === 'admin') return null;
+  if (!user) return null;
   if (updates.name !== undefined) {
     await getPool().query('UPDATE users SET name = $1 WHERE id = $2', [updates.name, id]);
   }
@@ -158,16 +164,19 @@ export async function updateUserByAdmin(
     await getPool().query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, id]);
     await getPool().query('DELETE FROM password_reset_tokens WHERE user_id = $1', [id]);
   }
-  if (updates.permissions) await setUserPermissions(id, updates.permissions);
-  if (updates.processAssignments) await setUserProcessAssignments(id, updates.processAssignments);
+  if (user.role !== 'admin') {
+    if (updates.permissions) await setUserPermissions(id, updates.permissions);
+    if (updates.processAssignments) await setUserProcessAssignments(id, updates.processAssignments);
+  }
   return (await getUserById(id)) ?? null;
 }
 
 export async function deleteUserById(id: number): Promise<{ ok: true } | { ok: false; reason: string }> {
   const user = await getUserById(id);
   if (!user) return { ok: false, reason: 'User not found' };
-  if (user.role === 'admin') return { ok: false, reason: 'Cannot remove admin accounts' };
   await getPool().query('DELETE FROM password_reset_tokens WHERE user_id = $1', [id]);
+  await getPool().query('DELETE FROM user_permissions WHERE user_id = $1', [id]);
+  await getPool().query('DELETE FROM user_process_assignments WHERE user_id = $1', [id]);
   await getPool().query('DELETE FROM users WHERE id = $1', [id]);
   return { ok: true };
 }

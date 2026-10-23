@@ -11,6 +11,8 @@ export interface AuthUser {
   created_at: string;
   permissions: PermissionKey[];
   processAssignments: ProcessStageKey[];
+  /** The website settings recreate this administrator and replace the password on each start. */
+  restoredFromSettings?: boolean;
 }
 
 export function getStoredToken(): string | null {
