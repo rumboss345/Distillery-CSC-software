@@ -503,7 +503,7 @@ export function Fermentation() {
       ? `Delete the distilled logs for ${name} on wash ${row.batch.batch_number}? The wash batch stays.`
       : row.assignment
         ? `Delete the fermentation in ${name} for wash ${row.batch.batch_number}? Other fermenters on this wash stay.`
-        : `Delete the fermentation record for wash ${row.batch.batch_number}? This wash batch is deleted with it.`;
+        : `Delete the fermentation record for wash ${row.batch.batch_number}? This wash batch is deleted with it, and the sugar, yeast, and nutrients go back to inventory.`;
     if (confirm(message)) performDelete(row);
   };
 
@@ -540,7 +540,7 @@ export function Fermentation() {
     if (row.assignment) {
       return `The fermentation in ${row.fermenterName} for wash ${row.batch.batch_number} is complete. Enter an administrator email and password to delete it. Other fermenters on this wash stay.`;
     }
-    return `The fermentation record for wash ${row.batch.batch_number} is complete. Enter an administrator email and password to permanently delete the wash batch and its logs.`;
+    return `The fermentation record for wash ${row.batch.batch_number} is complete. Enter an administrator email and password to permanently delete the wash batch and its logs. Sugar, yeast, and nutrients go back to inventory.`;
   };
 
   return (

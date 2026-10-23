@@ -555,6 +555,168 @@ describe('PostgreSQL production modules', () => {
     expect(leftovers.rows[0]).toEqual({ recipes: '0', spirits: '0', ingredients: '0', versions: '0' });
   });
 
+  it('puts sugar, yeast, and nutrients back when a wash is deleted', async () => {
+    const stock = (name: string) => engine.readProduction((api) => (
+      api.getInventoryItems().find((item) => item.name === name)?.quantity ?? null
+    ));
+    await save('saveInventoryItem', [{
+      name: 'Restore Sugar',
+      category: 'sugar',
+      unit: 'lbs',
+      quantity: 200,
+      reorder_level: 0,
+      notes: '',
+      package_size_ml: null,
+      density_g_per_ml: null,
+      density_reference: '',
+      abv: null,
+    }]);
+    await save('saveInventoryItem', [{
+      name: 'Restore Yeast',
+      category: 'yeast',
+      unit: 'lbs',
+      quantity: 10,
+      reorder_level: 0,
+      notes: '',
+      package_size_ml: null,
+      density_g_per_ml: null,
+      density_reference: '',
+      abv: null,
+    }]);
+    await save('saveInventoryItem', [{
+      name: 'Restore DAP',
+      category: 'nutrients',
+      unit: 'lbs',
+      quantity: 20,
+      reorder_level: 0,
+      notes: '',
+      package_size_ml: null,
+      density_g_per_ml: null,
+      density_reference: '',
+      abv: null,
+    }]);
+
+    await saveEquipment('Restore Fermenter A', 'fermenter', 300);
+    await saveEquipment('Restore Fermenter B', 'fermenter', 300);
+    const fermenterA = engine.readProduction((api) => api.getFloorEquipment().find((item) => item.name === 'Restore Fermenter A')!.id);
+    const fermenterB = engine.readProduction((api) => api.getFloorEquipment().find((item) => item.name === 'Restore Fermenter B')!.id);
+
+    const wash = (batchNumber: string, sugarLbs: number, yeastLbs: number, fermenterId: number, nutrients: { name: string; amount: number; unit: string }[]) => ({
+      batch: {
+        batch_number: batchNumber,
+        recipe_name: 'Restore Wash',
+        grain_type: 'Restore Sugar',
+        grain_lbs: sugarLbs,
+        water_gal: 40,
+        yeast_strain: yeastLbs > 0 ? 'Restore Yeast' : '',
+        yeast_lbs: yeastLbs,
+        start_date: '2026-10-23',
+        fermentation_start_date: '2026-10-23',
+        expected_completion_date: '2026-10-27',
+        target_brix: 18,
+        actual_brix: 18,
+        target_final_brix: 2,
+        actual_final_brix: null,
+        status: 'fermenting',
+        assigned_user_id: null,
+        assigned_user_name: 'Admin',
+        notes: '',
+      },
+      assignments: [{ equipmentId: fermenterId, volumeGal: 40, status: 'fermenting' as const }],
+      nutrients,
+    });
+
+    const first = wash('W-RESTORE-A', 25, 1.5, fermenterA, [{ name: 'Restore DAP', amount: 4, unit: 'lbs' }]);
+    const firstSave = await save('saveMashBatchWithFermenters', [first.batch, first.assignments, first.nutrients]);
+    const firstId = Number(firstSave.result);
+    const second = wash('W-RESTORE-B', 10, 0, fermenterB, []);
+    const secondSave = await save('saveMashBatchWithFermenters', [second.batch, second.assignments, second.nutrients]);
+    const secondId = Number(secondSave.result);
+
+    expect(stock('Restore Sugar')).toBe(165);
+    expect(stock('Restore Yeast')).toBe(8.5);
+    expect(stock('Restore DAP')).toBe(16);
+
+    await save('addFermentationLog', [{
+      mash_batch_id: firstId,
+      floor_equipment_id: fermenterA,
+      logged_at: '2026-10-23T09:00:00',
+      temperature_f: 84,
+      brix: 16,
+      ph: 4.1,
+      notes: 'Started',
+    }]);
+    await save('recordFermenterLeftover', [{
+      mashBatchId: firstId,
+      equipmentId: fermenterA,
+      fermenterName: 'Restore Fermenter A',
+      volumeGal: 1,
+      notes: 'Could not pump the last gallon',
+      changedBy: 'Admin',
+    }]);
+    const run = await save('saveDistillationRun', [{
+      batch_number: 'D-RESTORE-001',
+      run_type: 'wash',
+      source_mash_batch_id: firstId,
+      source_fermenter_equipment_id: fermenterA,
+      source_holding_tank_equipment_id: null,
+      dest_holding_tank_equipment_id: null,
+      still_name: 'Test Pot Still',
+      run_date: '2026-10-23',
+      charge_volume_gal: 20,
+      charge_abv: 8,
+      status: 'planned',
+      assigned_user_id: null,
+      assigned_user_name: '',
+      notes: '',
+      stillage_volume_gal: null,
+      stillage_discarded: 0,
+      stillage_holding_tank_equipment_id: null,
+    }, undefined, undefined, undefined]);
+    const runId = Number(run.result);
+
+    await save('deleteOneFermentation', [secondId, fermenterB]);
+    expect(engine.readProduction((api) => api.getMashBatch(secondId)?.batch_number)).toBe('W-RESTORE-B');
+    expect(stock('Restore Sugar')).toBe(165);
+    expect(stock('Restore Yeast')).toBe(8.5);
+    expect(stock('Restore DAP')).toBe(16);
+
+    await save('deleteMashBatch', [firstId]);
+    expect(engine.readProduction((api) => api.getMashBatch(firstId))).toBeUndefined();
+    expect(stock('Restore Sugar')).toBe(190);
+    expect(stock('Restore Yeast')).toBe(10);
+    expect(stock('Restore DAP')).toBe(20);
+    expect(engine.readProduction((api) => api.getDistillationRuns().find((item) => item.id === runId)?.source_mash_batch_id)).toBeNull();
+
+    const cleared = await poolQuery(
+      `SELECT
+         (SELECT count(*) FROM mash_batches WHERE id = $1) AS washes,
+         (SELECT count(*) FROM mash_batch_nutrients WHERE mash_batch_id = $1) AS nutrients,
+         (SELECT count(*) FROM fermentation_logs WHERE mash_batch_id = $1) AS logs,
+         (SELECT count(*) FROM mash_fermenter_assignments WHERE mash_batch_id = $1) AS assignments,
+         (SELECT count(*) FROM discarded_fermentations WHERE mash_batch_id = $1) AS leftovers,
+         (SELECT count(*) FROM distillation_runs WHERE id = $2 AND source_mash_batch_id IS NULL) AS runs`,
+      [firstId, runId],
+    );
+    expect(cleared.rows[0]).toEqual({
+      washes: '0',
+      nutrients: '0',
+      logs: '0',
+      assignments: '0',
+      leftovers: '0',
+      runs: '1',
+    });
+    const leftover = await poolQuery(
+      'SELECT batch_number, mash_batch_id FROM discarded_fermentations WHERE batch_number = $1',
+      ['W-RESTORE-A'],
+    );
+    expect(leftover.rows).toEqual([{ batch_number: 'W-RESTORE-A', mash_batch_id: null }]);
+
+    await save('deleteMashBatch', [secondId]);
+    expect(engine.readProduction((api) => api.getMashBatch(secondId))).toBeUndefined();
+    expect(stock('Restore Sugar')).toBe(200);
+  });
+
   it('backs up and restores production rows without passwords or sample batches', async () => {
     const backup = await engine.exportProductionBackup();
     const encoded = JSON.stringify(backup);

@@ -204,7 +204,7 @@ export function MashFermentation() {
   };
 
   const handleDelete = (batch: MashBatch) => {
-    if (confirm(`Delete wash batch ${batch.batch_number}?`)) {
+    if (confirm(`Delete wash batch ${batch.batch_number}? Sugar, yeast, and nutrients used for this wash go back to inventory.`)) {
       performDelete(batch.id);
     }
   };
