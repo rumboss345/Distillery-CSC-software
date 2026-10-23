@@ -14,7 +14,8 @@ export function Dashboard() {
   const { user } = useAuth();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
-  const summary = getProductionSummary(undefined, format(new Date(), 'yyyy-MM'));
+  const month = format(new Date(), 'yyyy-MM');
+  const summary = getProductionSummary(month, month);
   const today = localIsoDate();
   const mashes = getMashBatches();
   const recentMashes = mashes.slice(0, 3);
@@ -69,10 +70,22 @@ export function Dashboard() {
           <div className="value">{summary.totalHeartsGal.toFixed(1)} gal</div>
           <div className="sub">Collected this month</div>
         </div>
-        <div className="stat-card">
+        <div className="stat-card" data-testid="dashboard-bottled-month">
           <div className="label">Bottled This Month</div>
-          <div className="value">{summary.bottlesThisMonth}</div>
-          <div className="sub">Bottles filled</div>
+          {summary.bottlesBySize.length === 0 ? (
+            <>
+              <div className="value">0</div>
+              <div className="sub">No bottles this month</div>
+            </>
+          ) : (
+            <div className="dashboard-bottle-sizes" data-testid="dashboard-bottle-sizes">
+              {summary.bottlesBySize.map((size) => (
+                <div key={size.sizeMl} data-testid={`dashboard-bottle-size-${size.sizeMl}`}>
+                  {size.count.toLocaleString()} × {size.sizeMl} ml
+                </div>
+              ))}
+            </div>
+          )}
         </div>
         <div className="stat-card">
           <div className="label">Low Stock Alerts</div>
