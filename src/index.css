@@ -514,6 +514,20 @@ body.nav-open {
   margin-top: 0.25rem;
 }
 
+.dashboard-bottle-sizes {
+  margin-top: 0.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.dashboard-bottle-sizes div {
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--text);
+}
+
 /* Buttons */
 .btn {
   display: inline-flex;
@@ -4219,6 +4233,10 @@ tr.calendar-record-focus td {
 
   .stat-card .value {
     font-size: 1.45rem;
+  }
+
+  .dashboard-bottle-sizes div {
+    font-size: 1rem;
   }
 
   .modal-overlay {

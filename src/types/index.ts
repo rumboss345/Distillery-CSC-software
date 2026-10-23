@@ -690,6 +690,8 @@ export interface ProductionSummary {
   barrelsAging: number;
   totalHeartsGal: number;
   bottlesThisMonth: number;
+  /** Bottle counts for the same period as bottlesThisMonth, largest size first. */
+  bottlesBySize: { sizeMl: number; count: number }[];
   lowStockItems: number;
 }
 

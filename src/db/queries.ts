@@ -5987,11 +5987,32 @@ export function getProductionSummary(reportMonth?: string, heartsMonth = reportM
       'SELECT COALESCE(SUM(bottle_count), 0) as total FROM bottling_runs',
     )?.total ?? 0;
 
+  const bottleSizeRows = queryAll<{ bottle_size_ml: number; bottle_count: number }>(
+    reportMonth
+      ? `SELECT l.bottle_size_ml, SUM(l.bottle_count) as bottle_count
+         FROM bottling_run_lines l
+         JOIN bottling_runs r ON r.id = l.bottling_run_id
+         WHERE l.bottle_count > 0 AND l.bottle_size_ml > 0
+           AND strftime('%Y-%m', r.bottling_date) = ?
+         GROUP BY l.bottle_size_ml
+         ORDER BY l.bottle_size_ml DESC`
+      : `SELECT l.bottle_size_ml, SUM(l.bottle_count) as bottle_count
+         FROM bottling_run_lines l
+         WHERE l.bottle_count > 0 AND l.bottle_size_ml > 0
+         GROUP BY l.bottle_size_ml
+         ORDER BY l.bottle_size_ml DESC`,
+    reportMonth ? [reportMonth] : [],
+  );
+  const bottlesBySize = bottleSizeRows.map((row) => ({
+    sizeMl: row.bottle_size_ml,
+    count: row.bottle_count,
+  }));
+
   const lowStockItems = queryOne<{ count: number }>(
     'SELECT COUNT(*) as count FROM inventory_items WHERE quantity <= reorder_level',
   )?.count ?? 0;
 
-  return { activeMashes, activeFermentations, activeRuns, barrelsAging, totalHeartsGal, bottlesThisMonth, lowStockItems };
+  return { activeMashes, activeFermentations, activeRuns, barrelsAging, totalHeartsGal, bottlesThisMonth, bottlesBySize, lowStockItems };
 }
 
 export function getYieldReports(reportMonth?: string): YieldReport[] {
