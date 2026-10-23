@@ -41,6 +41,13 @@ export interface PublicUser {
   created_at: string;
   permissions: PermissionKey[];
   processAssignments: ProcessStageKey[];
+  /** This account is recreated, and its password replaced, from the website settings on each start. */
+  restoredFromSettings: boolean;
+}
+
+function restoredFromSettings(email: string): boolean {
+  const configured = process.env.ADMIN_EMAIL?.trim().toLowerCase();
+  return Boolean(configured && email.toLowerCase() === configured);
 }
 
 let db: Database.Database;
@@ -201,6 +208,7 @@ export function publicUser(user: User): PublicUser {
     created_at: user.created_at,
     permissions,
     processAssignments,
+    restoredFromSettings: restoredFromSettings(user.email),
   };
 }
 
@@ -256,7 +264,7 @@ export function updateUserByAdmin(
   },
 ): User | null {
   const user = getUserById(id);
-  if (!user || user.role === 'admin') return null;
+  if (!user) return null;
 
   if (updates.name !== undefined) {
     ensureDb().prepare('UPDATE users SET name = ? WHERE id = ?').run(updates.name, id);
@@ -266,11 +274,13 @@ export function updateUserByAdmin(
     ensureDb().prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(passwordHash, id);
     ensureDb().prepare('DELETE FROM password_reset_tokens WHERE user_id = ?').run(id);
   }
-  if (updates.permissions) {
-    setUserPermissions(id, updates.permissions);
-  }
-  if (updates.processAssignments) {
-    setUserProcessAssignments(id, updates.processAssignments);
+  if (user.role !== 'admin') {
+    if (updates.permissions) {
+      setUserPermissions(id, updates.permissions);
+    }
+    if (updates.processAssignments) {
+      setUserProcessAssignments(id, updates.processAssignments);
+    }
   }
   return getUserById(id)!;
 }
@@ -278,9 +288,10 @@ export function updateUserByAdmin(
 export function deleteUserById(id: number): { ok: true } | { ok: false; reason: string } {
   const user = getUserById(id);
   if (!user) return { ok: false, reason: 'User not found' };
-  if (user.role === 'admin') return { ok: false, reason: 'Cannot remove admin accounts' };
 
   ensureDb().prepare('DELETE FROM password_reset_tokens WHERE user_id = ?').run(id);
+  ensureDb().prepare('DELETE FROM user_permissions WHERE user_id = ?').run(id);
+  ensureDb().prepare('DELETE FROM user_process_assignments WHERE user_id = ?').run(id);
   ensureDb().prepare('DELETE FROM users WHERE id = ?').run(id);
   return { ok: true };
 }

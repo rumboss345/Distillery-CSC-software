@@ -135,12 +135,17 @@ export function AdminUsers() {
       return;
     }
     try {
-      const result = await updateAdminUser(editUser.id, {
-        name: editName || null,
-        permissions: editPermissions,
-        processAssignments: editProcessAssignments,
-        password: editPassword || undefined,
-      });
+      const result = await updateAdminUser(editUser.id, editUser.role === 'admin'
+        ? {
+          name: editName || null,
+          password: editPassword || undefined,
+        }
+        : {
+          name: editName || null,
+          permissions: editPermissions,
+          processAssignments: editProcessAssignments,
+          password: editPassword || undefined,
+        });
       setMessage(result.message);
       setEditUser(null);
       await load();
@@ -149,12 +154,16 @@ export function AdminUsers() {
     }
   }
 
-  async function handleDelete(id: number, email: string) {
-    if (!window.confirm(`Remove user ${email}? This cannot be undone.`)) return;
+  async function handleDelete(account: AuthUser) {
+    const kind = account.role === 'admin' ? 'administrator' : 'user';
+    const restored = account.restoredFromSettings
+      ? ' This account is created again from the website settings the next time the site starts.'
+      : '';
+    if (!window.confirm(`Remove ${kind} ${account.email}? This cannot be undone.${restored}`)) return;
     setMessage('');
     setError('');
     try {
-      const result = await deleteAdminUser(id);
+      const result = await deleteAdminUser(account.id);
       setMessage(result.message);
       await load();
     } catch (err) {
@@ -444,22 +453,17 @@ export function AdminUsers() {
                   <td>{formatPermissions(u)}</td>
                   <td>{formatAssignments(u)}</td>
                   <td className="table-actions">
-                    {u.role !== 'admin' && (
-                      <>
-                        <button type="button" className="btn btn-secondary btn-sm" onClick={() => openEdit(u)}>
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-danger btn-sm"
-                          disabled={u.id === user.id}
-                          onClick={() => handleDelete(u.id, u.email)}
-                        >
-                          Remove
-                        </button>
-                      </>
-                    )}
-                    {u.role === 'admin' && <span className="text-muted">—</span>}
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => openEdit(u)}>
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-danger btn-sm"
+                      disabled={u.id === user.id}
+                      onClick={() => handleDelete(u)}
+                    >
+                      Remove
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -567,13 +571,26 @@ export function AdminUsers() {
                 onChange={(e) => setEditPassword(e.target.value)}
               />
             </label>
-            <p className="admin-hint">Use this when an employee needs a new password and cannot sign in.</p>
+            <p className="admin-hint">
+              {editUser.role === 'admin'
+                ? 'Set a new password when this administrator cannot sign in. Administrators can open every page.'
+                : 'Use this when an employee needs a new password and cannot sign in.'}
+            </p>
+            {editUser.restoredFromSettings && (
+              <p className="admin-hint">
+                The password saved in the website settings is applied again each time the site starts.
+              </p>
+            )}
 
-            <h3 className="admin-subtitle">Page access</h3>
-            {renderPermissionChecks(editPermissions, setEditPermissions)}
+            {editUser.role !== 'admin' && (
+              <>
+                <h3 className="admin-subtitle">Page access</h3>
+                {renderPermissionChecks(editPermissions, setEditPermissions)}
 
-            <h3 className="admin-subtitle">Process assignments</h3>
-            {renderProcessChecks(editProcessAssignments, setEditProcessAssignments)}
+                <h3 className="admin-subtitle">Process assignments</h3>
+                {renderProcessChecks(editProcessAssignments, setEditProcessAssignments)}
+              </>
+            )}
 
             <div className="modal-actions">
               <button type="button" className="btn btn-secondary" onClick={() => setEditUser(null)}>

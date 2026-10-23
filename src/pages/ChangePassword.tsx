@@ -51,7 +51,7 @@ export function ChangePassword() {
         <form onSubmit={handleSubmit}>
           {error && <div className="auth-error">{error}</div>}
           {message && <div className="auth-success">{message}</div>}
-          {user?.role === 'admin' && (
+          {user?.restoredFromSettings && (
             <p className="admin-hint">
               Each time the website starts, the administrator password saved in the website settings is applied again.
             </p>

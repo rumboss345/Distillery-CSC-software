@@ -102,6 +102,35 @@ describe('sqlite password reset', () => {
     expect(auth.resetPasswordWithToken(replacement!, 'ShouldNotWork1')).toBe(false);
     expect(bcrypt.compareSync('AdminSetPass1', auth.getUserByEmail(employee.email)!.password_hash)).toBe(true);
   });
+
+  it('lets an administrator reset another administrator password and remove that account', () => {
+    const other = auth.createUserByAdmin(
+      'other.admin@csc.test',
+      ORIGINAL_PASSWORD,
+      'Other Admin',
+      [],
+      [],
+      'admin',
+    );
+    const before = auth.getUserPermissions(other.id);
+    const saved = auth.updateUserByAdmin(other.id, {
+      password: 'OtherAdmin9',
+      permissions: ['inventory'],
+    });
+    expect(saved?.role).toBe('admin');
+    expect(bcrypt.compareSync('OtherAdmin9', auth.getUserById(other.id)!.password_hash)).toBe(true);
+    expect(auth.getUserPermissions(other.id)).toEqual(before);
+
+    const previous = process.env.ADMIN_EMAIL;
+    process.env.ADMIN_EMAIL = other.email;
+    expect(auth.publicUser(auth.getUserById(other.id)!).restoredFromSettings).toBe(true);
+    if (previous === undefined) delete process.env.ADMIN_EMAIL;
+    else process.env.ADMIN_EMAIL = previous;
+    expect(auth.publicUser(auth.getUserById(other.id)!).restoredFromSettings).toBe(false);
+
+    expect(auth.deleteUserById(other.id)).toEqual({ ok: true });
+    expect(auth.getUserById(other.id)).toBeUndefined();
+  });
 });
 
 describe('postgres password reset', () => {
@@ -153,5 +182,27 @@ describe('postgres password reset', () => {
       `SELECT count(*)::int AS count FROM mash_batches WHERE batch_number = 'M-2025-001'`,
     );
     expect(sample.rows[0].count).toBe(0);
+  });
+
+  it('lets an administrator reset another administrator password and remove that account', async () => {
+    const other = await auth.createUserByAdmin(
+      'other.admin@csc.test',
+      ORIGINAL_PASSWORD,
+      'Other Admin',
+      [],
+      [],
+      'admin',
+    );
+    const before = await auth.getUserPermissions(other.id);
+    const saved = await auth.updateUserByAdmin(other.id, {
+      password: 'OtherAdmin9',
+      permissions: ['inventory'],
+    });
+    expect(saved?.role).toBe('admin');
+    const stored = (await auth.getUserById(other.id))!;
+    expect(bcrypt.compareSync('OtherAdmin9', stored.password_hash)).toBe(true);
+    expect(await auth.getUserPermissions(other.id)).toEqual(before);
+    expect(await auth.deleteUserById(other.id)).toEqual({ ok: true });
+    expect(await auth.getUserById(other.id)).toBeUndefined();
   });
 });
