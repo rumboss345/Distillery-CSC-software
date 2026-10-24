@@ -19,6 +19,7 @@ import {
   calendarEventPath,
   calendarProgress,
   calendarProgressRank,
+  ALL_CALENDAR_KINDS,
   filterCalendarEvents,
   filterEventsByKind,
   filterEventsByStatusCategory,
@@ -561,5 +562,38 @@ describe('filters', () => {
       new Set(['upcoming', 'in_progress']),
     );
     expect(filtered.map((e) => e.id)).toEqual(['1', '2']);
+  });
+
+  it('treats cleaning as an activity filter alongside blending and bottling', () => {
+    expect(ALL_CALENDAR_KINDS).toEqual([
+      'wash',
+      'fermentation',
+      'distillation',
+      'bottling',
+      'blend',
+      'cleaning',
+    ]);
+    const events = [
+      {
+        id: 'clean',
+        startDate: '2026-01-04',
+        kind: 'cleaning' as const,
+        title: 'Latina',
+        status: 'upcoming',
+        statusCategory: 'planned' as const,
+      },
+      {
+        id: 'blend',
+        startDate: '2026-01-04',
+        kind: 'blend' as const,
+        title: 'Blend',
+        status: 'planned',
+        statusCategory: 'planned' as const,
+      },
+    ];
+    const upcoming = new Set(['upcoming' as const]);
+    expect(filterCalendarEvents(events, new Set(['cleaning']), upcoming).map((event) => event.id)).toEqual(['clean']);
+    expect(filterCalendarEvents(events, new Set(['blend']), upcoming).map((event) => event.id)).toEqual(['blend']);
+    expect(filterCalendarEvents(events, new Set(ALL_CALENDAR_KINDS), upcoming).map((event) => event.id)).toEqual(['clean', 'blend']);
   });
 });

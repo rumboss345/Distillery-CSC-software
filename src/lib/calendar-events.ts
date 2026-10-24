@@ -80,6 +80,7 @@ export const ALL_CALENDAR_KINDS: CalendarActivityKind[] = [
   'distillation',
   'bottling',
   'blend',
+  'cleaning',
 ];
 
 export const ALL_CALENDAR_STATUS_CATEGORIES: CalendarStatusCategory[] = [
