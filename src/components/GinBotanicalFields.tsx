@@ -1,4 +1,5 @@
 import { IngredientSelect } from './IngredientSelect';
+import { getInventoryByCategory } from '../db/queries';
 import {
   emptyGinBotanical,
   normalizeBotanicalPlace,
@@ -13,12 +14,14 @@ const WEIGHT_UNITS = NUTRIENT_UNITS.filter((unit) => unit.kind === 'weight');
 export function GinBotanicalFields({
   lines,
   onChange,
-  inventoryNames,
 }: {
   lines: GinBotanicalInput[];
   onChange: (lines: GinBotanicalInput[]) => void;
-  inventoryNames: string[];
 }) {
+  const inventoryOptions = getInventoryByCategory('botanicals').map((item) => ({
+    value: item.name,
+    label: `${item.name} (${item.quantity} ${item.unit} on hand)`,
+  }));
   const update = (index: number, patch: Partial<GinBotanicalInput>) => {
     onChange(lines.map((line, i) => (i === index ? { ...line, ...patch } : line)));
   };
@@ -36,7 +39,7 @@ export function GinBotanicalFields({
         </button>
       </div>
       <p className="field-hint">
-        Choose each botanical, enter its weight, and say whether it goes in the pot or in the basket.
+        Choose each botanical from inventory, enter its weight, and say whether it goes in the pot or in the basket. Saving a gin run takes those weights out of inventory.
       </p>
       {lines.map((line, index) => (
         <div key={index} className="form-grid" style={{ marginBottom: '0.75rem' }}>
@@ -49,7 +52,7 @@ export function GinBotanicalFields({
               noun="botanical"
               category="botanicals"
               unit={normalizeBotanicalWeightUnit(line.weight_unit)}
-              options={inventoryNames.map((name) => ({ value: name, label: name }))}
+              options={inventoryOptions}
               orphanLabel={line.name || undefined}
               onSelect={(name) => update(index, { name })}
               onAdded={(item) => update(index, { name: item.name })}

@@ -1,5 +1,5 @@
 import type { BotanicalPlace, GinBotanicalInput } from '../types';
-import { normalizeNutrientUnit, nutrientUnitLabel } from './wash-recipe-nutrients';
+import { normalizeNutrientUnit, nutrientAmountInUnit, nutrientUnitLabel } from './wash-recipe-nutrients';
 
 const WEIGHT_UNITS = new Set(['g', 'kg', 'lbs', 'oz']);
 
@@ -62,4 +62,36 @@ export function formatGinBotanicalsSummary(lines: GinBotanicalInput[]): string {
   const active = lines.filter(botanicalHasMeasure);
   if (active.length === 0) return '';
   return active.map(formatGinBotanicalLine).join(', ');
+}
+
+/**
+ * Stock change for each botanical, in that item's inventory unit.
+ * A positive delta puts weight back. A negative delta takes it out.
+ */
+export function botanicalInventoryAdjustments(
+  previous: GinBotanicalInput[],
+  next: GinBotanicalInput[],
+  inventoryUnit: (name: string) => string,
+): { name: string; delta: number }[] {
+  const totals = (lines: GinBotanicalInput[]) => {
+    const map = new Map<string, { name: string; qty: number }>();
+    for (const line of activeGinBotanicals(lines)) {
+      const key = line.name.toLowerCase();
+      const unit = inventoryUnit(line.name).trim() || 'g';
+      const qty = nutrientAmountInUnit(line.weight, line.weight_unit, unit);
+      const current = map.get(key);
+      if (current) current.qty += qty;
+      else map.set(key, { name: line.name, qty });
+    }
+    return map;
+  };
+  const before = totals(previous);
+  const after = totals(next);
+  const adjustments: { name: string; delta: number }[] = [];
+  for (const key of new Set([...before.keys(), ...after.keys()])) {
+    const delta = (before.get(key)?.qty ?? 0) - (after.get(key)?.qty ?? 0);
+    if (delta === 0) continue;
+    adjustments.push({ name: after.get(key)?.name ?? before.get(key)!.name, delta });
+  }
+  return adjustments;
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   activeGinBotanicals,
+  botanicalInventoryAdjustments,
   botanicalsFromRecipe,
   formatGinBotanicalLine,
   formatGinBotanicalsSummary,
@@ -40,5 +41,23 @@ describe('gin botanicals', () => {
     const lines = [{ name: 'Juniper', amount: 0, weight: 500, weight_unit: 'g', place: null }];
     expect(ginBotanicalPlaceError(lines)).toBe('Choose whether Juniper will go in the pot or in the basket.');
     expect(ginBotanicalPlaceError([{ ...lines[0], place: 'pot' }])).toBeNull();
+  });
+
+  it('takes botanical weight out of inventory in the stock unit', () => {
+    const juniper = { name: 'Juniper berries', amount: 0, weight: 200, weight_unit: 'g', place: 'pot' as const };
+    const coriander = { name: 'Coriander seed', amount: 0, weight: 1, weight_unit: 'kg', place: 'basket' as const };
+    const grams = () => 'g';
+    expect(botanicalInventoryAdjustments([], [juniper, coriander], grams)).toEqual([
+      { name: 'Juniper berries', delta: -200 },
+      { name: 'Coriander seed', delta: -1000 },
+    ]);
+    expect(botanicalInventoryAdjustments(
+      [juniper],
+      [{ ...juniper, weight: 50 }],
+      grams,
+    )).toEqual([{ name: 'Juniper berries', delta: 150 }]);
+    expect(botanicalInventoryAdjustments([juniper], [], () => 'kg')).toEqual([
+      { name: 'Juniper berries', delta: 0.2 },
+    ]);
   });
 });

@@ -21,7 +21,7 @@ import {
 import { distillationAlcoholBalance, washChargeAbvFromBrix, type AlcoholChargeBasis, type DistillationAlcoholBalance } from '../lib/distillation-loss';
 import type { MonthlyProduction } from '../lib/reporting/productivity';
 import { isFermenterSourcedRun, isSpiritStyleRun, isTankSourcedRun, runTypeLabel, stillChargeSourcePhrase } from '../lib/distillation-run-types';
-import { activeGinBotanicals, ginBotanicalPlaceError, normalizeBotanicalWeightUnit } from '../lib/gin-botanicals';
+import { activeGinBotanicals, botanicalInventoryAdjustments, ginBotanicalPlaceError, normalizeBotanicalWeightUnit } from '../lib/gin-botanicals';
 import { preparedIngredientName } from '../lib/quick-ingredient';
 import {
   chargeExceedsStillCapacity,
@@ -4387,8 +4387,10 @@ export function saveDistillationRun(
   }
   releaseStillAfterRunningRun(previousRun, run.still_name, run.status);
 
-  if (runType === 'gin' && botanicals) {
-    persistRunBotanicals(runId, botanicals);
+  if (runType === 'gin') {
+    if (botanicals) persistRunBotanicals(runId, botanicals);
+  } else {
+    releaseRunBotanicalInventory(runId);
   }
   persistDistillationTankSources(runId, runType, tankSources);
   recordDistillationCollectionLoss(runId);
@@ -4404,10 +4406,29 @@ export function saveDistillationRun(
   return runId;
 }
 
+function applyGinBotanicalInventory(previous: GinBotanicalInput[], next: GinBotanicalInput[]): void {
+  const adjustments = botanicalInventoryAdjustments(
+    previous,
+    next,
+    (name) => findInventoryItem('botanicals', name)?.unit ?? 'g',
+  );
+  for (const adjustment of adjustments) {
+    applyInventoryDelta('botanicals', adjustment.name, adjustment.delta);
+  }
+}
+
+function releaseRunBotanicalInventory(runId: number): void {
+  const existing = getRunBotanicals(runId);
+  if (existing.length === 0) return;
+  applyGinBotanicalInventory(existing, []);
+  runQuery('DELETE FROM distillation_run_botanicals WHERE distillation_run_id = ?', [runId]);
+}
+
 function persistRunBotanicals(runId: number, botanicals: GinBotanicalInput[]): void {
   const lines = activeGinBotanicals(botanicals);
   const placeError = ginBotanicalPlaceError(lines);
   if (placeError) throw new Error(placeError);
+  applyGinBotanicalInventory(getRunBotanicals(runId), lines);
   runQuery('DELETE FROM distillation_run_botanicals WHERE distillation_run_id = ?', [runId]);
   lines.forEach((line, index) => {
     insertRow(
@@ -4513,7 +4534,7 @@ export function deleteDistillationRun(id: number): void {
   if (run && stillRunOccupiesEquipment(run.status)) {
     releaseStillAfterRunningRun(run, '', 'complete');
   }
-  runQuery('DELETE FROM distillation_run_botanicals WHERE distillation_run_id = ?', [id]);
+  releaseRunBotanicalInventory(id);
   runQuery('DELETE FROM distillation_run_tank_sources WHERE distillation_run_id = ?', [id]);
   deleteStatusDateLog('distillation', id);
   runQuery('DELETE FROM distillation_runs WHERE id = ?', [id]);
