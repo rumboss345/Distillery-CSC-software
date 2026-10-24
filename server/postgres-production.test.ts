@@ -150,6 +150,9 @@ describe('PostgreSQL production modules', () => {
     expect(userMayMutate('user', ['inventory'], 'admin')).toBe(false);
     expect(userMayMutate('admin', [], 'admin')).toBe(true);
     expect(userMayMutate('owner', [], 'admin')).toBe(true);
+    expect(userMayMutate('admin', [], 'owner')).toBe(false);
+    expect(userMayMutate('user', [], 'owner')).toBe(false);
+    expect(userMayMutate('owner', [], 'owner')).toBe(true);
     const users = await auth.listAllUsers();
     expect(users.map((user) => user.email).sort()).toEqual(['admin@example.com', 'casey.lee@csc.test']);
   });
