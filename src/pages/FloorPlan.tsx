@@ -35,6 +35,7 @@ import {
   type EquipmentIcon,
 } from '../lib/equipment';
 import { equipmentTypeDeleteError } from '../lib/equipment-type';
+import { tankContentsPhrase } from '../lib/tank-menu-label';
 import type { EquipmentStatus, FloorEquipment } from '../types';
 
 const emptyEquipment = (planId: number, type = 'fermenter'): Omit<FloorEquipment, 'id' | 'created_at'> => {
@@ -129,6 +130,9 @@ export function FloorPlanPage() {
   const selectedPlan = selected
     ? plans.find((p) => p.id === selected.floor_plan_id) ?? plan
     : plan;
+  const selectedContents = selected && isLiquidVesselEquipmentType(selected.equipment_type)
+    ? tankContentsPhrase(selected.id)
+    : null;
 
   const openNew = () => {
     setEditId(undefined);
@@ -421,6 +425,7 @@ export function FloorPlanPage() {
                   <>
                     <dt>Contents</dt>
                     <dd>
+                      {selectedContents ? `${selectedContents} · ` : ''}
                       {selected.active_volume_gal.toFixed(1)} gal
                       {selected.active_abv != null ? ` @ ${selected.active_abv.toFixed(1)}% ABV` : ''}
                       {selected.active_liquid_name

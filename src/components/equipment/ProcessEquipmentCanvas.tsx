@@ -10,6 +10,8 @@ import {
   updateEquipmentProcessPosition,
 } from '../../db/queries';
 import { buildEquipmentVisualData } from './equipment-visual-shared';
+import { tankContentsPhrase } from '../../lib/tank-menu-label';
+import { isSpiritLedgerEquipmentType } from '../../lib/equipment';
 import {
   PROCESS_ITEM_WIDTH,
   PROCESS_LABEL_BLOCK,
@@ -123,7 +125,10 @@ export function ProcessEquipmentCanvas({
   const visualById = useMemo(() => {
     const map = new Map<number, EquipmentVisualData>();
     for (const eq of allEquipment) {
-      map.set(eq.id, buildEquipmentVisualData(eq, volumeById.get(eq.id), eq.plan_name));
+      const ledgerContents = isSpiritLedgerEquipmentType(eq.equipment_type)
+        ? tankContentsPhrase(eq.id)
+        : undefined;
+      map.set(eq.id, buildEquipmentVisualData(eq, volumeById.get(eq.id), eq.plan_name, ledgerContents));
     }
     return map;
   }, [allEquipment, volumeById]);
