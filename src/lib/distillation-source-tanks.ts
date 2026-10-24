@@ -46,20 +46,28 @@ export function blendDistillationTankPulls(pulls: readonly DistillationTankPull[
   return { volumeGal: roundVolume(volume), abv: roundAbv(alcohol / volume) };
 }
 
+export const DISTILLATION_SOURCE_TANK_REQUIRED = 'Select a source tank to charge from.';
+
 export function distillationTankPullError(
   pulls: readonly DistillationTankPull[],
   availableGalByTank: ReadonlyMap<number, number>,
+  options?: { required?: boolean; checkAvailable?: boolean },
 ): string | null {
+  const required = options?.required !== false;
+  const checkAvailable = options?.checkAvailable !== false;
   const active = pulls.filter((pull) => pull.tankId > 0);
-  if (active.length === 0) return 'Select a source tank to charge from.';
+  if (active.length === 0) return required ? DISTILLATION_SOURCE_TANK_REQUIRED : null;
   const seen = new Set<number>();
   for (const pull of active) {
     const name = pull.tankName?.trim() || 'that tank';
     if (seen.has(pull.tankId)) return 'Each tank can be chosen once.';
     seen.add(pull.tankId);
-    if (!(pull.volumeGal > 0)) return `Enter the gallons drawn from ${name}.`;
+    if (!(pull.volumeGal > 0)) {
+      if (!required) continue;
+      return `Enter the gallons drawn from ${name}.`;
+    }
     const available = availableGalByTank.get(pull.tankId);
-    if (available != null && pull.volumeGal > available + 0.01) {
+    if (checkAvailable && available != null && pull.volumeGal > available + 0.01) {
       return `Only ${available.toFixed(1)} gal available in ${name}.`;
     }
   }

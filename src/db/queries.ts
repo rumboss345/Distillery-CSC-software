@@ -21,6 +21,7 @@ import {
 import { distillationAlcoholBalance, washChargeAbvFromBrix, type AlcoholChargeBasis, type DistillationAlcoholBalance } from '../lib/distillation-loss';
 import type { MonthlyProduction } from '../lib/reporting/productivity';
 import { isFermenterSourcedRun, isSpiritStyleRun, isTankSourcedRun, runTypeLabel, stillChargeSourcePhrase } from '../lib/distillation-run-types';
+import { DISTILLATION_SOURCE_TANK_REQUIRED } from '../lib/distillation-source-tanks';
 import { activeGinBotanicals, botanicalInventoryAdjustments, ginBotanicalPlaceError, normalizeBotanicalWeightUnit } from '../lib/gin-botanicals';
 import { preparedIngredientName } from '../lib/quick-ingredient';
 import {
@@ -4289,6 +4290,11 @@ export function saveDistillationRun(
         if (tankId > 0) assertEquipmentUsableForProduction(tankId, 'Source tank');
       }
     }
+  }
+  if (isTankSourcedRun(runType) && runConsumesSource(run.status)) {
+    const hasPull = (tankSources ?? []).some((source) => source.tankId > 0 && source.volumeGal > 0)
+      || ((run.source_holding_tank_equipment_id ?? 0) > 0 && run.charge_volume_gal > 0);
+    if (!hasPull) throw new Error(DISTILLATION_SOURCE_TANK_REQUIRED);
   }
   const stillCapacity = getStillCapacityByName(run.still_name);
   if (chargeExceedsStillCapacity(run.charge_volume_gal, stillCapacity)) {

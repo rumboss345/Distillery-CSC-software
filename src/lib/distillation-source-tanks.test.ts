@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   blendDistillationTankPulls,
+  DISTILLATION_SOURCE_TANK_REQUIRED,
   distillationChargeTypeChoices,
   distillationSourceSummary,
   distillationSourceTypeChoices,
@@ -64,7 +65,19 @@ describe('distillation source tanks', () => {
     expect(distillationTankPullError([
       { tankId: 2, volumeGal: 9, abv: 25, tankName: 'Tails' },
     ], available)).toBe('Only 8.0 gal available in Tails.');
-    expect(distillationTankPullError([], available)).toBe('Select a source tank to charge from.');
+    expect(distillationTankPullError([], available)).toBe(DISTILLATION_SOURCE_TANK_REQUIRED);
+  });
+
+  it('lets a planned pull skip the tank and its current volume', () => {
+    const available = new Map([[1, 5]]);
+    expect(distillationTankPullError([], available, { required: false, checkAvailable: false })).toBeNull();
+    expect(distillationTankPullError([
+      { tankId: 1, volumeGal: 0, abv: 70, tankName: 'Hearts' },
+    ], available, { required: false, checkAvailable: false })).toBeNull();
+    expect(distillationTankPullError([
+      { tankId: 1, volumeGal: 9, abv: 70, tankName: 'Hearts' },
+    ], available, { required: false, checkAvailable: false })).toBeNull();
+    expect(distillationTankPullError([], available, { required: true })).toBe(DISTILLATION_SOURCE_TANK_REQUIRED);
   });
 
   it('joins source tank names', () => {
