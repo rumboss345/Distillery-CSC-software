@@ -2826,6 +2826,10 @@ tr.volume-change-kind:hover td {
   border-color: var(--border);
 }
 
+.recipe-print-sheet {
+  display: none;
+}
+
 .recipe-tab.active,
 .reports-subnav-link.active,
 .inventory-category.active {
@@ -4524,6 +4528,88 @@ tr.calendar-record-focus td {
 }
 
 @media print {
+  body:has(.recipe-print-sheet) .sidebar,
+  body:has(.recipe-print-sheet) .mobile-topbar,
+  body:has(.recipe-print-sheet) .sidebar-backdrop {
+    display: none !important;
+  }
+
+  body:has(.recipe-print-sheet) .app-layout,
+  body:has(.recipe-print-sheet) .main-content {
+    display: block !important;
+    width: auto !important;
+    max-width: none !important;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+    color: #111 !important;
+    overflow: visible !important;
+    position: static !important;
+  }
+
+  body:has(.recipe-print-sheet) .main-content > * > :not(.recipe-print-sheet) {
+    display: none !important;
+  }
+
+  body:has(.recipe-print-sheet) .recipe-print-sheet {
+    display: block !important;
+    color: #111 !important;
+    background: #fff !important;
+  }
+
+  body:has(.recipe-print-sheet) .recipe-print-sheet h1,
+  body:has(.recipe-print-sheet) .recipe-print-sheet h2,
+  body:has(.recipe-print-sheet) .recipe-print-sheet h3,
+  body:has(.recipe-print-sheet) .recipe-print-sheet h4,
+  body:has(.recipe-print-sheet) .recipe-print-sheet p,
+  body:has(.recipe-print-sheet) .recipe-print-sheet li {
+    color: #111 !important;
+    background: transparent !important;
+  }
+
+  .recipe-print-sheet h1 {
+    font-size: 22pt;
+    margin: 0 0 0.15rem;
+  }
+
+  .recipe-print-date {
+    margin: 0 0 1rem;
+  }
+
+  .recipe-print-sheet h2 {
+    font-size: 14pt;
+    margin: 1.1rem 0 0.4rem;
+    break-after: avoid;
+  }
+
+  .recipe-print-card {
+    break-inside: avoid;
+    margin: 0 0 0.9rem;
+    padding-bottom: 0.55rem;
+    border-bottom: 1px solid #ccc;
+  }
+
+  .recipe-print-sheet h3 {
+    font-size: 12pt;
+    margin: 0 0 0.25rem;
+  }
+
+  .recipe-print-sheet h4 {
+    font-size: 11pt;
+    margin: 0.35rem 0 0.15rem;
+  }
+
+  .recipe-print-sheet ul {
+    margin: 0;
+    padding-left: 1.15rem;
+  }
+
+  .recipe-print-sheet p {
+    margin: 0.35rem 0 0;
+  }
+
   body {
     background: #fff;
   }

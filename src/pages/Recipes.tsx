@@ -16,6 +16,7 @@ import { IngredientSelect } from '../components/IngredientSelect';
 import { BlendDesigner } from '../components/BlendDesigner';
 import { BlendRecipesTab } from '../components/BlendRecipesTab';
 import { GinRecipesTab } from '../components/GinRecipesTab';
+import { RecipePrintSheet } from '../components/RecipePrintSheet';
 import { useAuth } from '../context/AuthContext';
 import { importRecipeCsv } from '../lib/recipe-import';
 import { buildRecipeExport } from '../lib/recipe-export';
@@ -52,6 +53,8 @@ export function Recipes() {
   const defaultTab: RecipeTab = canWash ? 'wash' : canGin ? 'gin' : 'blend';
   const { key, refresh } = useRefreshKey();
   const recipes = getRecipes();
+  const ginRecipes = canGin ? getGinRecipes() : [];
+  const blendRecipes = canBlend ? getBlendRecipes() : [];
   const sugarItems = getInventoryByCategory('sugar');
   const yeastItems = getInventoryByCategory('yeast');
   const nutrientItems = getInventoryByCategory('nutrients');
@@ -125,6 +128,15 @@ export function Recipes() {
     saveRecipe(form, editId, nutrients);
     setShowForm(false);
     refresh();
+  };
+
+  const printRecipes = () => {
+    const count = (canWash ? recipes.length : 0) + ginRecipes.length + blendRecipes.length;
+    if (count === 0) {
+      alert('No recipes to print.');
+      return;
+    }
+    window.print();
   };
 
   const exportRecipes = () => {
@@ -302,6 +314,14 @@ export function Recipes() {
             </div>
           )}
           <div className="recipe-action-cluster recipe-action-cluster--end">
+            <button
+              type="button"
+              className="recipe-io-btn no-print"
+              onClick={printRecipes}
+              data-testid="print-recipes"
+            >
+              Print recipes
+            </button>
             <button
               type="button"
               className="recipe-io-btn"
@@ -626,6 +646,12 @@ export function Recipes() {
           </div>
         </Modal>
       )}
+
+      <RecipePrintSheet
+        wash={canWash ? recipes : []}
+        gin={ginRecipes}
+        blend={blendRecipes}
+      />
     </div>
   );
 }
