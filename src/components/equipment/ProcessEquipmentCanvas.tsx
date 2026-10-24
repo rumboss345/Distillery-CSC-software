@@ -418,7 +418,9 @@ export function ProcessEquipmentCanvas({
                   title={[
                     visual.name,
                     visual.liquidName,
-                    visual.currentVolumeGal > 0 ? `${visual.currentVolumeGal.toFixed(1)} gal` : 'Empty',
+                    visual.isWashing || visual.currentVolumeGal > 0
+                      ? `${visual.currentVolumeGal.toFixed(1)} gal`
+                      : 'Empty',
                     visual.abv != null && visual.abv > 0 ? `${visual.abv.toFixed(1)}% ABV` : null,
                     visual.fermenterLatestBrix != null ? `${visual.fermenterLatestBrix.toFixed(1)}° Brix` : null,
                     daysOverdue > 0 ? formatDaysOverdue(daysOverdue) : null,
