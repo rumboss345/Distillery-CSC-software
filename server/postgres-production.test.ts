@@ -802,6 +802,31 @@ describe('PostgreSQL production modules', () => {
     expect(engine.readProduction((api) => api.getGinRecipes().some((row) => row.name === 'House Gin'))).toBe(true);
   });
 
+  it('deletes an unused inventory category and keeps one that still has items', async () => {
+    await save('addInventoryCategory', ['spices']);
+    expect(engine.readProduction((api) => api.getInventoryCategories())).toContain('spices');
+
+    await save('saveInventoryItem', [{
+      name: 'Cinnamon bark',
+      category: 'spices',
+      unit: 'g',
+      quantity: 10,
+      reorder_level: 0,
+      notes: '',
+      package_size_ml: null,
+      density_g_per_ml: null,
+      density_reference: '',
+      abv: null,
+    }]);
+    await expect(save('deleteInventoryCategory', ['spices'])).rejects.toThrow(/items in "Spices" first/i);
+
+    await save('addInventoryCategory', ['corks']);
+    await save('deleteInventoryCategory', ['corks']);
+    const categories = engine.readProduction((api) => api.getInventoryCategories());
+    expect(categories).toContain('spices');
+    expect(categories).not.toContain('corks');
+  });
+
   it('backs up and restores production rows without passwords or sample batches', async () => {
     const backup = await engine.exportProductionBackup();
     const encoded = JSON.stringify(backup);

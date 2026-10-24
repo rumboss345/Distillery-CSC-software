@@ -537,6 +537,34 @@ export function addInventoryCategory(name: string): string {
   return normalized;
 }
 
+export function deleteInventoryCategory(name: string): void {
+  const __remote = forwardProductionMutation('deleteInventoryCategory', [name]);
+  if (__remote.forwarded) return __remote.value as never;
+
+  const normalized = name.trim().toLowerCase();
+  if (!normalized) {
+    throw new Error('Choose a category to delete.');
+  }
+
+  const existing = queryOne<{ name: string }>(
+    'SELECT name FROM inventory_categories WHERE name = ? COLLATE NOCASE',
+    [normalized],
+  );
+  if (!existing) {
+    throw new Error('That category is not in the list.');
+  }
+
+  const used = queryOne<{ count: number }>(
+    'SELECT COUNT(*) as count FROM inventory_items WHERE category = ? COLLATE NOCASE',
+    [normalized],
+  );
+  if ((used?.count ?? 0) > 0) {
+    throw new Error(`Move or delete the items in "${inventoryCategoryLabel(existing.name)}" first.`);
+  }
+
+  runQuery('DELETE FROM inventory_categories WHERE name = ? COLLATE NOCASE', [normalized]);
+}
+
 // ── Recipes ────────────────────────────────────────────────
 
 function attachRecipeNutrients(recipes: Recipe[]): RecipeView[] {

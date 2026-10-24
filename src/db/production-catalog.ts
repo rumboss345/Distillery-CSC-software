@@ -29,6 +29,7 @@ export const PRODUCTION_MUTATIONS: Record<string, ProductionMutation> = {
   adjustInventory: { access: 'inventory', table: 'inventory_items', idIndex: 0 },
   deleteInventoryItem: { access: 'inventory', table: 'inventory_items', idIndex: 0 },
   addInventoryCategory: { access: 'inventory' },
+  deleteInventoryCategory: { access: 'inventory' },
   saveRecipe: { access: ['wash', 'blending'], table: 'recipes', idIndex: 1 },
   deleteRecipe: { access: ['wash', 'blending'], table: 'recipes', idIndex: 0 },
   saveMashBatch: { access: 'wash', table: 'mash_batches', idIndex: 1 },
