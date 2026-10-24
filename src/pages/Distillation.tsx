@@ -878,7 +878,7 @@ export function Distillation() {
         ? distillationSourceSummary(savedNames)
         : (run.source_holding_tank_name ?? fermenterLabel(run.source_holding_tank_equipment_id));
       const to = run.dest_holding_tank_name ?? fermenterLabel(run.dest_holding_tank_equipment_id);
-      return to ? `${from} → ${to}` : from;
+      return to && to !== '—' ? `${from} → ${to}` : from;
     }
     const mash = mashes.find((m) => m.id === run.source_mash_batch_id);
     return mash?.batch_number ?? '—';
