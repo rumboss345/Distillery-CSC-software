@@ -6,6 +6,7 @@ import {
   deleteInventoryItem,
   adjustInventory,
   addInventoryCategory,
+  deleteInventoryCategory,
   useRefreshKey,
 } from '../db/queries';
 import { Modal } from '../components/Modal';
@@ -125,6 +126,21 @@ export function Inventory() {
     }
   };
 
+  const handleDeleteCategory = () => {
+    if (filter === 'all') return;
+    const label = inventoryCategoryLabel(filter);
+    if (!confirm(`Delete category ${label}? Items that still use it must be deleted or moved first.`)) {
+      return;
+    }
+    try {
+      deleteInventoryCategory(filter);
+      setFilter('all');
+      refresh();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Could not delete that category.');
+    }
+  };
+
   const handleAdjust = () => {
     if (!showAdjust) return;
     const delta = parseFloat(adjustAmount);
@@ -143,7 +159,17 @@ export function Inventory() {
         <p>Raw materials and supplies. Counts can go below zero when a batch uses more than is on hand.</p>
         <div className="page-actions">
           <button className="btn btn-primary" onClick={openNew}>+ Add Item</button>
-          <button className="btn btn-secondary" onClick={openNewCategory}>+ Add Category</button>
+          <button className="btn btn-secondary" data-testid="add-inventory-category" onClick={openNewCategory}>+ Add Category</button>
+          {filter !== 'all' && (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              data-testid="delete-inventory-category"
+              onClick={handleDeleteCategory}
+            >
+              Delete Category
+            </button>
+          )}
         </div>
       </div>
 
@@ -153,6 +179,7 @@ export function Inventory() {
           role="tab"
           aria-selected={filter === 'all'}
           className={`inventory-category${filter === 'all' ? ' active' : ''}`}
+          data-testid="inventory-category-all"
           onClick={() => setFilter('all')}
         >
           All
@@ -164,6 +191,7 @@ export function Inventory() {
             role="tab"
             aria-selected={filter === c}
             className={`inventory-category${filter === c ? ' active' : ''}`}
+            data-testid={`inventory-category-${c}`}
             onClick={() => setFilter(c)}
           >
             {inventoryCategoryLabel(c)}
@@ -337,6 +365,7 @@ export function Inventory() {
                 setCategoryError('');
               }}
               placeholder="e.g. spices, corks, packaging"
+              data-testid="inventory-category-name"
               autoFocus
             />
           </div>
@@ -344,7 +373,7 @@ export function Inventory() {
           <p className="form-hint">Categories are saved in lowercase and appear in the filter bar and item dropdown.</p>
           <div className="form-actions">
             <button className="btn btn-secondary" onClick={() => setShowCategoryForm(false)}>Cancel</button>
-            <button className="btn btn-primary" onClick={handleSaveCategory}>Add Category</button>
+            <button className="btn btn-primary" data-testid="save-inventory-category" onClick={handleSaveCategory}>Add Category</button>
           </div>
         </Modal>
       )}
