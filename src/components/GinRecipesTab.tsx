@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import {
   deleteGinRecipe,
   getGinRecipes,
-  getInventoryByCategory,
   saveGinRecipe,
   useRefreshKey,
 } from '../db/queries';
@@ -21,7 +20,6 @@ export function GinRecipesTab({
   const { key, refresh } = useRefreshKey();
   const recipes = getGinRecipes();
   void key;
-  const botanicalNames = getInventoryByCategory('botanicals').map((item) => item.name);
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<number | undefined>();
   const [name, setName] = useState('');
@@ -125,7 +123,7 @@ export function GinRecipesTab({
                 placeholder="House gin"
               />
             </div>
-            <GinBotanicalFields lines={lines} onChange={setLines} inventoryNames={botanicalNames} />
+            <GinBotanicalFields lines={lines} onChange={setLines} />
             <div className="form-group full-width">
               <label>Notes</label>
               <textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} />

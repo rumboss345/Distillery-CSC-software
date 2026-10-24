@@ -117,7 +117,7 @@ describe('PostgreSQL production modules', () => {
     expect(counts.bottling).toBe(0);
     expect(counts.barrels).toBe(0);
     expect(counts.equipment).toBe(0);
-    expect(counts.categories).toEqual(['barrels', 'bottles', 'labels', 'nutrients', 'other', 'packaging', 'sugar', 'yeast']);
+    expect(counts.categories).toEqual(['barrels', 'botanicals', 'bottles', 'labels', 'nutrients', 'other', 'packaging', 'sugar', 'yeast']);
     expect(counts.plans).toEqual([
       expect.objectContaining({ id: 1, name: 'Production Floor', width_ft: 80, height_ft: 60 }),
     ]);
@@ -715,6 +715,90 @@ describe('PostgreSQL production modules', () => {
     await save('deleteMashBatch', [secondId]);
     expect(engine.readProduction((api) => api.getMashBatch(secondId))).toBeUndefined();
     expect(stock('Restore Sugar')).toBe(200);
+  });
+
+  it('takes gin recipe botanicals out of inventory when a gin run is saved', async () => {
+    const stock = (name: string) => engine.readProduction((api) => (
+      api.getInventoryItems().find((item) => item.name === name)?.quantity ?? null
+    ));
+    const item = (name: string, unit: string, quantity: number) => ({
+      name,
+      category: 'botanicals',
+      unit,
+      quantity,
+      reorder_level: 0,
+      notes: '',
+      package_size_ml: null,
+      density_g_per_ml: null,
+      density_reference: '',
+      abv: null,
+    });
+    await save('saveInventoryItem', [item('Juniper berries', 'g', 1000)]);
+    await save('saveInventoryItem', [item('Coriander seed', 'g', 2000)]);
+    const recipe = await save('saveGinRecipe', [{
+      name: 'House Gin',
+      notes: '',
+    }, undefined, [
+      { name: 'Juniper berries', amount: 0, weight: 200, weight_unit: 'g', place: 'pot' },
+      { name: 'Coriander seed', amount: 0, weight: 1, weight_unit: 'kg', place: 'basket' },
+    ]]);
+    expect(stock('Juniper berries')).toBe(1000);
+    expect(stock('Coriander seed')).toBe(2000);
+
+    const botanicals = engine.readProduction((api) => (
+      api.getGinRecipes().find((row) => row.id === Number(recipe.result))?.botanicals ?? []
+    ));
+    const run = await save('saveDistillationRun', [{
+      batch_number: 'G-RESTORE-001',
+      run_type: 'gin',
+      source_mash_batch_id: null,
+      source_fermenter_equipment_id: null,
+      source_holding_tank_equipment_id: null,
+      dest_holding_tank_equipment_id: null,
+      still_name: '',
+      run_date: '2026-10-24',
+      charge_volume_gal: 0,
+      charge_abv: null,
+      status: 'planned',
+      assigned_user_id: null,
+      assigned_user_name: '',
+      notes: '',
+      stillage_volume_gal: null,
+      stillage_discarded: 0,
+      stillage_holding_tank_equipment_id: null,
+    }, undefined, botanicals, []]);
+    const runId = Number(run.result);
+    expect(stock('Juniper berries')).toBe(800);
+    expect(stock('Coriander seed')).toBe(1000);
+
+    await save('saveDistillationRun', [{
+      batch_number: 'G-RESTORE-001',
+      run_type: 'gin',
+      source_mash_batch_id: null,
+      source_fermenter_equipment_id: null,
+      source_holding_tank_equipment_id: null,
+      dest_holding_tank_equipment_id: null,
+      still_name: '',
+      run_date: '2026-10-24',
+      charge_volume_gal: 0,
+      charge_abv: null,
+      status: 'planned',
+      assigned_user_id: null,
+      assigned_user_name: '',
+      notes: '',
+      stillage_volume_gal: null,
+      stillage_discarded: 0,
+      stillage_holding_tank_equipment_id: null,
+    }, runId, [
+      { name: 'Juniper berries', amount: 0, weight: 100, weight_unit: 'g', place: 'pot' },
+    ], []]);
+    expect(stock('Juniper berries')).toBe(900);
+    expect(stock('Coriander seed')).toBe(2000);
+
+    await save('deleteDistillationRun', [runId]);
+    expect(stock('Juniper berries')).toBe(1000);
+    expect(stock('Coriander seed')).toBe(2000);
+    expect(engine.readProduction((api) => api.getGinRecipes().some((row) => row.name === 'House Gin'))).toBe(true);
   });
 
   it('backs up and restores production rows without passwords or sample batches', async () => {

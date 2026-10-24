@@ -42,7 +42,6 @@ import {
   getSpiritTransferVesselsWithContents,
   generateBatchNumber,
   getGinRecipes,
-  getInventoryByCategory,
   getRunBotanicals,
   saveGinRecipe,
   useRefreshKey,
@@ -205,7 +204,6 @@ export function Distillation() {
   const [ginRecipeId, setGinRecipeId] = useState<number | ''>('');
   const [ginRecipeName, setGinRecipeName] = useState('');
   const ginRecipes = getGinRecipes();
-  const botanicalNames = getInventoryByCategory('botanicals').map((item) => item.name);
   const runBotanicals = getRunBotanicals();
   const cutsRunId = Number(searchParams.get('cutsRun')) || 0;
   if (!cutsRunId && appliedCutsRunId !== 0) {
@@ -1772,7 +1770,6 @@ export function Distillation() {
                 <GinBotanicalFields
                   lines={botanicals}
                   onChange={setBotanicals}
-                  inventoryNames={botanicalNames}
                 />
               </>
             )}

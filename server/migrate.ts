@@ -2,7 +2,7 @@ import { SCHEMA } from '../src/db/schema.ts';
 import { getPool, redactDatabaseUrl } from './pg.ts';
 import { translateSqliteSchema } from './pg-schema.ts';
 
-const STRUCTURAL_CATEGORIES = ['sugar', 'yeast', 'nutrients', 'barrels', 'bottles', 'packaging', 'labels', 'other'];
+const STRUCTURAL_CATEGORIES = ['sugar', 'yeast', 'nutrients', 'barrels', 'bottles', 'botanicals', 'packaging', 'labels', 'other'];
 
 export async function migrateDatabase(): Promise<void> {
   const pool = getPool();
@@ -99,6 +99,13 @@ export async function migrateDatabase(): Promise<void> {
       `);
       await client.query(`INSERT INTO schema_migrations (version) VALUES ('002')`);
     }
+    await client.query(`
+      INSERT INTO inventory_categories (name)
+      SELECT 'botanicals'
+      WHERE NOT EXISTS (
+        SELECT 1 FROM inventory_categories WHERE lower(name) = 'botanicals'
+      )
+    `);
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');
