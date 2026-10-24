@@ -10,7 +10,15 @@ import {
   useRefreshKey,
 } from '../db/queries';
 import { Modal } from '../components/Modal';
-import { inventoryCategoryLabel } from '../lib/inventory-units';
+import {
+  defaultInventoryUnitForCategory,
+  INVENTORY_UNIT_KINDS,
+  inventoryCategoryLabel,
+  inventoryUnitForKind,
+  inventoryUnitKind,
+  inventoryUnitsForKind,
+  type InventoryUnitKind,
+} from '../lib/inventory-units';
 import { packagingItemSizeMl } from '../lib/packaging-bottles';
 import type { InventoryCategory, InventoryItem } from '../types';
 
@@ -55,7 +63,7 @@ export function Inventory() {
     setForm({
       ...emptyItem(),
       category,
-      unit: category === 'packaging' ? 'each' : 'lbs',
+      unit: defaultInventoryUnitForCategory(category),
     });
     setQuantityInput('0');
     setSizeInput('');
@@ -68,6 +76,7 @@ export function Inventory() {
     setEditId(item.id);
     setForm({
       ...item,
+      unit: inventoryUnitForKind(inventoryUnitKind(item.unit), item.unit),
       package_size_ml: item.package_size_ml ?? null,
       density_g_per_ml: item.density_g_per_ml ?? null,
       density_reference: item.density_reference ?? '',
@@ -269,7 +278,9 @@ export function Inventory() {
                   setForm({
                     ...form,
                     category,
-                    unit: category === 'packaging' && form.unit === 'lbs' ? 'each' : form.unit,
+                    unit: category === 'packaging' && inventoryUnitKind(form.unit) === 'mass'
+                      ? defaultInventoryUnitForCategory(category)
+                      : form.unit,
                   });
                 }}
               >
@@ -292,8 +303,32 @@ export function Inventory() {
               </div>
             )}
             <div className="form-group">
+              <label>Measure</label>
+              <select
+                data-testid="inventory-unit-kind"
+                value={inventoryUnitKind(form.unit)}
+                onChange={(e) => {
+                  const kind = e.target.value as InventoryUnitKind;
+                  setForm({ ...form, unit: inventoryUnitForKind(kind, form.unit) });
+                }}
+              >
+                {INVENTORY_UNIT_KINDS.map((kind) => (
+                  <option key={kind.value} value={kind.value}>{kind.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
               <label>Unit</label>
-              <input value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} placeholder="lbs, gal, each..." />
+              <select
+                data-testid="inventory-unit"
+                value={form.unit}
+                onChange={(e) => setForm({ ...form, unit: e.target.value })}
+              >
+                {inventoryUnitsForKind(inventoryUnitKind(form.unit), form.unit).map((unit) => (
+                  <option key={unit.value} value={unit.value}>{unit.label}</option>
+                ))}
+              </select>
+              <p className="field-hint">Choose volume, mass, or each, then the unit this item is counted in.</p>
             </div>
             <div className="form-group">
               <label>Quantity</label>
