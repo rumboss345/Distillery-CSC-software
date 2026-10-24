@@ -28,6 +28,19 @@
   margin-top: 0.75rem;
 }
 
+.admin-audit-log {
+  margin-top: 1.25rem;
+}
+
+.admin-audit-archive {
+  margin-top: 1rem;
+}
+
+.admin-audit-log .admin-table {
+  width: 100%;
+  margin-bottom: 0.75rem;
+}
+
 .admin-form .form-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));

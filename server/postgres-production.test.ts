@@ -6,6 +6,7 @@ import { translateSqliteSchema } from './pg-schema';
 import { blockSqliteWrite } from './sqlite-guard';
 import { SCHEMA } from '../src/db/schema';
 import { userMayMutate } from '../src/db/production-catalog';
+import { formatAuditTimestamp } from '../src/lib/audit-archive';
 import { ML_PER_GALLON } from '../src/types';
 
 const LOCAL_URL = 'postgres://distillery:distillery@127.0.0.1:5432/distillery_pg_test';
@@ -860,6 +861,29 @@ describe('PostgreSQL production modules', () => {
     );
     expect(sample.rows).toEqual([]);
   }, 60_000);
+
+  it('archives audit events older than 3 months and keeps recent rows', async () => {
+    const now = new Date('2026-10-24T12:00:00.000Z');
+    const fourMonthsAgo = new Date(now.getTime());
+    fourMonthsAgo.setUTCMonth(fourMonthsAgo.getUTCMonth() - 4);
+    const lastMonth = new Date(now.getTime());
+    lastMonth.setUTCMonth(lastMonth.getUTCMonth() - 1);
+    await poolQuery(
+      `INSERT INTO audit_events (user_id, email, action, summary, created_at) VALUES ($1, $2, $3, $4, $5)`,
+      [actor.id, actor.email, 'saveInventoryItem', 'four-month-old audit', formatAuditTimestamp(fourMonthsAgo)],
+    );
+    await poolQuery(
+      `INSERT INTO audit_events (user_id, email, action, summary, created_at) VALUES ($1, $2, $3, $4, $5)`,
+      [actor.id, actor.email, 'saveInventoryItem', 'last-month audit', formatAuditTimestamp(lastMonth)],
+    );
+
+    const recent = await engine.listAuditEvents(100, now);
+    expect(recent.some((event) => event.summary === 'last-month audit')).toBe(true);
+    expect(recent.some((event) => event.summary === 'four-month-old audit')).toBe(false);
+    const archived = await engine.listArchivedAuditEvents();
+    expect(archived.some((event) => event.summary === 'four-month-old audit')).toBe(true);
+    expect(archived.some((event) => event.summary === 'last-month audit')).toBe(false);
+  });
 
   async function saveEquipment(name: string, type: string, capacity: number) {
     await save('saveFloorEquipment', [{

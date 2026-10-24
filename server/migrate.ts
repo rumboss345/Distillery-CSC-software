@@ -1,4 +1,5 @@
 import { SCHEMA } from '../src/db/schema.ts';
+import { ARCHIVE_OLD_AUDIT_DELETE, ARCHIVE_OLD_AUDIT_INSERT, auditArchiveCutoff } from '../src/lib/audit-archive.ts';
 import { getPool, redactDatabaseUrl } from './pg.ts';
 import { translateSqliteSchema } from './pg-schema.ts';
 
@@ -109,6 +110,25 @@ export async function migrateDatabase(): Promise<void> {
         WHERE lower(email) = 'nelson@rum.ky'
       `);
       await client.query(`INSERT INTO schema_migrations (version) VALUES ('003')`);
+    }
+    const auditArchiveMigration = await client.query('SELECT version FROM schema_migrations WHERE version = $1', ['004']);
+    if (auditArchiveMigration.rowCount === 0) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS audit_events_archive (
+          id INTEGER PRIMARY KEY,
+          user_id INTEGER,
+          email TEXT NOT NULL DEFAULT '',
+          action TEXT NOT NULL,
+          summary TEXT NOT NULL DEFAULT '',
+          created_at TEXT NOT NULL,
+          archived_at TEXT NOT NULL DEFAULT to_char(CURRENT_TIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')
+        )
+      `);
+      await client.query('CREATE INDEX IF NOT EXISTS idx_audit_events_archive_created ON audit_events_archive (created_at)');
+      const cutoff = auditArchiveCutoff();
+      await client.query(ARCHIVE_OLD_AUDIT_INSERT, [cutoff]);
+      await client.query(ARCHIVE_OLD_AUDIT_DELETE, [cutoff]);
+      await client.query(`INSERT INTO schema_migrations (version) VALUES ('004')`);
     }
     await client.query(`
       INSERT INTO inventory_categories (name)

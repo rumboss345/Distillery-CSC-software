@@ -16,6 +16,7 @@ import {
   fetchAuditEvents,
   resetAllData,
   restoreDatabaseBackup,
+  type AuditEvent,
 } from '../db/client-actions';
 import { isPostgresMode } from '../db/database';
 import {
@@ -32,6 +33,7 @@ import {
   type PermissionKey,
   type ProcessStageKey,
 } from '../lib/permissions';
+import { CollapsibleSection } from '../components/CollapsibleSection';
 import { Modal } from '../components/Modal';
 import { isAdminRole, isOwnerRole, roleLabel, type AuthRole } from '../lib/roles';
 import './admin.css';
@@ -54,7 +56,8 @@ export function AdminUsers() {
   const [message, setMessage] = useState('');
   const [restoring, setRestoring] = useState(false);
   const [backupNote, setBackupNote] = useState('');
-  const [auditEvents, setAuditEvents] = useState<{ id: number; email: string; action: string; summary: string; created_at: string }[]>([]);
+  const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
+  const [archivedEvents, setArchivedEvents] = useState<AuditEvent[]>([]);
   const restoreInputRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState(emptyForm);
   const [editUser, setEditUser] = useState<AuthUser | null>(null);
@@ -83,7 +86,10 @@ export function AdminUsers() {
 
   useEffect(() => {
     if (!isPostgresMode()) return;
-    void fetchAuditEvents().then(setAuditEvents);
+    void fetchAuditEvents().then((result) => {
+      setAuditEvents(result.events);
+      setArchivedEvents(result.archived);
+    });
   }, [message, backupNote]);
 
   if (!isAdminRole(user?.role)) {
@@ -528,36 +534,45 @@ export function AdminUsers() {
         </div>
 
         {isPostgresMode() && (
-          <>
-            <h3 className="admin-subtitle">Audit log</h3>
+          <CollapsibleSection
+            id="admin-audit-log"
+            className="admin-audit-log"
+            headingClassName="admin-subtitle"
+            title="Audit log"
+            summary={
+              archivedEvents.length > 0
+                ? `${auditEvents.length} in the last 3 months · ${archivedEvents.length} archived`
+                : auditEvents.length > 0
+                  ? `${auditEvents.length} in the last 3 months`
+                  : 'empty'
+            }
+            defaultOpen={false}
+            storageKey="admin-audit-log"
+          >
             <p className="admin-hint">
-              Saves, restores, and clears are recorded with the employee who made them.
+              Saves, restores, and clears from the last 3 months. Older records move to Archive.
             </p>
             {auditEvents.length === 0 ? (
-              <p className="admin-hint" data-testid="audit-log">No production changes have been recorded yet.</p>
+              <p className="admin-hint" data-testid="audit-log">No production changes have been recorded in the last 3 months.</p>
             ) : (
-              <table className="admin-table" data-testid="audit-log">
-                <thead>
-                  <tr>
-                    <th>When</th>
-                    <th>Employee</th>
-                    <th>Action</th>
-                    <th>Record</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {auditEvents.map((event) => (
-                    <tr key={event.id}>
-                      <td>{formatRecordedAt(event.created_at)}</td>
-                      <td>{event.email}</td>
-                      <td>{event.action}</td>
-                      <td>{event.summary}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <AuditEventTable events={auditEvents} testId="audit-log" />
             )}
-          </>
+            <CollapsibleSection
+              className="admin-audit-archive"
+              headingLevel="h4"
+              headingClassName="admin-subtitle"
+              title="Archive"
+              summary={`${archivedEvents.length} older than 3 months`}
+              defaultOpen={false}
+              storageKey="admin-audit-archive"
+            >
+              {archivedEvents.length === 0 ? (
+                <p className="admin-hint" data-testid="audit-log-archive">No archived production changes.</p>
+              ) : (
+                <AuditEventTable events={archivedEvents} testId="audit-log-archive" />
+              )}
+            </CollapsibleSection>
+          </CollapsibleSection>
         )}
       </div>
 
@@ -621,5 +636,30 @@ export function AdminUsers() {
         </Modal>
       )}
     </div>
+  );
+}
+
+function AuditEventTable({ events, testId }: { events: AuditEvent[]; testId: string }) {
+  return (
+    <table className="admin-table" data-testid={testId}>
+      <thead>
+        <tr>
+          <th>When</th>
+          <th>Employee</th>
+          <th>Action</th>
+          <th>Record</th>
+        </tr>
+      </thead>
+      <tbody>
+        {events.map((event) => (
+          <tr key={event.id}>
+            <td>{formatRecordedAt(event.created_at)}</td>
+            <td>{event.email}</td>
+            <td>{event.action}</td>
+            <td>{event.summary}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
