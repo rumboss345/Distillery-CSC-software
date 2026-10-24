@@ -27,6 +27,7 @@ import { EquipmentIconPicker } from '../components/equipment/EquipmentIconPicker
 import { useAuth } from '../context/AuthContext';
 import {
   EQUIPMENT_STATUSES,
+  applyEquipmentIconPick,
   equipmentTypeDefaults,
   equipmentTypeLabel,
   isBuiltInEquipmentType,
@@ -172,26 +173,7 @@ export function FloorPlanPage() {
   };
 
   const handleIconPick = (icon: EquipmentIcon) => {
-    if (icon === 'jug') {
-      const alreadyTank = form.equipment_type === 'holding_tank';
-      const defaults = equipmentTypeDefaults('holding_tank');
-      setForm({
-        ...form,
-        equipment_type: 'holding_tank',
-        icon: 'jug',
-        ...(alreadyTank ? {} : {
-          width_ft: defaults.width_ft,
-          depth_ft: defaults.depth_ft,
-          capacity_gal: defaults.capacity_gal,
-        }),
-      });
-      return;
-    }
-    if (isBuiltInEquipmentType(form.equipment_type) && isBuiltInEquipmentType(icon)) {
-      handleTypeChange(icon);
-      return;
-    }
-    setForm({ ...form, icon });
+    setForm(applyEquipmentIconPick(form, icon));
   };
 
   const handleSave = () => {
@@ -532,7 +514,7 @@ export function FloorPlanPage() {
               <label>Icon</label>
               <EquipmentIconPicker value={resolveEquipmentIcon(form.icon, form.equipment_type)} onChange={handleIconPick} />
               <p className="form-hint">
-                Tanks, jugs, fermenters, wash tanks, and stills show how full they are and the liquid inside. A jug keeps holding-tank gallons and ABV.
+                The picture does not have to match the equipment type. Tanks, jugs, fermenters, wash tanks, and stills show how full they are and the liquid inside.
               </p>
             </div>
             <div className="form-group">

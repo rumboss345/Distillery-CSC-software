@@ -15,7 +15,7 @@ export const EQUIPMENT_TYPES: { value: EquipmentType; label: string }[] = [
   { value: 'other', label: 'Other' },
 ];
 
-/** Pictures you can assign when adding or editing equipment. A jug is a holding tank with its own picture. */
+/** Pictures you can assign when adding or editing equipment. The picture does not have to match the type. */
 export type EquipmentIcon = EquipmentType | 'jug';
 
 export const EQUIPMENT_ICONS: { value: EquipmentIcon; label: string }[] = [
@@ -124,6 +124,11 @@ export function resolveEquipmentIcon(icon: string | null | undefined, equipmentT
   if (isEquipmentIcon(chosen)) return chosen;
   if (isBuiltInEquipmentType(equipmentType)) return equipmentType;
   return 'other';
+}
+
+/** Picking a picture only changes the picture. Equipment type stays as it is. */
+export function applyEquipmentIconPick<T extends { icon: string }>(form: T, icon: EquipmentIcon): T {
+  return { ...form, icon };
 }
 
 export function equipmentTypeLabel(type: string): string {
