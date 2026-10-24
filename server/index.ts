@@ -52,6 +52,13 @@ import {
   type User,
 } from './db.js';
 import { sanitizePermissions, sanitizeProcessStages } from './permissions.js';
+import {
+  OWNER_CREATE_ERROR,
+  OWNER_RESET_ADMIN_ERROR,
+  isAdminRole,
+  isOwnerRole,
+  parseCreatedRole,
+} from '../src/lib/roles.ts';
 import { sendAdminApprovalEmail, sendPasswordResetEmail } from './email.js';
 import {
   clearDistilleryRecord,
@@ -98,7 +105,7 @@ if (isProduction && !process.env.APP_URL) {
 interface AuthPayload {
   userId: number;
   email: string;
-  role: 'admin' | 'user';
+  role: 'owner' | 'admin' | 'user';
 }
 
 function signToken(user: User) {
@@ -124,7 +131,7 @@ async function authMiddleware(
   try {
     const payload = jwt.verify(token, JWT_SECRET) as AuthPayload;
     const user = await getUserById(payload.userId);
-    if (!user || (user.role !== 'admin' && user.status !== 'approved')) {
+    if (!user || (!isAdminRole(user.role) && user.status !== 'approved')) {
       res.status(401).json({ error: 'Invalid session' });
       return;
     }
@@ -140,7 +147,7 @@ function adminMiddleware(
   res: express.Response,
   next: express.NextFunction
 ) {
-  if (req.user?.role !== 'admin') {
+  if (!isAdminRole(req.user?.role)) {
     res.status(403).json({ error: 'Admin access required' });
     return;
   }
@@ -266,7 +273,7 @@ app.post('/api/auth/login', async (req, res) => {
     return;
   }
 
-  if (user.role !== 'admin') {
+  if (!isAdminRole(user.role)) {
     if (user.status === 'pending') {
       res.status(403).json({
         error: 'Your account is pending administrator approval. You will receive access after approval.',
@@ -302,7 +309,7 @@ app.post('/api/auth/verify-admin', authMiddleware, async (req, res) => {
   }
 
   const user = await getUserByEmail(email);
-  if (!user || user.role !== 'admin' || !bcrypt.compareSync(password, user.password_hash)) {
+  if (!user || !isAdminRole(user.role) || !bcrypt.compareSync(password, user.password_hash)) {
     res.status(401).json({ error: 'Invalid administrator credentials' });
     return;
   }
@@ -438,7 +445,13 @@ app.post('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) =
       ? req.body.processAssignments.map(String)
       : [],
   );
-  const role = req.body.role === 'admin' ? 'admin' : 'user';
+  let role: 'owner' | 'admin' | 'user';
+  try {
+    role = parseCreatedRole(req.body.role, req.user!.role);
+  } catch (err) {
+    res.status(403).json({ error: err instanceof Error ? err.message : OWNER_CREATE_ERROR });
+    return;
+  }
 
   if (!email || !password) {
     res.status(400).json({ error: 'Email and password are required' });
@@ -454,7 +467,15 @@ app.post('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) =
   }
 
   try {
-    const user = await createUserByAdmin(email, password, name, permissions, processAssignments, role);
+    const user = await createUserByAdmin(
+      email,
+      password,
+      name,
+      permissions,
+      processAssignments,
+      role,
+      req.user!.role,
+    );
     res.status(201).json({ message: `${user.email} created`, user: await publicUser(user) });
   } catch (err) {
     res.status(409).json({
@@ -484,20 +505,25 @@ app.patch('/api/admin/users/:id', authMiddleware, adminMiddleware, async (req, r
     return;
   }
 
-  const user = await updateUserByAdmin(id, {
-    name,
-    permissions,
-    processAssignments,
-    password: password || undefined,
-  });
-  if (!user) {
-    res.status(404).json({ error: 'User not found or cannot be modified' });
-    return;
+  try {
+    const user = await updateUserByAdmin(id, {
+      name,
+      permissions,
+      processAssignments,
+      password: password || undefined,
+    }, req.user!.role);
+    if (!user) {
+      res.status(404).json({ error: 'User not found or cannot be modified' });
+      return;
+    }
+    res.json({
+      message: password ? `Password updated for ${user.email}` : 'User updated',
+      user: await publicUser(user),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Could not update user';
+    res.status(message === OWNER_RESET_ADMIN_ERROR ? 403 : 400).json({ error: message });
   }
-  res.json({
-    message: password ? `Password updated for ${user.email}` : 'User updated',
-    user: await publicUser(user),
-  });
 });
 
 app.delete('/api/admin/users/:id', authMiddleware, adminMiddleware, async (req, res) => {
@@ -506,7 +532,7 @@ app.delete('/api/admin/users/:id', authMiddleware, adminMiddleware, async (req, 
     res.status(400).json({ error: 'You cannot remove your own account' });
     return;
   }
-  const result = await deleteUserById(id);
+  const result = await deleteUserById(id, req.user!.role);
   if (!result.ok) {
     res.status(400).json({ error: result.reason });
     return;
@@ -543,7 +569,7 @@ app.post('/api/production/mutate', authMiddleware, async (req, res) => {
     res.status(400).json({ error: 'A valid production action is required.' });
     return;
   }
-  const permissions = req.user!.role === 'admin' ? [] : await getUserPermissions(req.user!.id);
+  const permissions = isAdminRole(req.user!.role) ? [] : await getUserPermissions(req.user!.id);
   if (!userMayMutate(req.user!.role, permissions, mutation.access)) {
     res.status(403).json({ error: 'You do not have permission for that action.' });
     return;

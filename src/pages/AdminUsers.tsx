@@ -33,13 +33,14 @@ import {
   type ProcessStageKey,
 } from '../lib/permissions';
 import { Modal } from '../components/Modal';
+import { isAdminRole, isOwnerRole, roleLabel, type AuthRole } from '../lib/roles';
 import './admin.css';
 
 const emptyForm = () => ({
   email: '',
   password: '',
   name: '',
-  role: 'user' as 'admin' | 'user',
+  role: 'user' as AuthRole,
   permissions: [...PERMISSION_KEYS] as PermissionKey[],
   processAssignments: [...PROCESS_STAGE_KEYS] as ProcessStageKey[],
 });
@@ -85,7 +86,7 @@ export function AdminUsers() {
     void fetchAuditEvents().then(setAuditEvents);
   }, [message, backupNote]);
 
-  if (user?.role !== 'admin') {
+  if (!isAdminRole(user?.role)) {
     return <Navigate to="/" replace />;
   }
 
@@ -135,10 +136,11 @@ export function AdminUsers() {
       return;
     }
     try {
-      const result = await updateAdminUser(editUser.id, editUser.role === 'admin'
+      const canResetPassword = !isAdminRole(editUser.role) || isOwnerRole(user?.role);
+      const result = await updateAdminUser(editUser.id, isAdminRole(editUser.role)
         ? {
           name: editName || null,
-          password: editPassword || undefined,
+          password: canResetPassword ? editPassword || undefined : undefined,
         }
         : {
           name: editName || null,
@@ -155,7 +157,7 @@ export function AdminUsers() {
   }
 
   async function handleDelete(account: AuthUser) {
-    const kind = account.role === 'admin' ? 'administrator' : 'user';
+    const kind = roleLabel(account.role).toLowerCase();
     const restored = account.restoredFromSettings
       ? ' This account is created again from the website settings the next time the site starts.'
       : '';
@@ -234,7 +236,7 @@ export function AdminUsers() {
   }
 
   function formatAssignments(u: AuthUser) {
-    if (u.role === 'admin') return 'All processes';
+    if (isAdminRole(u.role)) return 'All processes';
     if (u.processAssignments.length === 0) return 'None assigned';
     return u.processAssignments.map((k) => PROCESS_STAGE_LABELS[k]).join(', ');
   }
@@ -311,7 +313,7 @@ export function AdminUsers() {
   }
 
   function formatPermissions(u: AuthUser) {
-    if (u.role === 'admin') return 'Full access';
+    if (isAdminRole(u.role)) return 'Full access';
     if (u.permissions.length === 0) return 'No access';
     return `${u.permissions.length} area${u.permissions.length === 1 ? '' : 's'}`;
   }
@@ -395,18 +397,24 @@ export function AdminUsers() {
           </div>
 
           <h3 className="admin-subtitle">Role</h3>
-          <label className="admin-check-label">
-            <input
-              type="checkbox"
-              checked={form.role === 'admin'}
-              onChange={(e) => setForm({ ...form, role: e.target.checked ? 'admin' : 'user' })}
-            />
-            Administrator
+          <label>
+            Role
+            <select
+              data-testid="create-user-role"
+              value={form.role}
+              onChange={(e) => setForm({ ...form, role: e.target.value as AuthRole })}
+            >
+              <option value="user">Production user</option>
+              <option value="admin">Administrator</option>
+              {isOwnerRole(user?.role) && <option value="owner">Owner</option>}
+            </select>
           </label>
           <p className="admin-hint">
-            {form.role === 'admin'
-              ? 'This user can manage users and open every page. They can also confirm actions that need an administrator password.'
-              : 'Leave this off for a production user. Choose the pages and processes they can use below.'}
+            {form.role === 'owner'
+              ? 'Owners can create other owners and are the only people who can reset an administrator password.'
+              : form.role === 'admin'
+                ? 'This user can manage users and open every page. They can also confirm actions that need an administrator password. An owner must reset their password.'
+                : 'A production user uses the pages and processes you choose below.'}
           </p>
 
           {form.role === 'user' && (
@@ -448,7 +456,7 @@ export function AdminUsers() {
                 <tr key={u.id}>
                   <td>{u.email}</td>
                   <td>{u.name ?? '—'}</td>
-                  <td>{u.role}</td>
+                  <td>{roleLabel(u.role)}</td>
                   <td>{u.status}</td>
                   <td>{formatPermissions(u)}</td>
                   <td>{formatAssignments(u)}</td>
@@ -459,7 +467,7 @@ export function AdminUsers() {
                     <button
                       type="button"
                       className="btn btn-danger btn-sm"
-                      disabled={u.id === user.id}
+                      disabled={u.id === user?.id || (u.role === 'owner' && !isOwnerRole(user?.role))}
                       onClick={() => handleDelete(u)}
                     >
                       Remove
@@ -560,29 +568,38 @@ export function AdminUsers() {
               Name
               <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} />
             </label>
-            <label>
-              New password
-              <input
-                type="password"
-                autoComplete="new-password"
-                minLength={8}
-                value={editPassword}
-                placeholder="Leave blank to keep the current password"
-                onChange={(e) => setEditPassword(e.target.value)}
-              />
-            </label>
-            <p className="admin-hint">
-              {editUser.role === 'admin'
-                ? 'Set a new password when this administrator cannot sign in. Administrators can open every page.'
-                : 'Use this when an employee needs a new password and cannot sign in.'}
-            </p>
+            {(!isAdminRole(editUser.role) || isOwnerRole(user?.role)) ? (
+              <>
+                <label>
+                  New password
+                  <input
+                    type="password"
+                    autoComplete="new-password"
+                    minLength={8}
+                    data-testid="edit-user-password"
+                    value={editPassword}
+                    placeholder="Leave blank to keep the current password"
+                    onChange={(e) => setEditPassword(e.target.value)}
+                  />
+                </label>
+                <p className="admin-hint">
+                  {isAdminRole(editUser.role)
+                    ? 'Set a new password when this administrator cannot sign in. Only an owner can do this.'
+                    : 'Use this when an employee needs a new password and cannot sign in.'}
+                </p>
+              </>
+            ) : (
+              <p className="admin-hint" data-testid="owner-only-admin-password">
+                Only an owner can reset an administrator password.
+              </p>
+            )}
             {editUser.restoredFromSettings && (
               <p className="admin-hint">
                 The password saved in the website settings is applied again each time the site starts.
               </p>
             )}
 
-            {editUser.role !== 'admin' && (
+            {!isAdminRole(editUser.role) && (
               <>
                 <h3 className="admin-subtitle">Page access</h3>
                 {renderPermissionChecks(editPermissions, setEditPermissions)}

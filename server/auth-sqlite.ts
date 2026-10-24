@@ -13,12 +13,23 @@ import {
   type PermissionKey,
   type ProcessStageKey,
 } from './permissions.js';
+import {
+  LAST_OWNER_ERROR,
+  OWNER_CREATE_ERROR,
+  OWNER_REMOVE_ERROR,
+  OWNER_RESET_ADMIN_ERROR,
+  isAdminRole,
+  isOwnerRole,
+  isSiteOwnerEmail,
+  siteOwnerEmail,
+  type AuthRole,
+} from '../src/lib/roles.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = process.env.DATA_DIR ?? join(__dirname, 'data');
 const DB_PATH = join(DATA_DIR, 'auth.db');
 
-export type UserRole = 'admin' | 'user';
+export type UserRole = AuthRole;
 export type UserStatus = 'pending' | 'approved' | 'rejected';
 
 export interface User {
@@ -45,7 +56,8 @@ export interface PublicUser {
   restoredFromSettings: boolean;
 }
 
-function restoredFromSettings(email: string): boolean {
+function restoredFromSettings(email: string, role: UserRole): boolean {
+  if (isOwnerRole(role) || isSiteOwnerEmail(email)) return false;
   const configured = process.env.ADMIN_EMAIL?.trim().toLowerCase();
   return Boolean(configured && email.toLowerCase() === configured);
 }
@@ -63,7 +75,7 @@ function ensureDb() {
       email TEXT NOT NULL UNIQUE COLLATE NOCASE,
       password_hash TEXT NOT NULL,
       name TEXT,
-      role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('admin', 'user')),
+      role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('owner', 'admin', 'user')),
       status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'approved', 'rejected')),
       approval_token TEXT UNIQUE,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -89,8 +101,46 @@ function ensureDb() {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
+  migrateUserRoles();
   migrateExistingUserPermissions();
+  promoteSiteOwner();
   return db;
+}
+
+function migrateUserRoles() {
+  const row = db
+    .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'users'`)
+    .get() as { sql: string } | undefined;
+  if (!row?.sql || row.sql.includes("'owner'")) return;
+  db.exec(`
+    PRAGMA foreign_keys = OFF;
+    CREATE TABLE users_role_upgrade (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT NOT NULL UNIQUE COLLATE NOCASE,
+      password_hash TEXT NOT NULL,
+      name TEXT,
+      role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('owner', 'admin', 'user')),
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'approved', 'rejected')),
+      approval_token TEXT UNIQUE,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    INSERT INTO users_role_upgrade (id, email, password_hash, name, role, status, approval_token, created_at)
+      SELECT id, email, password_hash, name, role, status, approval_token, created_at FROM users;
+    DROP TABLE users;
+    ALTER TABLE users_role_upgrade RENAME TO users;
+    PRAGMA foreign_keys = ON;
+  `);
+}
+
+export function promoteSiteOwner(): void {
+  const email = siteOwnerEmail();
+  ensureDb()
+    .prepare(
+      `UPDATE users
+       SET role = 'owner', status = 'approved', approval_token = NULL
+       WHERE email = ? COLLATE NOCASE`,
+    )
+    .run(email);
 }
 
 function migrateExistingUserPermissions() {
@@ -128,6 +178,7 @@ export function syncAdminFromEnv() {
   }
 
   resetAdminAccount(adminEmail, adminPassword);
+  promoteSiteOwner();
   console.log(`Admin account synced for ${adminEmail}`);
 }
 
@@ -187,16 +238,10 @@ export function setUserProcessAssignments(userId: number, stages: ProcessStageKe
 
 export function publicUser(user: User): PublicUser {
   const permissions =
-    user.role === 'admin' ? [...DEFAULT_USER_PERMISSIONS] : getUserPermissions(user.id);
+    isAdminRole(user.role) ? [...DEFAULT_USER_PERMISSIONS] : getUserPermissions(user.id);
   const processAssignments =
-    user.role === 'admin'
-      ? sanitizeProcessStages([
-          'preparation',
-          'fermentation',
-          'distillation',
-          'storage',
-          'other',
-        ])
+    isAdminRole(user.role)
+      ? sanitizeProcessStages([...PROCESS_STAGE_KEYS])
       : getUserProcessAssignments(user.id);
 
   return {
@@ -208,7 +253,7 @@ export function publicUser(user: User): PublicUser {
     created_at: user.created_at,
     permissions,
     processAssignments,
-    restoredFromSettings: restoredFromSettings(user.email),
+    restoredFromSettings: restoredFromSettings(user.email, user.role),
   };
 }
 
@@ -232,24 +277,30 @@ export function createUserByAdmin(
   permissions: PermissionKey[],
   processAssignments: ProcessStageKey[],
   role: UserRole = 'user',
+  actorRole: UserRole = 'admin',
 ): User {
   const normalized = email.toLowerCase();
   if (getUserByEmail(normalized)) {
     throw new Error('An account with this email already exists');
   }
-  const isAdmin = role === 'admin';
+  let storedRole: UserRole = role === 'owner' ? 'owner' : role === 'admin' ? 'admin' : 'user';
+  if (isSiteOwnerEmail(normalized)) storedRole = 'owner';
+  if (storedRole === 'owner' && !isOwnerRole(actorRole) && !isSiteOwnerEmail(normalized)) {
+    throw new Error(OWNER_CREATE_ERROR);
+  }
+  const fullAccess = isAdminRole(storedRole);
   const passwordHash = bcrypt.hashSync(password, 12);
   const result = ensureDb()
     .prepare(
       `INSERT INTO users (email, password_hash, name, role, status, approval_token)
        VALUES (?, ?, ?, ?, 'approved', NULL)`,
     )
-    .run(normalized, passwordHash, name, isAdmin ? 'admin' : 'user');
+    .run(normalized, passwordHash, name, storedRole);
   const user = getUserById(Number(result.lastInsertRowid))!;
-  setUserPermissions(user.id, isAdmin ? [...DEFAULT_USER_PERMISSIONS] : permissions);
+  setUserPermissions(user.id, fullAccess ? [...DEFAULT_USER_PERMISSIONS] : permissions);
   setUserProcessAssignments(
     user.id,
-    isAdmin ? [...PROCESS_STAGE_KEYS] : processAssignments,
+    fullAccess ? [...PROCESS_STAGE_KEYS] : processAssignments,
   );
   return user;
 }
@@ -262,9 +313,13 @@ export function updateUserByAdmin(
     processAssignments?: ProcessStageKey[];
     password?: string;
   },
+  actorRole: UserRole = 'admin',
 ): User | null {
   const user = getUserById(id);
   if (!user) return null;
+  if (updates.password && isAdminRole(user.role) && !isOwnerRole(actorRole)) {
+    throw new Error(OWNER_RESET_ADMIN_ERROR);
+  }
 
   if (updates.name !== undefined) {
     ensureDb().prepare('UPDATE users SET name = ? WHERE id = ?').run(updates.name, id);
@@ -274,7 +329,7 @@ export function updateUserByAdmin(
     ensureDb().prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(passwordHash, id);
     ensureDb().prepare('DELETE FROM password_reset_tokens WHERE user_id = ?').run(id);
   }
-  if (user.role !== 'admin') {
+  if (!isAdminRole(user.role)) {
     if (updates.permissions) {
       setUserPermissions(id, updates.permissions);
     }
@@ -285,9 +340,23 @@ export function updateUserByAdmin(
   return getUserById(id)!;
 }
 
-export function deleteUserById(id: number): { ok: true } | { ok: false; reason: string } {
+export function countOwners(): number {
+  const row = ensureDb()
+    .prepare(`SELECT COUNT(*) as count FROM users WHERE role = 'owner'`)
+    .get() as { count: number };
+  return row.count;
+}
+
+export function deleteUserById(
+  id: number,
+  actorRole: UserRole = 'admin',
+): { ok: true } | { ok: false; reason: string } {
   const user = getUserById(id);
   if (!user) return { ok: false, reason: 'User not found' };
+  if (user.role === 'owner') {
+    if (!isOwnerRole(actorRole)) return { ok: false, reason: OWNER_REMOVE_ERROR };
+    if (countOwners() <= 1) return { ok: false, reason: LAST_OWNER_ERROR };
+  }
 
   ensureDb().prepare('DELETE FROM password_reset_tokens WHERE user_id = ?').run(id);
   ensureDb().prepare('DELETE FROM user_permissions WHERE user_id = ?').run(id);
@@ -318,7 +387,7 @@ export function approveUserByToken(token: string): User | null {
 
 export function approveUserById(id: number): User | null {
   const user = getUserById(id);
-  if (!user || user.role === 'admin' || user.status !== 'pending') return null;
+  if (!user || isAdminRole(user.role) || user.status !== 'pending') return null;
   ensureDb()
     .prepare(`UPDATE users SET status = 'approved', approval_token = NULL WHERE id = ?`)
     .run(id);
@@ -331,7 +400,7 @@ export function approveUserById(id: number): User | null {
 
 export function rejectUserById(id: number): User | null {
   const user = getUserById(id);
-  if (!user || user.role === 'admin' || user.status !== 'pending') return null;
+  if (!user || isAdminRole(user.role) || user.status !== 'pending') return null;
   ensureDb()
     .prepare(`UPDATE users SET status = 'rejected', approval_token = NULL WHERE id = ?`)
     .run(id);
@@ -351,7 +420,10 @@ export function listPendingUsers(): PublicUser[] {
 
 export function listAllUsers(): PublicUser[] {
   const rows = ensureDb()
-    .prepare(`SELECT * FROM users ORDER BY role DESC, email ASC`)
+    .prepare(
+      `SELECT * FROM users
+       ORDER BY CASE role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END, email COLLATE NOCASE`,
+    )
     .all() as User[];
   return rows.map(publicUser);
 }
@@ -396,33 +468,43 @@ export function listProcessAssignmentsByStage(): Record<string, ProcessAssignmen
 export function resetAdminAccount(email: string, password: string, name = 'Admin') {
   const database = ensureDb();
   const normalized = email.toLowerCase();
-  const passwordHash = bcrypt.hashSync(password, 12);
-  const existing = database
-    .prepare('SELECT id FROM users WHERE email = ? COLLATE NOCASE')
-    .get(normalized) as { id: number } | undefined;
+  const existing = getUserByEmail(normalized);
 
+  if (existing && (isOwnerRole(existing.role) || isSiteOwnerEmail(normalized))) {
+    database
+      .prepare(
+        `UPDATE users
+         SET role = 'owner', status = 'approved', approval_token = NULL
+         WHERE id = ?`,
+      )
+      .run(existing.id);
+    return;
+  }
+
+  const passwordHash = bcrypt.hashSync(password, 12);
+  const storedRole: UserRole = isSiteOwnerEmail(normalized) ? 'owner' : 'admin';
   if (existing) {
     database
       .prepare(
         `UPDATE users
-         SET password_hash = ?, role = 'admin', status = 'approved', approval_token = NULL, name = ?
+         SET password_hash = ?, role = ?, status = 'approved', approval_token = NULL, name = ?
          WHERE id = ?`,
       )
-      .run(passwordHash, name, existing.id);
+      .run(passwordHash, storedRole, name, existing.id);
     return;
   }
 
   database
     .prepare(
       `INSERT INTO users (email, password_hash, name, role, status, approval_token)
-       VALUES (?, ?, ?, 'admin', 'approved', NULL)`,
+       VALUES (?, ?, ?, ?, 'approved', NULL)`,
     )
-    .run(normalized, passwordHash, name);
+    .run(normalized, passwordHash, name, storedRole);
 }
 
 export function createPasswordResetToken(email: string): string | null {
   const user = getUserByEmail(email);
-  if (!user || user.status !== 'approved') return null;
+  if (!user || user.status !== 'approved' || isAdminRole(user.role)) return null;
   const issued = newResetToken();
   const database = ensureDb();
   const replace = database.transaction(() => {
@@ -443,6 +525,11 @@ export function resetPasswordWithToken(token: string, password: string): boolean
     .get(tokenHash) as { user_id: number; expires_at: string } | undefined;
   if (!row || resetTokenExpired(row.expires_at)) {
     if (row) database.prepare('DELETE FROM password_reset_tokens WHERE token_hash = ?').run(tokenHash);
+    return false;
+  }
+  const target = getUserById(row.user_id);
+  if (!target || isAdminRole(target.role)) {
+    database.prepare('DELETE FROM password_reset_tokens WHERE token_hash = ?').run(tokenHash);
     return false;
   }
   const passwordHash = bcrypt.hashSync(password, 12);

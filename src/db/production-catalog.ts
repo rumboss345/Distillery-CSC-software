@@ -90,11 +90,11 @@ export const PRODUCTION_MUTATIONS: Record<string, ProductionMutation> = {
 };
 
 export function userMayMutate(
-  role: 'admin' | 'user',
+  role: string,
   permissions: readonly string[],
   access: MutationAccess,
 ): boolean {
-  if (role === 'admin') return true;
+  if (role === 'admin' || role === 'owner') return true;
   if (access === 'admin') return false;
   const required = Array.isArray(access) ? access : [access];
   return required.some((key) => permissions.includes(key));

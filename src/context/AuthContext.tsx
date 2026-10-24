@@ -19,6 +19,7 @@ import {
   type ProcessStageKey,
   userHasPermission,
 } from '../lib/permissions';
+import { isAdminRole } from '../lib/roles';
 import { ensureSharedDatabase } from '../db/database';
 
 interface AuthContextValue {
@@ -81,7 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const hasProcessAssignment = useCallback(
     (key: ProcessStageKey) => {
       if (!user) return false;
-      if (user.role === 'admin') return true;
+      if (isAdminRole(user.role)) return true;
       return user.processAssignments?.includes(key) ?? false;
     },
     [user],

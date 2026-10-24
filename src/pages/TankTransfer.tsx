@@ -98,7 +98,7 @@ const emptyFermenterForm = () => ({
 
 export function TankTransfer() {
   const { user } = useAuth();
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = user?.role === 'admin' || user?.role === 'owner';
   const changedBy = user?.name?.trim() || user?.email || 'Unknown';
   const [searchParams, setSearchParams] = useSearchParams();
   const { returnToEquipment } = useEquipmentReturn();

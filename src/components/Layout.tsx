@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { dismissSharedNotice, getSharedNotice, subscribeSharedNotice } from '../db/database';
 import type { PermissionKey } from '../lib/permissions';
+import { isAdminRole, roleLabel } from '../lib/roles';
 
 type NavItem = { to: string; label: string; icon: string; permission: PermissionKey };
 
@@ -82,7 +83,7 @@ export function Layout() {
     }))
     .filter((group) => group.items.length > 0);
 
-  const pageLabel = currentPageLabel(location.pathname, visibleGroups, user?.role === 'admin');
+  const pageLabel = currentPageLabel(location.pathname, visibleGroups, isAdminRole(user?.role));
 
   useEffect(() => {
     setNavOpen(false);
@@ -153,7 +154,7 @@ export function Layout() {
               ))}
             </div>
           ))}
-          {user?.role === 'admin' && (
+          {isAdminRole(user?.role) && (
             <div className="nav-group" role="group" aria-labelledby="nav-group-admin">
               <div id="nav-group-admin" className="nav-group-label">Admin</div>
               <NavLink
@@ -171,7 +172,9 @@ export function Layout() {
         <div className="sidebar-footer">
           <div className="sidebar-user">
             <span className="sidebar-user-email">{user?.email}</span>
-            {user?.role === 'admin' && <span className="sidebar-user-role">Admin</span>}
+            {user && isAdminRole(user.role) && (
+              <span className="sidebar-user-role" data-testid="sidebar-user-role">{roleLabel(user.role)}</span>
+            )}
           </div>
           <NavLink to="/account/password" className="btn btn-ghost btn-sm sidebar-logout">
             Change password

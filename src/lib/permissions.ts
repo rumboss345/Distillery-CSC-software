@@ -1,3 +1,5 @@
+import { isAdminRole } from './roles';
+
 export const PERMISSION_KEYS = [
   'dashboard',
   'wash',
@@ -62,11 +64,11 @@ export const PROCESS_STAGE_LABELS: Record<ProcessStageKey, string> = {
 };
 
 export function userHasPermission(
-  role: 'admin' | 'user',
+  role: string,
   permissions: string[] | undefined,
   key: PermissionKey,
 ): boolean {
-  if (role === 'admin') return true;
+  if (isAdminRole(role)) return true;
   return permissions?.includes(key) ?? false;
 }
 
