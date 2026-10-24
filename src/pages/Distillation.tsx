@@ -89,6 +89,7 @@ import {
   chargeExceedsStillCapacity,
   distillationRunShowsCuts,
   plannedRecordSkipsEquipmentStatus,
+  runConsumesSource,
   stillAlreadyOccupiedMessage,
   stillRunOccupiesEquipment,
 } from '../lib/still-charge';
@@ -729,7 +730,8 @@ export function Distillation() {
         return;
       }
     }
-    if (spiritProofPlan && !spiritProofPlan.ok) {
+    const consumeSource = runConsumesSource(runForm.status);
+    if (consumeSource && spiritProofPlan && !spiritProofPlan.ok) {
       alert(spiritProofPlan.message ?? 'This proofed charge does not fit.');
       return;
     }
@@ -775,23 +777,27 @@ export function Distillation() {
       const pullsToSave = chargeSizeMode === 'finished' && spiritProofPlan?.ok
         ? fitDistillationTankPulls(tankPulls, spiritProofPlan.spiritGal, availableByTank)
         : tankPulls;
-      const pullError = distillationTankPullError(pullsToSave, availableByTank);
+      const pullError = distillationTankPullError(pullsToSave, availableByTank, {
+        required: consumeSource,
+        checkAvailable: consumeSource,
+      });
       if (pullError) {
         alert(pullError);
         return;
       }
-      if (chargeSizeMode === 'finished' && !proofTarget.trim()) {
+      if (consumeSource && chargeSizeMode === 'finished' && !proofTarget.trim()) {
         alert('Enter the proof needed in the still.');
         return;
       }
-      if (tailsToCharge <= 0) {
+      if (consumeSource && tailsToCharge <= 0) {
         alert(chargeSizeMode === 'finished'
           ? 'Enter the final volume in the still and the proof it needs.'
           : 'Enter the gallons drawn from each tank.');
         return;
       }
       if (
-        chargeSizeMode === 'finished'
+        consumeSource
+        && chargeSizeMode === 'finished'
         && spiritProofPlan?.ok
         && blendDistillationTankPulls(pullsToSave).volumeGal + 0.01 < spiritProofPlan.spiritGal
       ) {
@@ -872,7 +878,7 @@ export function Distillation() {
         ? distillationSourceSummary(savedNames)
         : (run.source_holding_tank_name ?? fermenterLabel(run.source_holding_tank_equipment_id));
       const to = run.dest_holding_tank_name ?? fermenterLabel(run.dest_holding_tank_equipment_id);
-      return to ? `${from} → ${to}` : from;
+      return to && to !== '—' ? `${from} → ${to}` : from;
     }
     const mash = mashes.find((m) => m.id === run.source_mash_batch_id);
     return mash?.batch_number ?? '—';
@@ -1397,6 +1403,11 @@ export function Distillation() {
             ) : (
               <div className="form-group full-width" data-testid="source-tank-lines">
                 <label>Source tanks</label>
+                {planOnly && (
+                  <p className="field-hint">
+                    A planned run does not need a source tank. Alcohol and volume in a tank can change before the charge. Choose the tank when the run is running.
+                  </p>
+                )}
                 {sourceLines.map((line, index) => {
                   const lineTypeOptions = line.equipmentType === 'stillage_tank'
                     ? ['stillage_tank', ...sourceTypeOptions.filter((type) => type !== 'stillage_tank')]
@@ -1889,8 +1900,9 @@ export function Distillation() {
               </>
             ) : (
               <>
-                Charging draws spirit from the source tank. Proof it before the run if it is too hot:
-                blend the water in the tank first, or add it after the charge is in the still.
+                Charging draws spirit from the source tank when the run is <strong>running</strong>.
+                A <strong>planned</strong> run can wait to pick that tank, because alcohol and volume may change.
+                Proof the charge before the run if it is too hot: blend the water in the tank first, or add it after the charge is in the still.
                 The proofed volume cannot exceed the still. Choose
                 {' '}<strong>High Wines Storage Tank</strong> (or a collection vessel) when you record cuts.
               </>
