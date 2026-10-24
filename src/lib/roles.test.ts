@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   OWNER_CREATE_ERROR,
+  OWNER_RESET_DATA_ERROR,
   isAdminRole,
   isOwnerRole,
   isSiteOwnerEmail,
@@ -17,6 +18,12 @@ describe('owner role', () => {
     expect(isAdminRole('user')).toBe(false);
     expect(roleLabel('owner')).toBe('Owner');
     expect(roleLabel('admin')).toBe('Administrator');
+  });
+
+  it('names clear-all-data and empty-tanks as owner-only', () => {
+    expect(OWNER_RESET_DATA_ERROR).toMatch(/only an owner/i);
+    expect(OWNER_RESET_DATA_ERROR).toMatch(/clear all data/i);
+    expect(OWNER_RESET_DATA_ERROR).toMatch(/empty all tanks/i);
   });
 
   it('lets only an owner choose the owner role when creating a user', () => {

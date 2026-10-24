@@ -4,6 +4,7 @@ export const SITE_OWNER_EMAIL = 'nelson@rum.ky';
 
 export const OWNER_CREATE_ERROR = 'Only an owner can create another owner.';
 export const OWNER_RESET_ADMIN_ERROR = 'Only an owner can reset an administrator password.';
+export const OWNER_RESET_DATA_ERROR = 'Only an owner can clear all data or empty all tanks.';
 export const OWNER_REMOVE_ERROR = 'Only an owner can remove another owner.';
 export const LAST_OWNER_ERROR = 'Keep at least one owner.';
 

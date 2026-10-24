@@ -35,7 +35,7 @@ import {
 } from '../lib/permissions';
 import { CollapsibleSection } from '../components/CollapsibleSection';
 import { Modal } from '../components/Modal';
-import { isAdminRole, isOwnerRole, roleLabel, type AuthRole } from '../lib/roles';
+import { isAdminRole, isOwnerRole, OWNER_RESET_DATA_ERROR, roleLabel, type AuthRole } from '../lib/roles';
 import './admin.css';
 
 const emptyForm = () => ({
@@ -248,6 +248,10 @@ export function AdminUsers() {
   }
 
   function handleClearAllData() {
+    if (!isOwnerRole(user?.role)) {
+      window.alert(OWNER_RESET_DATA_ERROR);
+      return;
+    }
     if (!confirm('Clear production records for everyone? Washes, runs, blends, barrels, bottling, and inventory are removed. Employee logins stay.')) {
       return;
     }
@@ -293,6 +297,10 @@ export function AdminUsers() {
   }
 
   function handleEmptyAllTanks() {
+    if (!isOwnerRole(user?.role)) {
+      window.alert(OWNER_RESET_DATA_ERROR);
+      return;
+    }
     const tanksWithSpirit = getHoldingTanksWithContents().filter((t) => t.volume_gal > 0);
     if (tanksWithSpirit.length === 0) {
       alert('All holding tanks are already empty.');
@@ -519,19 +527,27 @@ export function AdminUsers() {
         {backupNote && <p className="admin-hint" data-testid="backup-note">{backupNote}</p>}
 
         <h3 className="admin-subtitle">Reset</h3>
-        <p className="admin-hint">
-          {isPostgresMode()
-            ? 'Clear production records for every employee, or empty every holding tank and leave the other records in place. Employee logins stay.'
-            : 'Clear the shared record for everyone and start from sample data, or empty every holding tank and leave the other records in place.'}
-        </p>
-        <div className="admin-data-actions">
-          <button type="button" className="btn btn-secondary" onClick={handleClearAllData}>
-            Clear all data
-          </button>
-          <button type="button" className="btn btn-secondary" onClick={handleEmptyAllTanks}>
-            Empty All Tanks
-          </button>
-        </div>
+        {isOwnerRole(user?.role) ? (
+          <>
+            <p className="admin-hint">
+              {isPostgresMode()
+                ? 'Clear production records for every employee, or empty every holding tank and leave the other records in place. Employee logins stay.'
+                : 'Clear the shared record for everyone and start from sample data, or empty every holding tank and leave the other records in place.'}
+            </p>
+            <div className="admin-data-actions">
+              <button type="button" className="btn btn-secondary" data-testid="clear-all-data" onClick={handleClearAllData}>
+                Clear all data
+              </button>
+              <button type="button" className="btn btn-secondary" data-testid="empty-all-tanks" onClick={handleEmptyAllTanks}>
+                Empty All Tanks
+              </button>
+            </div>
+          </>
+        ) : (
+          <p className="admin-hint" data-testid="owner-only-reset">
+            {OWNER_RESET_DATA_ERROR}
+          </p>
+        )}
 
         {isPostgresMode() && (
           <CollapsibleSection

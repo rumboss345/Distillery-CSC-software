@@ -1,6 +1,6 @@
 import type { PermissionKey } from '../lib/permissions';
 
-export type MutationAccess = PermissionKey | PermissionKey[] | 'admin';
+export type MutationAccess = PermissionKey | PermissionKey[] | 'admin' | 'owner';
 
 export interface ProductionMutation {
   access: MutationAccess;
@@ -87,7 +87,7 @@ export const PRODUCTION_MUTATIONS: Record<string, ProductionMutation> = {
   updateEquipmentProcessPosition: { access: 'equipment', table: 'floor_equipment', idIndex: 0 },
   moveEquipmentToPlan: { access: 'equipment', table: 'floor_equipment', idIndex: 0 },
   deleteFloorEquipment: { access: 'equipment', table: 'floor_equipment', idIndex: 0 },
-  emptyAllHoldingTanks: { access: 'admin' },
+  emptyAllHoldingTanks: { access: 'owner' },
 };
 
 export function userMayMutate(
@@ -95,6 +95,7 @@ export function userMayMutate(
   permissions: readonly string[],
   access: MutationAccess,
 ): boolean {
+  if (access === 'owner') return role === 'owner';
   if (role === 'admin' || role === 'owner') return true;
   if (access === 'admin') return false;
   const required = Array.isArray(access) ? access : [access];

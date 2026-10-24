@@ -55,6 +55,7 @@ import { sanitizePermissions, sanitizeProcessStages } from './permissions.js';
 import {
   OWNER_CREATE_ERROR,
   OWNER_RESET_ADMIN_ERROR,
+  OWNER_RESET_DATA_ERROR,
   isAdminRole,
   isOwnerRole,
   parseCreatedRole,
@@ -151,6 +152,18 @@ function adminMiddleware(
 ) {
   if (!isAdminRole(req.user?.role)) {
     res.status(403).json({ error: 'Admin access required' });
+    return;
+  }
+  next();
+}
+
+function ownerMiddleware(
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction
+) {
+  if (!isOwnerRole(req.user?.role)) {
+    res.status(403).json({ error: OWNER_RESET_DATA_ERROR });
     return;
   }
   next();
@@ -573,7 +586,9 @@ app.post('/api/production/mutate', authMiddleware, async (req, res) => {
   }
   const permissions = isAdminRole(req.user!.role) ? [] : await getUserPermissions(req.user!.id);
   if (!userMayMutate(req.user!.role, permissions, mutation.access)) {
-    res.status(403).json({ error: 'You do not have permission for that action.' });
+    res.status(403).json({
+      error: mutation.access === 'owner' ? OWNER_RESET_DATA_ERROR : 'You do not have permission for that action.',
+    });
     return;
   }
   try {
@@ -615,7 +630,7 @@ app.post('/api/production/restore', authMiddleware, adminMiddleware, async (req,
   }
 });
 
-app.delete('/api/production', authMiddleware, adminMiddleware, async (req, res) => {
+app.delete('/api/production', authMiddleware, ownerMiddleware, async (req, res) => {
   if (!usingPostgres()) {
     res.status(404).json({ error: 'PostgreSQL is not configured.' });
     return;
