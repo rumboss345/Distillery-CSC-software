@@ -8,7 +8,20 @@ import { PG_BACKUP_FORMAT, PG_BACKUP_VERSION, pgBackupError, type PgBackupFile }
 import { SCHEMA } from '../src/db/schema.ts';
 import { bindSqlHandle, type SqlHandle } from '../src/db/sql-session.ts';
 import * as queries from '../src/db/queries.ts';
+import {
+  ARCHIVE_OLD_AUDIT_DELETE,
+  ARCHIVE_OLD_AUDIT_INSERT,
+  auditArchiveCutoff,
+} from '../src/lib/audit-archive.ts';
 import { getPool, redactDatabaseUrl } from './pg.ts';
+
+export interface AuditEventRow {
+  id: number;
+  email: string;
+  action: string;
+  summary: string;
+  created_at: string;
+}
 
 const wasmPath = join(dirname(fileURLToPath(import.meta.url)), '../node_modules/sql.js/dist/sql-wasm.wasm');
 
@@ -337,16 +350,42 @@ async function reloadStructure(client: import('pg').PoolClient): Promise<void> {
   }
 }
 
-export async function listAuditEvents(limit = 100): Promise<{
-  id: number;
-  email: string;
-  action: string;
-  summary: string;
-  created_at: string;
-}[]> {
+export async function archiveOldAuditEvents(now = new Date()): Promise<number> {
+  const cutoff = auditArchiveCutoff(now);
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(ARCHIVE_OLD_AUDIT_INSERT, [cutoff]);
+    const deleted = await client.query(ARCHIVE_OLD_AUDIT_DELETE, [cutoff]);
+    await client.query('COMMIT');
+    return deleted.rowCount ?? 0;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    const message = error instanceof Error ? error.message : 'The audit log could not be archived.';
+    throw new Error(redactDatabaseUrl(message));
+  } finally {
+    client.release();
+  }
+}
+
+export async function listAuditEvents(limit = 100, now = new Date()): Promise<AuditEventRow[]> {
+  await archiveOldAuditEvents(now);
+  const cutoff = auditArchiveCutoff(now);
   const result = await getPool().query(
     `SELECT id, email, action, summary, created_at
      FROM audit_events
+     WHERE created_at >= $1
+     ORDER BY id DESC
+     LIMIT $2`,
+    [cutoff, Math.min(Math.max(limit, 1), 200)],
+  );
+  return result.rows;
+}
+
+export async function listArchivedAuditEvents(limit = 100): Promise<AuditEventRow[]> {
+  const result = await getPool().query(
+    `SELECT id, email, action, summary, created_at
+     FROM audit_events_archive
      ORDER BY id DESC
      LIMIT $1`,
     [Math.min(Math.max(limit, 1), 200)],

@@ -101,12 +101,23 @@ export async function restoreDatabaseBackup(file: Blob): Promise<string | null> 
   return null;
 }
 
-export async function fetchAuditEvents(): Promise<{ id: number; email: string; action: string; summary: string; created_at: string }[]> {
+export type AuditEvent = {
+  id: number;
+  email: string;
+  action: string;
+  summary: string;
+  created_at: string;
+};
+
+export async function fetchAuditEvents(): Promise<{ events: AuditEvent[]; archived: AuditEvent[] }> {
   const token = getStoredToken();
   const headers = new Headers();
   if (token) headers.set('Authorization', `Bearer ${token}`);
   const response = await fetch('/api/production/audit', { headers });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) return [];
-  return Array.isArray(body.events) ? body.events : [];
+  if (!response.ok) return { events: [], archived: [] };
+  return {
+    events: Array.isArray(body.events) ? body.events : [],
+    archived: Array.isArray(body.archived) ? body.archived : [],
+  };
 }

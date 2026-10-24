@@ -74,6 +74,8 @@ import {
   clearProductionData,
   exportProductionBackup,
   initProductionEngine,
+  archiveOldAuditEvents,
+  listArchivedAuditEvents,
   listAuditEvents,
   productionRevision,
   productionSnapshot,
@@ -627,12 +629,16 @@ app.get('/api/production/audit', authMiddleware, adminMiddleware, async (_req, r
     res.status(404).json({ error: 'PostgreSQL is not configured.' });
     return;
   }
-  res.json({ events: await listAuditEvents() });
+  res.json({
+    events: await listAuditEvents(),
+    archived: await listArchivedAuditEvents(),
+  });
 });
 
 async function start() {
   if (usingPostgres()) {
     await migrateDatabase();
+    await archiveOldAuditEvents();
     await initProductionEngine();
   }
   await initializeAuthDatabase();
