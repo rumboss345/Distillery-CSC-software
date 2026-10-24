@@ -73,7 +73,11 @@ export function inventoryUnitsForKind(
   if (!current) return units;
   const canon = canonicalUnit(current);
   if (units.some((unit) => unit.value === canon || unit.value === current)) return units;
-  return [...units, { value: current, label: current }];
+  // Keep a custom count unit (sacks, pails) on Each. Do not carry mass or volume into another kind.
+  if (kind === 'each' && inventoryUnitKind(current) === 'each') {
+    return [...units, { value: current, label: current }];
+  }
+  return units;
 }
 
 /** Keep the current unit when it belongs to the kind, otherwise the kind's default. */
