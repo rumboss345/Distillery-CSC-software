@@ -11,7 +11,6 @@ import {
 import { buildBlendRecipeSnapshot } from '../lib/blend-recipe-version';
 import { isSqliteFile, missingBackupTablesError } from '../lib/database-backup';
 import { buildCscFloorEquipmentRows, CSC_FLOOR_PLAN_SIZE } from '../lib/csc-floor-equipment';
-import { PACKAGING_BOTTLES } from '../lib/packaging-bottles';
 import type { BlendIngredientInput } from '../types';
 import { SCHEMA, SEED_DATA } from './schema';
 import {
@@ -662,7 +661,6 @@ function runMigrations(): void {
 
   migrateInventoryPackageSize();
   migrateFormulationPrecisionColumns();
-  seedPackagingBottles();
   migratePackagingBottleColumn();
   migrateBottlingTankSourceColumns();
   migrateBottlingVolumeVarianceColumns();
@@ -1087,22 +1085,6 @@ function migrateBlendRecipeVersions(): void {
       `INSERT INTO blend_recipe_versions (blend_recipe_id, version_number, snapshot_json, notes)
        VALUES (?, 1, ?, ?)`,
       [recipe.id, JSON.stringify(snapshot), 'Version 1'],
-    );
-  }
-}
-
-function seedPackagingBottles(): void {
-  if (!db) return;
-  db.run(`INSERT OR IGNORE INTO inventory_categories (name) VALUES ('packaging')`);
-  for (const bottle of PACKAGING_BOTTLES) {
-    const exists = queryOne<{ id: number }>(
-      'SELECT id FROM inventory_items WHERE name = ? COLLATE NOCASE AND category = ?',
-      [bottle.name, 'packaging'],
-    );
-    if (exists) continue;
-    db.run(
-      `INSERT INTO inventory_items (name, category, unit, quantity, reorder_level, notes) VALUES (?, 'packaging', 'each', 0, 100, ?)`,
-      [bottle.name, `${bottle.sizeMl} ml bottle`],
     );
   }
 }

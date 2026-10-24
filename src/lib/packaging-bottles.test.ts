@@ -9,20 +9,16 @@ describe('packaging bottle options', () => {
     expect(packagingSizeMlFromText('corks')).toBeNull();
   });
 
-  it('adds packaging inventory bottles that are not on the standard list', () => {
+  it('lists only packaging inventory items', () => {
     const options = packagingBottleOptions([
-      { name: '750mL 7F', notes: '750 ml bottle' },
       { name: '500mL Test Bottle', notes: '' },
       { name: '  House Decanter  ', notes: '700 ml bottle' },
       { name: '500mL Test Bottle', notes: 'duplicate' },
     ]);
-    const names = options.map((bottle) => bottle.name);
-    expect(names.filter((name) => name === '750mL 7F')).toHaveLength(1);
-    expect(names).toContain('500mL Test Bottle');
-    expect(names).toContain('House Decanter');
+    expect(options.map((bottle) => bottle.name)).toEqual(['500mL Test Bottle', 'House Decanter']);
     expect(options.find((bottle) => bottle.name === '500mL Test Bottle')?.sizeMl).toBe(500);
     expect(options.find((bottle) => bottle.name === 'House Decanter')?.sizeMl).toBe(700);
-    expect(names.indexOf('750mL 7F')).toBeLessThan(names.indexOf('500mL Test Bottle'));
+    expect(options.some((bottle) => bottle.name === '750mL 7F')).toBe(false);
   });
 
   it('uses the size entered for a packaging item', () => {
