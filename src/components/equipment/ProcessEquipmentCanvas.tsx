@@ -418,7 +418,7 @@ export function ProcessEquipmentCanvas({
                   title={[
                     visual.name,
                     visual.liquidName,
-                    visual.isWashing || visual.currentVolumeGal > 0
+                    needsCleaning || visual.isWashing || visual.currentVolumeGal > 0
                       ? `${visual.currentVolumeGal.toFixed(1)} gal`
                       : 'Empty',
                     visual.abv != null && visual.abv > 0 ? `${visual.abv.toFixed(1)}% ABV` : null,

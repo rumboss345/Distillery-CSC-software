@@ -48,7 +48,7 @@ describe('buildEquipmentVisualData fermenter est. ABV', () => {
     expect(visual.estimatedAbv).toBeUndefined();
   });
 
-  it('shows 0 gallons while a wash tank is washing', () => {
+  it('shows wash volume while a wash tank is washing', () => {
     const visual = buildEquipmentVisualData(
       fermenterView({
         name: 'Wash tank',
@@ -60,9 +60,26 @@ describe('buildEquipmentVisualData fermenter est. ABV', () => {
       }),
     );
     expect(visual.isWashing).toBe(true);
-    expect(visual.currentVolumeGal).toBe(0);
-    expect(visual.fillPercent).toBe(78);
+    expect(visual.currentVolumeGal).toBe(468);
+    expect(visual.fillPercent).toBeCloseTo((468 / 600) * 100);
     expect(visual.liquidName).toBe('Wash W-2026-002');
+  });
+
+  it('shows 0 gallons while a tank is being cleaned', () => {
+    const visual = buildEquipmentVisualData(
+      fermenterView({
+        name: 'Holding tank',
+        equipment_type: 'holding_tank',
+        status: 'cleaning',
+        capacity_gal: 600,
+        active_volume_gal: 400,
+        active_batch_number: undefined,
+        active_mash_status: undefined,
+      }),
+    );
+    expect(visual.currentVolumeGal).toBe(0);
+    expect(visual.fillPercent).toBe(0);
+    expect(visual.status).toBe('warning');
   });
 
   it('uses a saved icon and otherwise matches the equipment type', () => {

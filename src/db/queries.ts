@@ -6579,7 +6579,7 @@ export function getFloorEquipmentWithContext(planId = 1): FloorEquipmentView[] {
         return {
           ...eq,
           active_batch_number: wash.batch_number,
-          active_volume_gal: 0,
+          active_volume_gal: wash.water_gal,
           active_mash_status: 'mashing',
         };
       }

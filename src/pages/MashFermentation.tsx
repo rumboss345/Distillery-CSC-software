@@ -249,7 +249,10 @@ export function MashFermentation() {
   const washTankPreview = useMemo((): EquipmentVisualData | null => {
     if (form.status !== 'mashing') return null;
     const capacityGal = washTank?.capacity_gal ?? 600;
-    const fillPercent = 78;
+    const volume = form.water_gal > 0 ? form.water_gal : capacityGal * 0.78;
+    const fillPercent = capacityGal > 0
+      ? Math.min(100, (volume / capacityGal) * 100)
+      : 78;
     return {
       id: washTank?.id ?? 0,
       code: 'WASH',
@@ -258,13 +261,13 @@ export function MashFermentation() {
       icon: 'mash_tun',
       typeLabel: 'Wash Tank',
       capacityGal,
-      currentVolumeGal: 0,
+      currentVolumeGal: volume,
       fillPercent,
       status: 'active',
       isWashing: true,
       liquidName: form.batch_number ? `Wash ${form.batch_number}` : 'Washing',
     };
-  }, [form.status, form.batch_number, washTank, key]);
+  }, [form.status, form.batch_number, form.water_gal, washTank, key]);
 
   return (
     <div>
@@ -578,7 +581,7 @@ export function MashFermentation() {
             {washTankPreview && (
               <div className="form-group full-width wash-tank-form-preview">
                 <span className="field-hint" style={{ margin: 0 }}>
-                  Wash tank fill while status is washing — volume reads 0 gal until the wash is in fermenters.
+                  Wash tank fill while status is washing — volume follows batch size.
                 </span>
                 <MashTunVisual data={washTankPreview} size="md" />
               </div>
