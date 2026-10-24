@@ -6416,7 +6416,7 @@ export function getEquipmentVolumeReport(): EquipmentVolumeReport[] {
       };
     }
 
-    if (eq.equipment_type === 'fermenter') {
+    if (eq.equipment_type === 'fermenter' || eq.equipment_type === 'mash_tun') {
       return {
         id: eq.id,
         name: eq.name,

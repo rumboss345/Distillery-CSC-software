@@ -89,7 +89,7 @@ export function buildEquipmentVisualData(
   planName?: string,
 ): EquipmentVisualData {
   const capacityGal = item.capacity_gal > 0 ? item.capacity_gal : (report?.capacity_gal ?? 0);
-  const storedVolumeGal = Math.max(0, report?.volume_gal ?? item.active_volume_gal ?? 0);
+  const storedVolumeGal = Math.max(0, report?.volume_gal ?? 0, item.active_volume_gal ?? 0);
   const isWashing = item.equipment_type === 'mash_tun' && item.active_mash_status === 'mashing';
   const isCleaning = equipmentNeedsCleaning(item);
   const currentVolumeGal = isCleaning ? 0 : storedVolumeGal;
