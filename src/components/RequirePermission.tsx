@@ -1,6 +1,7 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { canAccessPath } from '../lib/permissions';
+import { isAdminRole } from '../lib/roles';
 
 export function RequirePermission() {
   const { user, loading, hasPermission } = useAuth();
@@ -20,7 +21,7 @@ export function RequirePermission() {
   }
 
   if (location.pathname.startsWith('/admin')) {
-    if (user.role !== 'admin') {
+    if (!isAdminRole(user.role)) {
       return <Navigate to="/" replace />;
     }
     return <Outlet />;

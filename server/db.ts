@@ -79,8 +79,12 @@ export function updateUserByAdmin(...args: Parameters<typeof sqliteAuth.updateUs
   return postgres() ? pgAuth.updateUserByAdmin(...args) : Promise.resolve(sqliteAuth.updateUserByAdmin(...args));
 }
 
-export function deleteUserById(id: number) {
-  return postgres() ? pgAuth.deleteUserById(id) : Promise.resolve(sqliteAuth.deleteUserById(id));
+export function deleteUserById(...args: Parameters<typeof sqliteAuth.deleteUserById>) {
+  return postgres() ? pgAuth.deleteUserById(...args) : Promise.resolve(sqliteAuth.deleteUserById(...args));
+}
+
+export function promoteSiteOwner() {
+  return postgres() ? pgAuth.promoteSiteOwner() : Promise.resolve(sqliteAuth.promoteSiteOwner());
 }
 
 export function countAdmins() {

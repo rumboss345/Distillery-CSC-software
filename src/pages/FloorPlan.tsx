@@ -64,7 +64,7 @@ const emptyEquipment = (planId: number, type = 'fermenter'): Omit<FloorEquipment
 
 export function FloorPlanPage() {
   const { user } = useAuth();
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = user?.role === 'admin' || user?.role === 'owner';
   const { key, refresh } = useRefreshKey();
   const plans = getFloorPlans();
   const [searchParams, setSearchParams] = useSearchParams();

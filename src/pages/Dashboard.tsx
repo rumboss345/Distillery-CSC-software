@@ -32,7 +32,7 @@ export function Dashboard() {
         <p>Overview of your distillery operations</p>
       </div>
 
-      {mounted && user && user.role !== 'admin' && user.processAssignments.length > 0 && (
+      {mounted && user && user.role === 'user' && user.processAssignments.length > 0 && (
         <div className="card" style={{ marginBottom: '1rem' }}>
           <h3 className="section-title" style={{ marginTop: 0 }}>My process assignments</h3>
           <ul style={{ margin: 0, paddingLeft: '1.25rem' }}>

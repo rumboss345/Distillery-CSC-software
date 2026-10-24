@@ -23,7 +23,7 @@ export async function migrateDatabase(): Promise<void> {
           email TEXT NOT NULL,
           password_hash TEXT NOT NULL,
           name TEXT,
-          role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('admin', 'user')),
+          role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('owner', 'admin', 'user')),
           status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
           approval_token TEXT UNIQUE,
           created_at TEXT NOT NULL DEFAULT to_char(CURRENT_TIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')
@@ -98,6 +98,17 @@ export async function migrateDatabase(): Promise<void> {
         )
       `);
       await client.query(`INSERT INTO schema_migrations (version) VALUES ('002')`);
+    }
+    const ownerMigration = await client.query('SELECT version FROM schema_migrations WHERE version = $1', ['003']);
+    if (ownerMigration.rowCount === 0) {
+      await client.query(`ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check`);
+      await client.query(`ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('owner', 'admin', 'user'))`);
+      await client.query(`
+        UPDATE users
+        SET role = 'owner', status = 'approved', approval_token = NULL
+        WHERE lower(email) = 'nelson@rum.ky'
+      `);
+      await client.query(`INSERT INTO schema_migrations (version) VALUES ('003')`);
     }
     await client.query(`
       INSERT INTO inventory_categories (name)

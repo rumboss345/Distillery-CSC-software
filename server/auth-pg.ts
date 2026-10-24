@@ -11,8 +11,19 @@ import {
 } from './permissions.js';
 import type { ProcessAssignmentEntry, PublicUser, User, UserRole } from './auth-sqlite.js';
 import { getPool } from './pg.js';
+import {
+  LAST_OWNER_ERROR,
+  OWNER_CREATE_ERROR,
+  OWNER_REMOVE_ERROR,
+  OWNER_RESET_ADMIN_ERROR,
+  isAdminRole,
+  isOwnerRole,
+  isSiteOwnerEmail,
+  siteOwnerEmail,
+} from '../src/lib/roles.ts';
 
-function restoredFromSettings(email: string): boolean {
+function restoredFromSettings(email: string, role: UserRole): boolean {
+  if (isOwnerRole(role) || isSiteOwnerEmail(email)) return false;
   const configured = process.env.ADMIN_EMAIL?.trim().toLowerCase();
   return Boolean(configured && email.toLowerCase() === configured);
 }
@@ -91,8 +102,8 @@ export async function setUserProcessAssignments(userId: number, stages: ProcessS
 }
 
 export async function publicUser(user: User): Promise<PublicUser> {
-  const permissions = user.role === 'admin' ? [...DEFAULT_USER_PERMISSIONS] : await getUserPermissions(user.id);
-  const processAssignments = user.role === 'admin'
+  const permissions = isAdminRole(user.role) ? [...DEFAULT_USER_PERMISSIONS] : await getUserPermissions(user.id);
+  const processAssignments = isAdminRole(user.role)
     ? sanitizeProcessStages([...PROCESS_STAGE_KEYS])
     : await getUserProcessAssignments(user.id);
   return {
@@ -104,7 +115,7 @@ export async function publicUser(user: User): Promise<PublicUser> {
     created_at: user.created_at,
     permissions,
     processAssignments,
-    restoredFromSettings: restoredFromSettings(user.email),
+    restoredFromSettings: restoredFromSettings(user.email, user.role),
   };
 }
 
@@ -128,20 +139,26 @@ export async function createUserByAdmin(
   permissions: PermissionKey[],
   processAssignments: ProcessStageKey[],
   role: UserRole = 'user',
+  actorRole: UserRole = 'admin',
 ): Promise<User> {
   const normalized = email.toLowerCase();
   if (await getUserByEmail(normalized)) throw new Error('An account with this email already exists');
-  const isAdmin = role === 'admin';
+  let storedRole: UserRole = role === 'owner' ? 'owner' : role === 'admin' ? 'admin' : 'user';
+  if (isSiteOwnerEmail(normalized)) storedRole = 'owner';
+  if (storedRole === 'owner' && !isOwnerRole(actorRole) && !isSiteOwnerEmail(normalized)) {
+    throw new Error(OWNER_CREATE_ERROR);
+  }
+  const fullAccess = isAdminRole(storedRole);
   const passwordHash = bcrypt.hashSync(password, 12);
   const result = await getPool().query(
     `INSERT INTO users (email, password_hash, name, role, status, approval_token)
      VALUES ($1, $2, $3, $4, 'approved', NULL)
      RETURNING id`,
-    [normalized, passwordHash, name, isAdmin ? 'admin' : 'user'],
+    [normalized, passwordHash, name, storedRole],
   );
   const user = (await getUserById(Number(result.rows[0].id)))!;
-  await setUserPermissions(user.id, isAdmin ? [...DEFAULT_USER_PERMISSIONS] : permissions);
-  await setUserProcessAssignments(user.id, isAdmin ? [...PROCESS_STAGE_KEYS] : processAssignments);
+  await setUserPermissions(user.id, fullAccess ? [...DEFAULT_USER_PERMISSIONS] : permissions);
+  await setUserProcessAssignments(user.id, fullAccess ? [...PROCESS_STAGE_KEYS] : processAssignments);
   return user;
 }
 
@@ -153,9 +170,13 @@ export async function updateUserByAdmin(
     processAssignments?: ProcessStageKey[];
     password?: string;
   },
+  actorRole: UserRole = 'admin',
 ): Promise<User | null> {
   const user = await getUserById(id);
   if (!user) return null;
+  if (updates.password && isAdminRole(user.role) && !isOwnerRole(actorRole)) {
+    throw new Error(OWNER_RESET_ADMIN_ERROR);
+  }
   if (updates.name !== undefined) {
     await getPool().query('UPDATE users SET name = $1 WHERE id = $2', [updates.name, id]);
   }
@@ -164,16 +185,28 @@ export async function updateUserByAdmin(
     await getPool().query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, id]);
     await getPool().query('DELETE FROM password_reset_tokens WHERE user_id = $1', [id]);
   }
-  if (user.role !== 'admin') {
+  if (!isAdminRole(user.role)) {
     if (updates.permissions) await setUserPermissions(id, updates.permissions);
     if (updates.processAssignments) await setUserProcessAssignments(id, updates.processAssignments);
   }
   return (await getUserById(id)) ?? null;
 }
 
-export async function deleteUserById(id: number): Promise<{ ok: true } | { ok: false; reason: string }> {
+export async function countOwners(): Promise<number> {
+  const result = await getPool().query(`SELECT COUNT(*)::int AS count FROM users WHERE role = 'owner'`);
+  return Number(result.rows[0].count);
+}
+
+export async function deleteUserById(
+  id: number,
+  actorRole: UserRole = 'admin',
+): Promise<{ ok: true } | { ok: false; reason: string }> {
   const user = await getUserById(id);
   if (!user) return { ok: false, reason: 'User not found' };
+  if (user.role === 'owner') {
+    if (!isOwnerRole(actorRole)) return { ok: false, reason: OWNER_REMOVE_ERROR };
+    if ((await countOwners()) <= 1) return { ok: false, reason: LAST_OWNER_ERROR };
+  }
   await getPool().query('DELETE FROM password_reset_tokens WHERE user_id = $1', [id]);
   await getPool().query('DELETE FROM user_permissions WHERE user_id = $1', [id]);
   await getPool().query('DELETE FROM user_process_assignments WHERE user_id = $1', [id]);
@@ -199,7 +232,7 @@ export async function approveUserByToken(token: string): Promise<User | null> {
 
 export async function approveUserById(id: number): Promise<User | null> {
   const user = await getUserById(id);
-  if (!user || user.role === 'admin' || user.status !== 'pending') return null;
+  if (!user || isAdminRole(user.role) || user.status !== 'pending') return null;
   await getPool().query(`UPDATE users SET status = 'approved', approval_token = NULL WHERE id = $1`, [id]);
   const approved = (await getUserById(id))!;
   if ((await getUserPermissions(approved.id)).length === 0) {
@@ -210,7 +243,7 @@ export async function approveUserById(id: number): Promise<User | null> {
 
 export async function rejectUserById(id: number): Promise<User | null> {
   const user = await getUserById(id);
-  if (!user || user.role === 'admin' || user.status !== 'pending') return null;
+  if (!user || isAdminRole(user.role) || user.status !== 'pending') return null;
   await getPool().query(`UPDATE users SET status = 'rejected', approval_token = NULL WHERE id = $1`, [id]);
   return (await getUserById(id)) ?? null;
 }
@@ -224,7 +257,10 @@ export async function listPendingUsers(): Promise<PublicUser[]> {
 }
 
 export async function listAllUsers(): Promise<PublicUser[]> {
-  const result = await getPool().query(`SELECT * FROM users ORDER BY role DESC, email ASC`);
+  const result = await getPool().query(
+    `SELECT * FROM users
+     ORDER BY CASE role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END, lower(email)`,
+  );
   const users = result.rows.map((row) => mapUser(row)!);
   return Promise.all(users.map((user) => publicUser(user)));
 }
@@ -261,23 +297,42 @@ export async function listProcessAssignmentsByStage(): Promise<Record<string, Pr
   return map;
 }
 
+export async function promoteSiteOwner(): Promise<void> {
+  await getPool().query(
+    `UPDATE users
+     SET role = 'owner', status = 'approved', approval_token = NULL
+     WHERE lower(email) = lower($1)`,
+    [siteOwnerEmail()],
+  );
+}
+
 export async function resetAdminAccount(email: string, password: string, name = 'Admin'): Promise<void> {
   const normalized = email.toLowerCase();
-  const passwordHash = bcrypt.hashSync(password, 12);
-  const existing = await getPool().query('SELECT id FROM users WHERE lower(email) = lower($1)', [normalized]);
-  if (existing.rows[0]) {
+  const existing = await getUserByEmail(normalized);
+  if (existing && (isOwnerRole(existing.role) || isSiteOwnerEmail(normalized))) {
     await getPool().query(
       `UPDATE users
-       SET password_hash = $1, role = 'admin', status = 'approved', approval_token = NULL, name = $2
-       WHERE id = $3`,
-      [passwordHash, name, existing.rows[0].id],
+       SET role = 'owner', status = 'approved', approval_token = NULL
+       WHERE id = $1`,
+      [existing.id],
+    );
+    return;
+  }
+  const passwordHash = bcrypt.hashSync(password, 12);
+  const storedRole: UserRole = isSiteOwnerEmail(normalized) ? 'owner' : 'admin';
+  if (existing) {
+    await getPool().query(
+      `UPDATE users
+       SET password_hash = $1, role = $2, status = 'approved', approval_token = NULL, name = $3
+       WHERE id = $4`,
+      [passwordHash, storedRole, name, existing.id],
     );
     return;
   }
   await getPool().query(
     `INSERT INTO users (email, password_hash, name, role, status, approval_token)
-     VALUES ($1, $2, $3, 'admin', 'approved', NULL)`,
-    [normalized, passwordHash, name],
+     VALUES ($1, $2, $3, $4, 'approved', NULL)`,
+    [normalized, passwordHash, name, storedRole],
   );
 }
 
@@ -293,12 +348,13 @@ export async function syncAdminFromEnv(): Promise<void> {
     return;
   }
   await resetAdminAccount(adminEmail, adminPassword);
+  await promoteSiteOwner();
   console.log(`Admin account synced for ${adminEmail}`);
 }
 
 export async function createPasswordResetToken(email: string): Promise<string | null> {
   const user = await getUserByEmail(email);
-  if (!user || user.status !== 'approved') return null;
+  if (!user || user.status !== 'approved' || isAdminRole(user.role)) return null;
   const issued = newResetToken();
   const client = await getPool().connect();
   try {
@@ -327,6 +383,11 @@ export async function resetPasswordWithToken(token: string, password: string): P
   const row = found.rows[0] as { user_id: number; expires_at: string } | undefined;
   if (!row || resetTokenExpired(String(row.expires_at))) {
     if (row) await getPool().query('DELETE FROM password_reset_tokens WHERE token_hash = $1', [tokenHash]);
+    return false;
+  }
+  const target = await getUserById(Number(row.user_id));
+  if (!target || isAdminRole(target.role)) {
+    await getPool().query('DELETE FROM password_reset_tokens WHERE token_hash = $1', [tokenHash]);
     return false;
   }
   const passwordHash = bcrypt.hashSync(password, 12);

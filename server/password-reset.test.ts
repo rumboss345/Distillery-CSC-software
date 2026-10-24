@@ -103,7 +103,7 @@ describe('sqlite password reset', () => {
     expect(bcrypt.compareSync('AdminSetPass1', auth.getUserByEmail(employee.email)!.password_hash)).toBe(true);
   });
 
-  it('lets an administrator reset another administrator password and remove that account', () => {
+  it('lets only an owner reset an administrator password or create another owner', () => {
     const other = auth.createUserByAdmin(
       'other.admin@csc.test',
       ORIGINAL_PASSWORD,
@@ -113,23 +113,46 @@ describe('sqlite password reset', () => {
       'admin',
     );
     const before = auth.getUserPermissions(other.id);
+    expect(() => auth.updateUserByAdmin(other.id, { password: 'OtherAdmin9' }, 'admin')).toThrow(
+      'Only an owner can reset an administrator password.',
+    );
+    expect(bcrypt.compareSync(ORIGINAL_PASSWORD, auth.getUserById(other.id)!.password_hash)).toBe(true);
+    expect(auth.createPasswordResetToken(other.email)).toBeNull();
+
+    const owner = auth.createUserByAdmin(
+      'nelson@rum.ky',
+      'OwnerPass12',
+      'Nelson',
+      [],
+      [],
+      'admin',
+    );
+    expect(owner.role).toBe('owner');
     const saved = auth.updateUserByAdmin(other.id, {
       password: 'OtherAdmin9',
       permissions: ['inventory'],
-    });
+    }, 'owner');
     expect(saved?.role).toBe('admin');
     expect(bcrypt.compareSync('OtherAdmin9', auth.getUserById(other.id)!.password_hash)).toBe(true);
     expect(auth.getUserPermissions(other.id)).toEqual(before);
 
+    expect(() => auth.createUserByAdmin('second.owner@csc.test', 'OwnerPass12', 'Second', [], [], 'owner', 'admin'))
+      .toThrow('Only an owner can create another owner.');
+    const second = auth.createUserByAdmin('second.owner@csc.test', 'OwnerPass12', 'Second', [], [], 'owner', 'owner');
+    expect(second.role).toBe('owner');
+
     const previous = process.env.ADMIN_EMAIL;
-    process.env.ADMIN_EMAIL = other.email;
-    expect(auth.publicUser(auth.getUserById(other.id)!).restoredFromSettings).toBe(true);
+    process.env.ADMIN_EMAIL = owner.email;
+    expect(auth.publicUser(auth.getUserById(owner.id)!).restoredFromSettings).toBe(false);
+    auth.resetAdminAccount(owner.email, 'ShouldNotReplace1');
+    expect(bcrypt.compareSync('OwnerPass12', auth.getUserById(owner.id)!.password_hash)).toBe(true);
+    expect(auth.getUserById(owner.id)!.role).toBe('owner');
     if (previous === undefined) delete process.env.ADMIN_EMAIL;
     else process.env.ADMIN_EMAIL = previous;
-    expect(auth.publicUser(auth.getUserById(other.id)!).restoredFromSettings).toBe(false);
 
     expect(auth.deleteUserById(other.id)).toEqual({ ok: true });
-    expect(auth.getUserById(other.id)).toBeUndefined();
+    expect(auth.deleteUserById(second.id, 'owner')).toEqual({ ok: true });
+    expect(auth.deleteUserById(owner.id, 'owner')).toEqual({ ok: false, reason: 'Keep at least one owner.' });
   });
 });
 
@@ -159,7 +182,7 @@ describe('postgres password reset', () => {
 
   it('stores reset links in PostgreSQL and applies migration 002 once', async () => {
     const versions = await pg.getPool().query(`SELECT version FROM schema_migrations ORDER BY version`);
-    expect(versions.rows.map((row) => row.version)).toEqual(['001', '002']);
+    expect(versions.rows.map((row) => row.version)).toEqual(['001', '002', '003']);
     const employee = await auth.createUserByAdmin(
       'casey.lee@csc.test',
       ORIGINAL_PASSWORD,
@@ -184,7 +207,7 @@ describe('postgres password reset', () => {
     expect(sample.rows[0].count).toBe(0);
   });
 
-  it('lets an administrator reset another administrator password and remove that account', async () => {
+  it('lets only an owner reset an administrator password or create another owner', async () => {
     const other = await auth.createUserByAdmin(
       'other.admin@csc.test',
       ORIGINAL_PASSWORD,
@@ -194,15 +217,39 @@ describe('postgres password reset', () => {
       'admin',
     );
     const before = await auth.getUserPermissions(other.id);
+    await expect(auth.updateUserByAdmin(other.id, { password: 'OtherAdmin9' }, 'admin')).rejects.toThrow(
+      'Only an owner can reset an administrator password.',
+    );
+    expect(await auth.createPasswordResetToken(other.email)).toBeNull();
+
+    const owner = await auth.createUserByAdmin(
+      'nelson@rum.ky',
+      'OwnerPass12',
+      'Nelson',
+      [],
+      [],
+      'admin',
+    );
+    expect(owner.role).toBe('owner');
     const saved = await auth.updateUserByAdmin(other.id, {
       password: 'OtherAdmin9',
       permissions: ['inventory'],
-    });
+    }, 'owner');
     expect(saved?.role).toBe('admin');
     const stored = (await auth.getUserById(other.id))!;
     expect(bcrypt.compareSync('OtherAdmin9', stored.password_hash)).toBe(true);
     expect(await auth.getUserPermissions(other.id)).toEqual(before);
+
+    await expect(auth.createUserByAdmin('second.owner@csc.test', 'OwnerPass12', 'Second', [], [], 'owner', 'admin'))
+      .rejects.toThrow('Only an owner can create another owner.');
+    const second = await auth.createUserByAdmin('second.owner@csc.test', 'OwnerPass12', 'Second', [], [], 'owner', 'owner');
+    expect(second.role).toBe('owner');
+
+    await auth.resetAdminAccount(owner.email, 'ShouldNotReplace1');
+    expect(bcrypt.compareSync('OwnerPass12', (await auth.getUserById(owner.id))!.password_hash)).toBe(true);
+
     expect(await auth.deleteUserById(other.id)).toEqual({ ok: true });
-    expect(await auth.getUserById(other.id)).toBeUndefined();
+    expect(await auth.deleteUserById(second.id, 'owner')).toEqual({ ok: true });
+    expect(await auth.deleteUserById(owner.id, 'owner')).toEqual({ ok: false, reason: 'Keep at least one owner.' });
   });
 });

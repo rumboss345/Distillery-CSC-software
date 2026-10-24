@@ -1,4 +1,5 @@
 import type { PermissionKey, ProcessStageKey } from './permissions';
+import type { AuthRole } from './roles';
 
 const TOKEN_KEY = 'distillery-tracker-auth-token';
 
@@ -6,7 +7,7 @@ export interface AuthUser {
   id: number;
   email: string;
   name: string | null;
-  role: 'admin' | 'user';
+  role: AuthRole;
   status: 'pending' | 'approved' | 'rejected';
   created_at: string;
   permissions: PermissionKey[];
@@ -134,7 +135,7 @@ export async function createAdminUser(payload: {
   name?: string;
   permissions: PermissionKey[];
   processAssignments: ProcessStageKey[];
-  role?: 'admin' | 'user';
+  role?: AuthRole;
 }) {
   return apiFetch<{ message: string; user: AuthUser }>('/api/admin/users', {
     method: 'POST',
