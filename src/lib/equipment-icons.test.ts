@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { equipmentIconShowsVolume, resolveEquipmentIcon } from './equipment';
+import { applyEquipmentIconPick, equipmentIconShowsVolume, resolveEquipmentIcon } from './equipment';
 
 describe('equipment icons', () => {
   it('keeps a chosen picture, otherwise uses the equipment type', () => {
@@ -8,6 +8,21 @@ describe('equipment icons', () => {
     expect(resolveEquipmentIcon('hose', 'holding_tank')).toBe('hose');
     expect(resolveEquipmentIcon('', 'Gin basket')).toBe('other');
     expect(resolveEquipmentIcon('pot_still', 'Gin basket')).toBe('pot_still');
+  });
+
+  it('lets the picture differ from the equipment type', () => {
+    const form = applyEquipmentIconPick({
+      name: 'F1',
+      equipment_type: 'fermenter',
+      icon: 'fermenter',
+    }, 'pot_still');
+    expect(form.equipment_type).toBe('fermenter');
+    expect(form.icon).toBe('pot_still');
+    expect(applyEquipmentIconPick(form, 'jug')).toEqual({
+      name: 'F1',
+      equipment_type: 'fermenter',
+      icon: 'jug',
+    });
   });
 
   it('shows a fill level for tanks, fermenters, wash tanks, and stills', () => {
