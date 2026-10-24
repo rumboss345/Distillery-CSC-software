@@ -6570,11 +6570,23 @@ export function getFloorEquipmentWithContext(planId = 1): FloorEquipmentView[] {
         active_liquid_name: productName ?? distilled ?? undefined,
       };
     }
-    if (eq.equipment_type === 'mash_tun' && eq.linked_mash_batch_id) {
-      const wash = queryOne<{ batch_number: string; water_gal: number; status: string }>(
-        'SELECT batch_number, water_gal, status FROM mash_batches WHERE id = ?',
-        [eq.linked_mash_batch_id],
-      );
+    if (eq.equipment_type === 'mash_tun') {
+      let wash = eq.linked_mash_batch_id
+        ? queryOne<{ batch_number: string; water_gal: number; status: string }>(
+          'SELECT batch_number, water_gal, status FROM mash_batches WHERE id = ?',
+          [eq.linked_mash_batch_id],
+        )
+        : null;
+      if (wash?.status !== 'mashing') {
+        const primary = getPrimaryWashTank();
+        if (primary && primary.id === eq.id) {
+          wash = queryOne<{ batch_number: string; water_gal: number; status: string }>(
+            `SELECT batch_number, water_gal, status FROM mash_batches
+             WHERE status = 'mashing'
+             ORDER BY id DESC LIMIT 1`,
+          );
+        }
+      }
       if (wash?.status === 'mashing') {
         return {
           ...eq,

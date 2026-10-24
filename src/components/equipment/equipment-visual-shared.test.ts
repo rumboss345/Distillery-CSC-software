@@ -92,6 +92,23 @@ describe('buildEquipmentVisualData fermenter est. ABV', () => {
     expect(visual.liquidName).toBe('Wash W-2026-003');
   });
 
+  it('shows wash volume while washing even if the tank is marked for cleaning', () => {
+    const visual = buildEquipmentVisualData(
+      fermenterView({
+        name: 'Wash tank',
+        equipment_type: 'mash_tun',
+        status: 'cleaning',
+        capacity_gal: 2000,
+        active_volume_gal: 500,
+        active_mash_status: 'mashing',
+        active_batch_number: 'W-2026-004',
+      }),
+    );
+    expect(visual.isWashing).toBe(true);
+    expect(visual.currentVolumeGal).toBe(500);
+    expect(visual.fillPercent).toBeCloseTo((500 / 2000) * 100);
+  });
+
   it('shows 0 gallons while a tank is being cleaned', () => {
     const visual = buildEquipmentVisualData(
       fermenterView({

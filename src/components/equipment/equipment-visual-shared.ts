@@ -92,7 +92,7 @@ export function buildEquipmentVisualData(
   const storedVolumeGal = Math.max(0, report?.volume_gal ?? 0, item.active_volume_gal ?? 0);
   const isWashing = item.equipment_type === 'mash_tun' && item.active_mash_status === 'mashing';
   const isCleaning = equipmentNeedsCleaning(item);
-  const currentVolumeGal = isCleaning ? 0 : storedVolumeGal;
+  const currentVolumeGal = isWashing ? storedVolumeGal : (isCleaning ? 0 : storedVolumeGal);
   const fillPercent = capacityGal > 0
     ? Math.min(100, (currentVolumeGal / capacityGal) * 100)
     : (currentVolumeGal > 0 ? 100 : 0);
