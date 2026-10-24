@@ -89,12 +89,13 @@ export function buildEquipmentVisualData(
   planName?: string,
 ): EquipmentVisualData {
   const capacityGal = item.capacity_gal > 0 ? item.capacity_gal : (report?.capacity_gal ?? 0);
-  const currentVolumeGal = Math.max(0, report?.volume_gal ?? item.active_volume_gal ?? 0);
+  const storedVolumeGal = Math.max(0, report?.volume_gal ?? item.active_volume_gal ?? 0);
+  const isWashing = item.equipment_type === 'mash_tun' && item.active_mash_status === 'mashing';
+  const isCleaning = equipmentNeedsCleaning(item);
+  const currentVolumeGal = isCleaning ? 0 : storedVolumeGal;
   const fillPercent = capacityGal > 0
     ? Math.min(100, (currentVolumeGal / capacityGal) * 100)
     : (currentVolumeGal > 0 ? 100 : 0);
-
-  const isWashing = item.equipment_type === 'mash_tun' && item.active_mash_status === 'mashing';
 
   let liquidName = report?.detail || undefined;
   if (!liquidName && item.active_batch_number) {
@@ -112,7 +113,7 @@ export function buildEquipmentVisualData(
     liquidName = item.notes;
   }
 
-  const visualFillPercent = isWashing && fillPercent <= 0
+  const visualFillPercent = !isCleaning && isWashing && fillPercent <= 0
     ? 78
     : fillPercent;
 

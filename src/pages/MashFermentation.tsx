@@ -267,7 +267,7 @@ export function MashFermentation() {
       isWashing: true,
       liquidName: form.batch_number ? `Wash ${form.batch_number}` : 'Washing',
     };
-  }, [form.status, form.water_gal, form.batch_number, washTank, key]);
+  }, [form.status, form.batch_number, form.water_gal, washTank, key]);
 
   return (
     <div>
@@ -581,7 +581,7 @@ export function MashFermentation() {
             {washTankPreview && (
               <div className="form-group full-width wash-tank-form-preview">
                 <span className="field-hint" style={{ margin: 0 }}>
-                  Wash tank fill while status is washing (also shown on Equipment process view after save).
+                  Wash tank fill while status is washing — volume follows batch size.
                 </span>
                 <MashTunVisual data={washTankPreview} size="md" />
               </div>
