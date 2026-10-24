@@ -692,13 +692,6 @@ export function Bottling() {
               {sourceType === 'tank' && selectedTankContents && form.product_name.trim() === selectedTankContents.trim() && (
                 <span className="field-hint">Taken from what is in the source holding tank.</span>
               )}
-              {isRumBottling ? (
-                <span className="field-hint">
-                  Rum product — pick bottle styles from the list, set size (ml), and enter counts. Matching packaging inventory is reduced when you save.
-                </span>
-              ) : (
-                <span className="field-hint">Include &quot;Rum&quot; in the name for rum bottling (bottle dropdown + size). Inventory is reduced for selected SKUs on save.</span>
-              )}
             </div>
             <div className="form-group">
               <label>Lot Number</label>
