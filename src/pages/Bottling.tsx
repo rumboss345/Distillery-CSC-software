@@ -795,8 +795,8 @@ export function Bottling() {
               </div>
               <p className="field-hint">
                 {isRumBottling
-                  ? 'Select each bottle style, confirm size (ml), and enter how many you bottled (packaging stock is deducted on save).'
-                  : 'Bottle different sizes from the same tank in one run. Packaging inventory is deducted on save.'}
+                  ? 'Choose bottles from Inventory → Packaging, confirm size (ml), and enter how many you bottled (stock is deducted on save).'
+                  : 'Bottle different sizes from the same tank in one run. The list is Inventory → Packaging items; stock is deducted on save.'}
               </p>
               {lines.map((line, index) => {
                 const lineGal = lineVolumeGal(line);
