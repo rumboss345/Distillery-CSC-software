@@ -30,7 +30,6 @@ import {
   CALENDAR_KIND_LABELS,
   CALENDAR_PROGRESS_LABELS,
   calendarEventPath,
-  calendarProgress,
   eventEndDate,
   eventOccursOnDate,
   filterCalendarEvents,
@@ -83,10 +82,7 @@ export function Calendar() {
     [selectedDate, sharedKey],
   );
   const filteredEvents = useMemo(
-    () => [
-      ...filterCalendarEvents(allEvents, enabledKinds, enabledProgress),
-      ...cleaningEvents.filter((event) => enabledProgress.has(calendarProgress(event.statusCategory))),
-    ],
+    () => filterCalendarEvents([...allEvents, ...cleaningEvents], enabledKinds, enabledProgress),
     [allEvents, cleaningEvents, enabledKinds, enabledProgress],
   );
   const monthStart = startOfMonth(anchorDate);
