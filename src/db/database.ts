@@ -1797,6 +1797,7 @@ async function loadDatabase(): Promise<Database> {
       revision: () => serverRevision,
       apply: (snapshot, revision) => applyPostgresSnapshot(snapshot, revision, true),
       notify: (message) => setSharedNotice(message),
+      dismiss: () => setSharedNotice(null),
     });
     setProductionMutationRedirect((name, args) => invokeProductionMutation(name, args));
     suspendPush = true;

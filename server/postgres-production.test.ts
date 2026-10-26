@@ -485,6 +485,165 @@ describe('PostgreSQL production modules', () => {
     expect(await rowRevision('inventory_items', sugar.id)).toBe(sugarRev);
   });
 
+  it('lets any new blend recipe finish wizard steps after an unrelated edit', async () => {
+    const spiritId = engine.readProduction((api) => api.getFloorEquipment().find((item) => item.name === 'Spirit Tank'))?.id;
+    const destId = engine.readProduction((api) => api.getFloorEquipment().find((item) => item.name === 'Tank A'))?.id;
+    if (!spiritId || !destId) throw new Error('Spirit tank is missing');
+
+    const sugar = engine.readProduction((api) => api.getInventoryItems().find((item) => item.name === 'Test Sugar'));
+    if (!sugar) throw new Error('Test Sugar is missing');
+    const sugarEdit = { ...sugar, quantity: sugar.quantity };
+    delete (sugarEdit as { id?: number }).id;
+    delete (sugarEdit as { created_at?: string }).created_at;
+    delete (sugarEdit as { updated_at?: string }).updated_at;
+
+    const water = {
+      ingredient_type: 'water',
+      name: 'Proofing water',
+      amount: 40.5,
+      unit: 'gal',
+      abv: null,
+      notes: '',
+    };
+    const caneSugar = {
+      ingredient_type: 'sugar',
+      name: 'Cane sugar',
+      amount: 2.25,
+      unit: 'lbs',
+      abv: null,
+      notes: '',
+    };
+    const vanilla = {
+      ingredient_type: 'flavoring',
+      name: 'Vanilla',
+      amount: 0.15,
+      unit: 'lbs',
+      abv: 35.2,
+      notes: '',
+    };
+
+    const specs = [
+      {
+        name: 'White Rum House',
+        source_type: 'tank',
+        via: 'saveBlendRecipe' as const,
+        ingredients: [water],
+      },
+      {
+        name: 'Spiced Barrel Pull',
+        source_type: 'barrel',
+        via: 'saveBlendRecipe' as const,
+        ingredients: [water, caneSugar, vanilla],
+      },
+      {
+        name: 'Gold Blend Draft',
+        source_type: 'tank',
+        via: 'saveBlendRecipeFromWizard' as const,
+        ingredients: [water, caneSugar],
+      },
+    ];
+
+    for (const [index, spec] of specs.entries()) {
+      const recipeSources = [{
+        spirit_label: 'High wines',
+        volume_gal: 80.123456,
+        abv: 75.4,
+      }];
+      const pullSources = [{
+        holding_tank_equipment_id: spiritId,
+        barrel_id: null,
+        volume_gal: 80.123456,
+        abv: 75.4,
+      }];
+
+      const created = spec.via === 'saveBlendRecipeFromWizard'
+        ? await save('saveBlendRecipeFromWizard', [
+          spec.name,
+          {
+            product_name: spec.name,
+            target_abv: 40 + index,
+            target_brix: 0.1 * index,
+            scale_factor: 1,
+            notes: 'Created during blending',
+          },
+          pullSources,
+          spec.ingredients,
+        ])
+        : await save('saveBlendRecipe', [{
+          name: spec.name,
+          product_name: spec.name,
+          target_abv: 40 + index,
+          target_brix: 0.1 * index,
+          target_sugar_g_per_l: null,
+          target_volume_gal: 100 + index,
+          scale_factor: 1,
+          source_type: spec.source_type,
+          notes: 'Not in the starter list',
+        }, recipeSources, spec.ingredients]);
+
+      const recipeId = Number(created.result);
+      expect(recipeId, spec.name).toBeGreaterThan(0);
+      expect(engine.readProduction((api) => api.getBlendRecipes().some((row) => row.id === recipeId))).toBe(true);
+      const versionId = engine.readProduction((api) => api.getBlendRecipeVersions(recipeId)[0]?.id ?? null);
+      const afterCreateRev = engine.productionRevision();
+
+      await save('saveInventoryItem', [sugarEdit, sugar.id]);
+
+      const formula = (status: string) => ({
+        batch_number: `BL-NEW-${index + 1}`,
+        product_name: spec.name,
+        source_holding_tank_equipment_id: spiritId,
+        base_spirit_volume_gal: 80.123456,
+        base_spirit_abv: 75.4,
+        blend_date: '2026-10-26',
+        target_abv: 40 + index,
+        target_brix: 0.1 * index,
+        scale_factor: 1,
+        formula_version: 1,
+        formulation_phase: status === 'trial' ? 'trial' : 'theoretical',
+        theoretical_volume_gal: 120.987654,
+        theoretical_abv: 62.501234,
+        theoretical_density: 0.891234,
+        theoretical_brix: 0.249999,
+        actual_volume_gal: status === 'trial' ? 119.5 : null,
+        actual_weight_lbs: null,
+        actual_abv: status === 'trial' ? 62.4 : null,
+        actual_density: null,
+        actual_brix: null,
+        status,
+        output_holding_tank_equipment_id: status === 'approved' ? destId : null,
+        blend_recipe_id: recipeId,
+        blend_recipe_version_id: versionId,
+        assigned_user_id: 1,
+        assigned_user_name: 'Administrator',
+        notes: spec.name,
+      });
+
+      const draft = await save('saveBlendFormula', [formula('draft'), pullSources, spec.ingredients], afterCreateRev);
+      const blendId = Number(draft.result);
+      expect(blendId, spec.name).toBeGreaterThan(0);
+      const draftRev = engine.productionRevision();
+      const blendRowRev = await rowRevision('blend_products', blendId);
+
+      await save('saveInventoryItem', [sugarEdit, sugar.id]);
+      expect(await rowRevision('blend_products', blendId), spec.name).toBe(blendRowRev);
+
+      await expect(save('saveBlendFormula', [
+        formula('trial'),
+        pullSources,
+        spec.ingredients,
+        blendId,
+      ], draftRev), spec.name).resolves.toMatchObject({ result: blendId });
+
+      await expect(save('saveBlendFormula', [
+        formula('approved'),
+        pullSources,
+        spec.ingredients,
+        blendId,
+      ]), spec.name).resolves.toMatchObject({ result: blendId });
+    }
+  });
+
   it('deletes a blend recipe that still has spirit pulls, additives, and a linked batch', async () => {
     const recipe = engine.readProduction((api) => api.getBlendRecipes().find((row) => row.name === 'Test Blend Recipe'));
     const product = engine.readProduction((api) => api.getBlendProducts().find((row) => row.batch_number === 'BL-TEST-001'));
