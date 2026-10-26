@@ -593,7 +593,7 @@ app.post('/api/production/mutate', authMiddleware, async (req, res) => {
   }
   try {
     const saved = await runProductionMutation(name, args, { id: req.user!.id, email: req.user!.email }, baseRevision);
-    res.json(saved);
+    res.json({ ...saved, database: saved.snapshot });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'The change could not be saved.';
     const status = error instanceof ProductionConflict ? 409 : 400;

@@ -8,6 +8,7 @@ import { SCHEMA } from '../src/db/schema';
 import { userMayMutate } from '../src/db/production-catalog';
 import { formatAuditTimestamp } from '../src/lib/audit-archive';
 import { ML_PER_GALLON } from '../src/types';
+import { mutationSnapshot } from '../src/db/production-client';
 
 const LOCAL_URL = 'postgres://distillery:distillery@127.0.0.1:5432/distillery_pg_test';
 const SAMPLE_BATCHES = ['M-2025-001', 'M-2025-002', 'D-2025-001', 'BT-2024-012'];
@@ -641,6 +642,176 @@ describe('PostgreSQL production modules', () => {
         spec.ingredients,
         blendId,
       ]), spec.name).resolves.toMatchObject({ result: blendId });
+    }
+  });
+
+  it('lets Overproof Rum and any new liter recipe pass lab, approve, and produce', async () => {
+    const equipmentId = (name: string) => engine.readProduction((api) => api.getFloorEquipment().find((item) => item.name === name)?.id);
+    if (!equipmentId('Spirit Tank')) await saveEquipment('Spirit Tank', 'holding_tank', 500);
+    if (!equipmentId('Tank A')) await saveEquipment('Tank A', 'holding_tank', 500);
+    const spiritId = equipmentId('Spirit Tank');
+    const destId = equipmentId('Tank A');
+    if (!spiritId || !destId) throw new Error('Spirit tank is missing');
+    const onHand = engine.readProduction((api) => api.getHoldingTankContents(spiritId).volume_gal);
+    if (onHand < 1) {
+      await save('saveHoldingTankOnHand', [{
+        tankEquipmentId: spiritId,
+        volumeGal: 20,
+        abv: 93,
+        recordedAt: '2026-10-26',
+        notes: 'Overproof lab stock',
+        changedBy: 'Admin',
+      }]);
+    }
+
+    expect(mutationSnapshot({ snapshot: 'after-save', database: 'conflict-copy' })).toBe('after-save');
+
+    const spiritLiters = 0.6507122856695999;
+    const waterLiters = 0.378;
+    const spiritGal = (spiritLiters * 1000) / ML_PER_GALLON;
+    const waterGal = (waterLiters * 1000) / ML_PER_GALLON;
+    expect(spiritGal).toBeCloseTo(0.1719, 3);
+
+    let clientRevision = engine.productionRevision();
+    const asBrowser = async (name: string, args: unknown[]) => {
+      const saved = await engine.runProductionMutation(name, args, actor, clientRevision);
+      const adopted = mutationSnapshot({ snapshot: saved.snapshot, database: saved.snapshot });
+      expect(adopted, name).toBeTruthy();
+      clientRevision = saved.revision;
+      return saved;
+    };
+
+    const specs = [
+      {
+        name: 'Overproof Rum',
+        product: 'GR Overproof',
+        targetAbv: 60.5,
+        spiritAbv: 93,
+        batch: 'BL-OVERPROOF-LAB',
+      },
+      {
+        name: 'Cane White 200ml Trial',
+        product: 'House White Sample',
+        targetAbv: 40,
+        spiritAbv: 80,
+        batch: 'BL-WHITE-200ML',
+      },
+    ];
+
+    for (const spec of specs) {
+      const created = await asBrowser('saveBlendRecipe', [{
+        name: spec.name,
+        product_name: spec.product,
+        target_abv: spec.targetAbv,
+        target_brix: null,
+        target_sugar_g_per_l: null,
+        target_volume_gal: null,
+        scale_factor: 1,
+        source_type: 'tank',
+        notes: '',
+      }, [{
+        spirit_label: 'Spirit',
+        volume_gal: spiritGal,
+        abv: spec.spiritAbv,
+        entered_amount: spiritLiters,
+        entered_unit: 'l',
+      }], [{
+        ingredient_type: 'water',
+        name: 'Proofing water',
+        amount: waterLiters,
+        unit: 'l',
+        abv: null,
+        notes: '',
+      }]]);
+      const recipeId = Number(created.result);
+      const versionId = engine.readProduction((api) => api.getBlendRecipeVersions(recipeId)[0]?.id ?? null);
+      const pullSources = [{
+        holding_tank_equipment_id: spiritId,
+        barrel_id: null,
+        volume_gal: spiritGal,
+        abv: spec.spiritAbv,
+      }];
+      const ingredients = [{
+        ingredient_type: 'water',
+        name: 'Proofing water',
+        amount: waterLiters,
+        unit: 'l',
+        abv: null,
+        notes: '',
+      }];
+      const finishedAbv = engine.readProduction((api) => (
+        api.computeBlendFormulation(pullSources, ingredients).theoretical.abv
+      ));
+      const formula = (status: string, outputId: number | null = null) => ({
+        batch_number: spec.batch,
+        product_name: spec.product,
+        source_holding_tank_equipment_id: spiritId,
+        base_spirit_volume_gal: spiritGal,
+        base_spirit_abv: spec.spiritAbv,
+        blend_date: '2026-10-26',
+        target_abv: finishedAbv,
+        target_brix: null,
+        scale_factor: 1,
+        formula_version: 1,
+        formulation_phase: status === 'trial' ? 'trial' : 'theoretical',
+        theoretical_volume_gal: spiritGal + waterGal,
+        theoretical_abv: spec.targetAbv,
+        theoretical_density: null,
+        theoretical_brix: null,
+        actual_volume_gal: status === 'trial' || status === 'approved' ? 0.26 : null,
+        actual_weight_lbs: null,
+        actual_abv: status === 'trial' || status === 'approved' ? spec.targetAbv : null,
+        actual_density: null,
+        actual_brix: null,
+        status,
+        output_holding_tank_equipment_id: outputId,
+        blend_recipe_id: recipeId,
+        blend_recipe_version_id: versionId,
+        assigned_user_id: 1,
+        assigned_user_name: 'Administrator',
+        notes: '',
+      });
+
+      const draft = await asBrowser('saveBlendFormula', [formula('draft'), pullSources, ingredients]);
+      const blendId = Number(draft.result);
+      expect(blendId, spec.name).toBeGreaterThan(0);
+
+      const staleRevision = draft.revision - 1;
+      await expect(engine.runProductionMutation(
+        'saveBlendFormula',
+        [formula('trial'), pullSources, ingredients, blendId],
+        actor,
+        staleRevision,
+      ), spec.name).rejects.toThrow(/someone else saved/i);
+
+      await expect(asBrowser('saveBlendFormula', [
+        formula('trial'),
+        pullSources,
+        ingredients,
+        blendId,
+      ]), spec.name).resolves.toMatchObject({ result: blendId });
+
+      await expect(asBrowser('saveBlendFormula', [
+        formula('approved'),
+        pullSources,
+        ingredients,
+        blendId,
+      ]), spec.name).resolves.toMatchObject({ result: blendId });
+
+      await expect(asBrowser('saveBlendFormula', [
+        formula('approved', destId),
+        pullSources,
+        ingredients,
+        blendId,
+      ]), spec.name).resolves.toMatchObject({ result: blendId });
+
+      await expect(asBrowser('executeBlendProduct', [blendId, destId]), spec.name).resolves.toMatchObject({
+        result: null,
+      });
+      expect(
+        engine.readProduction((api) => api.getBlendProducts().find((row) => row.id === blendId)?.status),
+        spec.name,
+      ).toBe('executed');
     }
   });
 
