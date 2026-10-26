@@ -4,6 +4,7 @@ interface ProductionBridge {
   revision: () => number;
   apply: (snapshot: string, revision: number) => void;
   notify: (message: string) => void;
+  dismiss?: () => void;
 }
 
 let bridge: ProductionBridge | null = null;
@@ -35,6 +36,7 @@ export function invokeProductionMutation(name: string, args: unknown[]): unknown
     throw new Error(body.error ?? 'The change could not be saved.');
   }
   if (body.database && body.revision != null) bridge.apply(body.database, body.revision);
+  bridge.dismiss?.();
   return body.result;
 }
 

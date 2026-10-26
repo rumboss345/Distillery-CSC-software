@@ -485,6 +485,94 @@ describe('PostgreSQL production modules', () => {
     expect(await rowRevision('inventory_items', sugar.id)).toBe(sugarRev);
   });
 
+  it('keeps a GR overproof blend save after later wizard steps and an unrelated edit', async () => {
+    const spiritId = engine.readProduction((api) => api.getFloorEquipment().find((item) => item.name === 'Spirit Tank'))?.id;
+    const destId = engine.readProduction((api) => api.getFloorEquipment().find((item) => item.name === 'Tank A'))?.id;
+    const recipe = engine.readProduction((api) => api.getBlendRecipes().find((row) => row.name === 'Test Blend Recipe'));
+    if (!spiritId || !destId || !recipe) throw new Error('Spirit tank or blend recipe is missing');
+
+    const versionId = engine.readProduction((api) => api.getBlendRecipeVersions(recipe.id)[0]?.id ?? null);
+    const formula = (status: string, batch: string) => ({
+      batch_number: batch,
+      product_name: 'GR Overproof',
+      source_holding_tank_equipment_id: spiritId,
+      base_spirit_volume_gal: 80.123456,
+      base_spirit_abv: 75.4,
+      blend_date: '2026-10-26',
+      target_abv: 62.5,
+      target_brix: 0.25,
+      scale_factor: 1.25,
+      formula_version: 1,
+      formulation_phase: status === 'trial' ? 'trial' : 'theoretical',
+      theoretical_volume_gal: 120.987654,
+      theoretical_abv: 62.501234,
+      theoretical_density: 0.891234,
+      theoretical_brix: 0.249999,
+      actual_volume_gal: status === 'trial' ? 119.5 : null,
+      actual_weight_lbs: null,
+      actual_abv: status === 'trial' ? 62.4 : null,
+      actual_density: null,
+      actual_brix: null,
+      status,
+      output_holding_tank_equipment_id: null,
+      blend_recipe_id: recipe.id,
+      blend_recipe_version_id: versionId,
+      assigned_user_id: 1,
+      assigned_user_name: 'Administrator',
+      notes: 'GR overproof',
+    });
+    const sources = [{
+      holding_tank_equipment_id: spiritId,
+      barrel_id: null,
+      volume_gal: 80.123456,
+      abv: 75.4,
+    }];
+    const ingredients = [{
+      ingredient_type: 'water',
+      name: 'Proofing water',
+      amount: 40.5,
+      unit: 'gal',
+      abv: null,
+      notes: '',
+    }];
+
+    const draft = await save('saveBlendFormula', [formula('draft', 'BL-GR-OP-001'), sources, ingredients]);
+    const blendId = Number(draft.result);
+    expect(blendId).toBeGreaterThan(0);
+    const draftRev = engine.productionRevision();
+    const blendRowRev = await rowRevision('blend_products', blendId);
+
+    const sugar = engine.readProduction((api) => api.getInventoryItems().find((item) => item.name === 'Test Sugar'));
+    if (!sugar) throw new Error('Test Sugar is missing');
+    const sugarEdit = { ...sugar, quantity: sugar.quantity };
+    delete (sugarEdit as { id?: number }).id;
+    delete (sugarEdit as { created_at?: string }).created_at;
+    delete (sugarEdit as { updated_at?: string }).updated_at;
+    await save('saveInventoryItem', [sugarEdit, sugar.id]);
+    expect(await rowRevision('blend_products', blendId)).toBe(blendRowRev);
+
+    await expect(save('saveBlendFormula', [
+      formula('draft', 'BL-GR-OP-001'),
+      sources,
+      ingredients,
+      blendId,
+    ], draftRev)).resolves.toMatchObject({ result: blendId });
+
+    await expect(save('saveBlendFormula', [
+      formula('trial', 'BL-GR-OP-001'),
+      sources,
+      ingredients,
+      blendId,
+    ])).resolves.toMatchObject({ result: blendId });
+
+    await expect(save('saveBlendFormula', [
+      { ...formula('approved', 'BL-GR-OP-001'), output_holding_tank_equipment_id: destId },
+      sources,
+      ingredients,
+      blendId,
+    ])).resolves.toMatchObject({ result: blendId });
+  });
+
   it('deletes a blend recipe that still has spirit pulls, additives, and a linked batch', async () => {
     const recipe = engine.readProduction((api) => api.getBlendRecipes().find((row) => row.name === 'Test Blend Recipe'));
     const product = engine.readProduction((api) => api.getBlendProducts().find((row) => row.batch_number === 'BL-TEST-001'));

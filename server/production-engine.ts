@@ -42,13 +42,48 @@ let memory: SqlDatabase | null = null;
 let memoryRevision = -1;
 const rowHashes = new Map<string, { rev: number; hash: string }>();
 
-function hashRow(row: Record<string, unknown>): string {
+function coerceSqliteValue(value: unknown, declaredType: string): unknown {
+  if (value == null) return null;
+  const type = declaredType.toUpperCase();
+  const numeric = type.includes('INT')
+    || type === 'REAL'
+    || type.includes('DOUBLE')
+    || type.includes('FLOAT')
+    || type.includes('NUMERIC');
+  if (numeric) {
+    if (typeof value === 'boolean') return value ? 1 : 0;
+    if (typeof value === 'bigint') return Number(value);
+    if (typeof value === 'string' && value.trim() !== '') {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : value;
+    }
+    return value;
+  }
+  if (value instanceof Date) {
+    return value.toISOString().replace('T', ' ').slice(0, 19);
+  }
+  if (typeof value === 'boolean') return value ? 1 : 0;
+  return value;
+}
+
+/** Same row from SQLite and PostgreSQL must hash the same after a round-trip. */
+export function hashRow(row: Record<string, unknown>): string {
   const normalized: Record<string, unknown> = {};
   for (const key of Object.keys(row).sort()) {
     const value = row[key];
-    normalized[key] = typeof value === 'number' && Number.isFinite(value)
-      ? Math.round(value * 1e6) / 1e6
-      : value ?? null;
+    if (value == null) {
+      normalized[key] = null;
+    } else if (typeof value === 'boolean') {
+      normalized[key] = value ? 1 : 0;
+    } else if (typeof value === 'bigint') {
+      normalized[key] = Number(value);
+    } else if (typeof value === 'number') {
+      normalized[key] = Number.isFinite(value) ? Math.round(value * 1e6) / 1e6 : null;
+    } else if (value instanceof Date) {
+      normalized[key] = value.toISOString().replace('T', ' ').slice(0, 19);
+    } else {
+      normalized[key] = value;
+    }
   }
   return createHash('sha256').update(JSON.stringify(normalized)).digest('hex');
 }
@@ -62,11 +97,18 @@ function tableNames(db: SqlDatabase): string[] {
 }
 
 function columns(db: SqlDatabase, table: string): string[] {
+  return columnInfo(db, table).map((column) => column.name);
+}
+
+function columnInfo(db: SqlDatabase, table: string): { name: string; type: string }[] {
   const stmt = db.prepare(`PRAGMA table_info(${table})`);
-  const names: string[] = [];
-  while (stmt.step()) names.push(String(stmt.get()[1]));
+  const cols: { name: string; type: string }[] = [];
+  while (stmt.step()) {
+    const row = stmt.get();
+    cols.push({ name: String(row[1]), type: String(row[2] ?? '') });
+  }
   stmt.free();
-  return names;
+  return cols;
 }
 
 function rowsOf(db: SqlDatabase, table: string): Record<string, unknown>[] {
@@ -104,12 +146,13 @@ async function reloadFromPostgres(client: import('pg').PoolClient): Promise<void
   db.run(SCHEMA);
   const names = tableNames(db);
   for (const table of names) {
-    const cols = columns(db, table);
+    const info = columnInfo(db, table);
+    const cols = info.map((column) => column.name);
     const result = await client.query(`SELECT ${cols.map((col) => `"${col}"`).join(', ')} FROM ${table}`);
     const placeholders = cols.map(() => '?').join(', ');
     const insert = db.prepare(`INSERT INTO ${table} (${cols.join(', ')}) VALUES (${placeholders})`);
     for (const row of result.rows) {
-      insert.run(cols.map((col) => row[col] ?? null));
+      insert.run(info.map((column) => coerceSqliteValue(row[column.name], column.type)));
     }
     insert.free();
   }
