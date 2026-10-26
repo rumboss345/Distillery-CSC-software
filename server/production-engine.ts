@@ -215,6 +215,8 @@ async function persistToPostgres(
       const key = `${table}:${id}`;
       const hash = hashRow(row);
       const previous = rowHashes.get(key);
+      // Compare to the row as it was after reload, not the last stored hash.
+      // A PostgreSQL round-trip must not look like an edit of this recipe or batch.
       const unchanged = hashesBefore
         ? hashesBefore.get(key) === hash
         : previous?.hash === hash;
