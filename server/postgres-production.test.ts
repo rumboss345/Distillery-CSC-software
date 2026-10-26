@@ -573,6 +573,113 @@ describe('PostgreSQL production modules', () => {
     ])).resolves.toMatchObject({ result: blendId });
   });
 
+  it('blends a recipe created in the same session without a someone-else-saved conflict', async () => {
+    const spiritId = engine.readProduction((api) => api.getFloorEquipment().find((item) => item.name === 'Spirit Tank'))?.id;
+    const destId = engine.readProduction((api) => api.getFloorEquipment().find((item) => item.name === 'Tank A'))?.id;
+    if (!spiritId || !destId) throw new Error('Spirit tank is missing');
+
+    const created = await save('saveBlendRecipe', [{
+      name: 'Future Overproof',
+      product_name: 'Future Overproof',
+      target_abv: 62.5,
+      target_brix: 0.25,
+      target_sugar_g_per_l: null,
+      target_volume_gal: 120.5,
+      scale_factor: 1,
+      source_type: 'tank',
+      notes: 'Not in the starter list',
+    }, [{
+      spirit_label: 'High wines',
+      volume_gal: 80.123456,
+      abv: 75.4,
+    }], [{
+      ingredient_type: 'water',
+      name: 'Proofing water',
+      amount: 40.5,
+      unit: 'gal',
+      abv: null,
+      notes: '',
+    }]]);
+    const recipeId = Number(created.result);
+    const versionId = engine.readProduction((api) => api.getBlendRecipeVersions(recipeId)[0]?.id ?? null);
+    const afterCreateRev = engine.productionRevision();
+
+    const sugar = engine.readProduction((api) => api.getInventoryItems().find((item) => item.name === 'Test Sugar'));
+    if (!sugar) throw new Error('Test Sugar is missing');
+    const sugarEdit = { ...sugar, quantity: sugar.quantity };
+    delete (sugarEdit as { id?: number }).id;
+    delete (sugarEdit as { created_at?: string }).created_at;
+    delete (sugarEdit as { updated_at?: string }).updated_at;
+    await save('saveInventoryItem', [sugarEdit, sugar.id]);
+
+    const formula = (status: string) => ({
+      batch_number: 'BL-FUTURE-001',
+      product_name: 'Future Overproof',
+      source_holding_tank_equipment_id: spiritId,
+      base_spirit_volume_gal: 80.123456,
+      base_spirit_abv: 75.4,
+      blend_date: '2026-10-26',
+      target_abv: 62.5,
+      target_brix: 0.25,
+      scale_factor: 1,
+      formula_version: 1,
+      formulation_phase: status === 'trial' ? 'trial' : 'theoretical',
+      theoretical_volume_gal: 120.987654,
+      theoretical_abv: 62.501234,
+      theoretical_density: 0.891234,
+      theoretical_brix: 0.249999,
+      actual_volume_gal: status === 'trial' ? 119.5 : null,
+      actual_weight_lbs: null,
+      actual_abv: status === 'trial' ? 62.4 : null,
+      actual_density: null,
+      actual_brix: null,
+      status,
+      output_holding_tank_equipment_id: status === 'approved' ? destId : null,
+      blend_recipe_id: recipeId,
+      blend_recipe_version_id: versionId,
+      assigned_user_id: 1,
+      assigned_user_name: 'Administrator',
+      notes: 'Future recipe',
+    });
+    const sources = [{
+      holding_tank_equipment_id: spiritId,
+      barrel_id: null,
+      volume_gal: 80.123456,
+      abv: 75.4,
+    }];
+    const ingredients = [{
+      ingredient_type: 'water',
+      name: 'Proofing water',
+      amount: 40.5,
+      unit: 'gal',
+      abv: null,
+      notes: '',
+    }];
+
+    const draft = await save('saveBlendFormula', [formula('draft'), sources, ingredients], afterCreateRev);
+    const blendId = Number(draft.result);
+    expect(blendId).toBeGreaterThan(0);
+    const draftRev = engine.productionRevision();
+    const blendRowRev = await rowRevision('blend_products', blendId);
+
+    await save('saveInventoryItem', [sugarEdit, sugar.id]);
+    expect(await rowRevision('blend_products', blendId)).toBe(blendRowRev);
+
+    await expect(save('saveBlendFormula', [
+      formula('trial'),
+      sources,
+      ingredients,
+      blendId,
+    ], draftRev)).resolves.toMatchObject({ result: blendId });
+
+    await expect(save('saveBlendFormula', [
+      formula('approved'),
+      sources,
+      ingredients,
+      blendId,
+    ])).resolves.toMatchObject({ result: blendId });
+  });
+
   it('deletes a blend recipe that still has spirit pulls, additives, and a linked batch', async () => {
     const recipe = engine.readProduction((api) => api.getBlendRecipes().find((row) => row.name === 'Test Blend Recipe'));
     const product = engine.readProduction((api) => api.getBlendProducts().find((row) => row.batch_number === 'BL-TEST-001'));

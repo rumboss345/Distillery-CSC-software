@@ -66,26 +66,47 @@ function coerceSqliteValue(value: unknown, declaredType: string): unknown {
   return value;
 }
 
+function normalizeHashValue(value: unknown): unknown {
+  if (value == null) return null;
+  if (typeof value === 'boolean') return value ? 1 : 0;
+  if (typeof value === 'bigint') return Number(value);
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? Math.round(value * 1e6) / 1e6 : null;
+  }
+  if (value instanceof Date) {
+    return value.toISOString().replace('T', ' ').slice(0, 19);
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed !== '' && /^-?\d+(\.\d+)?$/.test(trimmed)) {
+      const parsed = Number(trimmed);
+      if (Number.isFinite(parsed)) return Math.round(parsed * 1e6) / 1e6;
+    }
+    const iso = trimmed.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})/);
+    if (iso) return `${iso[1]} ${iso[2]}`;
+  }
+  return value;
+}
+
 /** Same row from SQLite and PostgreSQL must hash the same after a round-trip. */
 export function hashRow(row: Record<string, unknown>): string {
   const normalized: Record<string, unknown> = {};
   for (const key of Object.keys(row).sort()) {
-    const value = row[key];
-    if (value == null) {
-      normalized[key] = null;
-    } else if (typeof value === 'boolean') {
-      normalized[key] = value ? 1 : 0;
-    } else if (typeof value === 'bigint') {
-      normalized[key] = Number(value);
-    } else if (typeof value === 'number') {
-      normalized[key] = Number.isFinite(value) ? Math.round(value * 1e6) / 1e6 : null;
-    } else if (value instanceof Date) {
-      normalized[key] = value.toISOString().replace('T', ' ').slice(0, 19);
-    } else {
-      normalized[key] = value;
-    }
+    normalized[key] = normalizeHashValue(row[key]);
   }
   return createHash('sha256').update(JSON.stringify(normalized)).digest('hex');
+}
+
+function rowHashMap(db: SqlDatabase): Map<string, string> {
+  const hashes = new Map<string, string>();
+  for (const table of tableNames(db)) {
+    for (const row of rowsOf(db, table)) {
+      const id = Number(row.id);
+      if (!Number.isFinite(id)) continue;
+      hashes.set(`${table}:${id}`, hashRow(row));
+    }
+  }
+  return hashes;
 }
 
 function tableNames(db: SqlDatabase): string[] {
@@ -167,7 +188,11 @@ async function reloadFromPostgres(client: import('pg').PoolClient): Promise<void
   attach(db);
 }
 
-async function persistToPostgres(client: import('pg').PoolClient, nextRevision: number): Promise<void> {
+async function persistToPostgres(
+  client: import('pg').PoolClient,
+  nextRevision: number,
+  hashesBefore?: Map<string, string>,
+): Promise<void> {
   if (!memory) throw new Error('Database not initialized');
   const names = tableNames(memory);
   await client.query('SET CONSTRAINTS ALL DEFERRED');
@@ -187,10 +212,14 @@ async function persistToPostgres(client: import('pg').PoolClient, nextRevision: 
       );
       const id = Number(row.id);
       if (!Number.isFinite(id)) continue;
+      const key = `${table}:${id}`;
       const hash = hashRow(row);
-      const previous = rowHashes.get(`${table}:${id}`);
-      const rev = previous && previous.hash === hash ? previous.rev : nextRevision;
-      rowHashes.set(`${table}:${id}`, { rev, hash });
+      const previous = rowHashes.get(key);
+      const unchanged = hashesBefore
+        ? hashesBefore.get(key) === hash
+        : previous?.hash === hash;
+      const rev = unchanged && previous ? previous.rev : nextRevision;
+      rowHashes.set(key, { rev, hash });
       await client.query(
         `INSERT INTO production_row_revisions (table_name, row_id, change_rev, row_hash) VALUES ($1, $2, $3, $4)`,
         [table, id, rev, hash],
@@ -256,6 +285,7 @@ export async function runProductionMutation(
     await client.query('SELECT pg_advisory_xact_lock($1)', [841_234]);
     await client.query('SELECT revision FROM production_meta WHERE id = 1 FOR UPDATE');
     await reloadFromPostgres(client);
+    const hashesBefore = rowHashMap(memory!);
     const targetId = mutationTargetId(mutation, args);
     if (mutation.table && targetId != null) {
       const current = rowHashes.get(`${mutation.table}:${targetId}`);
@@ -266,7 +296,7 @@ export async function runProductionMutation(
     snapshotBefore = memory!.export();
     const result = callMutation(name, args);
     const nextRevision = memoryRevision + 1;
-    await persistToPostgres(client, nextRevision);
+    await persistToPostgres(client, nextRevision, hashesBefore);
     const summary = auditSummary(name, targetId);
     await client.query(
       `INSERT INTO audit_events (user_id, email, action, summary) VALUES ($1, $2, $3, $4)`,
