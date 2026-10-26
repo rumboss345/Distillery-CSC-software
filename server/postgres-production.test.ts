@@ -1194,6 +1194,44 @@ describe('PostgreSQL production modules', () => {
     expect(categories).not.toContain('corks');
   });
 
+  it('lets an administrator remove equipment that still has tank history', async () => {
+    const equipmentId = (name: string) => engine.readProduction((api) => api.getFloorEquipment().find((item) => item.name === name)?.id);
+    if (!equipmentId('Spirit Tank')) await saveEquipment('Spirit Tank', 'holding_tank', 500);
+    const spiritId = equipmentId('Spirit Tank');
+    if (!spiritId) throw new Error('Spirit tank is missing');
+
+    await saveEquipment('Remove Me Tank', 'holding_tank', 80);
+    const extraId = engine.readProduction((api) => api.getFloorEquipment().find((item) => item.name === 'Remove Me Tank'))?.id;
+    if (!extraId) throw new Error('Remove Me Tank is missing');
+
+    await save('saveHoldingTankOnHand', [{
+      tankEquipmentId: extraId,
+      volumeGal: 12,
+      abv: 40,
+      recordedAt: '2026-10-26',
+      notes: 'Spare stock',
+      changedBy: 'Admin',
+    }]);
+    await save('saveHoldingTankTransfer', [{
+      spirit_type: 'hearts',
+      source_tank_equipment_id: extraId,
+      dest_tank_equipment_id: spiritId,
+      volume_gal: 3,
+      abv: 40,
+      transfer_date: '2026-10-26',
+      notes: 'Into spirit',
+    }]);
+
+    await save('deleteFloorEquipment', [extraId]);
+
+    expect(engine.readProduction((api) => api.getFloorEquipment().some((item) => item.id === extraId))).toBe(false);
+    expect(engine.readProduction((api) => api.getFloorEquipment().some((item) => item.name === 'Spirit Tank'))).toBe(true);
+    const leftoverTransfer = engine.readProduction((api) => (
+      api.getHoldingTankTransfers().find((row) => row.notes === 'Into spirit')
+    ));
+    expect(leftoverTransfer).toBeUndefined();
+  });
+
   it('backs up and restores production rows without passwords or sample batches', async () => {
     const backup = await engine.exportProductionBackup();
     const encoded = JSON.stringify(backup);

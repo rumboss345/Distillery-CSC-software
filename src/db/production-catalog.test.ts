@@ -9,3 +9,13 @@ describe('owner-only production mutations', () => {
     expect(userMayMutate('user', ['inventory'], 'owner')).toBe(false);
   });
 });
+
+describe('admin equipment removal', () => {
+  it('lets only an administrator or owner remove floor equipment', () => {
+    expect(PRODUCTION_MUTATIONS.deleteFloorEquipment.access).toBe('admin');
+    expect(userMayMutate('owner', [], 'admin')).toBe(true);
+    expect(userMayMutate('admin', [], 'admin')).toBe(true);
+    expect(userMayMutate('user', ['equipment'], 'admin')).toBe(false);
+    expect(userMayMutate('user', ['equipment'], PRODUCTION_MUTATIONS.deleteFloorEquipment.access)).toBe(false);
+  });
+});
