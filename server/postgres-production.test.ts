@@ -692,7 +692,7 @@ describe('PostgreSQL production modules', () => {
       {
         name: 'Cane White 200ml Trial',
         product: 'House White Sample',
-        targetAbv: 40,
+        targetAbv: 52,
         spiritAbv: 80,
         batch: 'BL-WHITE-200ML',
       },
@@ -739,9 +739,10 @@ describe('PostgreSQL production modules', () => {
         abv: null,
         notes: '',
       }];
-      const finishedAbv = engine.readProduction((api) => (
+      const computedAbv = engine.readProduction((api) => (
         api.computeBlendFormulation(pullSources, ingredients).theoretical.abv
       ));
+      const targetAbv = spec.name === 'Overproof Rum' ? spec.targetAbv : computedAbv;
       const formula = (status: string, outputId: number | null = null) => ({
         batch_number: spec.batch,
         product_name: spec.product,
@@ -749,7 +750,7 @@ describe('PostgreSQL production modules', () => {
         base_spirit_volume_gal: spiritGal,
         base_spirit_abv: spec.spiritAbv,
         blend_date: '2026-10-26',
-        target_abv: finishedAbv,
+        target_abv: targetAbv,
         target_brix: null,
         scale_factor: 1,
         formula_version: 1,

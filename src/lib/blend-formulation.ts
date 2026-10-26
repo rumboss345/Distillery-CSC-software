@@ -194,10 +194,22 @@ export function proofingRecordForBlend(
     })
     : previewProofing(request);
   if (!result.ok) {
+    const checks = 'checks' in result ? result.checks.filter((check) => !check.passed) : [];
+    const finishedAbv = 'finalAbv' in result ? Number(result.finalAbv) : NaN;
+    // Recipe / review already confirmed the calculated proof within 0.3% ABV.
+    // Produce must use that same window or Overproof-style liter recipes never finish.
+    if (
+      checks.length === 1
+      && checks[0]?.name === 'target-proof'
+      && hasTarget
+      && Number.isFinite(finishedAbv)
+      && Math.abs(finishedAbv - (targetAbv as number)) <= 0.3
+    ) {
+      return { applies: true, ok: true, snapshot: result.snapshot, message: null };
+    }
     const message = 'warnings' in result && result.warnings.length > 0
       ? result.warnings.join(' ')
       : 'Proofing validation failed.';
-    const checks = 'checks' in result ? result.checks.filter((check) => !check.passed) : [];
     return {
       applies: true,
       ok: false,

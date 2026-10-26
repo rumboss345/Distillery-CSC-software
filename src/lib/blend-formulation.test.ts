@@ -5,6 +5,7 @@ import { decimalStringFromNumber } from './calc-engine/number-bridge';
 import { LITERS_PER_US_GALLON } from '../services/spirit-gauging';
 import {
   compensateProofingWater,
+  proofingRecordForBlend,
   proofingWaterForSameBatchSize,
   spiritVolumeForSourceAbv,
   computeBatchCorrection,
@@ -291,5 +292,35 @@ describe('totalIngredientCost', () => {
     expect(totalIngredientCost([
       { ingredientType: 'sugar', name: 'Sugar', amount: 10, unit: 'lbs', costPerUnit: 0.5 },
     ])).toBe(5);
+  });
+});
+
+describe('proofingRecordForBlend', () => {
+  it('lets Overproof Rum produce when calculated proof matches the 60.5% target within 0.3%', () => {
+    const spiritGal = 0.6507122856695999 / LITERS_PER_US_GALLON;
+    const waterGal = 0.378 / LITERS_PER_US_GALLON;
+    const posted = proofingRecordForBlend(
+      [{ volumeGal: spiritGal, abv: 93, label: 'Spirit' }],
+      [{ ingredientType: 'water', name: 'Proofing water', amount: waterGal, unit: 'gal' }],
+      60.5,
+      'post',
+      { sourceLot: 'BL-OVERPROOF', batchId: '1' },
+    );
+    expect(posted.applies).toBe(true);
+    if (!posted.applies) return;
+    expect(posted.ok).toBe(true);
+  });
+
+  it('still blocks produce when finished proof is far from the target', () => {
+    const posted = proofingRecordForBlend(
+      [{ volumeGal: 10, abv: 95, label: 'Spirit' }],
+      [{ ingredientType: 'water', name: 'Proofing water', amount: 1, unit: 'gal' }],
+      40,
+      'post',
+    );
+    expect(posted.applies).toBe(true);
+    if (!posted.applies) return;
+    expect(posted.ok).toBe(false);
+    expect(posted.message).toMatch(/Target proof/i);
   });
 });
