@@ -593,6 +593,8 @@ export interface BlendIngredientInput {
   cost_per_unit?: number | null;
   lot_number?: string;
   inventory_item_id?: number | null;
+  /** Inventory category chosen in the recipe/wizard picker. Not stored on the blend row. */
+  inventory_category?: string;
   notes: string;
 }
 

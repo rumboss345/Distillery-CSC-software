@@ -8,6 +8,7 @@ import {
   deleteBlendRecipe,
   getBlendRecipes,
   getBlendRecipeVersions,
+  getInventoryCategories,
   getInventoryItems,
   saveBlendRecipe,
   useRefreshKey,
@@ -16,19 +17,22 @@ import { Modal } from './Modal';
 import { IngredientSelect } from './IngredientSelect';
 import { ProofingWaterConfirm } from './ProofingWaterConfirm';
 import {
-  BLEND_INGREDIENT_TYPES,
+  BLEND_PROOFING_WATER_CATEGORY,
   additiveSupportsAbv,
+  blendIngredientTypeForCategory,
+  blendInventoryCategories,
   defaultUnitForMode,
   formatBlendRecipeAdditive,
   formatBlendRecipeSpiritPull,
   ingredientWeightLbs,
-  filterInventoryForBlendIngredient,
-  inventoryCategoriesForBlendType,
+  filterInventoryByCategory,
   convertIngredientAmount,
   convertSpiritAmount,
   inferMeasureMode,
+  isBlendProofingWaterCategory,
   measureAlternate,
   recommendMeasureMode,
+  resolvedBlendInventoryCategory,
   SPIRIT_MEASURE_RECOMMENDATION,
   spiritMeasureAlternate,
   spiritUnitsForMeasureMode,
@@ -50,12 +54,16 @@ import {
   VOLUME_LABEL_TARGET,
 } from '../lib/formulation-quantity';
 import { formulationSpiritWeightLb } from '../lib/formulation-spirit';
+import { inventoryCategoryLabel } from '../lib/inventory-units';
 import { LITERS_PER_US_GALLON } from '../lib/material-densities';
 import type {
   BlendIngredientInput,
   BlendRecipeSpiritSourceInput,
   BlendRecipeView,
+  InventoryItem,
 } from '../types';
+
+type RecipeAdditiveRow = BlendIngredientInput & { inventory_category: string };
 
 interface SpiritRecipeRow extends BlendRecipeSpiritSourceInput {
   amount: number;
@@ -97,17 +105,54 @@ function toSpiritRecipeInput(row: SpiritRecipeRow): BlendRecipeSpiritSourceInput
   };
 }
 
-const emptyIngredient = (): BlendIngredientInput => ({
-  ingredient_type: 'water',
-  name: 'Proofing water',
+const emptyIngredient = (): RecipeAdditiveRow => ({
+  ingredient_type: 'other',
+  name: '',
   amount: 0,
-  unit: defaultUnitForMode('water', recommendMeasureMode('water').mode),
+  unit: defaultUnitForMode('other', recommendMeasureMode('other').mode),
   abv: null,
   cost_per_unit: null,
   lot_number: '',
   inventory_item_id: null,
   notes: '',
+  inventory_category: '',
 });
+
+function toRecipeAdditiveRow(
+  ingredient: BlendIngredientInput,
+  items: InventoryItem[],
+): RecipeAdditiveRow {
+  return {
+    ingredient_type: ingredient.ingredient_type,
+    name: ingredient.name,
+    amount: ingredient.amount,
+    unit: ingredient.unit,
+    abv: ingredient.abv ?? null,
+    density_g_per_ml: ingredient.density_g_per_ml ?? null,
+    density_assumption: ingredient.density_assumption ?? null,
+    cost_per_unit: ingredient.cost_per_unit,
+    lot_number: ingredient.lot_number,
+    inventory_item_id: ingredient.inventory_item_id,
+    notes: ingredient.notes,
+    inventory_category: resolvedBlendInventoryCategory(ingredient, items),
+  };
+}
+
+function toBlendIngredientInput(row: RecipeAdditiveRow): BlendIngredientInput {
+  return {
+    ingredient_type: row.ingredient_type,
+    name: row.name,
+    amount: row.amount,
+    unit: row.unit,
+    abv: row.abv,
+    density_g_per_ml: row.density_g_per_ml,
+    density_assumption: row.density_assumption,
+    cost_per_unit: row.cost_per_unit,
+    lot_number: row.lot_number,
+    inventory_item_id: row.inventory_item_id,
+    notes: row.notes,
+  };
+}
 
 const emptyRecipeForm = () => ({
   name: '',
@@ -134,15 +179,19 @@ export function BlendRecipesTab({
   );
   const inventoryItems = getInventoryItems();
   const inventoryById = new Map(inventoryItems.map((item) => [item.id, item]));
+  const inventoryCategories = useMemo(
+    () => blendInventoryCategories(getInventoryCategories()),
+    [key],
+  );
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<number | undefined>();
   const [form, setForm] = useState(emptyRecipeForm());
   const [spiritSources, setSpiritSources] = useState<SpiritRecipeRow[]>([emptySpiritLine()]);
-  const [ingredients, setIngredients] = useState<BlendIngredientInput[]>([]);
+  const [ingredients, setIngredients] = useState<RecipeAdditiveRow[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [abvConfirmed, setAbvConfirmed] = useState(false);
   const [proofingPreview, setProofingPreview] = useState<ProofingWaterPreview | null>(null);
-  const [originalWater, setOriginalWater] = useState<BlendIngredientInput[]>([]);
+  const [originalWater, setOriginalWater] = useState<RecipeAdditiveRow[]>([]);
 
   void key;
 
@@ -212,19 +261,9 @@ export function BlendRecipesTab({
         })
         : [emptySpiritLine()],
     );
-    const loadedIngredients = recipe.ingredients.map((ingredient) => ({
-      ingredient_type: ingredient.ingredient_type,
-      name: ingredient.name,
-      amount: ingredient.amount,
-      unit: ingredient.unit,
-      abv: ingredient.abv ?? null,
-      density_g_per_ml: ingredient.density_g_per_ml ?? null,
-      density_assumption: ingredient.density_assumption ?? null,
-      cost_per_unit: ingredient.cost_per_unit,
-      lot_number: ingredient.lot_number,
-      inventory_item_id: ingredient.inventory_item_id,
-      notes: ingredient.notes,
-    }));
+    const loadedIngredients = recipe.ingredients.map((ingredient) => (
+      toRecipeAdditiveRow(ingredient, inventoryItems)
+    ));
     setIngredients(loadedIngredients);
     setOriginalWater(loadedIngredients.filter((ingredient) => ingredient.ingredient_type === 'water'));
     setProofingPreview(null);
@@ -245,7 +284,7 @@ export function BlendRecipesTab({
       saveBlendRecipe(
         { ...form, source_type: 'tank' },
         syncedSpiritSources.map(toSpiritRecipeInput),
-        ingredients,
+        ingredients.map(toBlendIngredientInput),
         editId,
       );
       setShowForm(false);
@@ -299,6 +338,7 @@ export function BlendRecipesTab({
           lot_number: existing?.lot_number ?? '',
           inventory_item_id: null,
           notes: existing?.notes ?? '',
+          inventory_category: BLEND_PROOFING_WATER_CATEGORY,
         },
       ];
     });
@@ -324,7 +364,7 @@ export function BlendRecipesTab({
     }
   };
 
-  const updateIngredient = (index: number, patch: Partial<BlendIngredientInput>) => {
+  const updateIngredient = (index: number, patch: Partial<RecipeAdditiveRow>) => {
     setIngredients((prev) => prev.map((row, i) => {
       if (i !== index) return row;
       const next = { ...row, ...patch };
@@ -386,15 +426,59 @@ export function BlendRecipesTab({
     }));
   };
 
+  const handleCategorySelect = (index: number, category: string) => {
+    const ingredientType = blendIngredientTypeForCategory(category);
+    setIngredients((prev) => prev.map((row, i) => {
+      if (i !== index) return row;
+      const next: RecipeAdditiveRow = {
+        ...row,
+        inventory_category: category,
+        ingredient_type: ingredientType,
+      };
+      if (ingredientType === 'water' || isBlendProofingWaterCategory(category)) {
+        return {
+          ...next,
+          ingredient_type: 'water',
+          inventory_category: BLEND_PROOFING_WATER_CATEGORY,
+          inventory_item_id: null,
+          name: row.name.trim() && row.ingredient_type === 'water' ? row.name : 'Proofing water',
+          unit: defaultUnitForMode('water', recommendMeasureMode('water').mode),
+          amount: inferMeasureMode(row.unit) === inferMeasureMode(defaultUnitForMode('water', recommendMeasureMode('water').mode))
+            ? convertIngredientAmount(row, defaultUnitForMode('water', recommendMeasureMode('water').mode))
+            : 0,
+          abv: null,
+          density_g_per_ml: null,
+          density_assumption: null,
+        };
+      }
+      const current = row.inventory_item_id != null ? inventoryById.get(row.inventory_item_id) : undefined;
+      const sameCategory = current
+        && current.category.toLowerCase() === category.trim().toLowerCase();
+      next.unit = defaultUnitForMode(ingredientType, recommendMeasureMode(ingredientType).mode);
+      if (!sameCategory) {
+        next.inventory_item_id = null;
+        next.name = '';
+        next.abv = null;
+        next.density_g_per_ml = null;
+        next.density_assumption = null;
+      }
+      if (!additiveSupportsAbv(ingredientType)) next.abv = null;
+      return next;
+    }));
+  };
+
   const handleInventorySelect = (index: number, rawId: string) => {
     if (!rawId) {
-      updateIngredient(index, { inventory_item_id: null });
+      updateIngredient(index, { inventory_item_id: null, name: '' });
       return;
     }
     const item = inventoryById.get(parseInt(rawId, 10));
     if (!item) return;
+    const ingredientType = blendIngredientTypeForCategory(item.category);
     updateIngredient(index, {
       inventory_item_id: item.id,
+      inventory_category: item.category,
+      ingredient_type: ingredientType,
       name: item.name,
       unit: item.unit,
       abv: item.abv ?? null,
@@ -795,24 +879,35 @@ export function BlendRecipesTab({
                 </button>
               </div>
               {ingredients.length === 0 ? (
-                <p className="field-hint blend-recipe-empty-hint">No additives — add water, sugar, or flavorings if this recipe needs them.</p>
+                <p className="field-hint blend-recipe-empty-hint">No additives — pick an inventory category, then the item, or add proofing water.</p>
               ) : (
                 <div className="blend-recipe-card-list">
                   {ingredients.map((ingredient, index) => {
                     const measureMode = inferMeasureMode(ingredient.unit);
                     const recommendation = recommendMeasureMode(ingredient.ingredient_type);
                     const unitOptions = unitOptionsForBlendIngredient(ingredient);
-                    const inventoryOptions = filterInventoryForBlendIngredient(
-                      inventoryItems,
-                      ingredient.ingredient_type,
-                    );
-                    const isWater = ingredient.ingredient_type === 'water';
+                    const selectedCategory = ingredient.inventory_category
+                      || resolvedBlendInventoryCategory(ingredient, inventoryItems);
+                    const isWater = ingredient.ingredient_type === 'water'
+                      || isBlendProofingWaterCategory(selectedCategory);
+                    const inventoryOptions = filterInventoryByCategory(inventoryItems, selectedCategory);
+                    const categoryNoun = isWater
+                      ? 'water'
+                      : inventoryCategoryLabel(selectedCategory || 'ingredient').toLowerCase();
+                    const categoryChoices = selectedCategory
+                      && !isWater
+                      && !inventoryCategories.some((name) => name.toLowerCase() === selectedCategory.toLowerCase())
+                      ? [...inventoryCategories, selectedCategory]
+                      : inventoryCategories;
 
                     return (
                       <article key={index} className="blend-recipe-additive-card">
                         <header className="blend-recipe-card-header">
                           <span className="blend-recipe-card-title">
-                            {ingredient.name.trim() || BLEND_INGREDIENT_TYPES.find((t) => t.value === ingredient.ingredient_type)?.label || 'Additive'}
+                            {ingredient.name.trim()
+                              || (isWater
+                                ? 'Proofing water'
+                                : (selectedCategory ? inventoryCategoryLabel(selectedCategory) : 'Additive'))}
                           </span>
                           <button
                             type="button"
@@ -824,35 +919,30 @@ export function BlendRecipesTab({
                         </header>
                         <div className="blend-recipe-additive-fields">
                           <div className="form-group">
-                            <label>Type</label>
+                            <label htmlFor={`blend-additive-category-${index}`}>Category</label>
                             <select
-                              value={ingredient.ingredient_type}
-                              onChange={(e) => updateIngredient(index, {
-                                ingredient_type: e.target.value as BlendIngredientInput['ingredient_type'],
-                              })}
+                              id={`blend-additive-category-${index}`}
+                              data-testid={index === 0 ? 'blend-additive-category' : `blend-additive-category-${index}`}
+                              value={isWater ? BLEND_PROOFING_WATER_CATEGORY : selectedCategory}
+                              onChange={(e) => handleCategorySelect(index, e.target.value)}
                             >
-                              {BLEND_INGREDIENT_TYPES.map((type) => (
-                                <option key={type.value} value={type.value}>{type.label}</option>
+                              <option value="">— Select category —</option>
+                              <option value={BLEND_PROOFING_WATER_CATEGORY}>Proofing water</option>
+                              {categoryChoices.map((name) => (
+                                <option key={name} value={name}>{inventoryCategoryLabel(name)}</option>
                               ))}
                             </select>
                           </div>
-                          <div className="form-group">
-                            <label>Name</label>
-                            <input
-                              value={ingredient.name}
-                              onChange={(e) => updateIngredient(index, { name: e.target.value })}
-                            />
-                          </div>
                           {!isWater && (
                             <div className="form-group">
-                              <label>Inventory item</label>
-                              {inventoryCategoriesForBlendType(ingredient.ingredient_type)[0] ? (
+                              <label htmlFor={`blend-additive-item-${index}`}>Item</label>
+                              {selectedCategory ? (
                                 <IngredientSelect
-                                  testId={`blend-ingredient-${index}`}
+                                  testId={index === 0 ? 'blend-ingredient-0' : `blend-ingredient-${index}`}
                                   value={ingredient.inventory_item_id != null ? String(ingredient.inventory_item_id) : ''}
                                   emptyLabel="— Select item —"
-                                  noun={ingredient.ingredient_type === 'other' ? 'additive' : (BLEND_INGREDIENT_TYPES.find((type) => type.value === ingredient.ingredient_type)?.label.toLowerCase() ?? 'ingredient')}
-                                  category={inventoryCategoriesForBlendType(ingredient.ingredient_type)[0]}
+                                  noun={categoryNoun}
+                                  category={selectedCategory}
                                   unit={ingredient.unit}
                                   options={inventoryOptions.map((item) => ({
                                     value: String(item.id),
@@ -867,6 +957,8 @@ export function BlendRecipesTab({
                                   onSelect={(rawId) => handleInventorySelect(index, rawId)}
                                   onAdded={(item) => updateIngredient(index, {
                                     inventory_item_id: item.id,
+                                    inventory_category: item.category,
+                                    ingredient_type: blendIngredientTypeForCategory(item.category),
                                     name: item.name,
                                     unit: item.unit,
                                     abv: item.abv ?? null,
@@ -876,15 +968,12 @@ export function BlendRecipesTab({
                                 />
                               ) : (
                                 <select
-                                  value={ingredient.inventory_item_id ?? ''}
-                                  onChange={(e) => handleInventorySelect(index, e.target.value)}
+                                  id={`blend-additive-item-${index}`}
+                                  data-testid={index === 0 ? 'blend-ingredient-0' : `blend-ingredient-${index}`}
+                                  disabled
+                                  value=""
                                 >
-                                  <option value="">— Select item —</option>
-                                  {inventoryOptions.map((item) => (
-                                    <option key={item.id} value={item.id}>
-                                      {item.name} ({item.quantity} {item.unit})
-                                    </option>
-                                  ))}
+                                  <option value="">— Choose a category first —</option>
                                 </select>
                               )}
                             </div>

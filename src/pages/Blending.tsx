@@ -20,6 +20,7 @@ import {
   getHoldingTankContents,
   getHoldingTanks,
   getSpiritTransferVessels,
+  getInventoryCategories,
   getInventoryItems,
   saveBlendFormula,
   deleteBlendProduct,
@@ -64,8 +65,12 @@ import {
   formatReviewVolume,
   formatReviewWeight,
   inferMeasureMode,
+  blendIngredientTypeForCategory,
+  blendInventoryCategories,
+  filterInventoryByCategory,
   inventoryCategoriesForBlendType,
   isWeightUnit,
+  resolvedBlendInventoryCategory,
   ingredientVolumeGal,
   ingredientWeightLbs,
   measureAlternate,
@@ -77,6 +82,7 @@ import {
   unitsForMeasureMode,
   type MeasureMode,
 } from '../lib/blending';
+import { inventoryCategoryLabel } from '../lib/inventory-units';
 import { previewProofingWaterAdjustment, type ProofingWaterPreview } from '../lib/blend-abv-confirm';
 import { parseBlendRecipeSnapshot } from '../lib/blend-recipe-version';
 import { decimalStringFromNumber } from '../lib/calc-engine/number-bridge';
@@ -163,7 +169,10 @@ const STEP_HINTS: Record<number, string> = {
   9: 'Weigh or measure the finished batch, then save. Use weight on a scale if that is how you verify yield.',
 };
 
-const emptyIngredient = (type: BlendIngredientInput['ingredient_type'] = 'water'): BlendIngredientInput => ({
+const emptyIngredient = (
+  type: BlendIngredientInput['ingredient_type'] = 'water',
+  category = '',
+): BlendIngredientInput => ({
   ingredient_type: type,
   name: type === 'water' ? 'Proofing water' : '',
   amount: 0,
@@ -172,13 +181,14 @@ const emptyIngredient = (type: BlendIngredientInput['ingredient_type'] = 'water'
   cost_per_unit: null,
   lot_number: '',
   inventory_item_id: null,
+  inventory_category: category || (type === 'water' ? '' : inventoryCategoriesForBlendType(type)[0] ?? ''),
   notes: '',
 });
 
 function blendIngredientFromRecord(
   ingredient: Pick<
     BlendIngredientInput,
-    'ingredient_type' | 'name' | 'amount' | 'unit' | 'cost_per_unit' | 'lot_number' | 'inventory_item_id' | 'notes'
+    'ingredient_type' | 'name' | 'amount' | 'unit' | 'cost_per_unit' | 'lot_number' | 'inventory_item_id' | 'inventory_category' | 'notes'
   > & {
     abv?: number | null;
     density_g_per_ml?: number | null;
@@ -196,6 +206,7 @@ function blendIngredientFromRecord(
     cost_per_unit: ingredient.cost_per_unit,
     lot_number: ingredient.lot_number,
     inventory_item_id: ingredient.inventory_item_id,
+    inventory_category: ingredient.inventory_category,
     notes: ingredient.notes,
   };
 }
@@ -461,6 +472,14 @@ export function Blending() {
   const blendRecipes = getBlendRecipes();
   const barrelInventory = useMemo(() => getBarrelsForBlend(), [key]);
   const inventoryItems = getInventoryItems();
+  const inventoryCategories = useMemo(
+    () => blendInventoryCategories(getInventoryCategories()),
+    [key],
+  );
+  const inventoryById = useMemo(
+    () => new Map(inventoryItems.map((item) => [item.id, item])),
+    [inventoryItems],
+  );
   const [showWizard, setShowWizard] = useState(false);
   const [wizardStep, setWizardStep] = useState(1);
   const [editId, setEditId] = useState<number | undefined>();
@@ -1297,8 +1316,49 @@ export function Blending() {
     }));
   };
 
-  const addIngredient = (type: BlendIngredientInput['ingredient_type'] = 'flavoring') => {
-    setIngredients((prev) => [...prev, emptyIngredient(type)]);
+  const addIngredient = (
+    type: BlendIngredientInput['ingredient_type'] = 'flavoring',
+    category = inventoryCategoriesForBlendType(type)[0] ?? '',
+  ) => {
+    setIngredients((prev) => [...prev, emptyIngredient(type, category)]);
+  };
+
+  const handleWizardCategorySelect = (index: number, category: string) => {
+    const ingredientType = blendIngredientTypeForCategory(category);
+    setIngredients((prev) => prev.map((ing, i) => {
+      if (i !== index) return ing;
+      const current = ing.inventory_item_id != null ? inventoryById.get(ing.inventory_item_id) : undefined;
+      const sameCategory = current
+        && current.category.toLowerCase() === category.trim().toLowerCase();
+      return {
+        ...ing,
+        inventory_category: category,
+        ingredient_type: ingredientType,
+        unit: defaultUnitForMode(ingredientType, recommendMeasureMode(ingredientType).mode),
+        inventory_item_id: sameCategory ? ing.inventory_item_id : null,
+        name: sameCategory ? ing.name : '',
+        abv: sameCategory && additiveSupportsAbv(ingredientType) ? ing.abv : null,
+      };
+    }));
+  };
+
+  const handleWizardItemSelect = (index: number, rawId: string) => {
+    if (!rawId) {
+      updateIngredient(index, { inventory_item_id: null, name: '' });
+      return;
+    }
+    const item = inventoryById.get(parseInt(rawId, 10));
+    if (!item) return;
+    updateIngredient(index, {
+      inventory_item_id: item.id,
+      inventory_category: item.category,
+      ingredient_type: blendIngredientTypeForCategory(item.category),
+      name: item.name,
+      unit: item.unit,
+      abv: item.abv ?? null,
+      density_g_per_ml: item.density_g_per_ml ?? null,
+      density_assumption: null,
+    });
   };
   const removeIngredient = (index: number) => setIngredients((prev) => prev.filter((_, i) => i !== index));
 
@@ -2246,25 +2306,68 @@ export function Blending() {
       case 3:
         return (
           <>
-            <p className="field-hint">Add these before proofing water. You can skip this step for straight spirits.</p>
+            <p className="field-hint">Add these before proofing water. Pick an inventory category, then the item. You can skip this step for straight spirits.</p>
             {ingredients.filter((i) => i.ingredient_type !== 'water').map((ing) => {
               const realIndex = ingredients.indexOf(ing);
               const measureMode = inferMeasureMode(ing.unit);
               const recommendation = recommendMeasureMode(ing.ingredient_type);
               const alternate = ing.amount > 0 ? measureAlternate(ing) : null;
               const unitOptions = unitsForMeasureMode(ing.ingredient_type, measureMode);
+              const selectedCategory = ing.inventory_category
+                || resolvedBlendInventoryCategory(ing, inventoryItems);
+              const itemOptions = filterInventoryByCategory(inventoryItems, selectedCategory);
+              const categoryChoices = selectedCategory
+                && !inventoryCategories.some((name) => name.toLowerCase() === selectedCategory.toLowerCase())
+                ? [...inventoryCategories, selectedCategory]
+                : inventoryCategories;
               return (
                 <div key={realIndex} className="wizard-additive-card">
                   <div className="wizard-additive-row">
                     <select
-                      value={ing.ingredient_type}
-                      onChange={(e) => updateIngredient(realIndex, { ingredient_type: e.target.value as BlendIngredientInput['ingredient_type'] })}
+                      data-testid={realIndex === ingredients.findIndex((row) => row.ingredient_type !== 'water') ? 'wizard-additive-category' : `wizard-additive-category-${realIndex}`}
+                      value={selectedCategory}
+                      onChange={(e) => handleWizardCategorySelect(realIndex, e.target.value)}
                     >
-                      {BLEND_INGREDIENT_TYPES.filter((t) => t.value !== 'water').map((t) => (
-                        <option key={t.value} value={t.value}>{t.label}</option>
+                      <option value="">— Category —</option>
+                      {categoryChoices.map((name) => (
+                        <option key={name} value={name}>{inventoryCategoryLabel(name)}</option>
                       ))}
                     </select>
-                    <input placeholder="Name (optional)" value={ing.name} onChange={(e) => updateIngredient(realIndex, { name: e.target.value })} />
+                    {selectedCategory ? (
+                      <IngredientSelect
+                        testId={`wizard-ingredient-${realIndex}`}
+                        value={ing.inventory_item_id != null ? String(ing.inventory_item_id) : ''}
+                        emptyLabel="— Item —"
+                        noun={inventoryCategoryLabel(selectedCategory).toLowerCase()}
+                        category={selectedCategory}
+                        unit={ing.unit}
+                        options={itemOptions.map((item) => ({
+                          value: String(item.id),
+                          label: `${item.name} (${item.quantity} ${item.unit})`,
+                        }))}
+                        orphanLabel={
+                          ing.inventory_item_id != null
+                          && !itemOptions.some((item) => item.id === ing.inventory_item_id)
+                            ? ing.name
+                            : undefined
+                        }
+                        onSelect={(rawId) => handleWizardItemSelect(realIndex, rawId)}
+                        onAdded={(item) => updateIngredient(realIndex, {
+                          inventory_item_id: item.id,
+                          inventory_category: item.category,
+                          ingredient_type: blendIngredientTypeForCategory(item.category),
+                          name: item.name,
+                          unit: item.unit,
+                          abv: item.abv ?? null,
+                          density_g_per_ml: item.density_g_per_ml ?? null,
+                          density_assumption: null,
+                        })}
+                      />
+                    ) : (
+                      <select disabled value="">
+                        <option value="">— Choose a category first —</option>
+                      </select>
+                    )}
                     <button type="button" className="btn btn-sm btn-ghost" onClick={() => removeIngredient(realIndex)}>Remove</button>
                   </div>
                   <div className="measure-mode-toggle">
@@ -2332,9 +2435,9 @@ export function Blending() {
               );
             })}
             <div className="wizard-add-buttons">
-              <button type="button" className="btn btn-sm btn-secondary" onClick={() => addIngredient('sugar')}>+ Sugar / syrup</button>
-              <button type="button" className="btn btn-sm btn-secondary" onClick={() => addIngredient('flavoring')}>+ Flavoring</button>
-              <button type="button" className="btn btn-sm btn-secondary" onClick={() => addIngredient('color')}>+ Color</button>
+              <button type="button" className="btn btn-sm btn-secondary" onClick={() => addIngredient('sugar', 'sugar')}>+ Sugar / syrup</button>
+              <button type="button" className="btn btn-sm btn-secondary" onClick={() => addIngredient('flavoring', 'flavoring')}>+ Flavoring</button>
+              <button type="button" className="btn btn-sm btn-secondary" onClick={() => addIngredient('color', 'color')}>+ Color</button>
             </div>
             <div className="form-group" style={{ marginTop: '1rem' }}>
               <label>{ESTIMATED_SUGAR_BRIX_LABEL} — optional</label>
@@ -2356,45 +2459,13 @@ export function Blending() {
               <input type="checkbox" checked={showInventoryDetails} onChange={(e) => setShowInventoryDetails(e.target.checked)} />
               Show inventory &amp; lot tracking
             </label>
-            {showInventoryDetails && ingredients.map((ing, index) => {
-              const quickCategory = inventoryCategoriesForBlendType(ing.ingredient_type)[0];
-              const typeLabel = BLEND_INGREDIENT_TYPES.find((t) => t.value === ing.ingredient_type)?.label;
+            {showInventoryDetails && ingredients.filter((ing) => ing.ingredient_type !== 'water').map((ing) => {
+              const realIndex = ingredients.indexOf(ing);
               return (
-                <div key={`inv-${index}`}>
+                <div key={`inv-${realIndex}`}>
                   <div className="wizard-inventory-row">
-                    <span>{ing.name || typeLabel}</span>
-                    <input placeholder="Lot #" value={ing.lot_number ?? ''} onChange={(e) => updateIngredient(index, { lot_number: e.target.value })} />
-                    {quickCategory ? (
-                      <IngredientSelect
-                        testId={`wizard-ingredient-${index}`}
-                        value={ing.inventory_item_id != null ? String(ing.inventory_item_id) : ''}
-                        emptyLabel="— Inventory item —"
-                        noun={ing.ingredient_type === 'other' ? 'additive' : (typeLabel?.toLowerCase() ?? 'ingredient')}
-                        category={quickCategory}
-                        unit={ing.unit}
-                        options={inventoryItems.map((item) => ({
-                          value: String(item.id),
-                          label: `${item.name} (${item.quantity} ${item.unit})`,
-                        }))}
-                        onSelect={(rawId) => updateIngredient(index, {
-                          inventory_item_id: rawId ? parseInt(rawId, 10) : null,
-                        })}
-                        onAdded={(item) => updateIngredient(index, {
-                          inventory_item_id: item.id,
-                          name: ing.name.trim() ? ing.name : item.name,
-                        })}
-                      />
-                    ) : (
-                      <select
-                        value={ing.inventory_item_id ?? ''}
-                        onChange={(e) => updateIngredient(index, { inventory_item_id: e.target.value ? parseInt(e.target.value) : null })}
-                      >
-                        <option value="">— Inventory item —</option>
-                        {inventoryItems.map((item) => (
-                          <option key={item.id} value={item.id}>{item.name} ({item.quantity} {item.unit})</option>
-                        ))}
-                      </select>
-                    )}
+                    <span>{ing.name || inventoryCategoryLabel(ing.inventory_category || 'Additive')}</span>
+                    <input placeholder="Lot #" value={ing.lot_number ?? ''} onChange={(e) => updateIngredient(realIndex, { lot_number: e.target.value })} />
                   </div>
                 </div>
               );
