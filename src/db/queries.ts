@@ -6872,10 +6872,63 @@ export function moveEquipmentToPlan(
   );
 }
 
+function detachFloorEquipment(id: number): void {
+  runQuery('UPDATE fermentation_logs SET floor_equipment_id = NULL WHERE floor_equipment_id = ?', [id]);
+  runQuery('UPDATE distillation_runs SET source_fermenter_equipment_id = NULL WHERE source_fermenter_equipment_id = ?', [id]);
+  runQuery('UPDATE distillation_runs SET source_holding_tank_equipment_id = NULL WHERE source_holding_tank_equipment_id = ?', [id]);
+  runQuery('UPDATE distillation_runs SET dest_holding_tank_equipment_id = NULL WHERE dest_holding_tank_equipment_id = ?', [id]);
+  runQuery('UPDATE distillation_runs SET stillage_holding_tank_equipment_id = NULL WHERE stillage_holding_tank_equipment_id = ?', [id]);
+  runQuery('UPDATE distillation_cuts SET holding_tank_equipment_id = NULL WHERE holding_tank_equipment_id = ?', [id]);
+  runQuery('UPDATE barrels SET source_holding_tank_equipment_id = NULL WHERE source_holding_tank_equipment_id = ?', [id]);
+  runQuery('UPDATE bottling_runs SET source_holding_tank_equipment_id = NULL WHERE source_holding_tank_equipment_id = ?', [id]);
+  runQuery('UPDATE bottling_runs SET return_holding_tank_equipment_id = NULL WHERE return_holding_tank_equipment_id = ?', [id]);
+  runQuery('UPDATE blend_products SET output_holding_tank_equipment_id = NULL WHERE output_holding_tank_equipment_id = ?', [id]);
+  runQuery('UPDATE holding_tank_transfers SET dest_tank_equipment_id = NULL WHERE dest_tank_equipment_id = ?', [id]);
+  runQuery('UPDATE production_status_logs SET floor_equipment_id = NULL WHERE floor_equipment_id = ?', [id]);
+
+  const blends = queryAll<{ id: number }>(
+    'SELECT id FROM blend_products WHERE source_holding_tank_equipment_id = ?',
+    [id],
+  );
+  for (const blend of blends) {
+    const other = queryOne<{ holding_tank_equipment_id: number }>(
+      `SELECT holding_tank_equipment_id FROM blend_spirit_sources
+       WHERE blend_product_id = ? AND holding_tank_equipment_id > 0 AND holding_tank_equipment_id != ?
+       ORDER BY sort_order, id LIMIT 1`,
+      [blend.id, id],
+    );
+    if (other) {
+      runQuery(
+        'UPDATE blend_products SET source_holding_tank_equipment_id = ? WHERE id = ?',
+        [other.holding_tank_equipment_id, blend.id],
+      );
+    } else {
+      runQuery('DELETE FROM blend_ingredients WHERE blend_product_id = ?', [blend.id]);
+      runQuery('DELETE FROM blend_formula_versions WHERE blend_product_id = ?', [blend.id]);
+      runQuery('DELETE FROM blend_spirit_sources WHERE blend_product_id = ?', [blend.id]);
+      runQuery('DELETE FROM blend_products WHERE id = ?', [blend.id]);
+    }
+  }
+
+  runQuery('DELETE FROM distillation_run_tank_sources WHERE holding_tank_equipment_id = ?', [id]);
+  runQuery('DELETE FROM barrel_fills WHERE source_holding_tank_equipment_id = ?', [id]);
+  runQuery('DELETE FROM bottling_run_returns WHERE holding_tank_equipment_id = ?', [id]);
+  runQuery('DELETE FROM blend_spirit_sources WHERE holding_tank_equipment_id = ?', [id]);
+  runQuery('DELETE FROM holding_tank_transfers WHERE source_tank_equipment_id = ?', [id]);
+  runQuery('DELETE FROM holding_tank_opening_balances WHERE tank_equipment_id = ?', [id]);
+  runQuery('DELETE FROM holding_tank_volume_variances WHERE tank_equipment_id = ?', [id]);
+  runQuery('DELETE FROM holding_tank_dilutions WHERE tank_equipment_id = ?', [id]);
+  runQuery('DELETE FROM discarded_fermentations WHERE source_fermenter_equipment_id = ?', [id]);
+}
+
 export function deleteFloorEquipment(id: number): void {
   const __remote = forwardProductionMutation('deleteFloorEquipment', [id]);
   if (__remote.forwarded) return __remote.value as never;
 
+  const existing = queryOne<{ id: number }>('SELECT id FROM floor_equipment WHERE id = ?', [id]);
+  if (!existing) return;
+
+  detachFloorEquipment(id);
   deleteStatusDateLog('equipment', id);
   runQuery('DELETE FROM floor_equipment WHERE id = ?', [id]);
 }

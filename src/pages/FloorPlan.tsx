@@ -236,10 +236,14 @@ export function FloorPlanPage() {
   };
 
   const handleDelete = (id: number) => {
-    if (confirm('Remove this equipment from the floor plan?')) {
+    if (!isAdmin) return;
+    if (!confirm('Remove this equipment from the floor plan?')) return;
+    try {
       deleteFloorEquipment(id);
       if (selectedId === id) selectEquipment(null);
       refresh();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Could not remove this equipment.');
     }
   };
 
@@ -330,7 +334,7 @@ export function FloorPlanPage() {
             refreshKey={key}
             onLayoutChange={refresh}
             onEditEquipment={isAdmin && selected ? () => openEdit(selected) : undefined}
-            onRemoveEquipment={selected ? () => handleDelete(selected.id) : undefined}
+            onRemoveEquipment={isAdmin && selected ? () => handleDelete(selected.id) : undefined}
           />
         </>
       )}
@@ -444,7 +448,9 @@ export function FloorPlanPage() {
                 {isAdmin && (
                   <button className="btn btn-sm btn-secondary" onClick={() => openEdit(selected)}>Edit</button>
                 )}
-                <button className="btn btn-sm btn-danger" onClick={() => handleDelete(selected.id)}>Remove</button>
+                {isAdmin && (
+                  <button className="btn btn-sm btn-danger" onClick={() => handleDelete(selected.id)}>Remove</button>
+                )}
               </div>
             </div>
           ) : (
