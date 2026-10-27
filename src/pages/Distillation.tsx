@@ -51,6 +51,7 @@ import {
   blendDistillationTankPulls,
   distillationChargeTypeChoices,
   distillationSourceSummary,
+  formatDistillationSourceDetail,
   distillationTankPullError,
   fitDistillationTankPulls,
   tanksOfEquipmentType,
@@ -58,7 +59,7 @@ import {
 } from '../lib/distillation-source-tanks';
 import { mixedSpiritConfirmMessage } from '../lib/blend-spirit-mix';
 import { equipmentTypeLabel } from '../lib/equipment';
-import { formatTankMenuLabel, tankContentsPhrase, tankDropdownLabel } from '../lib/tank-menu-label';
+import { formatTankMenuLabel, tankContentsPhrase, tankDropdownLabel, tankOriginDetail } from '../lib/tank-menu-label';
 import { AbvTemperatureInput, correctedAbvFromInputs } from '../components/AbvTemperatureInput';
 import { AdminCredentialConfirmModal } from '../components/AdminCredentialConfirmModal';
 import { GinBotanicalFields } from '../components/GinBotanicalFields';
@@ -298,11 +299,13 @@ export function Distillation() {
     row: (typeof fermenterSourceOptions)[number],
   ) => {
     const latestBrix = getLatestFermentationBrix(row.mash_batch_id, row.floor_equipment_id);
+    const estAbv = estimatedWashChargeAbv(row.mash_batch_id, row.floor_equipment_id);
     const brixNote = latestBrix != null ? `${latestBrix}° Brix` : 'no Brix logged';
+    const abvNote = estAbv != null ? `${estAbv.toFixed(1)}% ABV est.` : null;
     const readyNote = isBrixReadyForDistillation(latestBrix)
       ? 'ready'
       : `below ${FERMENTATION_READY_MAX_BRIX}° recommended`;
-    return `${row.equipment_name} — ${row.batch_number} (${row.volume_gal.toFixed(1)} gal · ${brixNote}, ${readyNote})`;
+    return `${row.equipment_name} — ${row.batch_number} (${[`${row.volume_gal.toFixed(1)} gal`, abvNote, `${brixNote}, ${readyNote}`].filter(Boolean).join(' · ')})`;
   };
 
   const sourceTankLabel = (
@@ -861,11 +864,11 @@ export function Distillation() {
     }
   };
 
-  const tankSourceNamesByRun = new Map<number, string[]>();
+  const tankSourcesByRun = new Map<number, ReturnType<typeof listDistillationTankSources>>();
   for (const source of listDistillationTankSources()) {
-    const names = tankSourceNamesByRun.get(source.runId) ?? [];
-    if (source.tankName) names.push(source.tankName);
-    tankSourceNamesByRun.set(source.runId, names);
+    const rows = tankSourcesByRun.get(source.runId) ?? [];
+    rows.push(source);
+    tankSourcesByRun.set(source.runId, rows);
   }
 
   const runSourceSummary = (run: DistillationRun & {
@@ -873,15 +876,43 @@ export function Distillation() {
     dest_holding_tank_name?: string;
   }) => {
     if (isTankSourcedRun(run.run_type ?? 'wash')) {
-      const savedNames = tankSourceNamesByRun.get(run.id) ?? [];
-      const from = savedNames.length > 0
-        ? distillationSourceSummary(savedNames)
-        : (run.source_holding_tank_name ?? fermenterLabel(run.source_holding_tank_equipment_id));
+      const saved = tankSourcesByRun.get(run.id) ?? [];
+      const from = saved.length > 0
+        ? distillationSourceSummary(saved.map((source) => {
+          const origin = tankOriginDetail(source.tankId);
+          return formatDistillationSourceDetail({
+            place: source.tankName,
+            what: origin.phrase,
+            abv: source.abv > 0 ? source.abv : origin.currentAbv,
+            previousAbv: origin.previousAbv,
+          });
+        }))
+        : (() => {
+          const origin = run.source_holding_tank_equipment_id
+            ? tankOriginDetail(run.source_holding_tank_equipment_id)
+            : null;
+          return formatDistillationSourceDetail({
+            place: run.source_holding_tank_name ?? fermenterLabel(run.source_holding_tank_equipment_id),
+            what: origin?.phrase,
+            abv: run.proof_spirit_abv ?? run.charge_abv ?? origin?.currentAbv,
+            previousAbv: origin?.previousAbv,
+          });
+        })();
       const to = run.dest_holding_tank_name ?? fermenterLabel(run.dest_holding_tank_equipment_id);
       return to && to !== '—' ? `${from} → ${to}` : from;
     }
     const mash = mashes.find((m) => m.id === run.source_mash_batch_id);
-    return mash?.batch_number ?? '—';
+    const fermenterName = equipment.find((item) => item.id === run.source_fermenter_equipment_id)?.name
+      ?? fermenterLabel(run.source_fermenter_equipment_id);
+    return formatDistillationSourceDetail({
+      place: fermenterName !== '—' ? fermenterName : null,
+      what: mash?.batch_number,
+      abv: run.charge_abv ?? (
+        mash && run.source_fermenter_equipment_id
+          ? estimatedWashChargeAbv(mash.id, run.source_fermenter_equipment_id)
+          : null
+      ),
+    });
   };
 
   const runsByStatus = useMemo(() => {
@@ -1391,6 +1422,7 @@ export function Distillation() {
                         {mashes.find((m) => m.id === runForm.source_mash_batch_id)?.batch_number
                           ?? `#${runForm.source_mash_batch_id}`}
                       </strong>
+                      {runForm.charge_abv != null && ` · ${runForm.charge_abv.toFixed(1)}% ABV`}
                     </p>
                   )}
                   {fermenterSourceOptions.length === 0 && (
@@ -1464,11 +1496,19 @@ export function Distillation() {
                             {lineTanks.length === 0 && !savedName && (
                               <p className="field-hint">No tanks of this type have spirit to charge.</p>
                             )}
-                            {selectedTank && (
-                              <p className="field-hint">
-                                Available: {selectedTank.available_gal.toFixed(1)} gal @ {selectedTank.available_abv.toFixed(1)}% ABV
-                              </p>
-                            )}
+                            {selectedTank && (() => {
+                              const origin = tankOriginDetail(selectedTank.id);
+                              return (
+                                <p className="field-hint">
+                                  {formatDistillationSourceDetail({
+                                    place: origin.phrase ?? selectedTank.name,
+                                    abv: selectedTank.available_abv,
+                                    previousAbv: origin.previousAbv,
+                                  })}
+                                  {` · ${selectedTank.available_gal.toFixed(1)} gal available`}
+                                </p>
+                              );
+                            })()}
                           </div>
                         )}
                         {line.tankId && (

@@ -5,6 +5,7 @@ import {
   distillationChargeTypeChoices,
   distillationSourceSummary,
   distillationSourceTypeChoices,
+  formatDistillationSourceDetail,
   distillationTankPullError,
   fitDistillationTankPulls,
   tanksOfEquipmentType,
@@ -82,6 +83,27 @@ describe('distillation source tanks', () => {
 
   it('joins source tank names', () => {
     expect(distillationSourceSummary(['High proof', 'Latina 500L'])).toBe('High proof + Latina 500L');
+  });
+
+  it('names the place, what the liquid was, and the alcohol percent', () => {
+    expect(formatDistillationSourceDetail({
+      place: 'Hearts tank',
+      what: 'Rum Run · Hearts from D-12',
+      abv: 75.2,
+    })).toBe('Hearts tank — Rum Run · Hearts from D-12 · 75.2% ABV');
+    expect(formatDistillationSourceDetail({
+      place: 'Hearts tank',
+      what: 'Rum Run · Hearts from D-12',
+      abv: 40,
+      previousAbv: 75.2,
+    })).toBe('Hearts tank — Rum Run · Hearts from D-12 · 40.0% ABV (was 75.2%)');
+    expect(formatDistillationSourceDetail({
+      place: 'Fermenter 2',
+      what: 'W-2026-004',
+      abv: 8.5,
+    })).toBe('Fermenter 2 — W-2026-004 · 8.5% ABV');
+    expect(formatDistillationSourceDetail({ place: 'Hearts tank' })).toBe('Hearts tank');
+    expect(formatDistillationSourceDetail({})).toBe('—');
   });
 
   it('draws a finished-volume spirit pull from the chosen tanks in order', () => {

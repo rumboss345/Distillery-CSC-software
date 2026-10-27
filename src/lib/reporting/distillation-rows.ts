@@ -1,6 +1,7 @@
 import { queryAll } from '../../db/database';
 import { distillationAlcoholBalance, washChargeAbvFromBrix, type AlcoholChargeBasis } from '../distillation-loss';
-import { distillationSourceSummary } from '../distillation-source-tanks';
+import { distillationSourceSummary, formatDistillationSourceDetail } from '../distillation-source-tanks';
+import { tankOriginDetail } from '../tank-menu-label';
 import { ALL_RUN_TYPES, runTypeLabel } from '../distillation-run-types';
 import type { DistillationRunType } from '../../types';
 import { laaGalFromVolumeAbv, roundAbv, roundVolume } from './alcohol-units';
@@ -62,6 +63,7 @@ export function buildDistillationReportRows(range: ReportDateRange): Distillatio
     mash_batch: string | null;
     source_mash_batch_id: number | null;
     source_fermenter_equipment_id: number | null;
+    source_holding_tank_equipment_id: number | null;
     start_brix: number | null;
     final_brix: number | null;
   }>(`
@@ -70,6 +72,7 @@ export function buildDistillationReportRows(range: ReportDateRange): Distillatio
            r.alcohol_charged_gal, r.alcohol_collected_gal, r.alcohol_loss_gal, r.alcohol_charge_basis,
            r.stillage_volume_gal,
            r.assigned_user_name, r.notes, r.source_mash_batch_id, r.source_fermenter_equipment_id,
+           r.source_holding_tank_equipment_id,
            fe.name as fermenter_name, src.name as source_tank_name, m.batch_number as mash_batch,
            COALESCE(m.actual_brix, m.target_brix) as start_brix, m.actual_final_brix as final_brix
     FROM distillation_runs r
@@ -80,8 +83,14 @@ export function buildDistillationReportRows(range: ReportDateRange): Distillatio
   `);
 
   const sourceNamesByRun = new Map<number, string[]>();
-  const sourceNameRows = queryAll<{ distillation_run_id: number; tank_name: string }>(`
-    SELECT s.distillation_run_id, fe.name as tank_name
+  const sourceNameRows = queryAll<{
+    distillation_run_id: number;
+    tank_id: number;
+    tank_name: string;
+    abv: number;
+  }>(`
+    SELECT s.distillation_run_id, s.holding_tank_equipment_id as tank_id,
+           fe.name as tank_name, s.abv
     FROM distillation_run_tank_sources s
     JOIN floor_equipment fe ON fe.id = s.holding_tank_equipment_id
     WHERE s.volume_gal > 0
@@ -89,7 +98,13 @@ export function buildDistillationReportRows(range: ReportDateRange): Distillatio
   `);
   for (const row of sourceNameRows) {
     const names = sourceNamesByRun.get(row.distillation_run_id) ?? [];
-    names.push(row.tank_name);
+    const origin = tankOriginDetail(row.tank_id);
+    names.push(formatDistillationSourceDetail({
+      place: row.tank_name,
+      what: origin.phrase,
+      abv: row.abv > 0 ? row.abv : origin.currentAbv,
+      previousAbv: origin.previousAbv,
+    }));
     sourceNamesByRun.set(row.distillation_run_id, names);
   }
 
@@ -181,12 +196,18 @@ export function buildDistillationReportRows(range: ReportDateRange): Distillatio
     const alcoholBasis = !hasCuts ? null : (recorded ? r.alcohol_charge_basis : (live.basis === 'unknown' ? null : live.basis));
 
     const sourceNames = sourceNamesByRun.get(r.id);
+    const fallbackOrigin = r.source_holding_tank_equipment_id
+      ? tankOriginDetail(r.source_holding_tank_equipment_id)
+      : null;
     const sourceLabel = (sourceNames && sourceNames.length > 0
       ? distillationSourceSummary(sourceNames)
-      : '')
-      || r.source_tank_name
-      || r.fermenter_name
-      || (r.mash_batch ? `Wash ${r.mash_batch}` : '—');
+      : formatDistillationSourceDetail({
+        place: r.source_tank_name || r.fermenter_name,
+        what: fallbackOrigin?.phrase
+          ?? (r.mash_batch ? r.mash_batch : null),
+        abv: r.proof_spirit_abv ?? r.charge_abv ?? estimatedAbv ?? fallbackOrigin?.currentAbv,
+        previousAbv: fallbackOrigin?.previousAbv,
+      }));
 
     rows.push({
       run_id: r.id,
