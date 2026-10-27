@@ -6873,6 +6873,10 @@ export function moveEquipmentToPlan(
 }
 
 function detachFloorEquipment(id: number): void {
+  // SQLite memory runs with foreign_keys OFF, so ON DELETE CASCADE never fires.
+  // Drop these children before the piece is removed or Postgres rejects the persist.
+  runQuery('DELETE FROM equipment_maintenance_log WHERE floor_equipment_id = ?', [id]);
+  runQuery('DELETE FROM mash_fermenter_assignments WHERE floor_equipment_id = ?', [id]);
   runQuery('UPDATE fermentation_logs SET floor_equipment_id = NULL WHERE floor_equipment_id = ?', [id]);
   runQuery('UPDATE distillation_runs SET source_fermenter_equipment_id = NULL WHERE source_fermenter_equipment_id = ?', [id]);
   runQuery('UPDATE distillation_runs SET source_holding_tank_equipment_id = NULL WHERE source_holding_tank_equipment_id = ?', [id]);

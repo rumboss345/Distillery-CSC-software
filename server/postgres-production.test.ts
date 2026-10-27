@@ -1221,6 +1221,7 @@ describe('PostgreSQL production modules', () => {
       transfer_date: '2026-10-26',
       notes: 'Into spirit',
     }]);
+    await save('updateEquipmentMaintenance', [extraId, 'repair_note', 'Worn gasket', 1, 'Admin']);
 
     await save('deleteFloorEquipment', [extraId]);
 
@@ -1230,6 +1231,11 @@ describe('PostgreSQL production modules', () => {
       api.getHoldingTankTransfers().find((row) => row.notes === 'Into spirit')
     ));
     expect(leftoverTransfer).toBeUndefined();
+    const leftoverLogs = await poolQuery(
+      'SELECT id FROM equipment_maintenance_log WHERE floor_equipment_id = $1',
+      [extraId],
+    );
+    expect(leftoverLogs.rows).toEqual([]);
   });
 
   it('backs up and restores production rows without passwords or sample batches', async () => {
