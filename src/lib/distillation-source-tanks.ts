@@ -79,6 +79,39 @@ export function distillationSourceSummary(names: readonly string[]): string {
   return labels.join(' + ');
 }
 
+const ABV_CHANGED = 0.15;
+
+/** Place the charge came from, what the liquid was, and the alcohol percent. */
+export function formatDistillationSourceDetail(input: {
+  place?: string | null;
+  what?: string | null;
+  abv?: number | null;
+  previousAbv?: number | null;
+}): string {
+  const place = input.place?.trim() ?? '';
+  const what = input.what?.trim() ?? '';
+  const parts: string[] = [];
+  if (what && what.localeCompare(place, undefined, { sensitivity: 'base' }) !== 0) {
+    parts.push(what);
+  }
+  if (input.abv != null && Number.isFinite(input.abv)) {
+    const abv = `${input.abv.toFixed(1)}% ABV`;
+    const previous = input.previousAbv;
+    if (
+      previous != null
+      && Number.isFinite(previous)
+      && Math.abs(previous - input.abv) > ABV_CHANGED
+    ) {
+      parts.push(`${abv} (was ${previous.toFixed(1)}%)`);
+    } else {
+      parts.push(abv);
+    }
+  }
+  if (!place) return parts.join(' · ') || '—';
+  if (parts.length === 0) return place;
+  return `${place} — ${parts.join(' · ')}`;
+}
+
 /**
  * Keep the tanks the user chose, but draw only `targetGal` of spirit.
  * Extra gallons already entered are left in the later tanks. If the entered

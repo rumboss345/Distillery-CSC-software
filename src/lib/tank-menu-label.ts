@@ -37,6 +37,23 @@ export function preferContentsSummary(
   return 'Spirit';
 }
 
+function tankHistoryPhrase(tankId: number): string | null {
+  const phrase = preferContentsSummary(
+    null,
+    getHoldingTankIntakeHistory(tankId, 12),
+    getCollectionVesselStoredCutType(tankId),
+  );
+  return phrase && phrase !== 'Spirit' ? phrase : null;
+}
+
+function originIntakeAbv(tankId: number): number | null {
+  for (const entry of getHoldingTankIntakeHistory(tankId, 12)) {
+    if (entry.kind === 'stillage') continue;
+    if (Number.isFinite(entry.abv) && entry.abv > 0) return entry.abv;
+  }
+  return null;
+}
+
 /** What is in the tank, without a gallon amount. Null when the tank is empty. */
 export function tankContentsPhrase(tankId: number): string | null {
   const ledger = getHoldingTankContents(tankId);
@@ -50,6 +67,21 @@ export function tankContentsPhrase(tankId: number): string | null {
     getHoldingTankIntakeHistory(tankId, 12),
     getCollectionVesselStoredCutType(tankId),
   );
+}
+
+/** What the liquid was and the proof it arrived at, even after the tank is emptied. */
+export function tankOriginDetail(tankId: number): {
+  phrase: string | null;
+  currentAbv: number | null;
+  previousAbv: number | null;
+} {
+  const ledger = getHoldingTankContents(tankId);
+  const live = tankContentsPhrase(tankId);
+  return {
+    phrase: live ?? tankHistoryPhrase(tankId),
+    currentAbv: ledger.volume_gal > 0.001 && Number.isFinite(ledger.abv) ? ledger.abv : null,
+    previousAbv: originIntakeAbv(tankId),
+  };
 }
 
 /** Dropdown text: tank name, what it holds, and the proof. Gallons are included when moving. */
