@@ -424,6 +424,100 @@ describe('PostgreSQL production modules', () => {
     expect(engine.readProduction((api) => api.getMonthlyProduction()).length).toBeGreaterThan(0);
   }, 60_000);
 
+  it('deducts a labels-category item when a bottling line picks that label', async () => {
+    const stock = (name: string) => engine.readProduction((api) => (
+      api.getInventoryItems().find((item) => item.name === name)?.quantity ?? null
+    ));
+    await save('saveInventoryItem', [{
+      name: '750 ml Label Test Bottle',
+      category: 'packaging',
+      unit: 'each',
+      quantity: 50,
+      reorder_level: 0,
+      notes: '',
+      package_size_ml: 750,
+      density_g_per_ml: null,
+      density_reference: '',
+      abv: null,
+    }]);
+    await save('saveInventoryItem', [{
+      name: 'Front Labels',
+      category: 'labels',
+      unit: 'each',
+      quantity: 80,
+      reorder_level: 0,
+      notes: '',
+      package_size_ml: null,
+      density_g_per_ml: null,
+      density_reference: '',
+      abv: null,
+    }]);
+    expect(stock('750 ml Label Test Bottle')).toBe(50);
+    expect(stock('Front Labels')).toBe(80);
+
+    await save('saveBottlingRun', [{
+      batch_number: 'BT-LABEL-001',
+      source_barrel_id: null,
+      source_holding_tank_equipment_id: null,
+      source_volume_gal: null,
+      source_abv: null,
+      bottled_volume_gal: null,
+      volume_variance_gal: null,
+      alcohol_variance_gal: null,
+      variance_reason: '',
+      variance_changed_by: 'Admin',
+      source_run_id: null,
+      bottling_date: '2026-10-26',
+      packaging_bottle: '',
+      bottle_size_ml: 750,
+      bottle_count: 12,
+      final_abv: 40,
+      product_name: 'Label Test Spirit',
+      lot_number: 'LOT-LABEL-1',
+      notes: '',
+      returns: [],
+    }, [{
+      packaging_bottle: '750 ml Label Test Bottle',
+      packaging_label: 'Front Labels',
+      bottle_size_ml: 750,
+      bottle_count: 12,
+    }]]);
+    const bottled = engine.readProduction((api) => api.getBottlingRuns().find((run) => run.batch_number === 'BT-LABEL-001'));
+    expect(bottled?.lines[0]?.packaging_label).toBe('Front Labels');
+    expect(stock('750 ml Label Test Bottle')).toBe(38);
+    expect(stock('Front Labels')).toBe(68);
+
+    await save('saveBottlingRun', [{
+      batch_number: bottled!.batch_number,
+      source_barrel_id: bottled!.source_barrel_id,
+      source_holding_tank_equipment_id: bottled!.source_holding_tank_equipment_id,
+      source_volume_gal: bottled!.source_volume_gal,
+      source_abv: bottled!.source_abv,
+      bottled_volume_gal: bottled!.bottled_volume_gal,
+      volume_variance_gal: bottled!.volume_variance_gal,
+      alcohol_variance_gal: bottled!.alcohol_variance_gal,
+      variance_reason: bottled!.variance_reason ?? '',
+      variance_changed_by: bottled!.variance_changed_by ?? 'Admin',
+      source_run_id: bottled!.source_run_id,
+      bottling_date: bottled!.bottling_date,
+      packaging_bottle: bottled!.packaging_bottle,
+      bottle_size_ml: bottled!.bottle_size_ml,
+      bottle_count: bottled!.bottle_count,
+      final_abv: bottled!.final_abv,
+      product_name: bottled!.product_name,
+      lot_number: bottled!.lot_number,
+      notes: bottled!.notes,
+      returns: [],
+    }, [{
+      packaging_bottle: '750 ml Label Test Bottle',
+      packaging_label: '',
+      bottle_size_ml: 750,
+      bottle_count: 12,
+    }], bottled!.id]);
+    expect(stock('750 ml Label Test Bottle')).toBe(38);
+    expect(stock('Front Labels')).toBe(80);
+  });
+
   it('lets different records save together and stops a tank from being overdrawn', async () => {
     const spiritId = engine.readProduction((api) => api.getFloorEquipment().find((item) => item.name === 'Spirit Tank')!.id);
     const tankA = engine.readProduction((api) => api.getFloorEquipment().find((item) => item.name === 'Tank A')!.id);

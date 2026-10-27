@@ -7,17 +7,36 @@ export function isRumBottlingProduct(productName: string): boolean {
   return /\brum\b/i.test(productName.trim());
 }
 
-/** Bottle counts grouped by packaging SKU name (inventory item name). */
-export function packagingBottleCountsBySku(
-  lines: { packaging_bottle?: string; bottle_count: number }[],
+function skuCountsByName(
+  lines: { name?: string | null; bottle_count: number }[],
 ): Record<string, number> {
   const out: Record<string, number> = {};
   for (const line of lines) {
-    const name = line.packaging_bottle?.trim();
+    const name = line.name?.trim();
     if (!name || line.bottle_count <= 0) continue;
     out[name] = (out[name] ?? 0) + line.bottle_count;
   }
   return out;
+}
+
+/** Bottle counts grouped by packaging SKU name (inventory item name). */
+export function packagingBottleCountsBySku(
+  lines: { packaging_bottle?: string; bottle_count: number }[],
+): Record<string, number> {
+  return skuCountsByName(lines.map((line) => ({
+    name: line.packaging_bottle,
+    bottle_count: line.bottle_count,
+  })));
+}
+
+/** Label counts grouped by labels-category inventory item name. */
+export function packagingLabelCountsBySku(
+  lines: { packaging_label?: string; bottle_count: number }[],
+): Record<string, number> {
+  return skuCountsByName(lines.map((line) => ({
+    name: line.packaging_label,
+    bottle_count: line.bottle_count,
+  })));
 }
 
 /** Inventory quantity adjustment per SKU (positive = add back to stock, negative = consume). */
@@ -52,6 +71,7 @@ export interface BottlingLineAmount {
   bottle_count: number;
   bottle_size_ml: number;
   packaging_bottle?: string;
+  packaging_label?: string;
 }
 
 export function lineVolumeGal(line: BottlingLineAmount): number {
@@ -310,8 +330,10 @@ export function formatLinesSummary(lines: BottlingLineAmount[]): string {
   const active = lines.filter((line) => line.bottle_count > 0);
   if (active.length === 0) return '—';
   return active.map((line) => {
-    const label = line.packaging_bottle?.trim()
+    const bottle = line.packaging_bottle?.trim()
       || `${line.bottle_size_ml} ml`;
-    return `${label} × ${line.bottle_count.toLocaleString()}`;
+    const label = line.packaging_label?.trim();
+    const sku = label ? `${bottle} + ${label}` : bottle;
+    return `${sku} × ${line.bottle_count.toLocaleString()}`;
   }).join(', ');
 }

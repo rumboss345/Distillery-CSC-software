@@ -464,6 +464,7 @@ export interface BottlingRunLine {
   id: number;
   bottling_run_id: number;
   packaging_bottle: string;
+  packaging_label: string;
   bottle_size_ml: number;
   bottle_count: number;
   sort_order: number;
@@ -471,6 +472,7 @@ export interface BottlingRunLine {
 
 export interface BottlingRunLineInput {
   packaging_bottle: string;
+  packaging_label?: string;
   bottle_size_ml: number;
   bottle_count: number;
 }

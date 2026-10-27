@@ -2692,7 +2692,7 @@ tr.volume-change-kind:hover td {
 
 .bottling-line-row {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr auto;
+  grid-template-columns: 2fr 2fr 1fr 1fr auto;
   gap: 0.75rem;
   align-items: end;
   padding: 0.75rem 0;
