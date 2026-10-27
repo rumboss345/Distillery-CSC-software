@@ -1202,6 +1202,7 @@ function migrateBottlingRunLines(): void {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       bottling_run_id INTEGER NOT NULL REFERENCES bottling_runs(id) ON DELETE CASCADE,
       packaging_bottle TEXT NOT NULL DEFAULT '',
+      packaging_label TEXT NOT NULL DEFAULT '',
       bottle_size_ml INTEGER NOT NULL DEFAULT 750,
       bottle_count INTEGER NOT NULL DEFAULT 0,
       sort_order INTEGER NOT NULL DEFAULT 0
@@ -1210,6 +1211,7 @@ function migrateBottlingRunLines(): void {
   db.run(`
     CREATE INDEX IF NOT EXISTS idx_bottling_run_lines_run ON bottling_run_lines(bottling_run_id)
   `);
+  addColumnIfMissing('bottling_run_lines', 'packaging_label', "TEXT NOT NULL DEFAULT ''");
   db.run(`
     INSERT INTO bottling_run_lines (bottling_run_id, packaging_bottle, bottle_size_ml, bottle_count, sort_order)
     SELECT id, packaging_bottle, bottle_size_ml, bottle_count, 0

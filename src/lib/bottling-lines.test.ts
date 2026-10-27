@@ -18,6 +18,7 @@ import {
   maxBottlesFromGallons,
   packagingBottleCountsBySku,
   packagingInventoryAdjustments,
+  packagingLabelCountsBySku,
   totalVolumeGal,
 } from './bottling-lines';
 
@@ -58,6 +59,14 @@ describe('bottling-lines', () => {
       '750mL 7F': 20,
       '375mL Oslo': -48,
     });
+  });
+
+  it('aggregates label counts the same way as bottles', () => {
+    expect(packagingLabelCountsBySku([
+      { packaging_label: 'Front Labels', bottle_count: 100 },
+      { packaging_label: 'Front Labels', bottle_count: 20 },
+      { packaging_label: '', bottle_count: 12 },
+    ])).toEqual({ 'Front Labels': 120 });
   });
 
   it('does not treat gallons sent to a tank as a loss', () => {
@@ -278,5 +287,8 @@ describe('bottling-lines', () => {
       { packaging_bottle: '750mL 7F', bottle_count: 120, bottle_size_ml: 750 },
       { packaging_bottle: '375mL Oslo', bottle_count: 48, bottle_size_ml: 375 },
     ])).toBe('750mL 7F × 120, 375mL Oslo × 48');
+    expect(formatLinesSummary([
+      { packaging_bottle: '750mL 7F', packaging_label: 'Front Labels', bottle_count: 120, bottle_size_ml: 750 },
+    ])).toBe('750mL 7F + Front Labels × 120');
   });
 });

@@ -130,6 +130,11 @@ export async function migrateDatabase(): Promise<void> {
       await client.query(ARCHIVE_OLD_AUDIT_DELETE, [cutoff]);
       await client.query(`INSERT INTO schema_migrations (version) VALUES ('004')`);
     }
+    const bottlingLabelMigration = await client.query('SELECT version FROM schema_migrations WHERE version = $1', ['005']);
+    if (bottlingLabelMigration.rowCount === 0) {
+      await client.query(`ALTER TABLE bottling_run_lines ADD COLUMN IF NOT EXISTS packaging_label TEXT NOT NULL DEFAULT ''`);
+      await client.query(`INSERT INTO schema_migrations (version) VALUES ('005')`);
+    }
     await client.query(`
       INSERT INTO inventory_categories (name)
       SELECT 'botanicals'

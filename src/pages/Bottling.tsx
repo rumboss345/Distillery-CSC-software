@@ -56,6 +56,7 @@ function formatBottlingAbv(value: number): string {
 
 const emptyLine = (): BottlingRunLineInput => ({
   packaging_bottle: '',
+  packaging_label: '',
   bottle_size_ml: 750,
   bottle_count: 0,
 });
@@ -111,6 +112,7 @@ function linesFromRun(run: BottlingRunView): BottlingRunLineInput[] {
   if (run.lines.length > 0) {
     return run.lines.map((line) => ({
       packaging_bottle: line.packaging_bottle,
+      packaging_label: line.packaging_label ?? '',
       bottle_size_ml: line.bottle_size_ml,
       bottle_count: line.bottle_count,
     }));
@@ -137,9 +139,14 @@ export function Bottling() {
   const namedHoldingTanks = getHoldingTanks({ includeUnavailable: true });
   const namedCollectionVessels = getCollectionVessels({ includeUnavailable: true });
   const packagingInventory = getInventoryByCategory('packaging');
+  const labelInventory = getInventoryByCategory('labels');
   const bottleOptions = useMemo(
     () => packagingBottleOptions(packagingInventory),
     [packagingInventory],
+  );
+  const labelOptions = useMemo(
+    () => [...labelInventory].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })),
+    [labelInventory],
   );
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<number | undefined>();
@@ -788,11 +795,16 @@ export function Bottling() {
               </div>
               <p className="field-hint">
                 {isRumBottling
-                  ? 'Choose bottles from Inventory → Packaging, confirm size (ml), and enter how many you bottled (stock is deducted on save).'
-                  : 'Bottle different sizes from the same tank in one run. The list is Inventory → Packaging items; stock is deducted on save.'}
+                  ? 'Choose bottles from Inventory → Packaging and a label from Inventory → Labels. Confirm size (ml) and count. Bottle and label stock are deducted on save.'
+                  : 'Bottle different sizes from the same tank in one run. Pick a bottle from Packaging and a label from Labels; stock of both is deducted on save.'}
               </p>
               {lines.map((line, index) => {
                 const lineGal = lineVolumeGal(line);
+                const selectedLabel = (line.packaging_label ?? '').trim();
+                const labelsForLine = selectedLabel
+                  && !labelOptions.some((item) => item.name.toLowerCase() === selectedLabel.toLowerCase())
+                  ? [...labelOptions, { id: 0, name: selectedLabel, quantity: 0, unit: 'each' }]
+                  : labelOptions;
                 return (
                   <div key={index} className="bottling-line-row">
                     <div className="form-group">
@@ -805,6 +817,24 @@ export function Bottling() {
                         {optionsForLine(line.packaging_bottle).map((b) => (
                           <option key={b.name} value={b.name}>
                             {b.sizeMl != null ? `${b.name} (${b.sizeMl} ml)` : b.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor={`bottling-label-${index}`}>Label</label>
+                      <select
+                        id={`bottling-label-${index}`}
+                        data-testid={index === 0 ? 'bottling-label' : `bottling-label-${index}`}
+                        value={line.packaging_label ?? ''}
+                        onChange={(e) => updateLine(index, { packaging_label: e.target.value })}
+                      >
+                        <option value="">— None —</option>
+                        {labelsForLine.map((item) => (
+                          <option key={item.name} value={item.name}>
+                            {item.id > 0
+                              ? `${item.name} (${item.quantity.toLocaleString()} ${item.unit})`
+                              : item.name}
                           </option>
                         ))}
                       </select>

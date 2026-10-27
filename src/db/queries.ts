@@ -7,6 +7,7 @@ import {
   bottlingVolumeVarianceGal,
   packagingBottleCountsBySku,
   packagingInventoryAdjustments,
+  packagingLabelCountsBySku,
 } from '../lib/bottling-lines';
 import {
   collectionVesselAcceptsIncomingCut,
@@ -412,17 +413,26 @@ function syncBottlingPackagingInventory(
   previousLines: BottlingRunLineInput[],
   nextLines: BottlingRunLineInput[],
 ): void {
-  const prev = packagingBottleCountsBySku(previousLines);
-  const next = packagingBottleCountsBySku(nextLines);
-  const adjustments = packagingInventoryAdjustments(prev, next);
-  for (const [sku, delta] of Object.entries(adjustments)) {
+  const bottleAdj = packagingInventoryAdjustments(
+    packagingBottleCountsBySku(previousLines),
+    packagingBottleCountsBySku(nextLines),
+  );
+  for (const [sku, delta] of Object.entries(bottleAdj)) {
     applyInventoryDelta('packaging', sku, delta);
+  }
+  const labelAdj = packagingInventoryAdjustments(
+    packagingLabelCountsBySku(previousLines),
+    packagingLabelCountsBySku(nextLines),
+  );
+  for (const [sku, delta] of Object.entries(labelAdj)) {
+    applyInventoryDelta('labels', sku, delta);
   }
 }
 
 function bottlingLinesToInventoryInput(lines: BottlingRunLine[]): BottlingRunLineInput[] {
   return lines.map((line) => ({
     packaging_bottle: line.packaging_bottle,
+    packaging_label: line.packaging_label,
     bottle_size_ml: line.bottle_size_ml,
     bottle_count: line.bottle_count,
   }));
@@ -5004,6 +5014,7 @@ function attachBottlingRunLines(runs: BottlingRun[]): BottlingRunView[] {
           id: 0,
           bottling_run_id: run.id,
           packaging_bottle: run.packaging_bottle,
+          packaging_label: '',
           bottle_size_ml: run.bottle_size_ml,
           bottle_count: run.bottle_count,
           sort_order: 0,
@@ -5034,9 +5045,9 @@ function persistBottlingRunLines(runId: number, lines: BottlingRunLineInput[]): 
   lines.forEach((line, index) => {
     if (line.bottle_count <= 0 || line.bottle_size_ml <= 0) return;
     insertRow(
-      `INSERT INTO bottling_run_lines (bottling_run_id, packaging_bottle, bottle_size_ml, bottle_count, sort_order)
-       VALUES (?, ?, ?, ?, ?)`,
-      [runId, line.packaging_bottle, line.bottle_size_ml, line.bottle_count, index],
+      `INSERT INTO bottling_run_lines (bottling_run_id, packaging_bottle, packaging_label, bottle_size_ml, bottle_count, sort_order)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [runId, line.packaging_bottle, line.packaging_label?.trim() ?? '', line.bottle_size_ml, line.bottle_count, index],
     );
   });
 }

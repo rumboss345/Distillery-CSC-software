@@ -231,6 +231,7 @@ describe('buildCalendarEventsFromData', () => {
           id: 1,
           bottling_run_id: 1,
           packaging_bottle: '750mL',
+          packaging_label: '',
           bottle_size_ml: 750,
           bottle_count: 100,
           sort_order: 0,
