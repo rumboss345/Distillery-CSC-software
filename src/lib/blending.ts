@@ -198,6 +198,65 @@ const NON_BLEND_INVENTORY_CATEGORIES = new Set([
   'yeast',
 ]);
 
+/** Category select value for proofing water, which is not an inventory item. */
+export const BLEND_PROOFING_WATER_CATEGORY = '__proofing_water__';
+
+export function isBlendProofingWaterCategory(category: string): boolean {
+  return category === BLEND_PROOFING_WATER_CATEGORY;
+}
+
+/** Inventory categories a blend recipe can pull additives from. */
+export function blendInventoryCategories(categories: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of categories) {
+    const name = raw.trim();
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (NON_BLEND_INVENTORY_CATEGORIES.has(key) || seen.has(key)) continue;
+    seen.add(key);
+    out.push(name);
+  }
+  return out.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+}
+
+/** Blend additive role inferred from the inventory category the user picked. */
+export function blendIngredientTypeForCategory(category: string): BlendIngredientType {
+  const key = category.trim().toLowerCase();
+  if (isBlendProofingWaterCategory(key) || key === 'water') return 'water';
+  if (key === 'sugar') return 'sugar';
+  if (key === 'syrup') return 'syrup';
+  if (key === 'flavoring') return 'flavoring';
+  if (key === 'color') return 'color';
+  return 'other';
+}
+
+export function filterInventoryByCategory(
+  items: InventoryItem[],
+  category: string,
+): InventoryItem[] {
+  const key = category.trim().toLowerCase();
+  if (!key || isBlendProofingWaterCategory(key)) return [];
+  return items.filter((item) => item.category.toLowerCase() === key);
+}
+
+/** Category shown in the picker: chosen category, else the linked item, else the type default. */
+export function resolvedBlendInventoryCategory(
+  ingredient: Pick<BlendIngredientInput, 'ingredient_type' | 'inventory_item_id'> & {
+    inventory_category?: string | null;
+  },
+  items: InventoryItem[],
+): string {
+  if (ingredient.ingredient_type === 'water') return BLEND_PROOFING_WATER_CATEGORY;
+  const stored = ingredient.inventory_category?.trim();
+  if (stored) return stored;
+  if (ingredient.inventory_item_id != null) {
+    const item = items.find((row) => row.id === ingredient.inventory_item_id);
+    if (item?.category.trim()) return item.category;
+  }
+  return inventoryCategoriesForBlendType(ingredient.ingredient_type)[0] ?? '';
+}
+
 /** Preferred inventory categories for each blend additive type (water excluded). */
 export function inventoryCategoriesForBlendType(type: BlendIngredientType): string[] {
   switch (type) {

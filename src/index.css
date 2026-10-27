@@ -1184,7 +1184,7 @@ tr.volume-change-kind:hover td {
 
 .blend-recipe-additive-fields {
   display: grid;
-  grid-template-columns: minmax(8rem, 1fr) minmax(10rem, 1.2fr) minmax(12rem, 1.4fr);
+  grid-template-columns: minmax(10rem, 1fr) minmax(14rem, 1.4fr);
   gap: 0.75rem;
   align-items: end;
   margin-bottom: 0.5rem;

@@ -12,7 +12,12 @@ import {
   convertIngredientAmount,
   convertSpiritAmount,
   spiritVolumeGalFromAmount,
+  BLEND_PROOFING_WATER_CATEGORY,
+  blendIngredientTypeForCategory,
+  blendInventoryCategories,
+  filterInventoryByCategory,
   filterInventoryForBlendIngredient,
+  resolvedBlendInventoryCategory,
   formatBlendRecipeAdditive,
   formatBlendRecipeSpiritPull,
   formatReviewVolume,
@@ -191,6 +196,28 @@ describe('blend recipe inventory helpers', () => {
     expect(filterInventoryForBlendIngredient(items, 'water')).toEqual([]);
     expect(filterInventoryForBlendIngredient(items, 'sugar').map((i) => i.name)).toEqual(['Raw Cane Sugar']);
     expect(filterInventoryForBlendIngredient(items, 'flavoring').map((i) => i.name)).toEqual(['Vanilla']);
+  });
+
+  it('lists blend inventory categories then items in that category', () => {
+    expect(blendInventoryCategories([
+      'packaging',
+      'Sugar',
+      'botanicals',
+      'labels',
+      'flavoring',
+      'sugar',
+    ])).toEqual(['botanicals', 'flavoring', 'Sugar']);
+    expect(blendInventoryCategories(['sugar', 'flavoring', 'packaging'])).toEqual(['flavoring', 'sugar']);
+    expect(blendIngredientTypeForCategory('sugar')).toBe('sugar');
+    expect(blendIngredientTypeForCategory('botanicals')).toBe('other');
+    expect(blendIngredientTypeForCategory('')).toBe('other');
+    expect(blendIngredientTypeForCategory(BLEND_PROOFING_WATER_CATEGORY)).toBe('water');
+    expect(filterInventoryByCategory(items, 'sugar').map((item) => item.name)).toEqual(['Raw Cane Sugar']);
+    expect(filterInventoryByCategory(items, 'botanicals')).toEqual([]);
+    expect(resolvedBlendInventoryCategory({
+      ingredient_type: 'flavoring',
+      inventory_item_id: 3,
+    }, items)).toBe('flavoring');
   });
 
   it('includes current unit in selectable unit options', () => {
