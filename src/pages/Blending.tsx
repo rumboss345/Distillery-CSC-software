@@ -473,7 +473,10 @@ export function Blending() {
   const barrelInventory = useMemo(() => getBarrelsForBlend(), [key]);
   const inventoryItems = getInventoryItems();
   const inventoryCategories = useMemo(
-    () => blendInventoryCategories(getInventoryCategories()),
+    () => blendInventoryCategories([
+      ...getInventoryCategories(),
+      ...inventoryItems.map((item) => item.category),
+    ]),
     [key],
   );
   const inventoryById = useMemo(

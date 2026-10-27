@@ -180,7 +180,10 @@ export function BlendRecipesTab({
   const inventoryItems = getInventoryItems();
   const inventoryById = new Map(inventoryItems.map((item) => [item.id, item]));
   const inventoryCategories = useMemo(
-    () => blendInventoryCategories(getInventoryCategories()),
+    () => blendInventoryCategories([
+      ...getInventoryCategories(),
+      ...inventoryItems.map((item) => item.category),
+    ]),
     [key],
   );
   const [showForm, setShowForm] = useState(false);

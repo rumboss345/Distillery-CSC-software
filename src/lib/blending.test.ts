@@ -207,6 +207,7 @@ describe('blend recipe inventory helpers', () => {
       'flavoring',
       'sugar',
     ])).toEqual(['botanicals', 'flavoring', 'Sugar']);
+    expect(blendInventoryCategories(['sugar', 'flavoring', 'packaging'])).toEqual(['flavoring', 'sugar']);
     expect(blendIngredientTypeForCategory('sugar')).toBe('sugar');
     expect(blendIngredientTypeForCategory('botanicals')).toBe('other');
     expect(blendIngredientTypeForCategory('')).toBe('other');
