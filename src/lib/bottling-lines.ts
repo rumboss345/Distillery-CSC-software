@@ -264,14 +264,12 @@ export function bottlingReturnsError(input: {
         : 'Enter how many gallons go to the tank.';
     }
     if (!line.tankId) return 'Choose the tank that receives the product that is not bottled.';
-    if (line.tankId === input.sourceTankId) {
-      return 'Choose a different tank than the one you are bottling from.';
-    }
     if (seen.has(line.tankId)) return `${name} is already selected. Pick each tank once.`;
     seen.add(line.tankId);
     total += line.gallons;
+    const leaveInSource = line.tankId === input.sourceTankId;
     const capacity = line.destCapacityGal ?? 0;
-    if (capacity > 0) {
+    if (!leaveInSource && capacity > 0) {
       const destVolume = line.destVolumeGal ?? 0;
       if (destVolume + line.gallons > capacity + 0.01) {
         const room = Math.max(0, capacity - destVolume);
@@ -300,15 +298,13 @@ export function bottlingReturnError(input: {
     return null;
   }
   if (!input.destTankId) return 'Choose the tank that receives the product that is not bottled.';
-  if (input.destTankId === input.sourceTankId) {
-    return 'Choose a different tank than the one you are bottling from.';
-  }
   const left = Math.max(0, input.unbottledGal);
   if (gallons > left + 0.01) {
     return `Only ${left.toFixed(2)} gal is left after bottling.`;
   }
+  const leaveInSource = input.destTankId === input.sourceTankId;
   const capacity = input.destCapacityGal ?? 0;
-  if (capacity > 0) {
+  if (!leaveInSource && capacity > 0) {
     const destVolume = input.destVolumeGal ?? 0;
     if (destVolume + gallons > capacity + 0.01) {
       const room = Math.max(0, capacity - destVolume);

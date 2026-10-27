@@ -518,6 +518,107 @@ describe('PostgreSQL production modules', () => {
     expect(stock('Front Labels')).toBe(80);
   });
 
+  it('leaves unbottled product in the spirit source and can still send some to another tank', async () => {
+    await saveEquipment('Leave Source Tank', 'holding_tank', 25);
+    await saveEquipment('Leave Other Tank', 'holding_tank', 50);
+    const sourceId = engine.readProduction((api) => (
+      api.getFloorEquipment().find((item) => item.name === 'Leave Source Tank')!.id
+    ));
+    const otherId = engine.readProduction((api) => (
+      api.getFloorEquipment().find((item) => item.name === 'Leave Other Tank')!.id
+    ));
+    await save('saveHoldingTankOnHand', [{
+      tankEquipmentId: sourceId,
+      volumeGal: 25,
+      abv: 40,
+      recordedAt: '2026-10-27',
+      notes: 'Fill for leave-in-source bottling',
+      changedBy: 'Admin',
+    }]);
+    expect(engine.readProduction((api) => api.getHoldingTankContents(sourceId).volume_gal)).toBeCloseTo(25, 3);
+
+    const bottledGal = (750 * 12) / ML_PER_GALLON;
+    const leftover = 25 - bottledGal;
+    const stayInSource = 10;
+    const sendAway = leftover - stayInSource;
+
+    await save('saveBottlingRun', [{
+      batch_number: 'BT-LEAVE-001',
+      source_barrel_id: null,
+      source_holding_tank_equipment_id: sourceId,
+      source_volume_gal: null,
+      source_abv: null,
+      bottled_volume_gal: null,
+      volume_variance_gal: null,
+      alcohol_variance_gal: null,
+      variance_reason: '',
+      variance_changed_by: 'Admin',
+      source_run_id: null,
+      bottling_date: '2026-10-27',
+      packaging_bottle: '',
+      bottle_size_ml: 750,
+      bottle_count: 12,
+      final_abv: 40,
+      product_name: 'Leave Source Spirit',
+      lot_number: 'LOT-LEAVE-1',
+      notes: '',
+      returns: [
+        { holding_tank_equipment_id: sourceId, volume_gal: stayInSource },
+        { holding_tank_equipment_id: otherId, volume_gal: sendAway },
+      ],
+    }, [{ packaging_bottle: '750 ml bottle', bottle_size_ml: 750, bottle_count: 12 }]]);
+
+    const bottled = engine.readProduction((api) => api.getBottlingRuns().find((run) => run.batch_number === 'BT-LEAVE-001'));
+    expect(bottled?.source_volume_gal).toBeCloseTo(25, 3);
+    expect(Math.abs(bottled?.volume_variance_gal ?? 99)).toBeLessThan(0.01);
+    expect(bottled?.returns).toHaveLength(2);
+    expect(bottled?.returns[0].holding_tank_equipment_id).toBe(sourceId);
+    expect(bottled?.returns[0].volume_gal).toBeCloseTo(stayInSource, 3);
+    expect(bottled?.returns[1].holding_tank_equipment_id).toBe(otherId);
+    expect(bottled?.returns[1].volume_gal).toBeCloseTo(sendAway, 3);
+    expect(engine.readProduction((api) => api.getHoldingTankContents(sourceId).volume_gal)).toBeCloseTo(stayInSource, 3);
+    expect(engine.readProduction((api) => api.getHoldingTankContents(otherId).volume_gal)).toBeCloseTo(sendAway, 3);
+
+    await saveEquipment('Leave Variance Tank', 'holding_tank', 25);
+    const varianceId = engine.readProduction((api) => (
+      api.getFloorEquipment().find((item) => item.name === 'Leave Variance Tank')!.id
+    ));
+    await save('saveHoldingTankOnHand', [{
+      tankEquipmentId: varianceId,
+      volumeGal: 10,
+      abv: 40,
+      recordedAt: '2026-10-27',
+      notes: 'Fill for leftover variance',
+      changedBy: 'Admin',
+    }]);
+    await save('saveBottlingRun', [{
+      batch_number: 'BT-LEAVE-002',
+      source_barrel_id: null,
+      source_holding_tank_equipment_id: varianceId,
+      source_volume_gal: null,
+      source_abv: null,
+      bottled_volume_gal: null,
+      volume_variance_gal: null,
+      alcohol_variance_gal: null,
+      variance_reason: 'Left leftover unassigned as variance',
+      variance_changed_by: 'Admin',
+      source_run_id: null,
+      bottling_date: '2026-10-27',
+      packaging_bottle: '',
+      bottle_size_ml: 750,
+      bottle_count: 12,
+      final_abv: 40,
+      product_name: 'Leave Variance Spirit',
+      lot_number: 'LOT-LEAVE-2',
+      notes: '',
+      returns: [],
+    }, [{ packaging_bottle: '750 ml bottle', bottle_size_ml: 750, bottle_count: 12 }]]);
+    const varianceRun = engine.readProduction((api) => api.getBottlingRuns().find((run) => run.batch_number === 'BT-LEAVE-002'));
+    expect(varianceRun?.source_volume_gal).toBeCloseTo(10, 3);
+    expect(varianceRun?.volume_variance_gal).toBeCloseTo(bottledGal - 10, 3);
+    expect(engine.readProduction((api) => api.getHoldingTankContents(varianceId).volume_gal)).toBeCloseTo(0, 3);
+  });
+
   it('lets different records save together and stops a tank from being overdrawn', async () => {
     const spiritId = engine.readProduction((api) => api.getFloorEquipment().find((item) => item.name === 'Spirit Tank')!.id);
     const tankA = engine.readProduction((api) => api.getFloorEquipment().find((item) => item.name === 'Tank A')!.id);

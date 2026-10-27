@@ -238,7 +238,25 @@ describe('bottling-lines', () => {
       unbottledGal: 15,
       destTankId: 1,
       sourceTankId: 1,
-    })).toMatch(/different tank/);
+      destName: 'Hearts Tank',
+      destVolumeGal: 25,
+      destCapacityGal: 25,
+    })).toBeNull();
+    expect(bottlingReturnsError({
+      returns: [
+        { tankId: 1, gallons: 15, name: 'Hearts Tank', destVolumeGal: 25, destCapacityGal: 25 },
+      ],
+      unbottledGal: 15,
+      sourceTankId: 1,
+    })).toBeNull();
+    expect(bottlingReturnsError({
+      returns: [
+        { tankId: 1, gallons: 10, name: 'Hearts Tank', destVolumeGal: 25, destCapacityGal: 25 },
+        { tankId: 2, gallons: 5, name: 'Milk can 1', destVolumeGal: 0, destCapacityGal: 50 },
+      ],
+      unbottledGal: 15,
+      sourceTankId: 1,
+    })).toBeNull();
     expect(bottlingReturnError({
       returnGal: 16,
       unbottledGal: 15,

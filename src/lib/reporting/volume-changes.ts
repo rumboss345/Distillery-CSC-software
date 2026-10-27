@@ -188,7 +188,9 @@ export function buildVolumeChangeRows(range: ReportDateRange): VolumeChangeRow[]
         kind: VOLUME_CHANGE_KINDS.bottlingToTank,
         place: `${run.batch_number} · ${tankName}`,
         change: `${line.volume_gal.toFixed(2)} gal at ${run.final_abv.toFixed(1)}% ABV (${run.product_name})`,
-        why: 'Product that was not bottled was sent to this tank.',
+        why: line.holding_tank_equipment_id === run.source_holding_tank_equipment_id
+          ? 'Product that was not bottled was left in the source tank.'
+          : 'Product that was not bottled was sent to this tank.',
         who: shown(run.variance_changed_by),
         gallons: line.volume_gal,
         abvPoints: null,

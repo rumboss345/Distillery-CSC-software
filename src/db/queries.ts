@@ -5139,7 +5139,9 @@ export function saveBottlingRun(
         assertEquipmentUsableForProduction(tankId, 'Destination tank');
         destName = dest.name;
         destCapacity = dest.capacity_gal;
-        destVolume = getHoldingTankContents(tankId, undefined, undefined, id).volume_gal;
+        destVolume = tankId === sourceTankId
+          ? 0
+          : getHoldingTankContents(tankId, undefined, undefined, id).volume_gal;
       }
       checkedReturns.push({
         tankId,
