@@ -12,7 +12,7 @@ import {
   getBlendProducts,
   getAllFermentationLogs,
 } from '../db/queries';
-import { formatLinesSummary } from './bottling-lines';
+import { formatLinesSummary, normalizeBottlingStatus } from './bottling-lines';
 import type {
   Barrel,
   BlendProduct,
@@ -232,6 +232,10 @@ export function mapRunStatus(status: DistillationRun['status']): CalendarStatusC
   }
 }
 
+export function mapBottlingStatus(status: string | null | undefined): CalendarStatusCategory {
+  return mapRunStatus(normalizeBottlingStatus(status));
+}
+
 export function mapBlendStatus(status: BlendProduct['status']): CalendarStatusCategory {
   switch (status) {
     case 'draft':
@@ -385,15 +389,17 @@ export function buildCalendarEventsFromData(
   for (const bottling of data.bottlings) {
     const startDate = toDateOnly(bottling.bottling_date);
     if (!startDate) continue;
+    const status = normalizeBottlingStatus(bottling.status);
     events.push({
       id: `bottling-${bottling.id}`,
       recordId: bottling.id,
       startDate,
+      endDate: status === 'running' ? spanThroughToday(startDate, today) : undefined,
       allDay: true,
       kind: 'bottling',
       title: bottling.product_name || bottling.batch_number,
-      status: 'complete',
-      statusCategory: 'complete',
+      status,
+      statusCategory: mapBottlingStatus(status),
       detail: bottling.lines.length > 0
         ? formatLinesSummary(bottling.lines)
         : `${bottling.bottle_count} bottles`,

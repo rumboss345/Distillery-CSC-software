@@ -148,6 +148,7 @@ export function buildVolumeChangeRows(range: ReportDateRange): VolumeChangeRow[]
     queryAll<{ id: number; name: string }>('SELECT id, name FROM floor_equipment').map((tank) => [tank.id, tank.name]),
   );
   for (const run of getBottlingRuns()) {
+    if (run.status === 'planned') continue;
     if (!eventInReportRange(run.bottling_date, range)) continue;
     const variance = reportedBottlingVarianceGal(run);
     const alcoholVariance = reportedBottlingAlcoholVarianceGal(run);

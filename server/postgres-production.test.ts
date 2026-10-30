@@ -619,6 +619,105 @@ describe('PostgreSQL production modules', () => {
     expect(engine.readProduction((api) => api.getHoldingTankContents(varianceId).volume_gal)).toBeCloseTo(0, 3);
   });
 
+  it('lets a bottling stay planned, then take bottles in sessions, then finish leftover in the source tank', async () => {
+    await saveEquipment('Session Source Tank', 'holding_tank', 25);
+    const sourceId = engine.readProduction((api) => (
+      api.getFloorEquipment().find((item) => item.name === 'Session Source Tank')!.id
+    ));
+    await save('saveInventoryItem', [{
+      name: '750 ml Session Bottle',
+      category: 'packaging',
+      unit: 'each',
+      quantity: 100,
+      reorder_level: 0,
+      notes: '',
+      package_size_ml: 750,
+      density_g_per_ml: null,
+      density_reference: '',
+      abv: null,
+    }]);
+    await save('saveHoldingTankOnHand', [{
+      tankEquipmentId: sourceId,
+      volumeGal: 25,
+      abv: 40,
+      recordedAt: '2026-10-30',
+      notes: 'Fill for session bottling',
+      changedBy: 'Admin',
+    }]);
+    const stock = () => engine.readProduction((api) => (
+      api.getInventoryItems().find((item) => item.name === '750 ml Session Bottle')?.quantity ?? null
+    ));
+    const tankGal = () => engine.readProduction((api) => api.getHoldingTankContents(sourceId).volume_gal);
+    const bottledGal = (750 * 12) / ML_PER_GALLON;
+    const header = {
+      batch_number: 'BT-SESSION-001',
+      source_barrel_id: null,
+      source_holding_tank_equipment_id: sourceId,
+      source_volume_gal: null,
+      source_abv: null,
+      bottled_volume_gal: null,
+      volume_variance_gal: null,
+      alcohol_variance_gal: null,
+      variance_reason: '',
+      variance_changed_by: 'Admin',
+      source_run_id: null,
+      bottling_date: '2026-10-30',
+      packaging_bottle: '',
+      bottle_size_ml: 750,
+      bottle_count: 0,
+      final_abv: 40,
+      product_name: 'Session Spirit',
+      lot_number: 'LOT-SESSION-1',
+      notes: '',
+    };
+
+    await save('saveBottlingRun', [{
+      ...header,
+      status: 'planned',
+      returns: [],
+    }, [{ packaging_bottle: '750 ml Session Bottle', bottle_size_ml: 750, bottle_count: 24 }]]);
+    const planned = engine.readProduction((api) => api.getBottlingRuns().find((run) => run.batch_number === 'BT-SESSION-001'));
+    expect(planned?.status).toBe('planned');
+    expect(planned?.source_volume_gal).toBeNull();
+    expect(tankGal()).toBeCloseTo(25, 3);
+    expect(stock()).toBe(100);
+
+    await save('saveBottlingRun', [{
+      ...header,
+      status: 'running',
+      returns: [],
+    }, [{ packaging_bottle: '750 ml Session Bottle', bottle_size_ml: 750, bottle_count: 12 }], planned!.id]);
+    const running = engine.readProduction((api) => api.getBottlingRuns().find((run) => run.batch_number === 'BT-SESSION-001'));
+    expect(running?.status).toBe('running');
+    expect(running?.source_volume_gal).toBeCloseTo(bottledGal, 3);
+    expect(tankGal()).toBeCloseTo(25 - bottledGal, 3);
+    expect(stock()).toBe(88);
+
+    await save('saveBottlingRun', [{
+      ...header,
+      status: 'running',
+      returns: [],
+    }, [{ packaging_bottle: '750 ml Session Bottle', bottle_size_ml: 750, bottle_count: 24 }], running!.id]);
+    const continued = engine.readProduction((api) => api.getBottlingRuns().find((run) => run.batch_number === 'BT-SESSION-001'));
+    expect(continued?.bottle_count).toBe(24);
+    expect(continued?.source_volume_gal).toBeCloseTo(bottledGal * 2, 3);
+    expect(tankGal()).toBeCloseTo(25 - bottledGal * 2, 3);
+    expect(stock()).toBe(76);
+
+    const leftover = 25 - bottledGal * 2;
+    await save('saveBottlingRun', [{
+      ...header,
+      status: 'complete',
+      returns: [{ holding_tank_equipment_id: sourceId, volume_gal: leftover }],
+    }, [{ packaging_bottle: '750 ml Session Bottle', bottle_size_ml: 750, bottle_count: 24 }], continued!.id]);
+    const finished = engine.readProduction((api) => api.getBottlingRuns().find((run) => run.batch_number === 'BT-SESSION-001'));
+    expect(finished?.status).toBe('complete');
+    expect(finished?.source_volume_gal).toBeCloseTo(25, 3);
+    expect(Math.abs(finished?.volume_variance_gal ?? 99)).toBeLessThan(0.01);
+    expect(tankGal()).toBeCloseTo(leftover, 3);
+    expect(stock()).toBe(76);
+  });
+
   it('lets different records save together and stops a tank from being overdrawn', async () => {
     const spiritId = engine.readProduction((api) => api.getFloorEquipment().find((item) => item.name === 'Spirit Tank')!.id);
     const tankA = engine.readProduction((api) => api.getFloorEquipment().find((item) => item.name === 'Tank A')!.id);

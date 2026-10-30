@@ -1,6 +1,35 @@
-import { mlToGallons } from '../types';
+import { mlToGallons, type RunStatus } from '../types';
 import { formatDistillationAlcoholResult } from './distillation-loss';
 import { roundAlcohol } from './reporting/alcohol-units';
+
+export type BottlingStatus = RunStatus;
+
+export const BOTTLING_STATUSES: BottlingStatus[] = ['planned', 'running', 'complete'];
+/** Running stays above planned. Finished runs stay last. */
+export const BOTTLING_STATUS_LIST_ORDER: BottlingStatus[] = ['running', 'planned', 'complete'];
+
+export const BOTTLING_STATUS_LABELS: Record<BottlingStatus, string> = {
+  planned: 'Planned',
+  running: 'Running',
+  complete: 'Finished',
+};
+
+export function isBottlingStatus(value: string | null | undefined): value is BottlingStatus {
+  return value === 'planned' || value === 'running' || value === 'complete';
+}
+
+/** Existing runs with no status were already finished. */
+export function normalizeBottlingStatus(value: string | null | undefined): BottlingStatus {
+  return isBottlingStatus(value) ? value : 'complete';
+}
+
+export function bottlingIsPlanned(status: string | null | undefined): boolean {
+  return normalizeBottlingStatus(status) === 'planned';
+}
+
+export function bottlingCountsTowardProduction(status: string | null | undefined): boolean {
+  return normalizeBottlingStatus(status) !== 'planned';
+}
 
 /** Rum bottling uses bottle dropdown + size; UI hides the packaging stock card while the form is open. */
 export function isRumBottlingProduct(productName: string): boolean {

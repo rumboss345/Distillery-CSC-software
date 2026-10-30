@@ -1475,6 +1475,13 @@ function migrateAdvancedBlending(): void {
   migrateDistillationAlcoholLossColumns();
   migrateBottlingReturnTankColumns();
   migrateBottlingRunReturns();
+  migrateBottlingStatusColumn();
+}
+
+/** Existing bottling runs were already finished. New runs can be planned or running. */
+function migrateBottlingStatusColumn(): void {
+  if (!db) return;
+  addColumnIfMissing('bottling_runs', 'status', "TEXT NOT NULL DEFAULT 'complete'");
 }
 
 /** Product left after bottling can be sent to another tank. Existing runs stay blank. */
