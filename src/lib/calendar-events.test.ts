@@ -226,6 +226,7 @@ describe('buildCalendarEventsFromData', () => {
         product_name: 'Gin',
         lot_number: 'L1',
         notes: '',
+        status: 'complete',
         created_at: '2026-05-01',
         lines: [{
           id: 1,
@@ -311,6 +312,50 @@ describe('buildCalendarEventsFromData', () => {
     expect(calendarEventPath(events.find((event) => event.kind === 'distillation')!)).toBe('/distillation?record=1');
     expect(calendarEventPath(events.find((event) => event.kind === 'blend')!)).toBe('/blending?record=1');
     expect(calendarEventPath(events.find((event) => event.kind === 'bottling')!)).toBe('/bottling?record=1');
+    expect(events.find((event) => event.kind === 'bottling')?.statusCategory).toBe('complete');
+  });
+
+  it('keeps a running bottling on the calendar through today', () => {
+    const events = buildCalendarEventsFromData(emptyData({
+      bottlings: [{
+        id: 2,
+        batch_number: 'BT-2',
+        source_barrel_id: null,
+        source_holding_tank_equipment_id: 1,
+        source_volume_gal: 2.38,
+        source_abv: 40,
+        bottled_volume_gal: 2.38,
+        volume_variance_gal: null,
+        alcohol_variance_gal: null,
+        source_run_id: null,
+        bottling_date: '2026-05-01',
+        packaging_bottle: '750mL',
+        bottle_size_ml: 750,
+        bottle_count: 12,
+        final_abv: 40,
+        product_name: 'Gin',
+        lot_number: 'L2',
+        notes: '',
+        status: 'running',
+        created_at: '2026-05-01',
+        lines: [{
+          id: 1,
+          bottling_run_id: 2,
+          packaging_bottle: '750mL',
+          packaging_label: '',
+          bottle_size_ml: 750,
+          bottle_count: 12,
+          sort_order: 0,
+        }],
+      } satisfies BottlingRunView],
+    }), '2026-05-04');
+    expect(events[0]).toMatchObject({
+      kind: 'bottling',
+      status: 'running',
+      statusCategory: 'in_progress',
+      startDate: '2026-05-01',
+      endDate: '2026-05-04',
+    });
   });
 
   it('skips records with missing dates', () => {

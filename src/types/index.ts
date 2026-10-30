@@ -433,7 +433,7 @@ export interface BottlingRun {
   batch_number: string;
   source_barrel_id: number | null;
   source_holding_tank_equipment_id: number | null;
-  /** Gallons drawn from source tank (empties tank on save when from tank). */
+  /** Gallons drawn from the source tank. Running draws bottled gallons; finished draws the tank. */
   source_volume_gal: number | null;
   /** ABV of the source tank when the run was saved. */
   source_abv: number | null;
@@ -457,6 +457,8 @@ export interface BottlingRun {
   product_name: string;
   lot_number: string;
   notes: string;
+  /** Planned saves a date and tank. Running deducts bottles so far. Finished closes leftover. */
+  status: RunStatus;
   created_at: string;
 }
 

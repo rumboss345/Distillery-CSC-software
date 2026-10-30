@@ -135,6 +135,11 @@ export async function migrateDatabase(): Promise<void> {
       await client.query(`ALTER TABLE bottling_run_lines ADD COLUMN IF NOT EXISTS packaging_label TEXT NOT NULL DEFAULT ''`);
       await client.query(`INSERT INTO schema_migrations (version) VALUES ('005')`);
     }
+    const bottlingStatusMigration = await client.query('SELECT version FROM schema_migrations WHERE version = $1', ['006']);
+    if (bottlingStatusMigration.rowCount === 0) {
+      await client.query(`ALTER TABLE bottling_runs ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'complete'`);
+      await client.query(`INSERT INTO schema_migrations (version) VALUES ('006')`);
+    }
     await client.query(`
       INSERT INTO inventory_categories (name)
       SELECT 'botanicals'

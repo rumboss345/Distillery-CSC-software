@@ -5,6 +5,7 @@ import {
   bottlingAlcoholVarianceGal,
   bottlingReturnsError,
   bottlingVolumeVarianceGal,
+  normalizeBottlingStatus,
   packagingBottleCountsBySku,
   packagingInventoryAdjustments,
   packagingLabelCountsBySku,
@@ -5075,13 +5076,35 @@ export function saveBottlingRun(
   if (__remote.forwarded) return __remote.value as never;
 
   assertEnteredAbv(run.final_abv, 'Final ABV');
+  const status = normalizeBottlingStatus(run.status);
+  const previous = id
+    ? queryOne<BottlingRun>('SELECT * FROM bottling_runs WHERE id = ?', [id])
+    : null;
+  const previousStatus = previous ? normalizeBottlingStatus(previous.status) : null;
   const activeLines = lines.filter((line) => line.bottle_count > 0 && line.bottle_size_ml > 0);
-  const previousLines = id ? bottlingLinesToInventoryInput(getBottlingRunLines(id)) : [];
+  const previousLines = id && previousStatus !== 'planned'
+    ? bottlingLinesToInventoryInput(getBottlingRunLines(id))
+    : [];
+  const nextInventory = status === 'planned' ? [] : activeLines;
   const fromTank = run.source_holding_tank_equipment_id != null;
   const sourceBarrelId = fromTank ? null : run.source_barrel_id;
   const sourceTankId = fromTank ? run.source_holding_tank_equipment_id : null;
-  if (sourceTankId) {
+  if (sourceTankId && status !== 'planned') {
     assertEquipmentUsableForProduction(sourceTankId, 'Source tank');
+  }
+  if (sourceTankId && status !== 'planned') {
+    const other = queryOne<{ batch_number: string }>(
+      `SELECT batch_number FROM bottling_runs
+       WHERE source_holding_tank_equipment_id = ?
+         AND status = 'running'
+         AND (? IS NULL OR id != ?)`,
+      [sourceTankId, id ?? null, id ?? -1],
+    );
+    if (other) {
+      throw new Error(
+        `${other.batch_number} is already bottling from this tank. Add bottles on that run, or finish it first.`,
+      );
+    }
   }
   const totalCount = activeLines.reduce((sum, line) => sum + line.bottle_count, 0);
   const bottledVolumeGal = totalCount > 0
@@ -5091,11 +5114,20 @@ export function saveBottlingRun(
   let sourceAbv: number | null = null;
   let volumeVarianceGal: number | null = null;
   let alcoholVarianceGal: number | null = null;
-  if (fromTank && sourceTankId && bottledVolumeGal != null && bottledVolumeGal > 0) {
+  const drawsFromTank = status !== 'planned'
+    && fromTank
+    && sourceTankId
+    && bottledVolumeGal != null
+    && bottledVolumeGal > 0;
+  if (drawsFromTank && sourceTankId) {
     const available = getHoldingTankContents(sourceTankId, undefined, undefined, id);
-    sourceVolumeGal = available.volume_gal;
     sourceAbv = available.abv;
-    volumeVarianceGal = bottledVolumeGal - sourceVolumeGal;
+    if (status === 'running') {
+      sourceVolumeGal = bottledVolumeGal;
+    } else {
+      sourceVolumeGal = available.volume_gal;
+      volumeVarianceGal = bottledVolumeGal! - sourceVolumeGal;
+    }
   }
   const packagingSummary = activeLines.length === 1
     ? activeLines[0].packaging_bottle
@@ -5121,7 +5153,7 @@ export function saveBottlingRun(
     destVolumeGal?: number;
     destCapacityGal?: number;
   }[] = [];
-  if (fromTank && sourceTankId && bottledVolumeGal != null && bottledVolumeGal > 0) {
+  if (status === 'complete' && fromTank && sourceTankId && bottledVolumeGal != null && bottledVolumeGal > 0) {
     const unbottled = Math.max(0, (sourceVolumeGal ?? 0) - bottledVolumeGal);
     for (const line of requestedReturns) {
       const gallons = line.volume_gal ?? 0;
@@ -5201,34 +5233,46 @@ export function saveBottlingRun(
       : null,
     return_holding_tank_equipment_id: storedReturnTankId,
     return_volume_gal: storedReturnGal,
+    status,
   };
 
   let runId = id;
   if (runId) {
     runQuery(
-      `UPDATE bottling_runs SET batch_number=?, source_barrel_id=?, source_holding_tank_equipment_id=?, source_volume_gal=?, source_abv=?, bottled_volume_gal=?, volume_variance_gal=?, alcohol_variance_gal=?, variance_reason=?, variance_changed_by=?, return_holding_tank_equipment_id=?, return_volume_gal=?, source_run_id=?, bottling_date=?, packaging_bottle=?, bottle_size_ml=?, bottle_count=?, final_abv=?, product_name=?, lot_number=?, notes=? WHERE id=?`,
-      [header.batch_number, sourceBarrelId, sourceTankId, header.source_volume_gal, header.source_abv, header.bottled_volume_gal, header.volume_variance_gal, header.alcohol_variance_gal, header.variance_reason, header.variance_changed_by, header.return_holding_tank_equipment_id, header.return_volume_gal, header.source_run_id, header.bottling_date, header.packaging_bottle, header.bottle_size_ml, header.bottle_count, header.final_abv, header.product_name, header.lot_number, header.notes, runId],
+      `UPDATE bottling_runs SET batch_number=?, source_barrel_id=?, source_holding_tank_equipment_id=?, source_volume_gal=?, source_abv=?, bottled_volume_gal=?, volume_variance_gal=?, alcohol_variance_gal=?, variance_reason=?, variance_changed_by=?, return_holding_tank_equipment_id=?, return_volume_gal=?, source_run_id=?, bottling_date=?, packaging_bottle=?, bottle_size_ml=?, bottle_count=?, final_abv=?, product_name=?, lot_number=?, notes=?, status=? WHERE id=?`,
+      [header.batch_number, sourceBarrelId, sourceTankId, header.source_volume_gal, header.source_abv, header.bottled_volume_gal, header.volume_variance_gal, header.alcohol_variance_gal, header.variance_reason, header.variance_changed_by, header.return_holding_tank_equipment_id, header.return_volume_gal, header.source_run_id, header.bottling_date, header.packaging_bottle, header.bottle_size_ml, header.bottle_count, header.final_abv, header.product_name, header.lot_number, header.notes, header.status, runId],
     );
     persistBottlingRunLines(runId, activeLines);
     persistBottlingRunReturns(runId, storedReturns);
   } else {
     runId = insertRow(
-      `INSERT INTO bottling_runs (batch_number, source_barrel_id, source_holding_tank_equipment_id, source_volume_gal, source_abv, bottled_volume_gal, volume_variance_gal, alcohol_variance_gal, variance_reason, variance_changed_by, return_holding_tank_equipment_id, return_volume_gal, source_run_id, bottling_date, packaging_bottle, bottle_size_ml, bottle_count, final_abv, product_name, lot_number, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [header.batch_number, sourceBarrelId, sourceTankId, header.source_volume_gal, header.source_abv, header.bottled_volume_gal, header.volume_variance_gal, header.alcohol_variance_gal, header.variance_reason, header.variance_changed_by, header.return_holding_tank_equipment_id, header.return_volume_gal, header.source_run_id, header.bottling_date, header.packaging_bottle, header.bottle_size_ml, header.bottle_count, header.final_abv, header.product_name, header.lot_number, header.notes],
+      `INSERT INTO bottling_runs (batch_number, source_barrel_id, source_holding_tank_equipment_id, source_volume_gal, source_abv, bottled_volume_gal, volume_variance_gal, alcohol_variance_gal, variance_reason, variance_changed_by, return_holding_tank_equipment_id, return_volume_gal, source_run_id, bottling_date, packaging_bottle, bottle_size_ml, bottle_count, final_abv, product_name, lot_number, notes, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [header.batch_number, sourceBarrelId, sourceTankId, header.source_volume_gal, header.source_abv, header.bottled_volume_gal, header.volume_variance_gal, header.alcohol_variance_gal, header.variance_reason, header.variance_changed_by, header.return_holding_tank_equipment_id, header.return_volume_gal, header.source_run_id, header.bottling_date, header.packaging_bottle, header.bottle_size_ml, header.bottle_count, header.final_abv, header.product_name, header.lot_number, header.notes, header.status],
     );
     persistBottlingRunLines(runId, activeLines);
     persistBottlingRunReturns(runId, storedReturns);
   }
-  syncBottlingPackagingInventory(previousLines, activeLines);
+  syncBottlingPackagingInventory(previousLines, nextInventory);
   syncHoldingTankStatuses();
+  recordStatusDateLog({
+    recordKind: 'bottling',
+    recordId: runId,
+    previousStatus: previous?.status,
+    status,
+    changedBy: run.variance_changed_by,
+  });
 }
 
 export function deleteBottlingRun(id: number): void {
   const __remote = forwardProductionMutation('deleteBottlingRun', [id]);
   if (__remote.forwarded) return __remote.value as never;
 
-  const previousLines = bottlingLinesToInventoryInput(getBottlingRunLines(id));
+  const previous = queryOne<BottlingRun>('SELECT * FROM bottling_runs WHERE id = ?', [id]);
+  const previousLines = previous && normalizeBottlingStatus(previous.status) !== 'planned'
+    ? bottlingLinesToInventoryInput(getBottlingRunLines(id))
+    : [];
   syncBottlingPackagingInventory(previousLines, []);
+  deleteStatusDateLog('bottling', id);
   runQuery('DELETE FROM bottling_run_returns WHERE bottling_run_id = ?', [id]);
   runQuery('DELETE FROM bottling_runs WHERE id = ?', [id]);
   syncHoldingTankStatuses();
@@ -6191,17 +6235,23 @@ export function getProductionSummary(reportMonth?: string, heartsMonth = reportM
       `SELECT COALESCE(SUM(l.bottle_count), 0) as total
        FROM bottling_run_lines l
        JOIN bottling_runs r ON r.id = l.bottling_run_id
-       WHERE strftime('%Y-%m', r.bottling_date) = ?`,
+       WHERE strftime('%Y-%m', r.bottling_date) = ?
+         AND COALESCE(r.status, 'complete') != 'planned'`,
       [reportMonth],
     )?.total ?? queryOne<{ total: number }>(
       `SELECT COALESCE(SUM(bottle_count), 0) as total FROM bottling_runs
-       WHERE strftime('%Y-%m', bottling_date) = ?`,
+       WHERE strftime('%Y-%m', bottling_date) = ?
+         AND COALESCE(status, 'complete') != 'planned'`,
       [reportMonth],
     )?.total ?? 0
     : queryOne<{ total: number }>(
-      'SELECT COALESCE(SUM(l.bottle_count), 0) as total FROM bottling_run_lines l',
+      `SELECT COALESCE(SUM(l.bottle_count), 0) as total
+       FROM bottling_run_lines l
+       JOIN bottling_runs r ON r.id = l.bottling_run_id
+       WHERE COALESCE(r.status, 'complete') != 'planned'`,
     )?.total ?? queryOne<{ total: number }>(
-      'SELECT COALESCE(SUM(bottle_count), 0) as total FROM bottling_runs',
+      `SELECT COALESCE(SUM(bottle_count), 0) as total FROM bottling_runs
+       WHERE COALESCE(status, 'complete') != 'planned'`,
     )?.total ?? 0;
 
   const bottleSizeRows = queryAll<{ bottle_size_ml: number; bottle_count: number }>(
@@ -6211,11 +6261,14 @@ export function getProductionSummary(reportMonth?: string, heartsMonth = reportM
          JOIN bottling_runs r ON r.id = l.bottling_run_id
          WHERE l.bottle_count > 0 AND l.bottle_size_ml > 0
            AND strftime('%Y-%m', r.bottling_date) = ?
+           AND COALESCE(r.status, 'complete') != 'planned'
          GROUP BY l.bottle_size_ml
          ORDER BY l.bottle_size_ml DESC`
       : `SELECT l.bottle_size_ml, SUM(l.bottle_count) as bottle_count
          FROM bottling_run_lines l
+         JOIN bottling_runs r ON r.id = l.bottling_run_id
          WHERE l.bottle_count > 0 AND l.bottle_size_ml > 0
+           AND COALESCE(r.status, 'complete') != 'planned'
          GROUP BY l.bottle_size_ml
          ORDER BY l.bottle_size_ml DESC`,
     reportMonth ? [reportMonth] : [],
@@ -6294,6 +6347,7 @@ export function getMonthlyProduction(): MonthlyProduction[] {
           ELSE r.bottle_count
         END as bottles
       FROM bottling_runs r
+      WHERE COALESCE(r.status, 'complete') != 'planned'
     )
     GROUP BY month
   `);

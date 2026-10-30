@@ -241,6 +241,7 @@ CREATE TABLE IF NOT EXISTS bottling_runs (
   product_name TEXT NOT NULL,
   lot_number TEXT NOT NULL DEFAULT '',
   notes TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'complete',
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

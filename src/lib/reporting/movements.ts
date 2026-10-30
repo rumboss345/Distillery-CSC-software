@@ -291,6 +291,7 @@ export function buildLiquidMovements(range: ReportDateRange): LiquidMovementRow[
     FROM bottling_runs br
     LEFT JOIN floor_equipment fe ON fe.id = br.source_holding_tank_equipment_id
     WHERE br.source_holding_tank_equipment_id IS NOT NULL AND br.source_volume_gal > 0
+      AND COALESCE(br.status, 'complete') != 'planned'
   `);
   for (const b of bottlings) {
     if (!eventInReportRange(b.bottling_date, range)) continue;

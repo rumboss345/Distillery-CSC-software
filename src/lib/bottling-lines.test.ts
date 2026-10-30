@@ -14,6 +14,9 @@ import {
   formatBottleSizes,
   formatLinesSummary,
   isRumBottlingProduct,
+  bottlingCountsTowardProduction,
+  bottlingIsPlanned,
+  normalizeBottlingStatus,
   lineVolumeGal,
   maxBottlesFromGallons,
   packagingBottleCountsBySku,
@@ -23,6 +26,15 @@ import {
 } from './bottling-lines';
 
 describe('bottling-lines', () => {
+  it('treats a missing bottling status as finished', () => {
+    expect(normalizeBottlingStatus(undefined)).toBe('complete');
+    expect(normalizeBottlingStatus('running')).toBe('running');
+    expect(bottlingIsPlanned('planned')).toBe(true);
+    expect(bottlingCountsTowardProduction('planned')).toBe(false);
+    expect(bottlingCountsTowardProduction('running')).toBe(true);
+    expect(bottlingCountsTowardProduction('complete')).toBe(true);
+  });
+
   it('detects rum products for bottling UI', () => {
     expect(isRumBottlingProduct('Island Reserve Rum')).toBe(true);
     expect(isRumBottlingProduct('Spiced Rum 750')).toBe(true);

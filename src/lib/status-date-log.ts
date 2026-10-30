@@ -1,5 +1,5 @@
 /** Kinds of production records that keep a dated status log. */
-export type StatusDateLogKind = 'wash' | 'fermentation' | 'distillation' | 'barrel' | 'equipment';
+export type StatusDateLogKind = 'wash' | 'fermentation' | 'distillation' | 'barrel' | 'bottling' | 'equipment';
 
 const STATUS_LABELS: Record<string, string> = {
   planned: 'planned',

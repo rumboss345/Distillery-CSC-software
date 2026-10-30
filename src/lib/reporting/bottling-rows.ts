@@ -30,6 +30,7 @@ export function buildBottlingReportRows(range: ReportDateRange): BottlingReportR
   const rows: BottlingReportRow[] = [];
 
   for (const run of runs) {
+    if (run.status === 'planned') continue;
     if (!eventInReportRange(run.bottling_date, range)) continue;
 
     const bottled = run.bottled_volume_gal ?? totalVolumeGal(run.lines);
