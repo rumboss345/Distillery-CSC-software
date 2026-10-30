@@ -113,6 +113,7 @@ function table6WaterPounds(volumeGal: number): number {
 }
 import {
   computeBatchCorrection,
+  computeTheoreticalBlend,
   proofingWaterForSameBatchSize,
   solveSugarForTargetBrix,
   solveWaterForTargetAbv,
@@ -1765,8 +1766,23 @@ export function Blending() {
   );
 
   const renderProductionWorksheet = (outputTankName: string | null) => {
-    const yieldGal = formulation.reconciliation.effective.volumeGal ?? formulation.theoretical.volumeGal ?? 0;
-    const worksheetSpiritLines = activeSources.map((s, index) => {
+    const worksheetSources = spiritSources
+      .map(syncSpiritVolume)
+      .filter((s) => s.volume_gal > 0 && s.abv > 0);
+    const worksheetTheoretical = activeSources.length > 0
+      ? formulation.theoretical
+      : computeTheoreticalBlend(
+        worksheetSources.map((s) => ({ volumeGal: s.volume_gal, abv: s.abv, label: s.spirit_label })),
+        toAdditiveInputs(ingredients),
+        form.target_abv,
+      );
+    const yieldGal = (activeSources.length > 0
+      ? (formulation.reconciliation.effective.volumeGal ?? formulation.theoretical.volumeGal)
+      : worksheetTheoretical.volumeGal) ?? 0;
+    const expectedAbv = (activeSources.length > 0
+      ? (formulation.reconciliation.effective.abv ?? formulation.theoretical.abv)
+      : worksheetTheoretical.abv) ?? 0;
+    const worksheetSpiritLines = worksheetSources.map((s, index) => {
       const tank = getSpiritTransferVessels().find((t) => t.id === s.holding_tank_equipment_id);
       return {
         label: s.spirit_label.trim()
@@ -1791,7 +1807,7 @@ export function Blending() {
           targetBrix={form.target_brix}
           scaleFactor={form.scale_factor ?? 1}
           expectedYieldGal={yieldGal}
-          expectedAbv={formulation.reconciliation.effective.abv ?? formulation.theoretical.abv ?? 0}
+          expectedAbv={expectedAbv}
           outputTankName={outputTankName}
           spiritLines={worksheetSpiritLines}
           ingredients={ingredients}
