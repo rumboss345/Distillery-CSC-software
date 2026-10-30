@@ -6,10 +6,22 @@ import {
   spiritMeasureAlternate,
   toLbs,
 } from '../lib/blending';
-import { formatGallonDisplay, formatQuantityDisplay } from '../lib/formulation-quantity';
+import { formatAbvDisplay, formatGallonDisplay, formatQuantityDisplay } from '../lib/formulation-quantity';
 import { formulationSpiritWeightLb } from '../lib/formulation-spirit';
-import type { SpiritAbvDelta } from '../lib/blend-formulation';
+import { preBlendSpiritAndWater, type AdditiveInput, type SpiritAbvDelta } from '../lib/blend-formulation';
 import type { BlendIngredientInput } from '../types';
+
+function worksheetAdditives(ingredients: BlendIngredientInput[]): AdditiveInput[] {
+  return ingredients.map((ingredient) => ({
+    ingredientType: ingredient.ingredient_type,
+    name: ingredient.name,
+    amount: ingredient.amount,
+    unit: ingredient.unit,
+    abv: ingredient.abv,
+    densityGPerMl: ingredient.density_g_per_ml,
+    densityAssumption: ingredient.density_assumption,
+  }));
+}
 
 export interface WorksheetSpiritLine {
   label: string;
@@ -56,10 +68,8 @@ export function BlendProductionWorksheet({
   abvDeltas,
   notes,
 }: BlendProductionWorksheetProps) {
-  const additives = [
-    ...ingredients.filter((i) => i.amount > 0 && i.ingredient_type !== 'water'),
-    ...ingredients.filter((i) => i.amount > 0 && i.ingredient_type === 'water'),
-  ];
+  const waterLines = ingredients.filter((i) => i.amount > 0 && i.ingredient_type === 'water');
+  const otherAdditives = ingredients.filter((i) => i.amount > 0 && i.ingredient_type !== 'water');
   const totalSpiritWeightLbs = spiritLines.reduce((sum, line) => {
     if (line.amount > 0 && isWeightUnit(line.unit)) return sum + toLbs(line.amount, line.unit);
     return sum + formulationSpiritWeightLb(line.volumeGal, line.abv);
@@ -67,6 +77,17 @@ export function BlendProductionWorksheet({
   const totalSpiritWeightLabel = totalSpiritWeightLbs > 0
     ? `${formatQuantityDisplay(totalSpiritWeightLbs, 3)} lbs`
     : null;
+  const preBlend = preBlendSpiritAndWater(
+    spiritLines.map((line) => ({ volumeGal: line.volumeGal, abv: line.abv, label: line.label })),
+    worksheetAdditives(ingredients),
+  );
+  const preBlendAlcoholLb = totalSpiritWeightLbs > 0 ? totalSpiritWeightLbs : preBlend.spiritWeightLb;
+  const preBlendCombinedLb = preBlendAlcoholLb + preBlend.waterWeightLb;
+  const showPreBlend = preBlend.hasSpirit || preBlend.hasWater;
+  let nextStep = 2;
+  const waterStep = waterLines.length > 0 ? nextStep++ : null;
+  const preBlendStep = showPreBlend ? nextStep++ : null;
+  const otherStep = nextStep;
 
   return (
     <div className="blend-production-worksheet">
@@ -187,8 +208,63 @@ export function BlendProductionWorksheet({
         </table>
       </section>
 
+      {waterLines.length > 0 && (
+        <section className="blend-worksheet-section">
+          <h2>{waterStep}. Proofing water</h2>
+          <table className="blend-worksheet-table blend-worksheet-checklist">
+            <thead>
+              <tr>
+                <th className="blend-worksheet-check">Done</th>
+                <th>Ingredient</th>
+                <th className="num">Amount</th>
+                <th>Scale / alternate</th>
+              </tr>
+            </thead>
+            <tbody>
+              {waterLines.map((ingredient, index) => {
+                const alt = measureAlternate(ingredient);
+                return (
+                  <tr key={index}>
+                    <td className="blend-worksheet-check"><span className="blend-worksheet-box" /></td>
+                    <td>{ingredient.name || 'Proofing water'}</td>
+                    <td className="num">{formatBlendRecipeAdditive(ingredient)}</td>
+                    <td>{alt?.label ?? '—'}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </section>
+      )}
+
+      {showPreBlend && (
+        <section className="blend-worksheet-section blend-worksheet-preblend" data-testid="preblend-spirit-water">
+          <h2>{preBlendStep}. Alcohol + water before other ingredients</h2>
+          <table className="blend-worksheet-table">
+            <tbody>
+              <tr>
+                <th>Alcohol weight</th>
+                <td className="num">{formatQuantityDisplay(preBlendAlcoholLb, 3)} lbs</td>
+                <th>Water weight</th>
+                <td className="num">{preBlend.hasWater ? `${formatQuantityDisplay(preBlend.waterWeightLb, 3)} lbs` : '—'}</td>
+              </tr>
+              <tr>
+                <th>Alcohol + water weight</th>
+                <td className="num"><strong>{formatQuantityDisplay(preBlendCombinedLb, 3)} lbs</strong></td>
+                <th>Alc% of alcohol + water</th>
+                <td className="num"><strong>{formatAbvDisplay(preBlend.abv)}</strong></td>
+              </tr>
+            </tbody>
+          </table>
+          <p className="blend-worksheet-weight-hint">
+            Weigh the tank after spirit{preBlend.hasWater ? ' and proofing water are' : ' is'} in.
+            This is the expected weight and Alc% before sugar, flavor, color, or other additives.
+          </p>
+        </section>
+      )}
+
       <section className="blend-worksheet-section">
-        <h2>2. Additives, then proofing water</h2>
+        <h2>{otherStep}. Other ingredients</h2>
         <table className="blend-worksheet-table blend-worksheet-checklist">
           <thead>
             <tr>
@@ -199,9 +275,9 @@ export function BlendProductionWorksheet({
             </tr>
           </thead>
           <tbody>
-            {additives.length === 0 ? (
-              <tr><td colSpan={4}>No additives for this batch.</td></tr>
-            ) : additives.map((ingredient, index) => {
+            {otherAdditives.length === 0 ? (
+              <tr><td colSpan={4}>No other ingredients for this batch.</td></tr>
+            ) : otherAdditives.map((ingredient, index) => {
               const alt = measureAlternate(ingredient);
               return (
                 <tr key={index}>
@@ -217,11 +293,19 @@ export function BlendProductionWorksheet({
       </section>
 
       <section className="blend-worksheet-section">
-        <h2>3. Production checklist</h2>
+        <h2>Production checklist</h2>
         <ul className="blend-worksheet-steps">
           <li><span className="blend-worksheet-box" /> Pull spirit from source tank(s) per amounts above</li>
+          {waterLines.length > 0 && (
+            <li><span className="blend-worksheet-box" /> Add proofing water</li>
+          )}
+          {showPreBlend && (
+            <li>
+              <span className="blend-worksheet-box" />
+              Check alcohol{preBlend.hasWater ? ' + water' : ''} weight ({formatQuantityDisplay(preBlendCombinedLb, 3)} lbs) and Alc% ({formatAbvDisplay(preBlend.abv)}) before other ingredients
+            </li>
+          )}
           <li><span className="blend-worksheet-box" /> Add sugar, flavors, color, and other additives</li>
-          <li><span className="blend-worksheet-box" /> Add proofing water</li>
           <li><span className="blend-worksheet-box" /> Mix thoroughly; let rest per SOP if required</li>
           <li><span className="blend-worksheet-box" /> Transfer finished batch to {outputTankName ?? 'output tank'}</li>
           <li><span className="blend-worksheet-box" /> Record any deviations on this sheet</li>

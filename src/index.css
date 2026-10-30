@@ -4492,6 +4492,21 @@ tr.calendar-record-focus td {
   color: #333;
 }
 
+.blend-worksheet-preblend {
+  padding: 0.75rem;
+  background: #eef6f1;
+  border: 1px solid #7a9e86;
+  border-radius: 4px;
+}
+
+.blend-worksheet-preblend h2 {
+  color: #1a1816;
+}
+
+.blend-worksheet-preblend .blend-worksheet-weight-hint {
+  margin: 0.55rem 0 0;
+}
+
 .blend-worksheet-check {
   width: 2.5rem;
   text-align: center;

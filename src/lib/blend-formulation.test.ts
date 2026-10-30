@@ -10,6 +10,7 @@ import {
   spiritVolumeForSourceAbv,
   computeBatchCorrection,
   computeTheoreticalBlend,
+  preBlendSpiritAndWater,
   reconcileMeasurements,
   scaleFormulation,
   solveSugarForTargetBrix,
@@ -71,6 +72,44 @@ describe('computeTheoreticalBlend', () => {
     expect(result.volumeGal).toBeLessThan(11);
     expect(result.pureAlcoholGal).toBeCloseTo(4.1, 3);
     expect(result.abv).toBeGreaterThan(37);
+  });
+});
+
+describe('preBlendSpiritAndWater', () => {
+  const coconutSpirits = [{ volumeGal: 88.29, abv: 93 }];
+  const coconutWater = [{ ingredientType: 'water' as const, name: 'Water', amount: 120.38, unit: 'gal' }];
+  const coconutAdditives = [
+    ...coconutWater,
+    { ingredientType: 'sugar' as const, name: 'White sugar', amount: 406, unit: 'lbs' },
+    { ingredientType: 'flavoring' as const, name: 'Coconut', amount: 2760, unit: 'ml' },
+  ];
+
+  it('reports alcohol and water weight and Alc% before sugar and flavor', () => {
+    const spiritOnly = computeTheoreticalBlend(coconutSpirits, coconutWater);
+    const finished = computeTheoreticalBlend(coconutSpirits, coconutAdditives);
+    const preBlend = preBlendSpiritAndWater(coconutSpirits, coconutAdditives);
+    const expectedSpiritLb = Number(postedSpiritPounds(
+      decimalStringFromNumber(88.29),
+      decimalStringFromNumber(93),
+    ));
+    const expectedWaterLb = Number(postedWaterPounds(decimalStringFromNumber(120.38)));
+
+    expect(preBlend.hasSpirit).toBe(true);
+    expect(preBlend.hasWater).toBe(true);
+    expect(preBlend.spiritWeightLb).toBeCloseTo(expectedSpiritLb, 2);
+    expect(preBlend.waterWeightLb).toBeCloseTo(expectedWaterLb, 2);
+    expect(preBlend.combinedWeightLb).toBeCloseTo(expectedSpiritLb + expectedWaterLb, 2);
+    expect(preBlend.combinedWeightLb).toBeLessThan(expectedSpiritLb + expectedWaterLb + 406);
+    expect(preBlend.abv).toBe(spiritOnly.abv);
+    expect(preBlend.abv).toBeGreaterThan(finished.abv);
+  });
+
+  it('keeps spirit-only Alc% when there is no proofing water', () => {
+    const preBlend = preBlendSpiritAndWater([{ volumeGal: 10, abv: 40 }], []);
+    expect(preBlend.hasWater).toBe(false);
+    expect(preBlend.waterWeightLb).toBe(0);
+    expect(preBlend.abv).toBe(40);
+    expect(preBlend.combinedWeightLb).toBe(preBlend.spiritWeightLb);
   });
 });
 
