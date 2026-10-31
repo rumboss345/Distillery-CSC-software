@@ -11,7 +11,10 @@ import {
 } from '../db/queries';
 import { Modal } from '../components/Modal';
 import {
+  convertInventoryAdjustment,
+  defaultAdjustmentUnit,
   defaultInventoryUnitForCategory,
+  inventoryAdjustmentUnits,
   INVENTORY_UNIT_KINDS,
   inventoryCategoryLabel,
   inventoryUnitForKind,
@@ -35,6 +38,10 @@ const emptyItem = (): Omit<InventoryItem, 'id' | 'created_at' | 'updated_at'> =>
   abv: null,
 });
 
+function formatAdjustQty(value: number): string {
+  return value.toLocaleString(undefined, { maximumFractionDigits: 3 });
+}
+
 export function Inventory() {
   const { key, refresh } = useRefreshKey();
   const items = getInventoryItems();
@@ -47,6 +54,7 @@ export function Inventory() {
   const [categoryName, setCategoryName] = useState('');
   const [categoryError, setCategoryError] = useState('');
   const [adjustAmount, setAdjustAmount] = useState('');
+  const [adjustUnit, setAdjustUnit] = useState('');
   const [quantityInput, setQuantityInput] = useState('0');
   const [sizeInput, setSizeInput] = useState('');
   const [densityInput, setDensityInput] = useState('');
@@ -150,15 +158,26 @@ export function Inventory() {
     }
   };
 
+  const adjustItem = items.find((i) => i.id === showAdjust) ?? null;
+  const adjustTyped = parseFloat(adjustAmount);
+  const adjustDelta = adjustItem && !isNaN(adjustTyped)
+    ? convertInventoryAdjustment(adjustTyped, adjustUnit || adjustItem.unit, adjustItem.unit)
+    : null;
+  const adjustInOtherUnit = adjustItem != null
+    && defaultAdjustmentUnit(adjustUnit || adjustItem.unit) !== defaultAdjustmentUnit(adjustItem.unit);
+
+  const openAdjust = (item: InventoryItem) => {
+    setShowAdjust(item.id);
+    setAdjustAmount('');
+    setAdjustUnit(defaultAdjustmentUnit(item.unit));
+  };
+
   const handleAdjust = () => {
-    if (!showAdjust) return;
-    const delta = parseFloat(adjustAmount);
-    if (!isNaN(delta)) {
-      adjustInventory(showAdjust, delta);
-      setShowAdjust(null);
-      setAdjustAmount('');
-      refresh();
-    }
+    if (!showAdjust || adjustDelta == null) return;
+    adjustInventory(showAdjust, adjustDelta);
+    setShowAdjust(null);
+    setAdjustAmount('');
+    refresh();
   };
 
   return (
@@ -250,7 +269,7 @@ export function Inventory() {
                     </td>
                     <td>{i.notes}</td>
                     <td className="td-actions">
-                      <button className="btn btn-sm btn-secondary" onClick={() => { setShowAdjust(i.id); setAdjustAmount(''); }}>Adjust</button>
+                      <button className="btn btn-sm btn-secondary" onClick={() => openAdjust(i)}>Adjust</button>
                       <button className="btn btn-sm btn-ghost" onClick={() => openEdit(i)}>Edit</button>
                       <button className="btn btn-sm btn-ghost" onClick={() => handleDelete(i.id)}>Delete</button>
                     </td>
@@ -413,25 +432,57 @@ export function Inventory() {
         </Modal>
       )}
 
-      {showAdjust !== null && (
+      {showAdjust !== null && adjustItem && (
         <Modal title="Adjust Quantity" onClose={() => setShowAdjust(null)}>
           <p style={{ marginBottom: '1rem', color: 'var(--text-muted)' }}>
             Enter a positive number to add stock, negative to remove.
+            {inventoryAdjustmentUnits(adjustItem.unit).length > 1 && (
+              <> You can enter a delivery in a larger unit. It is converted to {adjustItem.unit}, the unit used day to day.</>
+            )}
           </p>
-          <div className="form-group">
-            <label>Adjustment ({items.find((i) => i.id === showAdjust)?.unit})</label>
-            <input
-              type="number"
-              step="0.1"
-              value={adjustAmount}
-              onChange={(e) => setAdjustAmount(e.target.value)}
-              placeholder="e.g. 50 or -10"
-              autoFocus
-            />
+          <div className="form-grid">
+            <div className="form-group">
+              <label htmlFor="inventory-adjust-amount">Adjustment</label>
+              <input
+                id="inventory-adjust-amount"
+                data-testid="inventory-adjust-amount"
+                type="number"
+                step="any"
+                value={adjustAmount}
+                onChange={(e) => setAdjustAmount(e.target.value)}
+                placeholder="e.g. 50 or -10"
+                autoFocus
+              />
+            </div>
+            <div className="form-group">
+              <label htmlFor="inventory-adjust-unit">Unit</label>
+              <select
+                id="inventory-adjust-unit"
+                data-testid="inventory-adjust-unit"
+                value={adjustUnit}
+                onChange={(e) => setAdjustUnit(e.target.value)}
+              >
+                {inventoryAdjustmentUnits(adjustItem.unit).map((unit) => (
+                  <option key={unit.value} value={unit.value}>{unit.label}</option>
+                ))}
+              </select>
+            </div>
           </div>
+          <p className="field-hint" data-testid="inventory-adjust-preview">
+            On hand now: {adjustItem.quantity.toLocaleString(undefined, { maximumFractionDigits: 2 })} {adjustItem.unit}.
+            {adjustDelta != null && adjustDelta !== 0 && (
+              <>
+                {' '}
+                {adjustInOtherUnit && (
+                  <>{adjustTyped} {inventoryAdjustmentUnits(adjustItem.unit).find((u) => u.value === adjustUnit)?.label ?? adjustUnit} = {formatAdjustQty(adjustDelta)} {adjustItem.unit}. </>
+                )}
+                After: {formatAdjustQty(adjustItem.quantity + adjustDelta)} {adjustItem.unit}.
+              </>
+            )}
+          </p>
           <div className="form-actions">
             <button className="btn btn-secondary" onClick={() => setShowAdjust(null)}>Cancel</button>
-            <button className="btn btn-primary" onClick={handleAdjust}>Apply</button>
+            <button className="btn btn-primary" data-testid="inventory-adjust-apply" onClick={handleAdjust} disabled={adjustDelta == null}>Apply</button>
           </div>
         </Modal>
       )}

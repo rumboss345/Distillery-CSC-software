@@ -121,6 +121,80 @@ export function inventoryQuantityDelta(
   return null;
 }
 
+const LBS_PER_ADJUST_UNIT: Record<string, number> = {
+  g: 1 / 453.59237,
+  oz: 1 / 16,
+  lbs: 1,
+  kg: 2.20462262185,
+  ton: 2000,
+  tonne: 2204.62262185,
+};
+
+const GAL_PER_ADJUST_UNIT: Record<string, number> = {
+  ml: 1 / 3785.411784,
+  'fl oz': 1 / 128,
+  l: 1 / 3.785411784,
+  gal: 1,
+  drum: 55,
+  tote: 275,
+};
+
+const ADJUST_UNITS_BY_KIND: Record<'volume' | 'mass', { value: string; label: string }[]> = {
+  mass: [
+    { value: 'g', label: 'g' },
+    { value: 'oz', label: 'oz' },
+    { value: 'lbs', label: 'lbs' },
+    { value: 'kg', label: 'kg' },
+    { value: 'ton', label: 'US ton (2,000 lbs)' },
+    { value: 'tonne', label: 'Metric ton (1,000 kg)' },
+  ],
+  volume: [
+    { value: 'ml', label: 'mL' },
+    { value: 'fl oz', label: 'fl oz' },
+    { value: 'l', label: 'L' },
+    { value: 'gal', label: 'US gal' },
+    { value: 'drum', label: 'Drum (55 gal)' },
+    { value: 'tote', label: 'Tote (275 gal)' },
+  ],
+};
+
+/**
+ * Units you can type an adjustment in. Mass and volume items can use any unit of the same kind,
+ * including large delivery units. Count items only use their own unit.
+ */
+export function inventoryAdjustmentUnits(itemUnit: string): { value: string; label: string }[] {
+  const kind = inventoryUnitKind(itemUnit);
+  const own = canonicalUnit(itemUnit);
+  if (kind === 'each') return [{ value: own || itemUnit, label: itemUnit || 'each' }];
+  const units = ADJUST_UNITS_BY_KIND[kind];
+  return units.some((unit) => unit.value === own)
+    ? units
+    : [{ value: own || itemUnit, label: itemUnit }, ...units];
+}
+
+/** The item's own unit, as it appears in the adjustment unit list. */
+export function defaultAdjustmentUnit(itemUnit: string): string {
+  return canonicalUnit(itemUnit) || itemUnit;
+}
+
+/**
+ * Convert an adjustment typed in `fromUnit` into the item's own unit. Keeps the sign.
+ * Returns null when the units are different kinds.
+ */
+export function convertInventoryAdjustment(amount: number, fromUnit: string, itemUnit: string): number | null {
+  if (!Number.isFinite(amount)) return null;
+  const from = canonicalUnit(fromUnit);
+  const to = canonicalUnit(itemUnit);
+  if (from === to) return amount;
+  const table = LBS_PER_ADJUST_UNIT[from] != null && LBS_PER_ADJUST_UNIT[to] != null
+    ? LBS_PER_ADJUST_UNIT
+    : GAL_PER_ADJUST_UNIT[from] != null && GAL_PER_ADJUST_UNIT[to] != null
+      ? GAL_PER_ADJUST_UNIT
+      : null;
+  if (!table) return null;
+  return (amount * table[from]) / table[to];
+}
+
 /** Display name for a stored inventory category, e.g. "raw sugar" → "Raw Sugar". */
 export function inventoryCategoryLabel(category: string): string {
   return category
