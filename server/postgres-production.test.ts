@@ -774,6 +774,23 @@ describe('PostgreSQL production modules', () => {
     expect(status(ids.line)).toBe('empty');
   });
 
+  it('builds the fermentation report without saving anything', async () => {
+    const { buildFermentationHistoryRows } = await import('../src/lib/reporting/fermentation-rows');
+    const { setProductionMutationRedirect } = await import('../src/db/sql-session');
+    const attempted: string[] = [];
+    setProductionMutationRedirect((name) => {
+      attempted.push(name);
+      throw new Error(`Report tried to save: ${name}`);
+    });
+    try {
+      const rows = engine.readProduction(() => buildFermentationHistoryRows({ preset: 'all', from: null, to: null, label: 'All time' }));
+      expect(Array.isArray(rows)).toBe(true);
+    } finally {
+      setProductionMutationRedirect(null);
+    }
+    expect(attempted).toEqual([]);
+  });
+
   it('lets different records save together and stops a tank from being overdrawn', async () => {
     const spiritId = engine.readProduction((api) => api.getFloorEquipment().find((item) => item.name === 'Spirit Tank')!.id);
     const tankA = engine.readProduction((api) => api.getFloorEquipment().find((item) => item.name === 'Tank A')!.id);

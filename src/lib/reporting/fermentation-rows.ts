@@ -1,5 +1,4 @@
-import { queryAll } from '../../db/database';
-import { completeFermentationsSelectedForDistillation } from '../../db/queries';
+import { queryAll } from '../../db/sql-session';
 import { estimateAbvFromBrix } from '../fermentation';
 import { eventInReportRange, type ReportDateRange } from './period';
 
@@ -63,8 +62,20 @@ function loadLatestFermentationBrix(): Map<string, number> {
   return latest;
 }
 
+/**
+ * A fermenter drawn by a running or finished wash/heavy rum run counts as complete, even if
+ * its saved status was never updated. Reports only read; saving here would re-render the page
+ * on every shared-database save and freeze it.
+ */
+const DISTILLED_ASSIGNMENT = `EXISTS (
+  SELECT 1 FROM distillation_runs dr
+  WHERE dr.source_mash_batch_id = a.mash_batch_id
+    AND dr.source_fermenter_equipment_id = a.floor_equipment_id
+    AND dr.run_type IN ('wash', 'heavy_rum')
+    AND dr.status IN ('running', 'complete')
+)`;
+
 export function buildFermentationHistoryRows(range: ReportDateRange): FermentationHistoryRow[] {
-  completeFermentationsSelectedForDistillation();
   const rows = queryAll<{
     mash_id: number;
     assignment_id: number | null;
@@ -81,7 +92,12 @@ export function buildFermentationHistoryRows(range: ReportDateRange): Fermentati
   }>(`
     SELECT m.id as mash_id, a.id as assignment_id, a.floor_equipment_id, m.batch_number, m.recipe_name,
            fe.name as fermenter_name, a.volume_gal, m.start_date, m.actual_brix, m.actual_final_brix,
-           COALESCE(a.status, m.status) as row_status, m.assigned_user_name
+           CASE
+             WHEN a.id IS NOT NULL AND COALESCE(a.status, '') != 'discarded' AND m.status != 'discarded' AND ${DISTILLED_ASSIGNMENT}
+               THEN 'complete'
+             ELSE COALESCE(a.status, m.status)
+           END as row_status,
+           m.assigned_user_name
     FROM mash_batches m
     LEFT JOIN mash_fermenter_assignments a ON a.mash_batch_id = m.id
     LEFT JOIN floor_equipment fe ON fe.id = a.floor_equipment_id
@@ -89,6 +105,12 @@ export function buildFermentationHistoryRows(range: ReportDateRange): Fermentati
       (
         (m.status = 'complete' OR a.status = 'complete')
         AND COALESCE(a.status, m.status) != 'discarded'
+      )
+      OR (
+        a.id IS NOT NULL
+        AND COALESCE(a.status, '') != 'discarded'
+        AND m.status != 'discarded'
+        AND ${DISTILLED_ASSIGNMENT}
       )
       OR a.status = 'discarded'
       OR (
