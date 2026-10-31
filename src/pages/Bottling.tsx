@@ -16,6 +16,7 @@ import {
   getCollectionVessels,
   getHoldingTankContents,
   getHoldingTanks,
+  getFloorEquipment,
   generateBatchNumber,
   useRefreshKey,
 } from '../db/queries';
@@ -48,6 +49,10 @@ import {
 import { packagingBottleOptions, type PackagingBottleOption } from '../lib/packaging-bottles';
 import { tankContentsPhrase, tankDropdownLabel } from '../lib/tank-menu-label';
 import { volumeChangeReasonError } from '../lib/tank-volume-variance';
+import { bottlingEquipmentOptions } from '../lib/bottling-equipment';
+import { equipmentTypeLabel } from '../lib/equipment';
+import { equipmentNeedsCleaning } from '../lib/equipment-cleaning';
+import { equipmentBlocksProduction } from '../lib/equipment-maintenance';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
 import type { BottlingRunLineInput, BottlingRunReturnInput, BottlingRunView, RunStatus } from '../types';
 
@@ -163,8 +168,18 @@ export function Bottling() {
   const [varianceReason, setVarianceReason] = useState('');
   const [returnLines, setReturnLines] = useState<BottlingRunReturnInput[]>([]);
   const [plannedScheduleDate, setPlannedScheduleDate] = useState<string | null>(null);
+  const [equipmentIds, setEquipmentIds] = useState<number[]>([]);
+  const [savedEquipmentIds, setSavedEquipmentIds] = useState<number[]>([]);
 
   void key;
+
+  const floorEquipment = getFloorEquipment();
+  const equipmentChoices = bottlingEquipmentOptions(floorEquipment, savedEquipmentIds);
+  const toggleEquipment = (equipmentId: number, checked: boolean) => {
+    setEquipmentIds((prev) => (
+      checked ? [...prev.filter((id) => id !== equipmentId), equipmentId] : prev.filter((id) => id !== equipmentId)
+    ));
+  };
 
   const chargeableTanks = getChargeableHoldingTanksForBottling(editId);
   const tankOptions = useMemo(() => {
@@ -323,6 +338,8 @@ export function Bottling() {
     setSourceType('none');
     setVarianceReason('');
     setPlannedScheduleDate(null);
+    setEquipmentIds([]);
+    setSavedEquipmentIds([]);
     setShowForm(true);
   };
 
@@ -348,6 +365,8 @@ export function Bottling() {
       setReturnLines([]);
       setSourceType('tank');
       setVarianceReason('');
+      setEquipmentIds([]);
+      setSavedEquipmentIds([]);
       setShowForm(true);
     } else if (plan) {
       openNew(plan.date ?? undefined);
@@ -396,6 +415,8 @@ export function Bottling() {
     setSourceType(sourceTypeFromRun(run));
     setVarianceReason(run.variance_reason ?? '');
     setPlannedScheduleDate(null);
+    setEquipmentIds(run.equipment_ids ?? []);
+    setSavedEquipmentIds(run.equipment_ids ?? []);
     setShowForm(true);
   };
 
@@ -609,6 +630,7 @@ export function Bottling() {
         source_barrel_id: sourceType === 'barrel' ? form.source_barrel_id : null,
         source_holding_tank_equipment_id: sourceType === 'tank' ? form.source_holding_tank_equipment_id : null,
         returns: isFinished && sourceType === 'tank' ? returnLines : [],
+        equipment_ids: equipmentIds,
         return_holding_tank_equipment_id: null,
         return_volume_gal: null,
         variance_reason: varianceNeedsReason ? varianceReason.trim() : null,
@@ -783,50 +805,10 @@ export function Bottling() {
               <input value={form.batch_number} onChange={(e) => setForm({ ...form, batch_number: e.target.value })} />
             </div>
             <div className="form-group full-width">
-              <label>Product Name</label>
-              <input
-                data-testid="bottling-product-name"
-                value={form.product_name}
-                onChange={(e) => setForm({ ...form, product_name: e.target.value })}
-              />
-              {sourceType === 'tank' && selectedTankContents && form.product_name.trim() === selectedTankContents.trim() && (
-                <span className="field-hint">Taken from what is in the source holding tank.</span>
-              )}
-            </div>
-            <div className="form-group">
-              <label>Lot Number</label>
-              <input value={form.lot_number} onChange={(e) => setForm({ ...form, lot_number: e.target.value })} />
-            </div>
-            <div className="form-group">
-              <label>Bottling Date</label>
-              <DatePicker
-                value={form.bottling_date}
-                onChange={(bottling_date) => setForm({ ...form, bottling_date })}
-              />
-              {!isPlanned && plannedScheduleDate && (
-                <p className="field-hint">Date set to today because this left planned.</p>
-              )}
-            </div>
-            <div className="form-group">
-              <label htmlFor="bottling-status">Status</label>
+              <label htmlFor="bottling-spirit-source">Spirit Source</label>
               <select
-                id="bottling-status"
-                data-testid="bottling-status"
-                value={bottlingStatus}
-                onChange={(e) => handleStatusChange(e.target.value as RunStatus)}
-              >
-                {BOTTLING_STATUSES.map((status) => (
-                  <option key={status} value={status}>{BOTTLING_STATUS_LABELS[status]}</option>
-                ))}
-              </select>
-              <p className="field-hint">
-                Planned does not draw the tank. Running saves bottles filled so far so you can continue. Finished sends leftover to tanks or records variance.
-              </p>
-            </div>
-            <StatusDateLog kind="bottling" recordId={editId} />
-            <div className="form-group full-width">
-              <label>Spirit Source</label>
-              <select
+                id="bottling-spirit-source"
+                data-testid="bottling-spirit-source"
                 value={sourceType}
                 onChange={(e) => handleSourceTypeChange(e.target.value as BottlingSourceType)}
               >
@@ -911,6 +893,90 @@ export function Bottling() {
                 )}
               </div>
             )}
+            <div className="form-group full-width">
+              <label>Product Name</label>
+              <input
+                data-testid="bottling-product-name"
+                value={form.product_name}
+                onChange={(e) => setForm({ ...form, product_name: e.target.value })}
+              />
+              {sourceType === 'tank' && selectedTankContents && form.product_name.trim() === selectedTankContents.trim() && (
+                <span className="field-hint">Taken from what is in the source holding tank.</span>
+              )}
+            </div>
+            <div className="form-group">
+              <label>Lot Number</label>
+              <input value={form.lot_number} onChange={(e) => setForm({ ...form, lot_number: e.target.value })} />
+            </div>
+            <div className="form-group">
+              <label>Bottling Date</label>
+              <DatePicker
+                value={form.bottling_date}
+                onChange={(bottling_date) => setForm({ ...form, bottling_date })}
+              />
+              {!isPlanned && plannedScheduleDate && (
+                <p className="field-hint">Date set to today because this left planned.</p>
+              )}
+            </div>
+            <div className="form-group">
+              <label htmlFor="bottling-status">Status</label>
+              <select
+                id="bottling-status"
+                data-testid="bottling-status"
+                value={bottlingStatus}
+                onChange={(e) => handleStatusChange(e.target.value as RunStatus)}
+              >
+                {BOTTLING_STATUSES.map((status) => (
+                  <option key={status} value={status}>{BOTTLING_STATUS_LABELS[status]}</option>
+                ))}
+              </select>
+              <p className="field-hint">
+                Planned does not draw the tank. Running saves bottles filled so far so you can continue. Finished sends leftover to tanks or records variance.
+              </p>
+            </div>
+            <StatusDateLog kind="bottling" recordId={editId} />
+            <div className="form-group full-width" data-testid="bottling-equipment">
+              <label>Equipment used</label>
+              <p className="field-hint">
+                {isPlanned
+                  ? 'Pick the bottling line, pumps, hoses, or filters you plan to use. They are marked as needing cleaning once the run is Running or Finished.'
+                  : 'Picked equipment is marked as needing cleaning when you save.'}
+              </p>
+              {equipmentChoices.length === 0 ? (
+                <p className="field-hint">No bottling line, pump, hose, or other equipment set up yet.</p>
+              ) : (
+                <div className="bottling-equipment-list">
+                  {equipmentChoices.map((item) => {
+                    const checked = equipmentIds.includes(item.id);
+                    const alreadyOnRun = savedEquipmentIds.includes(item.id);
+                    const dirty = equipmentNeedsCleaning(item);
+                    const blocked = equipmentBlocksProduction(item);
+                    const offline = item.status === 'offline';
+                    const unavailable = !alreadyOnRun && (dirty || blocked || offline);
+                    const note = dirty
+                      ? 'needs cleaning'
+                      : blocked
+                        ? 'out of service'
+                        : offline
+                          ? 'offline'
+                          : null;
+                    return (
+                      <label key={item.id} className="checkbox-label">
+                        <input
+                          type="checkbox"
+                          data-testid={`bottling-equipment-${item.id}`}
+                          checked={checked}
+                          disabled={!checked && unavailable && !isPlanned}
+                          onChange={(e) => toggleEquipment(item.id, e.target.checked)}
+                        />
+                        {item.name}
+                        <span className="field-hint"> — {equipmentTypeLabel(item.equipment_type)}{note ? ` (${note})` : ''}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
 
             <div className="form-group full-width bottling-lines-section">
               <div className="bottling-lines-header">
