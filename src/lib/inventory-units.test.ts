@@ -28,6 +28,11 @@ describe('inventory adjustments in a larger unit', () => {
     expect(convertInventoryAdjustment(2, 'l', 'ml')).toBeCloseTo(2000, 6);
   });
 
+  it('saves whole conversions exactly, without floating-point tails', () => {
+    expect(100 + convertInventoryAdjustment(2, 'kg', 'g')!).toBe(2100);
+    expect(2100 + convertInventoryAdjustment(-0.5, 'kg', 'g')!).toBe(1600);
+  });
+
   it('keeps the sign so stock can be removed in a larger unit', () => {
     expect(convertInventoryAdjustment(-1.5, 'kg', 'g')).toBeCloseTo(-1500, 6);
   });

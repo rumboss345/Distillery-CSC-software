@@ -192,7 +192,7 @@ export function convertInventoryAdjustment(amount: number, fromUnit: string, ite
       ? GAL_PER_ADJUST_UNIT
       : null;
   if (!table) return null;
-  return (amount * table[from]) / table[to];
+  return Math.round(((amount * table[from]) / table[to]) * 1e6) / 1e6;
 }
 
 /** Display name for a stored inventory category, e.g. "raw sugar" → "Raw Sugar". */
