@@ -8,7 +8,50 @@ import {
   inventoryUnitForKind,
   inventoryUnitKind,
   inventoryUnitsForKind,
+  convertInventoryAdjustment,
+  defaultAdjustmentUnit,
+  inventoryAdjustmentUnits,
 } from './inventory-units';
+
+describe('inventory adjustments in a larger unit', () => {
+  it('converts a delivery in kg or tons into the item unit', () => {
+    expect(convertInventoryAdjustment(25, 'kg', 'g')).toBeCloseTo(25000, 6);
+    expect(convertInventoryAdjustment(1, 'ton', 'lbs')).toBeCloseTo(2000, 6);
+    expect(convertInventoryAdjustment(1, 'tonne', 'kg')).toBeCloseTo(1000, 6);
+    expect(convertInventoryAdjustment(2, 'lbs', 'oz')).toBeCloseTo(32, 6);
+  });
+
+  it('converts a delivery in gallons, drums, or totes into the item unit', () => {
+    expect(convertInventoryAdjustment(1, 'gal', 'l')).toBeCloseTo(3.785411784, 6);
+    expect(convertInventoryAdjustment(1, 'drum', 'gal')).toBeCloseTo(55, 6);
+    expect(convertInventoryAdjustment(1, 'tote', 'l')).toBeCloseTo(275 * 3.785411784, 4);
+    expect(convertInventoryAdjustment(2, 'l', 'ml')).toBeCloseTo(2000, 6);
+  });
+
+  it('saves whole conversions exactly, without floating-point tails', () => {
+    expect(100 + convertInventoryAdjustment(2, 'kg', 'g')!).toBe(2100);
+    expect(2100 + convertInventoryAdjustment(-0.5, 'kg', 'g')!).toBe(1600);
+  });
+
+  it('keeps the sign so stock can be removed in a larger unit', () => {
+    expect(convertInventoryAdjustment(-1.5, 'kg', 'g')).toBeCloseTo(-1500, 6);
+  });
+
+  it('accepts older unit spellings on the item', () => {
+    expect(convertInventoryAdjustment(1, 'kg', 'pounds')).toBeCloseTo(2.20462262185, 6);
+    expect(defaultAdjustmentUnit('Liters')).toBe('l');
+  });
+
+  it('refuses to mix mass and volume', () => {
+    expect(convertInventoryAdjustment(1, 'kg', 'gal')).toBeNull();
+  });
+
+  it('lists same-kind units, and only the own unit for count items', () => {
+    expect(inventoryAdjustmentUnits('g').map((u) => u.value)).toEqual(['g', 'oz', 'lbs', 'kg', 'ton', 'tonne']);
+    expect(inventoryAdjustmentUnits('ml').map((u) => u.value)).toContain('tote');
+    expect(inventoryAdjustmentUnits('each').map((u) => u.value)).toEqual(['each']);
+  });
+});
 
 describe('inventory unit conversion', () => {
   it('converts kilograms into pounds before a deduction', () => {
