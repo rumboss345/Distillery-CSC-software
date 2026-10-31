@@ -3,11 +3,20 @@ import {
   formatSpiritCorrectionWithAlternate,
   ingredientPureAlcoholGal,
   ingredientVolumeGal,
+  ingredientWeightLbs,
+  isWeightUnit,
   spiritDensityGPerMl,
   toLbs,
 } from './blending';
 import { decimalStringFromNumber } from './calc-engine/number-bridge';
-import { postProofing, previewProofing, type ProofingRequest } from './calc-engine/proofing';
+import {
+  postedSpiritPounds,
+  postedWaterPounds,
+  postProofing,
+  previewProofing,
+  type ProofingRequest,
+} from './calc-engine/proofing';
+import { formulationSpiritWeightLb } from './formulation-spirit';
 import { designFormulation, gaugePouredBlend, type FormulationComponent } from './formulation-engine';
 import type { BlendIngredientType } from '../types';
 
@@ -275,6 +284,58 @@ export function computeTheoreticalBlend(
     density,
     hasSugarOrFlavor: sugarOrFlavor,
     densityFromAbvUnreliable: sugarOrFlavor,
+  };
+}
+
+export interface PreBlendSpiritWater {
+  spiritWeightLb: number;
+  waterWeightLb: number;
+  combinedWeightLb: number;
+  abv: number;
+  volumeGal: number;
+  hasSpirit: boolean;
+  hasWater: boolean;
+}
+
+function spiritPullWeightLb(spirit: SpiritSourceInput): number {
+  if (!(spirit.volumeGal > 0) || !(spirit.abv > 0)) return 0;
+  const posted = postedSpiritPounds(
+    decimalStringFromNumber(spirit.volumeGal),
+    decimalStringFromNumber(spirit.abv),
+  );
+  return posted == null ? formulationSpiritWeightLb(spirit.volumeGal, spirit.abv) : Number(posted);
+}
+
+function waterAdditiveWeightLb(additive: AdditiveInput): number {
+  if (additive.ingredientType !== 'water' || !(additive.amount > 0)) return 0;
+  const measure = { ...additive, ingredient_type: additive.ingredientType };
+  if (isWeightUnit(additive.unit)) return toLbs(additive.amount, additive.unit);
+  const gal = ingredientVolumeGal(measure);
+  const posted = postedWaterPounds(decimalStringFromNumber(gal));
+  if (posted != null) return Number(posted);
+  return ingredientWeightLbs(measure);
+}
+
+/**
+ * Expected scale weight and Alc% after spirit and proofing water are in the tank,
+ * before sugar, flavor, color, or other additives.
+ */
+export function preBlendSpiritAndWater(
+  spirits: SpiritSourceInput[],
+  additives: AdditiveInput[],
+): PreBlendSpiritWater {
+  const waterOnly = additives.filter((additive) => additive.ingredientType === 'water' && additive.amount > 0);
+  const spiritWeightLb = round3(spirits.reduce((sum, spirit) => sum + spiritPullWeightLb(spirit), 0));
+  const waterWeightLb = round3(waterOnly.reduce((sum, additive) => sum + waterAdditiveWeightLb(additive), 0));
+  const theoretical = computeTheoreticalBlend(spirits, waterOnly);
+  return {
+    spiritWeightLb,
+    waterWeightLb,
+    combinedWeightLb: round3(spiritWeightLb + waterWeightLb),
+    abv: theoretical.abv,
+    volumeGal: theoretical.volumeGal,
+    hasSpirit: spiritWeightLb > 0 || spirits.some((spirit) => spirit.volumeGal > 0 && spirit.abv > 0),
+    hasWater: waterWeightLb > 0,
   };
 }
 
