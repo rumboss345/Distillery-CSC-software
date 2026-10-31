@@ -8,6 +8,8 @@ describe('equipment icons', () => {
     expect(resolveEquipmentIcon('hose', 'holding_tank')).toBe('hose');
     expect(resolveEquipmentIcon('', 'Gin basket')).toBe('other');
     expect(resolveEquipmentIcon('pot_still', 'Gin basket')).toBe('pot_still');
+    expect(resolveEquipmentIcon('bottling_line', 'other')).toBe('bottling_line');
+    expect(resolveEquipmentIcon('labeler', 'holding_tank')).toBe('labeler');
   });
 
   it('lets the picture differ from the equipment type', () => {
@@ -37,5 +39,13 @@ describe('equipment icons', () => {
     expect(equipmentIconShowsVolume('pump')).toBe(false);
     expect(equipmentIconShowsVolume('hose')).toBe(false);
     expect(equipmentIconShowsVolume('boiler')).toBe(false);
+    expect(equipmentIconShowsVolume('bottling_line')).toBe(false);
+    expect(equipmentIconShowsVolume('labeler')).toBe(false);
+    expect(equipmentIconShowsVolume('gin_basket')).toBe(false);
+    expect(equipmentIconShowsVolume('barrel_rack')).toBe(false);
+    expect(equipmentIconShowsVolume('filter')).toBe(false);
+    expect(equipmentIconShowsVolume('heat_exchanger')).toBe(false);
+    expect(equipmentIconShowsVolume('mixer')).toBe(false);
+    expect(equipmentIconShowsVolume('scale')).toBe(false);
   });
 });

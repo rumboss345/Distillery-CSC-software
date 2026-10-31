@@ -30,8 +30,9 @@ function previewData(icon: EquipmentIcon, label: string): EquipmentVisualData {
             ? 'Wash'
             : undefined,
     abv: icon === 'stillage_tank' ? 0 : tank ? 65 : undefined,
-    status: showsFill ? 'active' : 'available',
+    status: 'active',
     isWashing: wash,
+    isFermenting: fermenter,
     fermenterLatestBrix: fermenter ? 12 : undefined,
   };
 }

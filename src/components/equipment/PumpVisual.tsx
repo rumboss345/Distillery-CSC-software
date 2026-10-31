@@ -30,9 +30,11 @@ export function PumpVisual(props: EquipmentVisualProps) {
         <rect x="58" y="22" width="16" height="28" rx="3" fill={`url(#${uid}-steel)`} stroke="#1a1f26" />
         <circle cx="66" cy="74" r="30" fill={`url(#${uid}-body)`} stroke="#0e3330" strokeWidth="1.4" />
         <circle cx="66" cy="74" r="16" fill="none" stroke="#e8fff9" strokeWidth="1.2" opacity="0.35" />
-        <path d="M66 58 L72 74 L66 70 L60 74 Z" fill="#e8fff9" opacity={running ? 0.95 : 0.45} />
-        <path d="M82 74 L66 68 L70 74 L66 80 Z" fill="#e8fff9" opacity={running ? 0.85 : 0.35} />
-        <path d="M66 90 L60 74 L66 78 L72 74 Z" fill="#e8fff9" opacity={running ? 0.85 : 0.35} />
+        <g className={running ? 'pump-impeller' : undefined}>
+          <path d="M66 58 L72 74 L66 70 L60 74 Z" fill="#e8fff9" opacity={running ? 0.95 : 0.45} />
+          <path d="M82 74 L66 68 L70 74 L66 80 Z" fill="#e8fff9" opacity={running ? 0.85 : 0.35} />
+          <path d="M66 90 L60 74 L66 78 L72 74 Z" fill="#e8fff9" opacity={running ? 0.85 : 0.35} />
+        </g>
         <circle cx="66" cy="74" r="4" fill="#0e3330" />
         <rect x="92" y="58" width="32" height="32" rx="4" fill={`url(#${uid}-steel)`} stroke="#1a1f26" />
         <circle cx="108" cy="74" r="6" fill="none" stroke="#5ec8e8" strokeWidth="1.5" opacity={running ? 0.9 : 0.3} />

@@ -168,6 +168,14 @@ export function FloorCanvas({
                 {icon === 'pump' && <div className="eq-shape eq-pump" />}
                 {icon === 'hose' && <div className="eq-shape eq-hose" />}
                 {icon === 'jug' && <div className="eq-shape eq-jug" />}
+                {icon === 'bottling_line' && <div className="eq-shape eq-bottling-line" />}
+                {icon === 'labeler' && <div className="eq-shape eq-labeler" />}
+                {icon === 'gin_basket' && <div className="eq-shape eq-gin-basket" />}
+                {icon === 'barrel_rack' && <div className="eq-shape eq-barrel-rack" />}
+                {icon === 'filter' && <div className="eq-shape eq-filter" />}
+                {icon === 'heat_exchanger' && <div className="eq-shape eq-heat-exchanger" />}
+                {icon === 'mixer' && <div className="eq-shape eq-mixer" />}
+                {icon === 'scale' && <div className="eq-shape eq-scale" />}
                 {(icon === 'holding_tank' || icon === 'stillage_tank' || icon === 'collection_vessel' || icon === 'boiler' || icon === 'other') && (
                   <div className="eq-shape eq-tank" />
                 )}
