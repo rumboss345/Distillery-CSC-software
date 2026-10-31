@@ -608,9 +608,168 @@
   .mash-tun-wash-fill,
   .mash-tun-wash-surface,
   .mash-tun-wash-bubble,
-  .mash-tun-mixing-blade {
+  .mash-tun-mixing-blade,
+  .bottling-belt,
+  .bottling-bottles,
+  .bottling-nozzle,
+  .labeler-roll,
+  .labeler-arm,
+  .gin-basket-steam,
+  .barrel-rack-glow,
+  .filter-plate,
+  .filter-flow,
+  .heat-exchanger-dot,
+  .mixer-blade,
+  .scale-platform,
+  .scale-needle,
+  .pump-impeller {
     animation: none;
   }
+}
+
+.bottling-belt {
+  animation: bottling-belt-move 1.1s linear infinite;
+}
+
+.bottling-bottles {
+  animation: bottling-bottle-move 3.2s linear infinite;
+}
+
+.bottling-nozzle {
+  transform-box: fill-box;
+  transform-origin: top center;
+  animation: bottling-nozzle-dip 0.9s ease-in-out infinite alternate;
+}
+
+@keyframes bottling-belt-move {
+  from { transform: translateX(0); }
+  to { transform: translateX(40px); }
+}
+
+@keyframes bottling-bottle-move {
+  from { transform: translateX(-40px); }
+  to { transform: translateX(40px); }
+}
+
+@keyframes bottling-nozzle-dip {
+  from { transform: translateY(0); }
+  to { transform: translateY(4px); }
+}
+
+.labeler-roll {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: labeler-spin 2.4s linear infinite;
+}
+
+.labeler-arm {
+  transform-box: fill-box;
+  transform-origin: left center;
+  animation: labeler-apply 1.1s ease-in-out infinite alternate;
+}
+
+@keyframes labeler-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes labeler-apply {
+  from { transform: translateX(0); }
+  to { transform: translateX(4px); }
+}
+
+.gin-basket-steam {
+  fill: rgba(255, 230, 210, 0.7);
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: gin-basket-steam-rise 2.2s ease-in infinite;
+}
+
+@keyframes gin-basket-steam-rise {
+  0% { transform: translateY(0) scale(1); opacity: 0.7; }
+  100% { transform: translateY(-22px) scale(0.4); opacity: 0; }
+}
+
+.barrel-rack-glow {
+  animation: barrel-rack-shimmer 2.4s ease-in-out infinite alternate;
+}
+
+@keyframes barrel-rack-shimmer {
+  from { filter: brightness(1); }
+  to { filter: brightness(1.18); }
+}
+
+.filter-plate {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: filter-compress 1.6s ease-in-out infinite alternate;
+}
+
+.filter-flow {
+  animation: filter-flow-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes filter-compress {
+  from { transform: scaleY(1); }
+  to { transform: scaleY(0.94); }
+}
+
+@keyframes filter-flow-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
+.heat-exchanger-dot {
+  animation: heat-exchanger-flow 2s linear infinite;
+}
+
+@keyframes heat-exchanger-flow {
+  from { transform: translateX(0); opacity: 0.9; }
+  to { transform: translateX(88px); opacity: 0.2; }
+}
+
+.mixer-blade {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mixer-spin 1.4s linear infinite;
+}
+
+@keyframes mixer-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.scale-platform {
+  transform-box: fill-box;
+  transform-origin: bottom center;
+  animation: scale-settle 1.6s ease-in-out infinite alternate;
+}
+
+.scale-needle {
+  transform-box: fill-box;
+  transform-origin: 70px 38px;
+  animation: scale-needle-tick 1.6s ease-in-out infinite alternate;
+}
+
+@keyframes scale-settle {
+  from { transform: translateY(0); }
+  to { transform: translateY(2px); }
+}
+
+@keyframes scale-needle-tick {
+  from { transform: rotate(-8deg); }
+  to { transform: rotate(10deg); }
+}
+
+.pump-impeller {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: pump-spin 0.9s linear infinite;
+}
+
+@keyframes pump-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .mash-tun-wash-fill {

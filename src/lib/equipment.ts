@@ -16,11 +16,30 @@ export const EQUIPMENT_TYPES: { value: EquipmentType; label: string }[] = [
 ];
 
 /** Pictures you can assign when adding or editing equipment. The picture does not have to match the type. */
-export type EquipmentIcon = EquipmentType | 'jug';
+export type ExtraEquipmentIcon =
+  | 'jug'
+  | 'bottling_line'
+  | 'labeler'
+  | 'gin_basket'
+  | 'barrel_rack'
+  | 'filter'
+  | 'heat_exchanger'
+  | 'mixer'
+  | 'scale';
+
+export type EquipmentIcon = EquipmentType | ExtraEquipmentIcon;
 
 export const EQUIPMENT_ICONS: { value: EquipmentIcon; label: string }[] = [
   ...EQUIPMENT_TYPES,
   { value: 'jug', label: 'Jug' },
+  { value: 'bottling_line', label: 'Bottling line' },
+  { value: 'labeler', label: 'Labeler' },
+  { value: 'gin_basket', label: 'Gin basket' },
+  { value: 'barrel_rack', label: 'Barrel rack' },
+  { value: 'filter', label: 'Filter' },
+  { value: 'heat_exchanger', label: 'Heat exchanger' },
+  { value: 'mixer', label: 'Mixer' },
+  { value: 'scale', label: 'Scale' },
 ];
 
 export function isEquipmentIcon(icon: string): icon is EquipmentIcon {

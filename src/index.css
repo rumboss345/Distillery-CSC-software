@@ -1762,6 +1762,102 @@ tr.volume-change-kind:hover td {
 .eq-hose::before { left: -4%; }
 .eq-hose::after { right: -4%; }
 
+.eq-bottling-line {
+  width: 82%;
+  height: 28%;
+  border-radius: 4px;
+  position: relative;
+}
+
+.eq-bottling-line::before {
+  content: '';
+  position: absolute;
+  left: 22%;
+  top: -90%;
+  width: 56%;
+  height: 80%;
+  background: inherit;
+  border-radius: 3px;
+}
+
+.eq-labeler {
+  width: 36%;
+  height: 58%;
+  border-radius: 8px;
+  position: relative;
+}
+
+.eq-labeler::after {
+  content: '';
+  position: absolute;
+  right: -70%;
+  top: 10%;
+  width: 70%;
+  height: 70%;
+  background: inherit;
+  border-radius: 50%;
+}
+
+.eq-gin-basket {
+  width: 52%;
+  height: 58%;
+  border-radius: 0 0 46% 46%;
+}
+
+.eq-barrel-rack {
+  width: 70%;
+  height: 38%;
+  border-radius: 50%;
+  position: relative;
+}
+
+.eq-barrel-rack::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 70%;
+  width: 100%;
+  height: 100%;
+  background: inherit;
+  border-radius: 50%;
+}
+
+.eq-filter {
+  width: 64%;
+  height: 52%;
+  border-radius: 3px;
+}
+
+.eq-heat-exchanger {
+  width: 78%;
+  height: 28%;
+  border-radius: 999px;
+}
+
+.eq-mixer {
+  width: 52%;
+  height: 58%;
+  border-radius: 8px;
+}
+
+.eq-scale {
+  width: 58%;
+  height: 22%;
+  border-radius: 3px;
+  position: relative;
+}
+
+.eq-scale::before {
+  content: '';
+  position: absolute;
+  left: 28%;
+  top: -120%;
+  width: 44%;
+  height: 110%;
+  background: inherit;
+  border-radius: 3px;
+}
+
 .equipment-icon-picker {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));

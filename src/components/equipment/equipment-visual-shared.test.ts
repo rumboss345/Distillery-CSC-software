@@ -131,5 +131,6 @@ describe('buildEquipmentVisualData fermenter est. ABV', () => {
     expect(buildEquipmentVisualData(fermenterView({ icon: 'pump' })).icon).toBe('pump');
     expect(buildEquipmentVisualData(fermenterView({ equipment_type: 'holding_tank', icon: 'jug' })).icon).toBe('jug');
     expect(buildEquipmentVisualData(fermenterView({ equipment_type: 'Gin basket', icon: 'pot_still' })).icon).toBe('pot_still');
+    expect(buildEquipmentVisualData(fermenterView({ equipment_type: 'other', icon: 'bottling_line' })).icon).toBe('bottling_line');
   });
 });

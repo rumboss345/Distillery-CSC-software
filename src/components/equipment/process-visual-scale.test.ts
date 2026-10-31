@@ -12,5 +12,8 @@ describe('processEquipmentVisualScale', () => {
     expect(processEquipmentVisualScale('mash_tun')).toBe(1);
     expect(processEquipmentVisualScale('pump')).toBe(0.85);
     expect(processEquipmentVisualScale('hose')).toBe(0.85);
+    expect(processEquipmentVisualScale('bottling_line')).toBe(1.05);
+    expect(processEquipmentVisualScale('labeler')).toBe(0.9);
+    expect(processEquipmentVisualScale('mixer')).toBe(0.9);
   });
 });

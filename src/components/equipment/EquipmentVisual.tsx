@@ -8,6 +8,16 @@ import { MashTunVisual } from './MashTunVisual';
 import { BoilerVisual } from './BoilerVisual';
 import { PumpVisual } from './PumpVisual';
 import { HoseVisual } from './HoseVisual';
+import { BottlingLineVisual } from './BottlingLineVisual';
+import {
+  BarrelRackVisual,
+  FilterVisual,
+  GinBasketVisual,
+  HeatExchangerVisual,
+  LabelerVisual,
+  MixerVisual,
+  ScaleVisual,
+} from './ExtraEquipmentVisuals';
 
 /** Renders the picture chosen for this equipment. Volume still follows the equipment type. */
 export function EquipmentVisual(props: EquipmentVisualProps) {
@@ -61,6 +71,22 @@ export function EquipmentVisual(props: EquipmentVisualProps) {
       return <PumpVisual {...view} />;
     case 'hose':
       return <HoseVisual {...view} />;
+    case 'bottling_line':
+      return <BottlingLineVisual {...view} />;
+    case 'labeler':
+      return <LabelerVisual {...view} />;
+    case 'gin_basket':
+      return <GinBasketVisual {...view} />;
+    case 'barrel_rack':
+      return <BarrelRackVisual {...view} />;
+    case 'filter':
+      return <FilterVisual {...view} />;
+    case 'heat_exchanger':
+      return <HeatExchangerVisual {...view} />;
+    case 'mixer':
+      return <MixerVisual {...view} />;
+    case 'scale':
+      return <ScaleVisual {...view} />;
     case 'boiler':
     case 'other':
     default:
