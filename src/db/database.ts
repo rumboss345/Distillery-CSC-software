@@ -1476,6 +1476,22 @@ function migrateAdvancedBlending(): void {
   migrateBottlingReturnTankColumns();
   migrateBottlingRunReturns();
   migrateBottlingStatusColumn();
+  migrateBottlingRunEquipment();
+}
+
+/** Equipment used on a bottling run (bottling line, pumps, hoses). */
+function migrateBottlingRunEquipment(): void {
+  if (!db) return;
+  db.run(`
+    CREATE TABLE IF NOT EXISTS bottling_run_equipment (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      bottling_run_id INTEGER NOT NULL REFERENCES bottling_runs(id) ON DELETE CASCADE,
+      floor_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
+      sort_order INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+  db.run('CREATE INDEX IF NOT EXISTS idx_bottling_run_equipment_run ON bottling_run_equipment(bottling_run_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_bottling_run_equipment_equipment ON bottling_run_equipment(floor_equipment_id)');
 }
 
 /** Existing bottling runs were already finished. New runs can be planned or running. */

@@ -718,6 +718,62 @@ describe('PostgreSQL production modules', () => {
     expect(stock()).toBe(76);
   });
 
+  it('marks bottling equipment as needing cleaning once the run is running', async () => {
+    await saveEquipment('Bottling Line Equip', 'other', 0);
+    await saveEquipment('Bottling Pump Equip', 'pump', 0);
+    const ids = engine.readProduction((api) => {
+      const all = api.getFloorEquipment();
+      return {
+        line: all.find((item) => item.name === 'Bottling Line Equip')!.id,
+        pump: all.find((item) => item.name === 'Bottling Pump Equip')!.id,
+      };
+    });
+    const status = (eqId: number) => engine.readProduction((api) => (
+      api.getFloorEquipment().find((item) => item.id === eqId)!.status
+    ));
+    const run = () => engine.readProduction((api) => api.getBottlingRuns().find((r) => r.batch_number === 'BT-EQUIP-001'));
+    const header = {
+      batch_number: 'BT-EQUIP-001',
+      source_barrel_id: null,
+      source_holding_tank_equipment_id: null,
+      source_volume_gal: null,
+      source_abv: null,
+      bottled_volume_gal: null,
+      volume_variance_gal: null,
+      alcohol_variance_gal: null,
+      variance_reason: '',
+      variance_changed_by: 'Admin',
+      source_run_id: null,
+      bottling_date: '2026-10-31',
+      packaging_bottle: '',
+      bottle_size_ml: 750,
+      bottle_count: 0,
+      final_abv: 40,
+      product_name: 'Equipment Spirit',
+      lot_number: 'LOT-EQUIP',
+      notes: '',
+      returns: [],
+    };
+    const lines = [{ packaging_bottle: '750 ml bottle', bottle_size_ml: 750, bottle_count: 6 }];
+
+    await save('saveBottlingRun', [{ ...header, status: 'planned', equipment_ids: [ids.line, ids.pump] }, lines]);
+    expect(run()?.equipment_ids).toEqual([ids.line, ids.pump]);
+    expect(status(ids.line)).toBe('empty');
+    expect(status(ids.pump)).toBe('empty');
+
+    await save('saveBottlingRun', [{ ...header, status: 'running', equipment_ids: [ids.line, ids.pump] }, lines, run()!.id]);
+    expect(status(ids.line)).toBe('cleaning');
+    expect(status(ids.pump)).toBe('cleaning');
+
+    await save('saveBottlingRun', [{ ...header, status: 'running', equipment_ids: [ids.line] }, lines, run()!.id]);
+    expect(run()?.equipment_ids).toEqual([ids.line]);
+    expect(status(ids.line)).toBe('cleaning');
+    expect(status(ids.pump)).toBe('empty');
+
+    await save('deleteBottlingRun', [run()!.id]);
+    expect(status(ids.line)).toBe('empty');
+  });
+
   it('lets different records save together and stops a tank from being overdrawn', async () => {
     const spiritId = engine.readProduction((api) => api.getFloorEquipment().find((item) => item.name === 'Spirit Tank')!.id);
     const tankA = engine.readProduction((api) => api.getFloorEquipment().find((item) => item.name === 'Tank A')!.id);

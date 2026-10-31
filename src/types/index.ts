@@ -496,6 +496,8 @@ export interface BottlingRunReturnInput {
 export interface BottlingRunView extends BottlingRun {
   lines: BottlingRunLine[];
   returns?: BottlingRunReturn[];
+  /** Bottling line, pumps, hoses, filters, and other equipment used on this run. */
+  equipment_ids?: number[];
 }
 
 export type BlendStatus = 'draft' | 'trial' | 'approved' | 'executed' | 'bottled';

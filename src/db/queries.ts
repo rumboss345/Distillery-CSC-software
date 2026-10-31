@@ -42,6 +42,12 @@ import {
   maintenanceStatusLabel,
 } from '../lib/equipment-maintenance';
 import { CALENDAR_CLEANING_EQUIPMENT_TYPES, equipmentCleaningStatusLabel, equipmentNeedsCleaning, equipmentStatusWhenReturningToPlanned } from '../lib/equipment-cleaning';
+import {
+  bottlingEquipmentToMarkDirty,
+  bottlingEquipmentToRelease,
+  isBottlingEquipmentType,
+  uniqueEquipmentIds,
+} from '../lib/bottling-equipment';
 import { assertEnteredAbv } from '../lib/abv-limits';
 import { planTankProofDown } from '../lib/tank-proof-down';
 import { roundThousandths, tankReadingChanged, tankVolumeVarianceGal, volumeChangeReasonError } from '../lib/tank-volume-variance';
@@ -4990,6 +4996,15 @@ function attachBottlingRunLines(runs: BottlingRun[]): BottlingRunView[] {
     bucket.push(line);
     returnsByRun.set(line.bottling_run_id, bucket);
   }
+  const allEquipment = queryAll<{ bottling_run_id: number; floor_equipment_id: number }>(
+    'SELECT bottling_run_id, floor_equipment_id FROM bottling_run_equipment ORDER BY sort_order, id',
+  );
+  const equipmentByRun = new Map<number, number[]>();
+  for (const row of allEquipment) {
+    const bucket = equipmentByRun.get(row.bottling_run_id) ?? [];
+    bucket.push(row.floor_equipment_id);
+    equipmentByRun.set(row.bottling_run_id, bucket);
+  }
   return runs.map((run) => {
     const stored = linesByRun.get(run.id);
     const storedReturns = returnsByRun.get(run.id) ?? [];
@@ -5004,13 +5019,15 @@ function attachBottlingRunLines(runs: BottlingRun[]): BottlingRunView[] {
           sort_order: 0,
         }]
         : []);
+    const equipment_ids = equipmentByRun.get(run.id) ?? [];
     if (stored && stored.length > 0) {
-      return { ...run, lines: stored, returns };
+      return { ...run, lines: stored, returns, equipment_ids };
     }
     if (run.bottle_count > 0) {
       return {
         ...run,
         returns,
+        equipment_ids,
         lines: [{
           id: 0,
           bottling_run_id: run.id,
@@ -5022,7 +5039,35 @@ function attachBottlingRunLines(runs: BottlingRun[]): BottlingRunView[] {
         }],
       };
     }
-    return { ...run, lines: [], returns };
+    return { ...run, lines: [], returns, equipment_ids };
+  });
+}
+
+function getBottlingRunEquipmentIds(runId: number): number[] {
+  return queryAll<{ floor_equipment_id: number }>(
+    'SELECT floor_equipment_id FROM bottling_run_equipment WHERE bottling_run_id = ? ORDER BY sort_order, id',
+    [runId],
+  ).map((row) => row.floor_equipment_id);
+}
+
+function persistBottlingRunEquipment(runId: number, equipmentIds: number[]): void {
+  runQuery('DELETE FROM bottling_run_equipment WHERE bottling_run_id = ?', [runId]);
+  equipmentIds.forEach((equipmentId, index) => {
+    insertRow(
+      'INSERT INTO bottling_run_equipment (bottling_run_id, floor_equipment_id, sort_order) VALUES (?, ?, ?)',
+      [runId, equipmentId, index],
+    );
+  });
+}
+
+function markEquipmentDirtyAfterBottling(equipmentId: number, batchNumber: string): void {
+  const eq = queryOne<FloorEquipment>('SELECT status FROM floor_equipment WHERE id = ?', [equipmentId]);
+  if (!eq || eq.status === 'offline' || eq.status === 'cleaning') return;
+  runQuery(`UPDATE floor_equipment SET status='cleaning' WHERE id=?`, [equipmentId]);
+  appendEquipmentMaintenanceLog({
+    floor_equipment_id: equipmentId,
+    event_type: 'needs_cleaning',
+    notes: `Used during bottling ${batchNumber.trim() || 'run'}.`,
   });
 }
 
@@ -5068,7 +5113,7 @@ export function getBottlingRunLines(bottlingRunId: number): BottlingRunLine[] {
 }
 
 export function saveBottlingRun(
-  run: Omit<BottlingRun, 'id' | 'created_at'> & { returns?: BottlingRunReturnInput[] },
+  run: Omit<BottlingRun, 'id' | 'created_at'> & { returns?: BottlingRunReturnInput[]; equipment_ids?: number[] },
   lines: BottlingRunLineInput[],
   id?: number,
 ): void {
@@ -5107,6 +5152,29 @@ export function saveBottlingRun(
     }
   }
   const totalCount = activeLines.reduce((sum, line) => sum + line.bottle_count, 0);
+  const equipmentIds = uniqueEquipmentIds(run.equipment_ids).filter((eqId) => eqId !== sourceTankId);
+  const previousEquipmentIds = id ? getBottlingRunEquipmentIds(id) : [];
+  const equipmentUse = {
+    selectedIds: equipmentIds,
+    previousIds: previousEquipmentIds,
+    previousUsed: previousStatus != null && previousStatus !== 'planned',
+    nowUsed: status !== 'planned',
+  };
+  const equipmentToMarkDirty = bottlingEquipmentToMarkDirty({
+    ...equipmentUse,
+    newSession: previousStatus !== status || totalCount > (previous?.bottle_count ?? 0),
+  });
+  for (const eqId of equipmentIds) {
+    const eq = queryOne<FloorEquipment>('SELECT * FROM floor_equipment WHERE id = ?', [eqId]);
+    if (!eq) throw new Error('Bottling equipment not found.');
+    if (!isBottlingEquipmentType(eq.equipment_type) && !previousEquipmentIds.includes(eqId)) {
+      throw new Error(`${eq.name} is a tank, fermenter, or still. Pick it as the Spirit Source instead.`);
+    }
+  }
+  for (const eqId of equipmentToMarkDirty) {
+    const alreadyOnRun = equipmentUse.previousUsed && previousEquipmentIds.includes(eqId);
+    if (!alreadyOnRun) assertEquipmentUsableForProduction(eqId, 'Bottling equipment');
+  }
   const bottledVolumeGal = totalCount > 0
     ? activeLines.reduce((sum, line) => sum + mlToGallons(line.bottle_count * line.bottle_size_ml), 0)
     : null;
@@ -5252,6 +5320,13 @@ export function saveBottlingRun(
     persistBottlingRunLines(runId, activeLines);
     persistBottlingRunReturns(runId, storedReturns);
   }
+  persistBottlingRunEquipment(runId, equipmentIds);
+  for (const eqId of bottlingEquipmentToRelease(equipmentUse)) {
+    releaseEquipmentWithoutCleaningHold(eqId);
+  }
+  for (const eqId of equipmentToMarkDirty) {
+    markEquipmentDirtyAfterBottling(eqId, header.batch_number);
+  }
   syncBottlingPackagingInventory(previousLines, nextInventory);
   syncHoldingTankStatuses();
   recordStatusDateLog({
@@ -5273,6 +5348,13 @@ export function deleteBottlingRun(id: number): void {
     : [];
   syncBottlingPackagingInventory(previousLines, []);
   deleteStatusDateLog('bottling', id);
+  if (previous && normalizeBottlingStatus(previous.status) !== 'planned') {
+    for (const eqId of getBottlingRunEquipmentIds(id)) {
+      releaseEquipmentWithoutCleaningHold(eqId);
+    }
+  }
+  runQuery('DELETE FROM bottling_run_equipment WHERE bottling_run_id = ?', [id]);
+  runQuery('DELETE FROM bottling_run_lines WHERE bottling_run_id = ?', [id]);
   runQuery('DELETE FROM bottling_run_returns WHERE bottling_run_id = ?', [id]);
   runQuery('DELETE FROM bottling_runs WHERE id = ?', [id]);
   syncHoldingTankStatuses();
@@ -6984,6 +7066,7 @@ function detachFloorEquipment(id: number): void {
   runQuery('DELETE FROM distillation_run_tank_sources WHERE holding_tank_equipment_id = ?', [id]);
   runQuery('DELETE FROM barrel_fills WHERE source_holding_tank_equipment_id = ?', [id]);
   runQuery('DELETE FROM bottling_run_returns WHERE holding_tank_equipment_id = ?', [id]);
+  runQuery('DELETE FROM bottling_run_equipment WHERE floor_equipment_id = ?', [id]);
   runQuery('DELETE FROM blend_spirit_sources WHERE holding_tank_equipment_id = ?', [id]);
   runQuery('DELETE FROM holding_tank_transfers WHERE source_tank_equipment_id = ?', [id]);
   runQuery('DELETE FROM holding_tank_opening_balances WHERE tank_equipment_id = ?', [id]);

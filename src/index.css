@@ -2778,6 +2778,16 @@ tr.volume-change-kind:hover td {
   background: var(--bg-elevated);
 }
 
+.bottling-equipment-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: 0.35rem 1rem;
+}
+
+.bottling-equipment-list .field-hint {
+  margin: 0;
+}
+
 .bottling-lines-header {
   display: flex;
   align-items: center;
