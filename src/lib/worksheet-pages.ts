@@ -1,12 +1,15 @@
 /** A worksheet up to this many pages tall is shrunk onto one page instead of split. */
 export const ONE_PAGE_SHRINK_LIMIT = 1.4;
 
-/** Elements a page may start at, so a row, box, or section is never cut in half. */
+/**
+ * Elements a page may start at, so a row, box, or section is never cut in half. First rows
+ * and first checklist lines are left out so a heading never ends a page on its own.
+ */
 export const WORKSHEET_BREAK_SELECTOR = [
   '.blend-worksheet-section',
-  '.blend-worksheet-table tbody tr',
+  '.blend-worksheet-table tbody tr:not(:first-child)',
   '.blend-worksheet-table tfoot tr',
-  '.blend-worksheet-steps li',
+  '.blend-worksheet-steps li:not(:first-child)',
   '.blend-worksheet-signoff > div',
 ].join(', ');
 

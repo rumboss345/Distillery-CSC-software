@@ -1,6 +1,8 @@
 import { worksheetBreakPoints, worksheetOnePageScale, worksheetPageSlices } from './worksheet-pages';
 
 const PAGE_MARGIN_MM = 10;
+const LETTER_WIDTH_MM = 215.9;
+const PAPER_CONTENT_WIDTH_PX = ((LETTER_WIDTH_MM - PAGE_MARGIN_MM * 2) * 96) / 25.4;
 
 function sanitizePdfFilename(name: string): string {
   const trimmed = name.trim().replace(/[^\w.-]+/g, '-').replace(/-+/g, '-');
@@ -32,6 +34,10 @@ export async function downloadWorksheetPdf(
     scrollContainer.style.maxHeight = 'none';
     scrollContainer.style.overflow = 'visible';
   }
+  const previousWidth = worksheetElement.style.width;
+  const hadPaperClass = worksheetElement.classList.contains('is-paper');
+  worksheetElement.style.width = `${PAPER_CONTENT_WIDTH_PX}px`;
+  worksheetElement.classList.add('is-paper');
 
   try {
     const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
@@ -101,6 +107,8 @@ export async function downloadWorksheetPdf(
 
     pdf.save(sanitizePdfFilename(filename.replace(/\.pdf$/i, '')) + '.pdf');
   } finally {
+    worksheetElement.style.width = previousWidth;
+    if (!hadPaperClass) worksheetElement.classList.remove('is-paper');
     if (scrollContainer && previousContainerStyles) {
       scrollContainer.style.maxHeight = previousContainerStyles.maxHeight;
       scrollContainer.style.overflow = previousContainerStyles.overflow;
