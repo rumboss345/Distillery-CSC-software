@@ -998,10 +998,11 @@ export function Bottling() {
                   ? [...labelOptions, { id: 0, name: selectedLabel, quantity: 0, unit: 'each' }]
                   : labelOptions;
                 return (
-                  <div key={index} className="bottling-line-row">
-                    <div className="form-group">
-                      <label>{isRumBottling ? 'Bottle' : 'Packaging bottle'}</label>
+                  <div key={index} className="bottling-line-row bottling-packaging-row" data-testid="bottling-packaging-row">
+                    <div className="form-group bottling-line-bottle">
+                      <label htmlFor={`bottling-bottle-${index}`}>{isRumBottling ? 'Bottle' : 'Packaging bottle'}</label>
                       <select
+                        id={`bottling-bottle-${index}`}
                         value={line.packaging_bottle}
                         onChange={(e) => handleLinePackagingSelect(index, e.target.value)}
                       >
@@ -1013,7 +1014,7 @@ export function Bottling() {
                         ))}
                       </select>
                     </div>
-                    <div className="form-group">
+                    <div className="form-group bottling-line-label">
                       <label htmlFor={`bottling-label-${index}`}>Label</label>
                       <select
                         id={`bottling-label-${index}`}
@@ -1031,18 +1032,22 @@ export function Bottling() {
                         ))}
                       </select>
                     </div>
-                    <div className="form-group">
-                      <label>Bottle size (ml)</label>
+                    <div className="form-group bottling-line-size">
+                      <label htmlFor={`bottling-size-${index}`}>Bottle size (ml)</label>
                       <input
+                        id={`bottling-size-${index}`}
                         type="number"
+                        inputMode="numeric"
                         value={line.bottle_size_ml || ''}
                         onChange={(e) => updateLine(index, { bottle_size_ml: parseInt(e.target.value, 10) || 0 })}
                       />
                     </div>
-                    <div className="form-group">
-                      <label>Count</label>
+                    <div className="form-group bottling-line-count">
+                      <label htmlFor={`bottling-count-${index}`}>Count</label>
                       <input
+                        id={`bottling-count-${index}`}
                         type="number"
+                        inputMode="numeric"
                         value={line.bottle_count || ''}
                         onChange={(e) => updateLine(index, { bottle_count: parseInt(e.target.value) || 0 })}
                       />
@@ -1127,7 +1132,7 @@ export function Bottling() {
                     (tank) => tank.id === line.holding_tank_equipment_id || !taken.has(tank.id),
                   );
                   return (
-                    <div key={index} className="bottling-line-row" data-testid="bottling-return-row">
+                    <div key={index} className="bottling-line-row bottling-return-row" data-testid="bottling-return-row">
                       <div className="form-group">
                         <label htmlFor={`bottling-return-tank-${index}`}>Tank</label>
                         <select
