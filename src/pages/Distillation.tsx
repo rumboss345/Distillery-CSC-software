@@ -1239,7 +1239,7 @@ export function Distillation() {
                           <td className="num">
                             {r.charge_volume_gal} gal
                             {r.charge_abv != null ? ` @ ${r.charge_abv.toFixed(1)}%${r.alcohol_charge_basis === 'estimated_brix' ? ' est.' : ''}` : ''}
-                            {r.alcohol_loss_gal != null && (
+                            {r.alcohol_loss_gal != null && r.status === 'complete' && (
                               <div className="field-hint">{formatDistillationAlcoholResult(r.alcohol_loss_gal)} alcohol</div>
                             )}
                             {spiritChargeDetail(r) && (
@@ -1303,7 +1303,7 @@ export function Distillation() {
             )}
             {collectionLoss && (
               <p className="field-hint" style={{ margin: 0 }} data-testid="distillation-alcohol-loss">
-                {formatDistillationLossSummary(collectionLoss)}
+                {formatDistillationLossSummary(collectionLoss, { complete: selectedRunIsComplete })}
               </p>
             )}
             {selectedStillageLabel && (
@@ -1632,7 +1632,7 @@ export function Distillation() {
                 </p>
               ) : (
                 <p className="field-hint">
-                  Collected alcohol is checked against the alcohol in this wash. The difference is recorded as loss.
+                  Collected alcohol is checked against the alcohol in this wash. The difference is recorded as loss when the run is marked Complete.
                 </p>
               )}
               {selectedStill && selectedStill.capacity_gal > 0 && (

@@ -1,5 +1,5 @@
 import { queryAll } from '../../db/database';
-import { distillationAlcoholBalance, washChargeAbvFromBrix, type AlcoholChargeBasis } from '../distillation-loss';
+import { distillationAlcoholBalance, distillationRecordsLoss, washChargeAbvFromBrix, type AlcoholChargeBasis } from '../distillation-loss';
 import { distillationSourceSummary, formatDistillationSourceDetail } from '../distillation-source-tanks';
 import { tankOriginDetail } from '../tank-menu-label';
 import { ALL_RUN_TYPES, runTypeLabel } from '../distillation-run-types';
@@ -192,7 +192,9 @@ export function buildDistillationReportRows(range: ReportDateRange): Distillatio
     });
     const alcoholCharged = !hasCuts ? null : (recorded ? r.alcohol_charged_gal : live.chargedGal);
     const alcoholCollected = !hasCuts ? null : (recorded ? r.alcohol_collected_gal : live.collectedGal);
-    const alcoholLoss = !hasCuts ? null : (recorded ? r.alcohol_loss_gal : live.lossGal);
+    const alcoholLoss = !hasCuts || !distillationRecordsLoss(r.status)
+      ? null
+      : (recorded ? r.alcohol_loss_gal : live.lossGal);
     const alcoholBasis = !hasCuts ? null : (recorded ? r.alcohol_charge_basis : (live.basis === 'unknown' ? null : live.basis));
 
     const sourceNames = sourceNamesByRun.get(r.id);

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   distillationAlcoholBalance,
+  distillationRecordsLoss,
   formatDistillationAlcoholResult,
   formatDistillationLossSummary,
   stillageResidualAbv,
@@ -49,6 +50,21 @@ describe('distillationAlcoholBalance', () => {
     expect(balance.lossGal).toBeCloseTo(-0.8, 4);
     expect(formatDistillationAlcoholResult(balance.lossGal!)).toBe('Gain 0.80 gal');
     expect(formatDistillationLossSummary(balance)).toContain('Gain 0.80 gal alcohol');
+  });
+
+  it('does not show a loss while the run is still distilling', () => {
+    const balance = distillationAlcoholBalance({
+      chargeVolumeGal: 100,
+      chargeAbv: 10,
+      cuts: [{ volume_gal: 10, abv: 60 }],
+    });
+    const text = formatDistillationLossSummary(balance, { complete: false });
+    expect(text).toContain('Collected so far 6.00 gal');
+    expect(text).toContain('recorded when the run is marked Complete');
+    expect(text).not.toContain('Loss 4');
+    expect(distillationRecordsLoss('running')).toBe(false);
+    expect(distillationRecordsLoss('planned')).toBe(false);
+    expect(distillationRecordsLoss('complete')).toBe(true);
   });
 
   it('leaves loss blank when the charge alcohol is unknown', () => {

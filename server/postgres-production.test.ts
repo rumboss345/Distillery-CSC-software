@@ -774,6 +774,64 @@ describe('PostgreSQL production modules', () => {
     expect(status(ids.line)).toBe('empty');
   });
 
+  it('records distillation alcohol loss only once the run is complete', async () => {
+    await saveEquipment('Loss Test Still', 'pot_still', 500);
+    await saveEquipment('Loss Test Vessel', 'collection_vessel', 50);
+    const vesselId = engine.readProduction((api) => (
+      api.getFloorEquipment().find((item) => item.name === 'Loss Test Vessel')!.id
+    ));
+    const header = {
+      batch_number: 'D-LOSS-001',
+      run_type: 'wash',
+      source_mash_batch_id: null,
+      source_fermenter_equipment_id: null,
+      source_holding_tank_equipment_id: null,
+      dest_holding_tank_equipment_id: null,
+      still_name: 'Loss Test Still',
+      run_date: '2026-11-02',
+      charge_volume_gal: 100,
+      charge_abv: 10,
+      assigned_user_id: null,
+      assigned_user_name: '',
+      notes: '',
+      stillage_volume_gal: null,
+      stillage_discarded: 0,
+      stillage_holding_tank_equipment_id: null,
+    };
+    const saved = await save('saveDistillationRun', [{ ...header, status: 'running' }, undefined, undefined, undefined]);
+    const runId = Number(saved.result);
+    await save('saveDistillationCut', [{
+      distillation_run_id: runId,
+      cut_type: 'hearts',
+      holding_tank_equipment_id: vesselId,
+      start_time: '2026-11-02T10:00:00',
+      end_time: '2026-11-02T12:00:00',
+      volume_gal: 10,
+      abv: 60,
+      notes: '',
+    }]);
+    await save('recordDistillationCollectionLoss', [runId]);
+    const storedLoss = () => engine.readProduction((api) => (
+      api.getDistillationRuns().find((run) => run.id === runId)?.alcohol_loss_gal ?? null
+    ));
+    const { buildDistillationReportRows } = await import('../src/lib/reporting/distillation-rows');
+    const reportLoss = () => engine.readProduction(() => (
+      buildDistillationReportRows({ preset: 'all', from: null, to: null, label: 'All time' })
+        .find((row) => row.run_id === runId)?.alcohol_loss_gal ?? null
+    ));
+    expect(storedLoss()).toBeNull();
+    expect(reportLoss()).toBeNull();
+
+    await save('saveDistillationRun', [{
+      ...header,
+      status: 'complete',
+      stillage_volume_gal: 80,
+      stillage_discarded: 1,
+    }, runId, undefined, undefined]);
+    expect(storedLoss()).toBeCloseTo(4, 3);
+    expect(reportLoss()).toBeCloseTo(4, 3);
+  });
+
   it('builds the fermentation report without saving anything', async () => {
     const { buildFermentationHistoryRows } = await import('../src/lib/reporting/fermentation-rows');
     const { setProductionMutationRedirect } = await import('../src/db/sql-session');
