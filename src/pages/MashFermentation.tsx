@@ -24,6 +24,7 @@ import { IngredientSelect } from '../components/IngredientSelect';
 import { RecentCompletedNote } from '../components/RecentCompletedNote';
 import { StatusBadge } from '../components/StatusBadge';
 import { StatusDateLog } from '../components/StatusDateLog';
+import { WashBatchDetailsModal } from '../components/WashBatchDetailsModal';
 import { estimateSugarWash } from '../lib/fermentation';
 import { SugarScaleField } from '../components/SugarScaleField';
 import type { MashBatchNutrientInput } from '../types';
@@ -40,6 +41,7 @@ import { formatDateDisplay } from '../lib/date-input';
 import { equipmentUnavailableForProduction } from '../lib/equipment-maintenance';
 import { eventDateWhenLeavingPlanned, localIsoDate } from '../lib/planned-event-date';
 import { latestCompleted } from '../lib/recent-completed';
+import { findSavedWashRecipeByName } from '../lib/wash-recipe-match';
 import { WASH_PAGE_STATUSES, washPageListsBatch } from '../lib/wash-stage';
 import type { MashBatch, MashStatus } from '../types';
 
@@ -93,6 +95,8 @@ export function MashFermentation() {
   const allAssignments = getAllMashFermenterAssignments();
   const allLogSources = getAllFermentationLogSources();
   const [showForm, setShowForm] = useState(false);
+  const [viewBatch, setViewBatch] = useState<MashBatch | null>(null);
+  const [viewNutrients, setViewNutrients] = useState<MashBatchNutrientInput[]>([]);
   const [editId, setEditId] = useState<number | undefined>();
   const [form, setForm] = useState(emptyBatch());
   const [batchNutrients, setBatchNutrients] = useState<MashBatchNutrientInput[]>([]);
@@ -141,6 +145,13 @@ export function MashFermentation() {
     setSearchParams(stripCalendarPlanQuery(searchParams), { replace: true });
   }, [searchParams, setSearchParams, user]);
 
+  const openView = (batch: MashBatch) => {
+    setViewBatch(batch);
+    setViewNutrients(
+      getMashBatchNutrients(batch.id).map((n) => ({ name: n.name, amount: n.amount, unit: n.unit })),
+    );
+  };
+
   const openEdit = (batch: MashBatch) => {
     setEditId(batch.id);
     setPlannedScheduleDate(null);
@@ -158,7 +169,10 @@ export function MashFermentation() {
     if (!recordId || calendarRecordHandled.current) return;
     calendarRecordHandled.current = true;
     const batch = getMashBatches().find((item) => item.id === recordId);
-    if (batch) openEdit(batch);
+    if (batch) {
+      if (batch.status === 'fermenting' || batch.status === 'complete') openView(batch);
+      else openEdit(batch);
+    }
     const next = new URLSearchParams(searchParams);
     next.delete('record');
     setSearchParams(next, { replace: true });
@@ -341,9 +355,14 @@ export function MashFermentation() {
                             </Link>
                           )}
                           {(b.status === 'fermenting' || b.status === 'complete') && (
-                            <Link className="btn btn-sm btn-secondary" to="/fermentation">
-                              Fermentation
-                            </Link>
+                            <>
+                              <button type="button" className="btn btn-sm btn-secondary" onClick={() => openView(b)}>
+                                Details
+                              </button>
+                              <Link className="btn btn-sm btn-ghost" to="/fermentation">
+                                Fermentation
+                              </Link>
+                            </>
                           )}
                           {(b.status === 'planned' || b.status === 'mashing' || b.status === 'discarded') && (
                             <>
@@ -364,6 +383,16 @@ export function MashFermentation() {
             </section>
           ))}
         </div>
+      )}
+
+      {viewBatch && (
+        <WashBatchDetailsModal
+          batch={viewBatch}
+          nutrients={viewNutrients}
+          matchedRecipe={findSavedWashRecipeByName(recipes, viewBatch.recipe_name)}
+          statusLabel={STATUS_LABELS[viewBatch.status]}
+          onClose={() => setViewBatch(null)}
+        />
       )}
 
       {showForm && (
