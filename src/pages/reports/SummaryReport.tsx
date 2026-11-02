@@ -24,9 +24,14 @@ import {
 } from '../../lib/reporting/volume-changes';
 import { formatTankVolumeVariance } from '../../lib/tank-volume-variance';
 import { sugarUses, totalSugarProcessedLbs } from '../../lib/reporting/sugar-processed';
+import { formatAbvEstimate } from '../../lib/fermentation';
+import { buildFermentationPerformance } from '../../lib/reporting/fermentation-performance';
+import { buildPackagingConsumption } from '../../lib/reporting/packaging-consumption';
+import { ReportRecordLink } from '../../components/ReportRecordLink';
 import { useReportContext } from './report-context';
 import { ProductivityChart } from './ProductivityChart';
 import { CollapsibleSection } from '../../components/CollapsibleSection';
+import { useMemo } from 'react';
 
 export function SummaryReport() {
   const { range, employee } = useReportContext();
@@ -102,6 +107,30 @@ export function SummaryReport() {
       0,
     );
 
+  const fermentationPerformance = useMemo(() => {
+    const perf = buildFermentationPerformance(range);
+    const rows = filterRowsByPerson(perf.rows, (row) => row.operator, employee);
+    const finished = rows.filter((row) => row.duration_days != null && row.status !== 'fermenting');
+    const avgDuration = finished.length > 0
+      ? finished.reduce((sum, row) => sum + (row.duration_days ?? 0), 0) / finished.length
+      : null;
+    const withBrix = rows.filter((row) => row.start_brix != null && row.finish_brix != null);
+    const avgBrixDrop = withBrix.length > 0
+      ? withBrix.reduce((sum, row) => sum + ((row.start_brix ?? 0) - (row.finish_brix ?? 0)), 0) / withBrix.length
+      : null;
+    return {
+      rows,
+      avg_duration_days: avgDuration != null ? Math.round(avgDuration * 10) / 10 : null,
+      avg_brix_drop: avgBrixDrop != null ? Math.round(avgBrixDrop * 10) / 10 : null,
+      overdue_count: rows.filter((row) => row.overdue_days > 0).length,
+    };
+  }, [range, employee]);
+
+  const packagingConsumption = useMemo(
+    () => buildPackagingConsumption(range, employee),
+    [range, employee],
+  );
+
   return (
     <>
       <div className="card-grid">
@@ -144,6 +173,123 @@ export function SummaryReport() {
       </div>
 
       <ProductivityChart />
+
+      <CollapsibleSection
+        className="section"
+        headingClassName="section-title"
+        title="Fermentation performance"
+        summary={
+          fermentationPerformance.rows.length === 0
+            ? 'No fermentations'
+            : `${fermentationPerformance.rows.length} in period · ${fermentationPerformance.overdue_count} overdue`
+        }
+        storageKey="report-summary-ferment-performance"
+      >
+        <p className="report-section-desc">
+          Fermentations that finished or were charged in this period. Duration is from the day the wash moved into fermenters until distillation or the end of the report period. Overdue uses each wash&apos;s expected completion date.
+        </p>
+        {fermentationPerformance.rows.length === 0 ? (
+          <div className="empty-state">
+            <p>{employee ? `No fermentations for ${employee.label} in this period.` : 'No fermentations in this period.'}</p>
+          </div>
+        ) : (
+          <>
+            <div className="card-grid" style={{ marginBottom: '1rem' }}>
+              <div className="stat-card">
+                <div className="label">Avg ferment days</div>
+                <div className="value">{fermentationPerformance.avg_duration_days ?? '—'}</div>
+              </div>
+              <div className="stat-card">
+                <div className="label">Avg Brix drop</div>
+                <div className="value">{fermentationPerformance.avg_brix_drop ?? '—'}</div>
+              </div>
+              <div className="stat-card">
+                <div className="label">Overdue in period</div>
+                <div className="value">{fermentationPerformance.overdue_count}</div>
+              </div>
+            </div>
+            <div className="table-wrap">
+              <table data-testid="fermentation-performance-table">
+                <thead>
+                  <tr>
+                    <th>Wash batch</th>
+                    <th>Fermenter</th>
+                    <th className="num">Days</th>
+                    <th className="num">Start Brix</th>
+                    <th className="num">Finish Brix</th>
+                    <th className="num">Alc %</th>
+                    <th>Status</th>
+                    <th className="num">Overdue</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {fermentationPerformance.rows.map((row) => (
+                    <tr key={row.key}>
+                      <td>
+                        <ReportRecordLink
+                          target={{
+                            kind: 'fermentation_logs',
+                            id: row.mash_id,
+                            equipmentId: row.fermenter_equipment_id ?? undefined,
+                          }}
+                        >
+                          <strong>{row.batch_number}</strong>
+                        </ReportRecordLink>
+                      </td>
+                      <td>{row.fermenter_name}</td>
+                      <td className="num">{row.duration_days ?? '—'}</td>
+                      <td className="num">{row.start_brix ?? '—'}</td>
+                      <td className="num">{row.finish_brix ?? '—'}</td>
+                      <td className="num">{formatAbvEstimate(row.alcohol_pct)}</td>
+                      <td>{row.status}</td>
+                      <td className="num">{row.overdue_days > 0 ? `${row.overdue_days}d` : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        className="section"
+        headingClassName="section-title"
+        title="Packaging consumption"
+        summary={packagingConsumption.length}
+        defaultOpen={false}
+        storageKey="report-summary-packaging"
+      >
+        <p className="report-section-desc">
+          Bottles and labels counted on finished bottling runs in this period (packaging inventory SKUs).
+        </p>
+        {packagingConsumption.length === 0 ? (
+          <div className="empty-state">
+            <p>{employee ? `No packaging use recorded by ${employee.label} in this period.` : 'No packaging use in this period.'}</p>
+          </div>
+        ) : (
+          <div className="table-wrap">
+            <table data-testid="packaging-consumption-table">
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>Inventory SKU</th>
+                  <th className="num">Quantity</th>
+                </tr>
+              </thead>
+              <tbody>
+                {packagingConsumption.map((row) => (
+                  <tr key={row.key}>
+                    <td>{row.kind === 'bottle' ? 'Bottle' : 'Label'}</td>
+                    <td>{row.sku}</td>
+                    <td className="num">{row.quantity.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CollapsibleSection>
 
       <CollapsibleSection
         className="section"
@@ -287,7 +433,11 @@ export function SummaryReport() {
                   const alcoholVariance = reportedBottlingAlcoholVarianceGal(run);
                   return (
                     <tr key={run.id}>
-                      <td><strong>{run.batch_number}</strong></td>
+                      <td>
+                        <ReportRecordLink target={{ kind: 'bottling', id: run.id }}>
+                          <strong>{run.batch_number}</strong>
+                        </ReportRecordLink>
+                      </td>
                       <td>{run.product_name}</td>
                       <td>{formatDateDisplay(run.bottling_date)}</td>
                       <td className="num">{bottled.toFixed(2)}</td>

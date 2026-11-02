@@ -3,6 +3,7 @@ import { eventInReportRange, type ReportDateRange } from './period';
 
 export interface WashHistoryRow {
   key: string;
+  mash_id: number;
   batch_number: string;
   recipe_name: string;
   sugar_lbs: number;
@@ -34,6 +35,7 @@ export function buildWashHistoryRows(range: ReportDateRange): WashHistoryRow[] {
     .filter((row) => eventInReportRange(row.start_date, range))
     .map((row) => ({
       key: `wash-${row.id}`,
+      mash_id: row.id,
       batch_number: row.batch_number,
       recipe_name: row.recipe_name || 'Wash',
       sugar_lbs: row.grain_lbs,

@@ -6,6 +6,8 @@ import {
   type DistillationReportRow,
 } from '../../lib/reporting/distillation-rows';
 import { emptyForEmployee, filterRowsByPerson, reportPeriodLabel } from '../../lib/reporting/person';
+import { buildStillEfficiencyFromRows } from '../../lib/reporting/still-efficiency';
+import { ReportRecordLink } from '../../components/ReportRecordLink';
 import { useReportContext } from './report-context';
 import { ReportTableShell } from './ReportTableShell';
 
@@ -14,6 +16,7 @@ export function DistillationReport() {
   const periodLabel = reportPeriodLabel(range.label, employee);
   const rows = filterRowsByPerson(buildDistillationReportRows(range), (row) => row.operator, employee);
   const groups = groupDistillationReportRows(rows);
+  const stillEfficiency = buildStillEfficiencyFromRows(rows);
 
   const csvHeaders = [
     'Run ID', 'Batch', 'Date', 'Still', 'Type', 'Status', 'Source', 'Charge gal', 'Charge ABV',
@@ -30,6 +33,45 @@ export function DistillationReport() {
   ]);
 
   return (
+    <>
+    {stillEfficiency.length > 0 && (
+      <div className="section" data-testid="still-efficiency-section">
+        <h3 className="section-title">Still efficiency — {periodLabel}</h3>
+        <p className="report-section-desc">
+          Completed runs in this period, grouped by run type. Hearts recovery is hearts LAA divided by alcohol charged. Loss or gain is the net alcohol balance recorded when each run was marked complete.
+        </p>
+        <div className="table-wrap">
+          <table data-testid="still-efficiency-table">
+            <thead>
+              <tr>
+                <th>Run type</th>
+                <th className="num">Runs</th>
+                <th className="num">Hearts recovery</th>
+                <th className="num">Hearts LAA</th>
+                <th className="num">Alcohol charged</th>
+                <th className="num">Net loss or gain</th>
+              </tr>
+            </thead>
+            <tbody>
+              {stillEfficiency.map((row) => (
+                <tr key={row.run_type_key}>
+                  <td><strong>{row.run_type_label}</strong></td>
+                  <td className="num">{row.completed_runs}</td>
+                  <td className="num">
+                    {row.avg_hearts_recovery_pct != null ? `${row.avg_hearts_recovery_pct.toFixed(1)}%` : '—'}
+                  </td>
+                  <td className="num">{row.total_hearts_laa_gal.toFixed(2)} gal</td>
+                  <td className="num">
+                    {row.total_alcohol_charged_gal > 0 ? `${row.total_alcohol_charged_gal.toFixed(2)} gal` : '—'}
+                  </td>
+                  <td className="num">{row.net_loss_gain_label}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    )}
     <ReportTableShell
       title="Distillation runs"
       description="Runs are grouped by type: Low Wine Run, Rum Run, Vodka Run, Heavy Rum, and Gin Run. Heads, hearts, and tails show gallons and the alcohol percent of that cut. Each row also includes hearts LAA and alcohol loss or gain. The difference is the alcohol charged minus the alcohol collected. When more alcohol is collected than was charged, the result is recorded as a gain. The Distillation page keeps the latest 10 completed runs."
@@ -59,6 +101,7 @@ export function DistillationReport() {
         ))}
       </div>
     </ReportTableShell>
+    </>
   );
 }
 
@@ -98,7 +141,11 @@ function DistillationRunTable({ rows }: { rows: DistillationReportRow[] }) {
         <tbody>
           {rows.map((r) => (
             <tr key={r.run_id}>
-              <td><strong>{r.batch_number}</strong></td>
+              <td>
+                <ReportRecordLink target={{ kind: 'distillation', id: r.run_id }}>
+                  <strong>{r.batch_number}</strong>
+                </ReportRecordLink>
+              </td>
               <td>{formatDateDisplay(r.run_date)}</td>
               <td>{r.still_name}</td>
               <td>{r.status}</td>

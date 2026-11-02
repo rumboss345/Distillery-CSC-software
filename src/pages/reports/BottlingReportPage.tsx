@@ -1,7 +1,9 @@
 import { formatDateDisplay } from '../../lib/date-input';
 import { bottleSizeCounts, formatBottlingAlcoholVariance } from '../../lib/bottling-lines';
 import { buildBottlingReportRows } from '../../lib/reporting/bottling-rows';
+import { buildPackagingConsumption } from '../../lib/reporting/packaging-consumption';
 import { emptyForEmployee, filterRowsByPerson, reportPeriodLabel } from '../../lib/reporting/person';
+import { ReportRecordLink } from '../../components/ReportRecordLink';
 import { useReportContext } from './report-context';
 import { ReportTableShell } from './ReportTableShell';
 
@@ -16,6 +18,7 @@ export function BottlingReportPage() {
   const sizeTotals = bottleSizeCounts(rows.flatMap((row) => (
     row.bottle_sizes.map((size) => ({ bottle_count: size.count, bottle_size_ml: size.sizeMl }))
   )));
+  const packagingConsumption = buildPackagingConsumption(range, employee);
 
   const csvHeaders = [
     'Batch', 'Product', 'Date', 'Lot', 'Source type', 'Tank draw gal', 'Bottled gal', 'ABV',
@@ -39,6 +42,31 @@ export function BottlingReportPage() {
       emptyMessage={emptyForEmployee('No bottling runs in this period.', employee)}
       tableWrap={false}
     >
+      {packagingConsumption.length > 0 && (
+        <div className="table-wrap" style={{ marginBottom: '1rem' }} data-testid="bottling-packaging-consumption">
+          <table>
+            <thead>
+              <tr>
+                <th colSpan={3}>Packaging consumption (inventory SKUs)</th>
+              </tr>
+              <tr>
+                <th>Type</th>
+                <th>SKU</th>
+                <th className="num">Quantity</th>
+              </tr>
+            </thead>
+            <tbody>
+              {packagingConsumption.map((row) => (
+                <tr key={row.key}>
+                  <td>{row.kind === 'bottle' ? 'Bottle' : 'Label'}</td>
+                  <td>{row.sku}</td>
+                  <td className="num">{row.quantity.toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
       {sizeTotals.length > 0 && (
         <div className="card-grid bottling-size-grid" data-testid="bottling-size-totals">
           {sizeTotals.map((size) => (
@@ -70,7 +98,11 @@ export function BottlingReportPage() {
         <tbody>
           {rows.map((r) => (
             <tr key={r.bottling_id}>
-              <td><strong>{r.batch_number}</strong></td>
+              <td>
+                <ReportRecordLink target={{ kind: 'bottling', id: r.bottling_id }}>
+                  <strong>{r.batch_number}</strong>
+                </ReportRecordLink>
+              </td>
               <td>{r.product_name}</td>
               <td>{formatDateDisplay(r.bottling_date)}</td>
               <td className="num">{r.bottled_gal.toFixed(2)} gal</td>

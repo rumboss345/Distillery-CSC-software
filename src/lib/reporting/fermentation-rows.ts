@@ -4,6 +4,8 @@ import { eventInReportRange, type ReportDateRange } from './period';
 
 export interface FermentationHistoryRow {
   key: string;
+  mash_id: number;
+  fermenter_equipment_id: number | null;
   batch_number: string;
   recipe_name: string;
   fermenter_name: string;
@@ -197,6 +199,8 @@ export function buildFermentationHistoryRows(range: ReportDateRange): Fermentati
     .filter((row) => listedInPeriod(row.start_date, row.mash_id, row.floor_equipment_id))
     .map((row) => ({
       key: row.assignment_id != null ? `assign-${row.assignment_id}` : `batch-${row.mash_id}`,
+      mash_id: row.mash_id,
+      fermenter_equipment_id: row.floor_equipment_id,
       batch_number: row.batch_number,
       recipe_name: row.recipe_name || 'Wash',
       fermenter_name: row.fermenter_name || 'Not assigned',
@@ -212,6 +216,8 @@ export function buildFermentationHistoryRows(range: ReportDateRange): Fermentati
     .filter((row) => listedInPeriod(row.start_date, row.mash_id, row.fermenter_id))
     .map((row) => ({
       key: `charged-${row.mash_id}-${row.fermenter_id}`,
+      mash_id: row.mash_id,
+      fermenter_equipment_id: row.fermenter_id,
       batch_number: row.batch_number,
       recipe_name: row.recipe_name || 'Wash',
       fermenter_name: row.fermenter_name || 'Not assigned',
@@ -228,6 +234,7 @@ export function buildFermentationHistoryRows(range: ReportDateRange): Fermentati
 
 export interface FermentationLeftoverRow {
   key: string;
+  mash_batch_id: number | null;
   batch_number: string;
   recipe_name: string;
   fermenter_name: string;
@@ -240,6 +247,7 @@ export interface FermentationLeftoverRow {
 export function buildFermentationLeftoverRows(range: ReportDateRange): FermentationLeftoverRow[] {
   const rows = queryAll<{
     id: number;
+    mash_batch_id: number | null;
     batch_number: string;
     recipe_name: string | null;
     fermenter_name: string;
@@ -248,7 +256,7 @@ export function buildFermentationLeftoverRows(range: ReportDateRange): Fermentat
     notes: string;
     changed_by: string | null;
   }>(`
-    SELECT d.id, d.batch_number, m.recipe_name, d.fermenter_name, d.volume_gal,
+    SELECT d.id, d.mash_batch_id, d.batch_number, m.recipe_name, d.fermenter_name, d.volume_gal,
            d.discarded_date, d.notes, d.changed_by
     FROM discarded_fermentations d
     LEFT JOIN mash_batches m ON m.id = d.mash_batch_id
@@ -259,6 +267,7 @@ export function buildFermentationLeftoverRows(range: ReportDateRange): Fermentat
     .filter((row) => eventInReportRange(row.discarded_date, range))
     .map((row) => ({
       key: `leftover-${row.id}`,
+      mash_batch_id: row.mash_batch_id,
       batch_number: row.batch_number || '—',
       recipe_name: row.recipe_name || 'Wash',
       fermenter_name: row.fermenter_name || '—',

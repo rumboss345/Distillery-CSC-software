@@ -3,19 +3,40 @@ import { useRefreshKey } from '../../db/queries';
 import { ReportFilters } from '../../components/ReportFilters';
 import { ReportProvider, useReportContext } from './report-context';
 
-const TABS = [
-  { to: '/reports', end: true, label: 'Summary' },
-  { to: '/reports/wash', label: 'Wash' },
-  { to: '/reports/fermentation', label: 'Fermentation' },
-  { to: '/reports/distillation', label: 'Distillation' },
-  { to: '/reports/tanks', label: 'Tanks' },
-  { to: '/reports/blending', label: 'Blending' },
-  { to: '/reports/bottling', label: 'Bottling' },
-  { to: '/reports/volume-changes', label: 'Volume changes' },
-  { to: '/reports/maintenance', label: 'Maintenance' },
-  { to: '/reports/movements', label: 'Movements' },
-  { to: '/reports/exceptions', label: 'Exceptions' },
-  { to: '/reports/traceability', label: 'Traceability' },
+const REPORT_GROUPS = [
+  {
+    label: 'Overview',
+    tabs: [{ to: '/reports', end: true as const, label: 'Summary' }],
+  },
+  {
+    label: 'Production',
+    tabs: [
+      { to: '/reports/wash', label: 'Wash' },
+      { to: '/reports/fermentation', label: 'Fermentation' },
+      { to: '/reports/distillation', label: 'Distillation' },
+      { to: '/reports/blending', label: 'Blending' },
+      { to: '/reports/bottling', label: 'Bottling' },
+    ],
+  },
+  {
+    label: 'Inventory & liquid',
+    tabs: [
+      { to: '/reports/tanks', label: 'Tanks' },
+      { to: '/reports/movements', label: 'Movements' },
+      { to: '/reports/volume-changes', label: 'Volume changes' },
+    ],
+  },
+  {
+    label: 'Quality & audit',
+    tabs: [
+      { to: '/reports/exceptions', label: 'Exceptions' },
+      { to: '/reports/traceability', label: 'Traceability' },
+    ],
+  },
+  {
+    label: 'Facilities',
+    tabs: [{ to: '/reports/maintenance', label: 'Maintenance' }],
+  },
 ];
 
 function ReportsLayoutInner() {
@@ -64,15 +85,22 @@ function ReportsLayoutInner() {
       </p>
 
       <nav className="reports-subnav" aria-label="Report sections">
-        {TABS.map((tab) => (
-          <NavLink
-            key={tab.to}
-            to={tab.to}
-            end={tab.end}
-            className={({ isActive }) => `reports-subnav-link${isActive ? ' active' : ''}`}
-          >
-            {tab.label}
-          </NavLink>
+        {REPORT_GROUPS.map((group) => (
+          <div key={group.label} className="reports-subnav-group">
+            <div className="reports-subnav-group-label">{group.label}</div>
+            <div className="reports-subnav-group-links">
+              {group.tabs.map((tab) => (
+                <NavLink
+                  key={tab.to}
+                  to={tab.to}
+                  end={'end' in tab ? tab.end : false}
+                  className={({ isActive }) => `reports-subnav-link${isActive ? ' active' : ''}`}
+                >
+                  {tab.label}
+                </NavLink>
+              ))}
+            </div>
+          </div>
         ))}
       </nav>
 
