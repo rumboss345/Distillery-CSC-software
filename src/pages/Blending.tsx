@@ -54,6 +54,7 @@ import { localIsoDate } from '../lib/planned-event-date';
 import { latestCompleted } from '../lib/recent-completed';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
 import { downloadWorksheetPdf, worksheetPdfFilename } from '../lib/download-worksheet-pdf';
+import { printWorksheet } from '../lib/print-worksheet';
 import { StatusBadge } from '../components/StatusBadge';
 import {
   BLEND_INGREDIENT_TYPES,
@@ -1540,6 +1541,15 @@ export function Blending() {
     }
   };
 
+  const handlePrintWorksheet = () => {
+    const worksheet = worksheetPrintRef.current?.querySelector('.blend-production-worksheet') as HTMLElement | null;
+    if (!worksheet) {
+      window.print();
+      return;
+    }
+    printWorksheet(worksheet);
+  };
+
   const handleDownloadWorksheetPdf = async () => {
     const container = worksheetPrintRef.current;
     const worksheet = container?.querySelector('.blend-production-worksheet') as HTMLElement | null;
@@ -2712,7 +2722,7 @@ export function Blending() {
               <button
                 type="button"
                 className="btn btn-secondary"
-                onClick={() => window.print()}
+                onClick={handlePrintWorksheet}
               >
                 Print staff worksheet
               </button>
@@ -2816,7 +2826,7 @@ export function Blending() {
             )}
             {renderProductionWorksheet(outputTankName)}
             <div className="blend-worksheet-actions no-print">
-              <button type="button" className="btn btn-secondary" onClick={() => window.print()}>
+              <button type="button" className="btn btn-secondary" onClick={handlePrintWorksheet}>
                 Print staff worksheet
               </button>
               <button
