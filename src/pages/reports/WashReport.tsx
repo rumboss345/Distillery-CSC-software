@@ -2,6 +2,7 @@ import { formatDateDisplay } from '../../lib/date-input';
 import { emptyForEmployee, filterRowsByPerson, reportPeriodLabel } from '../../lib/reporting/person';
 import { buildWashHistoryRows } from '../../lib/reporting/wash-rows';
 import { washStatusLabel } from '../../lib/wash-stage';
+import { ReportRecordLink } from '../../components/ReportRecordLink';
 import { useReportContext } from './report-context';
 import { ReportTableShell } from './ReportTableShell';
 
@@ -49,7 +50,11 @@ export function WashReport() {
         <tbody>
           {rows.map((row) => (
             <tr key={row.key}>
-              <td><strong>{row.batch_number}</strong></td>
+              <td>
+                <ReportRecordLink target={{ kind: 'wash', id: row.mash_id }}>
+                  <strong>{row.batch_number}</strong>
+                </ReportRecordLink>
+              </td>
               <td>{row.recipe_name}</td>
               <td className="num">{row.sugar_lbs} lbs</td>
               <td className="num">{row.volume_gal} gal</td>

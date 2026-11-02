@@ -1,6 +1,7 @@
 import { formatCalendarDay } from '../../lib/date-input';
 import { buildBlendReportRows } from '../../lib/reporting/blend-rows';
 import { emptyForEmployee, filterRowsByPerson, reportPeriodLabel } from '../../lib/reporting/person';
+import { ReportRecordLink } from '../../components/ReportRecordLink';
 import { useReportContext } from './report-context';
 import { ReportTableShell } from './ReportTableShell';
 
@@ -47,7 +48,11 @@ export function BlendingReport() {
         <tbody>
           {rows.map((r) => (
             <tr key={r.blend_id}>
-              <td><strong>{r.batch_number}</strong></td>
+              <td>
+                <ReportRecordLink target={{ kind: 'blend', id: r.blend_id }}>
+                  <strong>{r.batch_number}</strong>
+                </ReportRecordLink>
+              </td>
               <td>{r.product_name}</td>
               <td>{formatCalendarDay(r.executed_at ?? r.blend_date)}</td>
               <td>{r.status}</td>

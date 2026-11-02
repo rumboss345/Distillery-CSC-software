@@ -5,6 +5,7 @@ import {
   buildFermentationLeftoverRows,
 } from '../../lib/reporting/fermentation-rows';
 import { emptyForEmployee, filterRowsByPerson, reportPeriodLabel } from '../../lib/reporting/person';
+import { ReportRecordLink } from '../../components/ReportRecordLink';
 import { useReportContext } from './report-context';
 import { ReportTableShell } from './ReportTableShell';
 
@@ -71,7 +72,17 @@ export function FermentationReport() {
         <tbody>
           {rows.map((row) => (
             <tr key={row.key}>
-              <td><strong>{row.batch_number}</strong></td>
+              <td>
+                <ReportRecordLink
+                  target={{
+                    kind: 'fermentation_logs',
+                    id: row.mash_id,
+                    equipmentId: row.fermenter_equipment_id ?? undefined,
+                  }}
+                >
+                  <strong>{row.batch_number}</strong>
+                </ReportRecordLink>
+              </td>
               <td>{row.recipe_name}</td>
               <td>{row.fermenter_name}</td>
               <td className="num">{row.volume_gal != null ? `${row.volume_gal.toFixed(1)} gal` : '—'}</td>
@@ -112,7 +123,15 @@ export function FermentationReport() {
           {leftovers.map((row) => (
             <tr key={row.key}>
               <td>{formatDateDisplay(row.discarded_date)}</td>
-              <td><strong>{row.batch_number}</strong></td>
+              <td>
+                {row.mash_batch_id ? (
+                  <ReportRecordLink target={{ kind: 'fermentation', id: row.mash_batch_id }}>
+                    <strong>{row.batch_number}</strong>
+                  </ReportRecordLink>
+                ) : (
+                  <strong>{row.batch_number}</strong>
+                )}
+              </td>
               <td>{row.recipe_name}</td>
               <td>{row.fermenter_name}</td>
               <td className="num">{row.volume_gal.toFixed(1)} gal</td>
