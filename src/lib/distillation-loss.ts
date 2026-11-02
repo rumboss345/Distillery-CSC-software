@@ -17,6 +17,11 @@ export interface DistillationAlcoholBalance {
   basis: AlcoholChargeBasis;
 }
 
+/** Cuts can still be added while a run is distilling, so loss is only recorded once it is complete. */
+export function distillationRecordsLoss(status: string | null | undefined): boolean {
+  return status === 'complete';
+}
+
 function alcoholGal(volumeGal: number, abv: number): number {
   if (!Number.isFinite(volumeGal) || !Number.isFinite(abv) || volumeGal <= 0 || abv <= 0) return 0;
   return volumeGal * (abv / 100);
@@ -117,7 +122,16 @@ export function formatDistillationAlcoholResult(lossGal: number): string {
 }
 
 /** One line for the cuts screen and the run list. */
-export function formatDistillationLossSummary(balance: DistillationAlcoholBalance): string {
+export function formatDistillationLossSummary(
+  balance: DistillationAlcoholBalance,
+  options: { complete?: boolean } = {},
+): string {
+  if (options.complete === false) {
+    const charged = balance.chargedGal != null
+      ? `Alcohol charged ${balance.chargedGal.toFixed(2)} gal. `
+      : '';
+    return `${charged}Collected so far ${balance.collectedGal.toFixed(2)} gal alcohol. Loss is recorded when the run is marked Complete.`;
+  }
   if (balance.lossGal == null || balance.chargedGal == null) {
     if (balance.collectedGal > 0) {
       return `Collected ${balance.collectedGal.toFixed(2)} gal alcohol. The alcohol in the charge is not known, so loss is not recorded.`;

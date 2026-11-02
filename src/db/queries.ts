@@ -20,7 +20,7 @@ import {
   type StoredCutType,
   type VesselInflow,
 } from '../lib/collection-vessel-cuts';
-import { distillationAlcoholBalance, washChargeAbvFromBrix, type AlcoholChargeBasis, type DistillationAlcoholBalance } from '../lib/distillation-loss';
+import { distillationAlcoholBalance, distillationRecordsLoss, washChargeAbvFromBrix, type AlcoholChargeBasis, type DistillationAlcoholBalance } from '../lib/distillation-loss';
 import type { MonthlyProduction } from '../lib/reporting/productivity';
 import { isFermenterSourcedRun, isSpiritStyleRun, isTankSourcedRun, runTypeLabel, stillChargeSourcePhrase } from '../lib/distillation-run-types';
 import { DISTILLATION_SOURCE_TANK_REQUIRED } from '../lib/distillation-source-tanks';
@@ -4160,16 +4160,18 @@ export function getDistillationCollectionLoss(runId: number): DistillationAlcoho
   });
 }
 
-/** Store the alcohol charged, the alcohol collected, and the loss on the run. */
+/** Store the alcohol charged, the alcohol collected, and the loss on the run once it is complete. */
 export function recordDistillationCollectionLoss(runId: number): void {
   const __remote = forwardProductionMutation('recordDistillationCollectionLoss', [runId]);
   if (__remote.forwarded) return __remote.value as never;
 
+  const run = queryOne<{ status: string }>('SELECT status FROM distillation_runs WHERE id = ?', [runId]);
+  if (!run) return;
   const cutCount = queryOne<{ n: number }>(
     'SELECT COUNT(*) as n FROM distillation_cuts WHERE distillation_run_id = ?',
     [runId],
   );
-  if (!cutCount?.n) {
+  if (!cutCount?.n || !distillationRecordsLoss(run.status)) {
     runQuery(
       `UPDATE distillation_runs
        SET alcohol_charged_gal = NULL, alcohol_collected_gal = NULL, alcohol_loss_gal = NULL, alcohol_charge_basis = NULL
