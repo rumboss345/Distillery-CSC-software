@@ -2814,7 +2814,7 @@ tr.volume-change-kind:hover td {
 }
 
 .bottling-packaging-row {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 9.5rem;
   grid-template-areas:
     'bottle bottle bottle'
     'label label label'
