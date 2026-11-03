@@ -1,5 +1,12 @@
 import type { FloorEquipment } from '../types';
 import { CALENDAR_CLEANING_EQUIPMENT_TYPES } from './equipment-cleaning';
+import { resolveEquipmentIcon } from './equipment';
+
+export function isBottlingLineEquipment(
+  item: Pick<FloorEquipment, 'icon' | 'equipment_type'>,
+): boolean {
+  return resolveEquipmentIcon(item.icon, item.equipment_type) === 'bottling_line';
+}
 
 /** Tanks, fermenters, and stills hold liquid and are handled by their own records, not picked as bottling equipment. */
 export function isBottlingEquipmentType(type: string): boolean {
@@ -10,13 +17,45 @@ export function isBottlingEquipmentType(type: string): boolean {
  * Equipment that can be picked for a bottling run: bottling lines, pumps, hoses, filters, and so on.
  * Already-saved picks stay listed even if they are now dirty or offline.
  */
-export function bottlingEquipmentOptions<T extends Pick<FloorEquipment, 'id' | 'name' | 'equipment_type'>>(
+export function bottlingEquipmentOptions<T extends Pick<FloorEquipment, 'id' | 'name' | 'equipment_type' | 'icon'>>(
   equipment: T[],
   selectedIds: number[] = [],
 ): T[] {
   return equipment
-    .filter((item) => isBottlingEquipmentType(item.equipment_type) || selectedIds.includes(item.id))
+    .filter((item) => (
+      (isBottlingEquipmentType(item.equipment_type) && !isBottlingLineEquipment(item))
+      || selectedIds.includes(item.id)
+    ))
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+}
+
+export function splitBottlingRunEquipmentIds(
+  equipmentIds: number[],
+  equipment: Pick<FloorEquipment, 'id' | 'icon' | 'equipment_type'>[],
+): { lineId: number | null; auxiliaryIds: number[] } {
+  const byId = new Map(equipment.map((item) => [item.id, item]));
+  let lineId: number | null = null;
+  const auxiliaryIds: number[] = [];
+  for (const id of equipmentIds) {
+    const item = byId.get(id);
+    if (!item) {
+      auxiliaryIds.push(id);
+      continue;
+    }
+    if (!lineId && isBottlingLineEquipment(item)) {
+      lineId = id;
+      continue;
+    }
+    auxiliaryIds.push(id);
+  }
+  return { lineId, auxiliaryIds };
+}
+
+export function mergeBottlingRunEquipmentIds(lineId: number | null | undefined, auxiliaryIds: number[]): number[] {
+  return uniqueEquipmentIds([
+    ...(lineId != null && lineId > 0 ? [lineId] : []),
+    ...auxiliaryIds,
+  ]);
 }
 
 export function uniqueEquipmentIds(ids: (number | null | undefined)[] | null | undefined): number[] {

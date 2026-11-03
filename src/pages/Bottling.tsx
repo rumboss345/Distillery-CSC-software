@@ -16,6 +16,8 @@ import {
   getCollectionVessels,
   getHoldingTankContents,
   getHoldingTanks,
+  getActiveBottlingRunOnEquipment,
+  getBottlingLines,
   getFloorEquipment,
   generateBatchNumber,
   useRefreshKey,
@@ -50,7 +52,11 @@ import {
 import { packagingBottleOptions, type PackagingBottleOption } from '../lib/packaging-bottles';
 import { tankContentsPhrase, tankDropdownLabel } from '../lib/tank-menu-label';
 import { volumeChangeReasonError } from '../lib/tank-volume-variance';
-import { bottlingEquipmentOptions } from '../lib/bottling-equipment';
+import {
+  bottlingEquipmentOptions,
+  mergeBottlingRunEquipmentIds,
+  splitBottlingRunEquipmentIds,
+} from '../lib/bottling-equipment';
 import { equipmentTypeLabel } from '../lib/equipment';
 import { equipmentNeedsCleaning } from '../lib/equipment-cleaning';
 import { equipmentBlocksProduction } from '../lib/equipment-maintenance';
@@ -175,11 +181,28 @@ export function Bottling() {
   void key;
 
   const floorEquipment = getFloorEquipment();
+  const equipmentListOptions = normalizeBottlingStatus(form.status) === 'planned'
+    ? { includeUnavailable: true as const }
+    : undefined;
+  const bottlingLineChoices = getBottlingLines(equipmentListOptions);
+  const { lineId: bottlingLineId, auxiliaryIds } = splitBottlingRunEquipmentIds(equipmentIds, floorEquipment);
+  const lineOptions = useMemo(() => {
+    const lines = [...bottlingLineChoices];
+    if (bottlingLineId && !lines.some((line) => line.id === bottlingLineId)) {
+      const saved = floorEquipment.find((item) => item.id === bottlingLineId);
+      if (saved) lines.push(saved);
+    }
+    return lines.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+  }, [bottlingLineChoices, bottlingLineId, floorEquipment]);
   const equipmentChoices = bottlingEquipmentOptions(floorEquipment, savedEquipmentIds);
-  const toggleEquipment = (equipmentId: number, checked: boolean) => {
-    setEquipmentIds((prev) => (
-      checked ? [...prev.filter((id) => id !== equipmentId), equipmentId] : prev.filter((id) => id !== equipmentId)
-    ));
+  const handleBottlingLineChange = (nextLineId: number | '') => {
+    setEquipmentIds(mergeBottlingRunEquipmentIds(nextLineId === '' ? null : nextLineId, auxiliaryIds));
+  };
+  const toggleAuxiliaryEquipment = (equipmentId: number, checked: boolean) => {
+    const nextAux = checked
+      ? [...auxiliaryIds.filter((id) => id !== equipmentId), equipmentId]
+      : auxiliaryIds.filter((id) => id !== equipmentId);
+    setEquipmentIds(mergeBottlingRunEquipmentIds(bottlingLineId, nextAux));
   };
 
   const chargeableTanks = getChargeableHoldingTanksForBottling(editId);
@@ -948,19 +971,49 @@ export function Bottling() {
               </p>
             </div>
             <StatusDateLog kind="bottling" recordId={editId} />
+            <div className="form-group" data-testid="bottling-line">
+              <label htmlFor="bottling-line-select">Bottling line</label>
+              <select
+                id="bottling-line-select"
+                data-testid="bottling-line-select"
+                value={bottlingLineId ?? ''}
+                onChange={(e) => handleBottlingLineChange(e.target.value ? parseInt(e.target.value, 10) : '')}
+              >
+                <option value="">— Select bottling line —</option>
+                {lineOptions.map((line) => {
+                  const occupied = isPlanned
+                    ? undefined
+                    : getActiveBottlingRunOnEquipment(line.id, editId);
+                  return (
+                    <option key={line.id} value={line.id} disabled={occupied != null}>
+                      {line.name}
+                      {occupied ? ` — in use (${occupied.batch_number})` : ''}
+                    </option>
+                  );
+                })}
+              </select>
+              {!isPlanned && bottlingLineId && getActiveBottlingRunOnEquipment(bottlingLineId, editId) && (
+                <p className="field-hint" style={{ color: 'var(--danger, #dc2626)' }}>
+                  This bottling line already has an active run. Finish it or pick another line.
+                </p>
+              )}
+              {lineOptions.length === 0 && (
+                <p className="field-hint">Add floor equipment with the bottling line icon to pick a line here.</p>
+              )}
+            </div>
             <div className="form-group full-width" data-testid="bottling-equipment">
-              <label>Equipment used</label>
+              <label>Other equipment</label>
               <p className="field-hint">
                 {isPlanned
-                  ? 'Pick the bottling line, pumps, hoses, or filters you plan to use. They are marked as needing cleaning once the run is Running or Finished.'
-                  : 'Picked equipment is marked as needing cleaning when you save.'}
+                  ? 'Optional pumps, hoses, or filters. The line shows as in use on the process view while the run is Running; everything is marked for cleaning when the run is Finished.'
+                  : 'Optional auxiliary gear. Marked for cleaning when the run is Finished.'}
               </p>
               {equipmentChoices.length === 0 ? (
-                <p className="field-hint">No bottling line, pump, hose, or other equipment set up yet.</p>
+                <p className="field-hint">No pumps, hoses, or other auxiliary equipment set up yet.</p>
               ) : (
                 <div className="bottling-equipment-list">
                   {equipmentChoices.map((item) => {
-                    const checked = equipmentIds.includes(item.id);
+                    const checked = auxiliaryIds.includes(item.id);
                     const alreadyOnRun = savedEquipmentIds.includes(item.id);
                     const dirty = equipmentNeedsCleaning(item);
                     const blocked = equipmentBlocksProduction(item);
@@ -980,7 +1033,7 @@ export function Bottling() {
                           data-testid={`bottling-equipment-${item.id}`}
                           checked={checked}
                           disabled={!checked && unavailable && !isPlanned}
-                          onChange={(e) => toggleEquipment(item.id, e.target.checked)}
+                          onChange={(e) => toggleAuxiliaryEquipment(item.id, e.target.checked)}
                         />
                         {item.name}
                         <span className="field-hint"> — {equipmentTypeLabel(item.equipment_type)}{note ? ` (${note})` : ''}</span>

@@ -793,7 +793,7 @@ describe('PostgreSQL production modules', () => {
     expect(tankGal()).toBeCloseTo(leftover, 3);
   });
 
-  it('marks bottling equipment as needing cleaning once the run is running', async () => {
+  it('shows bottling equipment in use while running and cleaning once finished', async () => {
     await saveEquipment('Bottling Line Equip', 'other', 0);
     await saveEquipment('Bottling Pump Equip', 'pump', 0);
     const ids = engine.readProduction((api) => {
@@ -837,13 +837,16 @@ describe('PostgreSQL production modules', () => {
     expect(status(ids.pump)).toBe('empty');
 
     await save('saveBottlingRun', [{ ...header, status: 'running', equipment_ids: [ids.line, ids.pump] }, lines, run()!.id]);
-    expect(status(ids.line)).toBe('cleaning');
-    expect(status(ids.pump)).toBe('cleaning');
+    expect(status(ids.line)).toBe('in_use');
+    expect(status(ids.pump)).toBe('in_use');
 
     await save('saveBottlingRun', [{ ...header, status: 'running', equipment_ids: [ids.line] }, lines, run()!.id]);
     expect(run()?.equipment_ids).toEqual([ids.line]);
-    expect(status(ids.line)).toBe('cleaning');
+    expect(status(ids.line)).toBe('in_use');
     expect(status(ids.pump)).toBe('empty');
+
+    await save('saveBottlingRun', [{ ...header, status: 'complete', equipment_ids: [ids.line] }, lines, run()!.id]);
+    expect(status(ids.line)).toBe('cleaning');
 
     await save('deleteBottlingRun', [run()!.id]);
     expect(status(ids.line)).toBe('empty');
