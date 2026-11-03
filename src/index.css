@@ -2787,6 +2787,23 @@ tr.volume-change-kind:hover td {
   margin-bottom: 1rem;
 }
 
+.hydrometer-correction-panel .measure-mode-buttons {
+  max-width: 36rem;
+}
+
+.hydrometer-correction-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: end;
+  max-width: 36rem;
+}
+
+.hydrometer-correction-panel .hydrometer-correction-result {
+  margin-top: 1rem;
+  max-width: 36rem;
+}
+
 .abv-temp-input label {
   display: flex;
   flex-direction: column;

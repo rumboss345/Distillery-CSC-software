@@ -709,7 +709,7 @@ function HydrometerCorrectionPanel() {
   }, [observed, sampleTempF, scale]);
 
   return (
-    <div className="card gauge-known" data-testid="hydrometer-correction-panel">
+    <div className="card gauge-known hydrometer-correction-panel" data-testid="hydrometer-correction-panel">
       <h3>Hydrometer &amp; temperature</h3>
       <p className="field-hint">
         Enter what the hydrometer shows in the sample and the sample temperature. The calculator returns
@@ -732,7 +732,7 @@ function HydrometerCorrectionPanel() {
           Hydrometer in ABV %
         </button>
       </div>
-      <div className="form-grid">
+      <div className="hydrometer-correction-fields">
         <div className="form-group">
           <label htmlFor="hydrometer-observed">
             {scale === 'proof' ? 'Observed proof (at sample temp)' : 'Observed ABV % (at sample temp)'}
@@ -763,7 +763,7 @@ function HydrometerCorrectionPanel() {
         </div>
       </div>
       {parsed && (
-        <div className="wizard-result-banner" style={{ marginTop: '1rem' }} data-testid="hydrometer-correction-result">
+        <div className="wizard-result-banner hydrometer-correction-result" data-testid="hydrometer-correction-result">
           <p style={{ margin: 0 }}>
             Observed:{' '}
             <strong>{parsed.observedProof.toFixed(1)} proof</strong>
