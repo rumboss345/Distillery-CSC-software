@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { fetchProcessAssignments, type ProcessAssignmentEntry } from '../../lib/auth-api';
 import {
-  getActiveBottlingRunOnEquipment,
   getAllFloorEquipmentWithContext,
   getDistillationRunForCuts,
   getEquipmentVolumeReport,
@@ -10,7 +9,6 @@ import {
   getProductionSummary,
   updateEquipmentProcessPosition,
 } from '../../db/queries';
-import { isBottlingLineEquipment } from '../../lib/bottling-equipment';
 import { buildEquipmentVisualData } from './equipment-visual-shared';
 import {
   PROCESS_ITEM_WIDTH,
@@ -178,13 +176,6 @@ export function ProcessEquipmentCanvas({
         : null,
       distillationRunStatus: (contextMenuEquipment.equipment_type === 'pot_still' || contextMenuEquipment.equipment_type === 'column_still')
         ? getDistillationRunForCuts(contextMenuEquipment.name)?.status ?? null
-        : null,
-      icon: contextMenuEquipment.icon,
-      bottlingRunId: isBottlingLineEquipment(contextMenuEquipment)
-        ? getActiveBottlingRunOnEquipment(contextMenuEquipment.id)?.id ?? null
-        : null,
-      bottlingRunStatus: isBottlingLineEquipment(contextMenuEquipment)
-        ? getActiveBottlingRunOnEquipment(contextMenuEquipment.id)?.status ?? null
         : null,
     })
     : null;

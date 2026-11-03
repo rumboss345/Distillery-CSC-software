@@ -4,17 +4,10 @@ import {
   bottlingEquipmentToMarkDirty,
   bottlingEquipmentToRelease,
   isBottlingEquipmentType,
-  mergeBottlingRunEquipmentIds,
-  splitBottlingRunEquipmentIds,
   uniqueEquipmentIds,
 } from './bottling-equipment';
 
-const item = (
-  id: number,
-  name: string,
-  equipment_type: string,
-  icon: string | null = null,
-) => ({ id, name, equipment_type, icon });
+const item = (id: number, name: string, equipment_type: string) => ({ id, name, equipment_type });
 
 describe('bottling equipment', () => {
   it('offers bottling lines, pumps, hoses, and other gear but not tanks, fermenters, or stills', () => {
@@ -29,20 +22,10 @@ describe('bottling equipment', () => {
     const options = bottlingEquipmentOptions([
       item(1, 'Tank 1', 'holding_tank'),
       item(2, 'Pump B', 'pump'),
-      item(3, 'Bottling Line', 'other', 'bottling_line'),
+      item(3, 'Bottling Line', 'other'),
       item(4, 'Fermenter 1', 'fermenter'),
     ]);
-    expect(options.map((o) => o.name)).toEqual(['Pump B']);
-  });
-
-  it('splits and merges bottling line vs auxiliary picks', () => {
-    const equipment = [
-      item(1, 'Line A', 'other', 'bottling_line'),
-      item(2, 'Pump', 'pump'),
-    ];
-    expect(splitBottlingRunEquipmentIds([1, 2], equipment)).toEqual({ lineId: 1, auxiliaryIds: [2] });
-    expect(mergeBottlingRunEquipmentIds(1, [2])).toEqual([1, 2]);
-    expect(mergeBottlingRunEquipmentIds(null, [2])).toEqual([2]);
+    expect(options.map((o) => o.name)).toEqual(['Bottling Line', 'Pump B']);
   });
 
   it('keeps an already-saved pick in the list', () => {

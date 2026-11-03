@@ -1,6 +1,5 @@
 import { classifyProcessLiquid } from './process-floor-label';
 import { FERMENTATION_READY_MAX_BRIX, isBrixReadyForDistillation } from '../../lib/fermentation';
-import { isBottlingLineEquipment } from '../../lib/bottling-equipment';
 
 export interface ProcessEquipmentMenuLink {
   key: string;
@@ -31,10 +30,6 @@ export interface ProcessEquipmentMenuSource {
   distillationRunId?: number | null;
   /** Status of distillationRunId. Cuts belong in Next step only while the run is distilling. */
   distillationRunStatus?: string | null;
-  /** Open bottling run on this bottling line. */
-  bottlingRunId?: number | null;
-  bottlingRunStatus?: string | null;
-  icon?: string | null;
 }
 
 export function buildProcessEquipmentContextMenu(
@@ -82,20 +77,6 @@ export function buildProcessEquipmentContextMenu(
       key: 'cuts',
       label: 'Cuts',
       to: `/distillation?cutsRun=${source.distillationRunId}`,
-    });
-  }
-  const bottlingLine = isBottlingLineEquipment({
-    icon: source.icon ?? null,
-    equipment_type: source.equipment_type,
-  });
-  const bottling = bottlingLine
-    && source.bottlingRunId
-    && source.bottlingRunStatus === 'running';
-  if (bottling) {
-    next.push({
-      key: 'bottling-run',
-      label: 'Bottling',
-      to: `/bottling?record=${source.bottlingRunId}`,
     });
   }
   if (canChargeFermenter) {
