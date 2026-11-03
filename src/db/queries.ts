@@ -3,6 +3,7 @@ import { gallonsRestoredToEmptiedBarrel } from '../lib/barrel-blending';
 import { BARREL_STOCK_CATEGORY, BARREL_STOCK_ITEM_NAME } from '../lib/barrel-inventory';
 import {
   bottlingAlcoholVarianceGal,
+  bottlingCompleteOutputError,
   bottlingReturnsError,
   bottlingVolumeVarianceGal,
   normalizeBottlingStatus,
@@ -5177,7 +5178,7 @@ export function saveBottlingRun(
     const alreadyOnRun = equipmentUse.previousUsed && previousEquipmentIds.includes(eqId);
     if (!alreadyOnRun) assertEquipmentUsableForProduction(eqId, 'Bottling equipment');
   }
-  const bottledVolumeGal = totalCount > 0
+  let bottledVolumeGal = totalCount > 0
     ? activeLines.reduce((sum, line) => sum + mlToGallons(line.bottle_count * line.bottle_size_ml), 0)
     : null;
   let sourceVolumeGal: number | null = null;
@@ -5216,6 +5217,18 @@ export function saveBottlingRun(
         : []
     ))
     : [];
+  const finishReturnGal = requestedReturns.reduce((sum, line) => {
+    const gallons = line.volume_gal ?? 0;
+    return sum + (Number.isFinite(gallons) && gallons > 0.001 ? gallons : 0);
+  }, 0);
+  const completeOutputError = bottlingCompleteOutputError({
+    status,
+    bottledCount: totalCount,
+    returnGal: finishReturnGal,
+    fromTank,
+  });
+  if (completeOutputError) throw new Error(completeOutputError);
+
   const checkedReturns: {
     tankId: number | null;
     gallons: number;
@@ -5223,8 +5236,15 @@ export function saveBottlingRun(
     destVolumeGal?: number;
     destCapacityGal?: number;
   }[] = [];
-  if (status === 'complete' && fromTank && sourceTankId && bottledVolumeGal != null && bottledVolumeGal > 0) {
-    const unbottled = Math.max(0, (sourceVolumeGal ?? 0) - bottledVolumeGal);
+  if (status === 'complete' && fromTank && sourceTankId) {
+    const available = getHoldingTankContents(sourceTankId, undefined, undefined, id);
+    sourceAbv = available.abv;
+    if (sourceVolumeGal == null) {
+      sourceVolumeGal = available.volume_gal;
+    }
+    const bottledGal = bottledVolumeGal ?? 0;
+    bottledVolumeGal = bottledGal;
+    const unbottled = Math.max(0, (sourceVolumeGal ?? 0) - bottledGal);
     for (const line of requestedReturns) {
       const gallons = line.volume_gal ?? 0;
       const tankId = line.holding_tank_equipment_id;
@@ -5260,11 +5280,11 @@ export function saveBottlingRun(
     });
     if (returnError) throw new Error(returnError);
     const returnGal = checkedReturns.reduce((sum, line) => sum + (line.gallons > 0 ? line.gallons : 0), 0);
-    volumeVarianceGal = bottlingVolumeVarianceGal(sourceVolumeGal ?? 0, bottledVolumeGal, returnGal);
+    volumeVarianceGal = bottlingVolumeVarianceGal(sourceVolumeGal ?? 0, bottledGal, returnGal);
     alcoholVarianceGal = bottlingAlcoholVarianceGal({
       sourceGal: sourceVolumeGal ?? 0,
       sourceAbv,
-      bottledGal: bottledVolumeGal,
+      bottledGal: bottledGal,
       bottledAbv: run.final_abv,
       returnGal,
     });

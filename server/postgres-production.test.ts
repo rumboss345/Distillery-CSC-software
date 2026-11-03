@@ -718,6 +718,81 @@ describe('PostgreSQL production modules', () => {
     expect(stock()).toBe(76);
   });
 
+  it('starts a tank bottling run without bottle counts and blocks finish until output is recorded', async () => {
+    await saveEquipment('Empty Start Tank', 'holding_tank', 20);
+    const sourceId = engine.readProduction((api) => (
+      api.getFloorEquipment().find((item) => item.name === 'Empty Start Tank')!.id
+    ));
+    await save('saveHoldingTankOnHand', [{
+      tankEquipmentId: sourceId,
+      volumeGal: 12,
+      abv: 40,
+      recordedAt: '2026-11-03',
+      notes: 'Fill for empty-start bottling',
+      changedBy: 'Admin',
+    }]);
+    const tankGal = () => engine.readProduction((api) => api.getHoldingTankContents(sourceId).volume_gal);
+    const header = {
+      batch_number: 'BT-EMPTY-START',
+      source_barrel_id: null,
+      source_holding_tank_equipment_id: sourceId,
+      source_volume_gal: null,
+      source_abv: null,
+      bottled_volume_gal: null,
+      volume_variance_gal: null,
+      alcohol_variance_gal: null,
+      variance_reason: '',
+      variance_changed_by: 'Admin',
+      source_run_id: null,
+      bottling_date: '2026-11-03',
+      packaging_bottle: '',
+      bottle_size_ml: 750,
+      bottle_count: 0,
+      final_abv: 40,
+      product_name: 'Empty Start Spirit',
+      lot_number: 'LOT-EMPTY-1',
+      notes: '',
+    };
+
+    await save('saveBottlingRun', [{ ...header, status: 'running', returns: [] }, []]);
+    const running = engine.readProduction((api) => (
+      api.getBottlingRuns().find((run) => run.batch_number === 'BT-EMPTY-START')
+    ));
+    expect(running?.status).toBe('running');
+    expect(running?.bottle_count).toBe(0);
+    expect(tankGal()).toBeCloseTo(12, 3);
+
+    await expect(save('saveBottlingRun', [{
+      ...header,
+      status: 'complete',
+      returns: [],
+    }, [], running!.id])).rejects.toThrow(/transferred/i);
+
+    const bottledGal = (750 * 6) / ML_PER_GALLON;
+    await save('saveBottlingRun', [{
+      ...header,
+      status: 'running',
+      returns: [],
+    }, [{ packaging_bottle: '750 ml bottle', bottle_size_ml: 750, bottle_count: 6 }], running!.id]);
+    const withBottles = engine.readProduction((api) => (
+      api.getBottlingRuns().find((run) => run.batch_number === 'BT-EMPTY-START')
+    ));
+    expect(withBottles?.bottle_count).toBe(6);
+    expect(tankGal()).toBeCloseTo(12 - bottledGal, 3);
+
+    const leftover = 12 - bottledGal;
+    await save('saveBottlingRun', [{
+      ...header,
+      status: 'complete',
+      returns: [{ holding_tank_equipment_id: sourceId, volume_gal: leftover }],
+    }, [{ packaging_bottle: '750 ml bottle', bottle_size_ml: 750, bottle_count: 6 }], withBottles!.id]);
+    const finished = engine.readProduction((api) => (
+      api.getBottlingRuns().find((run) => run.batch_number === 'BT-EMPTY-START')
+    ));
+    expect(finished?.status).toBe('complete');
+    expect(tankGal()).toBeCloseTo(leftover, 3);
+  });
+
   it('marks bottling equipment as needing cleaning once the run is running', async () => {
     await saveEquipment('Bottling Line Equip', 'other', 0);
     await saveEquipment('Bottling Pump Equip', 'pump', 0);

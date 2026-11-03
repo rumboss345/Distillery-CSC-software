@@ -31,6 +31,22 @@ export function bottlingCountsTowardProduction(status: string | null | undefined
   return normalizeBottlingStatus(status) !== 'planned';
 }
 
+/** Finished runs must record bottled counts and/or tank transfers. */
+export function bottlingCompleteOutputError(input: {
+  status: BottlingStatus;
+  bottledCount: number;
+  returnGal: number;
+  fromTank: boolean;
+}): string | null {
+  if (input.status !== 'complete') return null;
+  if (input.bottledCount > 0) return null;
+  if (input.fromTank && input.returnGal > 0.001) return null;
+  if (input.fromTank) {
+    return 'Before finishing, record bottled counts or where leftover spirit was transferred.';
+  }
+  return 'Before finishing, record bottled counts on at least one packaging line.';
+}
+
 /** Rum bottling uses bottle dropdown + size; UI hides the packaging stock card while the form is open. */
 export function isRumBottlingProduct(productName: string): boolean {
   return /\brum\b/i.test(productName.trim());

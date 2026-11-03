@@ -29,6 +29,7 @@ import { eventDateWhenLeavingPlanned, localIsoDate } from '../lib/planned-event-
 import { Modal } from '../components/Modal';
 import {
   bottlingAlcoholVarianceGal,
+  bottlingCompleteOutputError,
   bottlingReturnsError,
   bottlingVolumeVarianceGal,
   formatBottlingAlcoholVariance,
@@ -536,10 +537,22 @@ export function Bottling() {
           || `${line.bottle_size_ml} ml bottle`;
         return { ...line, packaging_bottle };
       });
-    if (activeLines.length === 0 && !isPlanned) {
-      alert(isRumBottlingProduct(form.product_name)
-        ? 'Add at least one bottle line: select a bottle, confirm size (ml), and enter count.'
-        : 'Add at least one packaging line with bottle count.');
+    const finishReturnGal = sourceType === 'tank'
+      ? returnLines.reduce((sum, line) => {
+        const gallons = line.volume_gal ?? 0;
+        return sum + (gallons > 0.001 ? gallons : 0);
+      }, 0)
+      : 0;
+    const completeOutputError = isFinished
+      ? bottlingCompleteOutputError({
+        status: 'complete',
+        bottledCount: totalBottleCount(activeLines),
+        returnGal: finishReturnGal,
+        fromTank: sourceType === 'tank',
+      })
+      : null;
+    if (completeOutputError) {
+      alert(completeOutputError);
       return;
     }
     if (sourceType === 'tank' && !form.source_holding_tank_equipment_id) {
@@ -547,7 +560,7 @@ export function Bottling() {
       return;
     }
     const varianceNeedsReason = isFinished && sourceType === 'tank' && (volumeNeedsReason || alcoholNeedsReason);
-    if (isFinished && sourceType === 'tank' && form.source_holding_tank_equipment_id && selectedTankAvailable && plannedDrawGal > 0) {
+    if (isFinished && sourceType === 'tank' && form.source_holding_tank_equipment_id && selectedTankAvailable) {
       const returnError = bottlingReturnsError({
         returns: returnLines.map((line) => {
           const dest = returnDestinations.find((tank) => tank.id === line.holding_tank_equipment_id);
