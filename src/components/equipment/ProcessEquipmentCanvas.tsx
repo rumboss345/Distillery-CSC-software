@@ -29,6 +29,7 @@ import { processEquipmentVisualScale } from './process-visual-scale';
 import type { EquipmentVisualData } from './equipment-visual.types';
 import type { FloorEquipmentView } from '../../types';
 import { equipmentNeedsCleaning } from '../../lib/equipment-cleaning';
+import { stillTrainHiddenFromProcessIds } from '../../lib/still-train';
 import {
   equipmentBlocksProduction,
   equipmentHasMaintenanceTag,
@@ -114,10 +115,13 @@ export function ProcessEquipmentCanvas({
 
   const allEquipment = useMemo((): EquipmentItem[] => {
     const planNameById = new Map(plans.map((p) => [p.id, p.name]));
-    return getAllFloorEquipmentWithContext().map((eq) => ({
-      ...eq,
-      plan_name: planNameById.get(eq.floor_plan_id) ?? '',
-    }));
+    const hiddenStillTrainIds = stillTrainHiddenFromProcessIds();
+    return getAllFloorEquipmentWithContext()
+      .filter((eq) => !hiddenStillTrainIds.has(eq.id))
+      .map((eq) => ({
+        ...eq,
+        plan_name: planNameById.get(eq.floor_plan_id) ?? '',
+      }));
   }, [refreshKey, plans]);
 
   const visualById = useMemo(() => {

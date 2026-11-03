@@ -10,20 +10,134 @@ const COLUMN_STILL_LIQUID = {
 } as const;
 
 const COLUMN_VAPOR_DOTS = [
-  { cx: 56, r: 2.2, delay: 0 },
-  { cx: 62, r: 1.7, delay: 0.55 },
-  { cx: 68, r: 2, delay: 1.1 },
-  { cx: 59, r: 1.4, delay: 1.65 },
-  { cx: 65, r: 1.8, delay: 2.05 },
+  { dx: -4, r: 2.2, delay: 0 },
+  { dx: 2, r: 1.7, delay: 0.55 },
+  { dx: 8, r: 2, delay: 1.1 },
+  { dx: -1, r: 1.4, delay: 1.65 },
+  { dx: 5, r: 1.8, delay: 2.05 },
 ] as const;
 
 const COLUMN_PLATES = [48, 68, 88, 108, 128] as const;
 
-/** Copper pot still, or a plated column still with a reboiler. */
+type ColumnInner = {
+  bottomY: number;
+  innerHeight: number;
+  surfaceY: number;
+  fillH: number;
+};
+
+function ColumnTower(props: {
+  uid: string;
+  centerX: number;
+  columnFillPercent: number;
+  isRunning: boolean;
+  columnInner: ColumnInner;
+  showCondenser: boolean;
+  condenserSide: 'left' | 'right';
+}) {
+  const {
+    uid,
+    centerX,
+    columnFillPercent,
+    isRunning,
+    columnInner,
+    showCondenser,
+    condenserSide,
+  } = props;
+  const clipId = `${uid}-col-${centerX}-clip`;
+  const colLeft = centerX - 12;
+  const colWidth = 24;
+
+  return (
+    <g>
+      <rect
+        x={colLeft - 2}
+        y={34}
+        width={colWidth + 4}
+        height={118}
+        rx={3}
+        fill={`url(#${uid}-steel)`}
+        stroke="#1a1f26"
+        strokeWidth="1.1"
+      />
+      {isRunning && columnFillPercent > 0 && (
+        <g clipPath={`url(#${clipId})`}>
+          <rect
+            className="column-still-liquid"
+            x={colLeft}
+            y={columnInner.surfaceY}
+            width={colWidth}
+            height={columnInner.fillH}
+            fill={`url(#${uid}-column-liq)`}
+          />
+          {columnFillPercent > 8 && (
+            <ellipse
+              className="column-still-liquid-surface"
+              cx={centerX}
+              cy={columnInner.surfaceY}
+              rx="10"
+              ry="3.2"
+              fill={`url(#${uid}-column-surf)`}
+            />
+          )}
+          <g className="column-still-vapor">
+            {COLUMN_VAPOR_DOTS.map((dot, index) => (
+              <circle
+                key={index}
+                className="column-still-vapor-dot"
+                cx={centerX + dot.dx}
+                cy={columnInner.bottomY - 10}
+                r={dot.r}
+                style={{ animationDelay: `${dot.delay}s` }}
+              />
+            ))}
+          </g>
+        </g>
+      )}
+      {COLUMN_PLATES.map((y) => (
+        <g key={y}>
+          <rect
+            x={colLeft - 6}
+            y={y}
+            width={colWidth + 12}
+            height="5"
+            rx="1.5"
+            fill={`url(#${uid}-head)`}
+            stroke="#1a1f26"
+            strokeWidth="0.6"
+          />
+        </g>
+      ))}
+      <rect x={centerX - 4} y={40} width={5} height={108} fill="#fff" opacity="0.16" />
+      <ellipse cx={centerX} cy={34} rx={18} ry={7} fill={`url(#${uid}-head)`} stroke="#1a1f26" strokeWidth="0.9" />
+      <rect x={centerX - 6} y={18} width={12} height={12} rx={2} fill={`url(#${uid}-steel)`} stroke="#1a1f26" strokeWidth="0.7" />
+      {showCondenser && condenserSide === 'right' && (
+        <path
+          d={`M ${centerX + 18} 36 H ${centerX + 38} V 42 H ${centerX + 32} V 70 H ${centerX + 26} V 42 H ${centerX + 18} Z`}
+          fill={`url(#${uid}-steel)`}
+          stroke="#1a1f26"
+          strokeWidth="0.7"
+        />
+      )}
+      {showCondenser && condenserSide === 'left' && (
+        <path
+          d={`M ${centerX - 18} 36 H ${centerX - 38} V 42 H ${centerX - 32} V 70 H ${centerX - 26} V 42 H ${centerX - 18} Z`}
+          fill={`url(#${uid}-steel)`}
+          stroke="#1a1f26"
+          strokeWidth="0.7"
+        />
+      )}
+    </g>
+  );
+}
+
+/** Copper pot still, or a plated column still with a reboiler (one or two columns). */
 export function StillVisual(props: EquipmentVisualProps) {
   const { data } = props;
   const uid = useId().replace(/:/g, '');
-  const isColumn = (data.icon || data.equipmentType) === 'column_still';
+  const icon = data.icon || data.equipmentType;
+  const isDualColumn = icon === 'dual_column_still';
+  const isColumn = icon === 'column_still' || isDualColumn;
   const isRunning = data.status === 'active';
 
   const columnFillPercent = useMemo(() => {
@@ -39,9 +153,14 @@ export function StillVisual(props: EquipmentVisualProps) {
     return { bottomY, innerHeight, surfaceY: bottomY - fillH, fillH };
   }, [columnFillPercent]);
 
+  const svgWidth = isDualColumn ? 168 : isColumn ? 120 : 150;
+  const statusDotX = isDualColumn ? 156 : isColumn ? 108 : 132;
+
+  const columnCenters = isDualColumn ? [52, 116] as const : [60] as const;
+
   return (
-    <EquipmentVisualFrame {...props} svgWidth={isColumn ? 120 : 150} svgHeight={200}>
-      <svg viewBox={`0 0 ${isColumn ? 120 : 150} 200`} width="100%" height="100%" aria-hidden>
+    <EquipmentVisualFrame {...props} svgWidth={svgWidth} svgHeight={200}>
+      <svg viewBox={`0 0 ${svgWidth} 200`} width="100%" height="100%" aria-hidden>
         <defs>
           <linearGradient id={`${uid}-copper`} x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" stopColor="#4a240c" />
@@ -78,11 +197,17 @@ export function StillVisual(props: EquipmentVisualProps) {
           )}
           {isColumn && (
             <>
-              <clipPath id={`${uid}-column-clip`}>
-                <rect x="48" y="38" width="24" height="110" rx="2" />
-              </clipPath>
+              {columnCenters.map((centerX) => (
+                <clipPath key={centerX} id={`${uid}-col-${centerX}-clip`}>
+                  <rect x={centerX - 12} y={38} width={24} height={110} rx={2} />
+                </clipPath>
+              ))}
               <clipPath id={`${uid}-boiler-clip`}>
-                <path d="M 24 156 H 96 V 168 C 96 182 24 182 24 168 Z" />
+                {isDualColumn ? (
+                  <path d="M 8 156 H 160 V 168 C 160 182 8 182 8 168 Z" />
+                ) : (
+                  <path d="M 24 156 H 96 V 168 C 96 182 24 182 24 168 Z" />
+                )}
               </clipPath>
               <linearGradient id={`${uid}-column-liq`} x1="0%" y1="0%" x2="100%" y2="0%">
                 <stop offset="0%" stopColor={COLUMN_STILL_LIQUID.edge} />
@@ -99,61 +224,71 @@ export function StillVisual(props: EquipmentVisualProps) {
         </defs>
         {isColumn ? (
           <g filter={`url(#${uid}-shadow)`}>
-            <path d="M 28 172 L 18 192 H 34 Z" fill="#3a424c" />
-            <path d="M 92 172 L 86 192 H 102 Z" fill="#3a424c" />
-            <path d="M 22 150 H 98 V 168 C 98 184 22 184 22 168 Z" fill={`url(#${uid}-steel)`} stroke="#1a1f26" strokeWidth="1.1" />
-            <ellipse cx="60" cy="150" rx="38" ry="10" fill={`url(#${uid}-head)`} stroke="#1a1f26" strokeWidth="0.8" />
+            {isDualColumn ? (
+              <>
+                <path d="M 20 172 L 12 192 H 26 Z" fill="#3a424c" />
+                <path d="M 148 172 L 142 192 H 156 Z" fill="#3a424c" />
+                <path
+                  d="M 8 150 H 160 V 168 C 160 184 8 184 8 168 Z"
+                  fill={`url(#${uid}-steel)`}
+                  stroke="#1a1f26"
+                  strokeWidth="1.1"
+                />
+                <ellipse cx={84} cy={150} rx={52} ry={10} fill={`url(#${uid}-head)`} stroke="#1a1f26" strokeWidth="0.8" />
+              </>
+            ) : (
+              <>
+                <path d="M 28 172 L 18 192 H 34 Z" fill="#3a424c" />
+                <path d="M 92 172 L 86 192 H 102 Z" fill="#3a424c" />
+                <path
+                  d="M 22 150 H 98 V 168 C 98 184 22 184 22 168 Z"
+                  fill={`url(#${uid}-steel)`}
+                  stroke="#1a1f26"
+                  strokeWidth="1.1"
+                />
+                <ellipse cx={60} cy={150} rx={38} ry={10} fill={`url(#${uid}-head)`} stroke="#1a1f26" strokeWidth="0.8" />
+              </>
+            )}
             {isRunning && (
               <g clipPath={`url(#${uid}-boiler-clip)`}>
-                <rect x="22" y="162" width="76" height="22" fill={`url(#${uid}-column-liq)`} opacity="0.9" />
-                <ellipse cx="60" cy="162" rx="28" ry="5" fill={`url(#${uid}-column-surf)`} />
-              </g>
-            )}
-            <rect x="46" y="34" width="28" height="118" rx="3" fill={`url(#${uid}-steel)`} stroke="#1a1f26" strokeWidth="1.1" />
-            {isRunning && columnFillPercent > 0 && (
-              <g clipPath={`url(#${uid}-column-clip)`}>
                 <rect
-                  className="column-still-liquid"
-                  x="48"
-                  y={columnInner.surfaceY}
-                  width="24"
-                  height={columnInner.fillH}
+                  x={isDualColumn ? 8 : 22}
+                  y={162}
+                  width={isDualColumn ? 152 : 76}
+                  height={22}
                   fill={`url(#${uid}-column-liq)`}
+                  opacity="0.9"
                 />
-                {columnFillPercent > 8 && (
-                  <ellipse
-                    className="column-still-liquid-surface"
-                    cx="60"
-                    cy={columnInner.surfaceY}
-                    rx="10"
-                    ry="3.2"
-                    fill={`url(#${uid}-column-surf)`}
-                  />
-                )}
-                <g className="column-still-vapor">
-                  {COLUMN_VAPOR_DOTS.map((dot, index) => (
-                    <circle
-                      key={index}
-                      className="column-still-vapor-dot"
-                      cx={dot.cx}
-                      cy={columnInner.bottomY - 10}
-                      r={dot.r}
-                      style={{ animationDelay: `${dot.delay}s` }}
-                    />
-                  ))}
-                </g>
+                <ellipse
+                  cx={isDualColumn ? 84 : 60}
+                  cy={162}
+                  rx={isDualColumn ? 40 : 28}
+                  ry={5}
+                  fill={`url(#${uid}-column-surf)`}
+                />
               </g>
             )}
-            {COLUMN_PLATES.map((y) => (
-              <g key={y}>
-                <rect x="40" y={y} width="40" height="5" rx="1.5" fill={`url(#${uid}-head)`} stroke="#1a1f26" strokeWidth="0.6" />
-              </g>
+            {columnCenters.map((centerX, index) => (
+              <ColumnTower
+                key={centerX}
+                uid={uid}
+                centerX={centerX}
+                columnFillPercent={columnFillPercent}
+                isRunning={isRunning}
+                columnInner={columnInner}
+                showCondenser={!isDualColumn || index === 0 || index === 1}
+                condenserSide={isDualColumn ? (index === 0 ? 'left' : 'right') : 'right'}
+              />
             ))}
-            <rect x="56" y="40" width="5" height="108" fill="#fff" opacity="0.16" />
-            <ellipse cx="60" cy="34" rx="18" ry="7" fill={`url(#${uid}-head)`} stroke="#1a1f26" strokeWidth="0.9" />
-            <rect x="54" y="18" width="12" height="12" rx="2" fill={`url(#${uid}-steel)`} stroke="#1a1f26" strokeWidth="0.7" />
-            <path d="M 78 36 H 98 V 42 H 92 V 70 H 86 V 42 H 78 Z" fill={`url(#${uid}-steel)`} stroke="#1a1f26" strokeWidth="0.7" />
-            <rect x="56" y="176" width="8" height="8" rx="1.5" fill="#5a6270" stroke="#2a3038" />
+            <rect
+              x={isDualColumn ? 80 : 56}
+              y={176}
+              width={8}
+              height={8}
+              rx={1.5}
+              fill="#5a6270"
+              stroke="#2a3038"
+            />
           </g>
         ) : (
           <g filter={`url(#${uid}-shadow)`}>
@@ -188,7 +323,7 @@ export function StillVisual(props: EquipmentVisualProps) {
             <rect x="54" y="168" width="8" height="8" rx="1.5" fill="#5a4030" stroke="#3a2010" />
           </g>
         )}
-        <circle cx={isColumn ? 108 : 132} cy="28" r="4.5" className={`equipment-status-dot equipment-status-dot--${data.status}`} />
+        <circle cx={statusDotX} cy="28" r="4.5" className={`equipment-status-dot equipment-status-dot--${data.status}`} />
       </svg>
     </EquipmentVisualFrame>
   );

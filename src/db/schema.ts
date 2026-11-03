@@ -526,6 +526,7 @@ CREATE INDEX IF NOT EXISTS idx_floor_equipment_plan ON floor_equipment(floor_pla
 CREATE TABLE IF NOT EXISTS still_trains (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   label TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  display_equipment_id INTEGER REFERENCES floor_equipment(id),
   pot_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
   column1_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
   column2_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id)

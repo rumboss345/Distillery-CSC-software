@@ -40,6 +40,7 @@ import {
   buildDistillationStillTargets,
   distillationRunUsesStillTrain,
   getStillTrainByPotId,
+  getStillTrainByDisplayEquipmentId,
   getStillTrainMemberIds,
   getStillTrains,
   stillTrainEquipmentToRelease,
@@ -1013,6 +1014,16 @@ export function getDistillationRunForStillEquipment(
   equipmentId: number,
 ): { id: number; batch_number: string; status: string } | undefined {
   if (equipmentId <= 0) return undefined;
+  const train = getStillTrainByDisplayEquipmentId(equipmentId);
+  if (train) {
+    const byTrainPot = queryOne<{ id: number; batch_number: string; status: string }>(
+      `SELECT id, batch_number, status FROM distillation_runs
+       WHERE still_pot_equipment_id = ? AND status IN ('running', 'planned')
+       ORDER BY CASE status WHEN 'running' THEN 0 ELSE 1 END, id DESC LIMIT 1`,
+      [train.pot_equipment_id],
+    );
+    if (byTrainPot) return byTrainPot;
+  }
   const byPot = queryOne<{ id: number; batch_number: string; status: string }>(
     `SELECT id, batch_number, status FROM distillation_runs
      WHERE still_pot_equipment_id = ? AND status IN ('running', 'planned')
@@ -3233,6 +3244,41 @@ function syncStillTrainStatuses(train: StillTrain): void {
   applyTrainPiece(train.pot_equipment_id, Boolean(running));
   applyTrainPiece(train.column1_equipment_id, running?.still_column_equipment_id === train.column1_equipment_id);
   applyTrainPiece(train.column2_equipment_id, running?.still_column_equipment_id === train.column2_equipment_id);
+
+  const displayId = train.display_equipment_id ?? 0;
+  if (displayId <= 0) return;
+  const display = queryOne<{ status: string }>(
+    'SELECT status FROM floor_equipment WHERE id = ?',
+    [displayId],
+  );
+  if (!display || display.status === 'offline') return;
+
+  const pieceStatus = (id: number) => queryOne<{ status: string }>(
+    'SELECT status FROM floor_equipment WHERE id = ?',
+    [id],
+  )?.status;
+
+  const potStatus = pieceStatus(train.pot_equipment_id);
+  const col1Status = pieceStatus(train.column1_equipment_id);
+  const col2Status = pieceStatus(train.column2_equipment_id);
+
+  let nextStatus: 'in_use' | 'cleaning' | 'empty' = 'empty';
+  if (potStatus === 'in_use' || col1Status === 'in_use' || col2Status === 'in_use') {
+    nextStatus = 'in_use';
+  } else if (
+    potStatus === 'cleaning'
+    || col1Status === 'cleaning'
+    || col2Status === 'cleaning'
+  ) {
+    nextStatus = 'cleaning';
+  }
+
+  if (nextStatus === display.status) return;
+  if (nextStatus === 'cleaning') {
+    markEquipmentNeedsCleaningAfterUse(displayId);
+  } else {
+    runQuery(`UPDATE floor_equipment SET status=? WHERE id=?`, [nextStatus, displayId]);
+  }
 }
 
 export function saveMashFermenterAssignments(

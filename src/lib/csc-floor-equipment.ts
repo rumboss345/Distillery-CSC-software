@@ -1,16 +1,13 @@
 import type { EquipmentType } from '../types';
 import { TYPE_DEFAULTS } from './equipment';
-import {
-  CARL_COLUMN_1_NAME,
-  CARL_COLUMN_2_NAME,
-  CARL_POT_NAME,
-} from './still-train';
+import { CARL_LEGACY_STILL_NAME } from './still-train';
 
 export type CscFloorEquipmentSeed = {
   name: string;
   equipment_type: EquipmentType;
   capacity_gal?: number;
   notes?: string;
+  icon?: string;
 };
 
 /** CSC distillery floor equipment catalog. Order controls default layout zones. */
@@ -39,9 +36,13 @@ export const CSC_FLOOR_EQUIPMENT: CscFloorEquipmentSeed[] = [
   { name: 'Groen kettle', equipment_type: 'mash_tun', capacity_gal: 100, notes: 'Groen wash kettle' },
   { name: 'Wash tank', equipment_type: 'mash_tun', capacity_gal: 2000, notes: 'Primary wash tank' },
   { name: 'Vendome', equipment_type: 'pot_still', capacity_gal: 1200, notes: '1200 gal pot still' },
-  { name: CARL_POT_NAME, equipment_type: 'pot_still', capacity_gal: 200, notes: 'Carl still shared pot' },
-  { name: CARL_COLUMN_1_NAME, equipment_type: 'column_still', capacity_gal: 200, notes: 'Carl still column 1' },
-  { name: CARL_COLUMN_2_NAME, equipment_type: 'column_still', capacity_gal: 200, notes: 'Carl still column 2' },
+  {
+    name: CARL_LEGACY_STILL_NAME,
+    equipment_type: 'column_still',
+    capacity_gal: 200,
+    notes: '200 gal dual-column still',
+    icon: 'dual_column_still',
+  },
   { name: 'Hill billy', equipment_type: 'column_still', capacity_gal: 50, notes: '50 gal column still' },
   { name: 'Gin Storage milk can 1', equipment_type: 'holding_tank', capacity_gal: 50 },
   { name: 'Gin Storage milk can 2', equipment_type: 'holding_tank', capacity_gal: 50 },
@@ -96,6 +97,7 @@ export function buildCscFloorEquipmentRows(
   floor_plan_id: number;
   name: string;
   equipment_type: string;
+  icon: string;
   pos_x_ft: number;
   pos_y_ft: number;
   width_ft: number;
@@ -115,6 +117,7 @@ export function buildCscFloorEquipmentRows(
       floor_plan_id: floorPlanId,
       name: item.name,
       equipment_type: item.equipment_type,
+      icon: item.icon ?? '',
       pos_x_ft: pos.pos_x_ft,
       pos_y_ft: pos.pos_y_ft,
       width_ft: pos.width_ft,

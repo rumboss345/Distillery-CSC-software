@@ -833,8 +833,15 @@ describe('PostgreSQL production modules', () => {
   });
 
   it('marks Carl still pot and the used column for cleaning when a train run completes', async () => {
-    const { CARL_COLUMN_1_NAME, CARL_COLUMN_2_NAME, CARL_POT_NAME, getStillTrains } = await import('../src/lib/still-train');
+    const {
+      CARL_COLUMN_1_NAME,
+      CARL_COLUMN_2_NAME,
+      CARL_LEGACY_STILL_NAME,
+      CARL_POT_NAME,
+      getStillTrains,
+    } = await import('../src/lib/still-train');
     const { migrateStillTrains } = await import('../src/db/database');
+    await saveEquipment(CARL_LEGACY_STILL_NAME, 'column_still', 200);
     await saveEquipment(CARL_POT_NAME, 'pot_still', 200);
     await saveEquipment(CARL_COLUMN_1_NAME, 'column_still', 200);
     await saveEquipment(CARL_COLUMN_2_NAME, 'column_still', 200);

@@ -23,6 +23,7 @@ import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
 import { StatusDateLog } from '../components/StatusDateLog';
 import { holdingTankIntakeKey } from '../db/queries';
+import { stillTrainHiddenFromProcessIds } from '../lib/still-train';
 import { EquipmentIconPicker } from '../components/equipment/EquipmentIconPicker';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -96,7 +97,10 @@ export function FloorPlanPage() {
 
   void key;
 
-  const allEquipment = useMemo(() => getAllFloorEquipmentWithContext(), [key]);
+  const allEquipment = useMemo(() => {
+    const hidden = stillTrainHiddenFromProcessIds();
+    return getAllFloorEquipmentWithContext().filter((eq) => !hidden.has(eq.id));
+  }, [key]);
 
   const selectEquipment = (id: number | null) => {
     setSelectedId(id);

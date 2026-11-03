@@ -169,6 +169,14 @@ export async function migrateDatabase(): Promise<void> {
       `);
       await client.query(`INSERT INTO schema_migrations (version) VALUES ('008')`);
     }
+    const stillTrainDisplayMigration = await client.query('SELECT version FROM schema_migrations WHERE version = $1', ['009']);
+    if (stillTrainDisplayMigration.rowCount === 0) {
+      await client.query(`
+        ALTER TABLE still_trains
+        ADD COLUMN IF NOT EXISTS display_equipment_id INTEGER REFERENCES floor_equipment(id)
+      `);
+      await client.query(`INSERT INTO schema_migrations (version) VALUES ('009')`);
+    }
     await client.query(`
       INSERT INTO inventory_categories (name)
       SELECT 'botanicals'

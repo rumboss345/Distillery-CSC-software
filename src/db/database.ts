@@ -731,43 +731,40 @@ export function migrateStillTrains(): void {
     CREATE TABLE IF NOT EXISTS still_trains (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       label TEXT NOT NULL UNIQUE COLLATE NOCASE,
+      display_equipment_id INTEGER REFERENCES floor_equipment(id),
       pot_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
       column1_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
       column2_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id)
     )
   `);
+  const hasDisplayCol = queryOne<{ name: string }>(
+    "SELECT name FROM pragma_table_info('still_trains') WHERE name='display_equipment_id'",
+  );
+  if (!hasDisplayCol) {
+    runQuery('ALTER TABLE still_trains ADD COLUMN display_equipment_id INTEGER REFERENCES floor_equipment(id)');
+  }
 
   const existingTrain = queryOne<{ id: number }>(
     'SELECT id FROM still_trains WHERE label = ? COLLATE NOCASE',
     [CARL_TRAIN_LABEL],
   );
-  if (existingTrain) return;
 
-  const linkCarlTrainIfReady = (potId: number, col1Id: number, col2Id: number): void => {
+  const linkCarlTrain = (displayId: number, potId: number, col1Id: number, col2Id: number): void => {
+    if (existingTrain) {
+      runQuery(
+        `UPDATE still_trains
+         SET display_equipment_id = ?, pot_equipment_id = ?, column1_equipment_id = ?, column2_equipment_id = ?
+         WHERE id = ?`,
+        [displayId, potId, col1Id, col2Id, existingTrain.id],
+      );
+      return;
+    }
     insertRow(
-      `INSERT INTO still_trains (label, pot_equipment_id, column1_equipment_id, column2_equipment_id)
-       VALUES (?, ?, ?, ?)`,
-      [CARL_TRAIN_LABEL, potId, col1Id, col2Id],
+      `INSERT INTO still_trains (label, display_equipment_id, pot_equipment_id, column1_equipment_id, column2_equipment_id)
+       VALUES (?, ?, ?, ?, ?)`,
+      [CARL_TRAIN_LABEL, displayId, potId, col1Id, col2Id],
     );
   };
-
-  const seededPot = queryOne<{ id: number }>(
-    'SELECT id FROM floor_equipment WHERE name = ? COLLATE NOCASE',
-    [CARL_POT_NAME],
-  );
-  const seededCol1 = queryOne<{ id: number }>(
-    'SELECT id FROM floor_equipment WHERE name = ? COLLATE NOCASE',
-    [CARL_COLUMN_1_NAME],
-  );
-  const seededCol2 = queryOne<{ id: number }>(
-    'SELECT id FROM floor_equipment WHERE name = ? COLLATE NOCASE',
-    [CARL_COLUMN_2_NAME],
-  );
-  if (seededPot && seededCol1 && seededCol2) {
-    linkCarlTrainIfReady(seededPot.id, seededCol1.id, seededCol2.id);
-    if (db && !postgresMode) persistDb();
-    return;
-  }
 
   const ensureEquipment = (
     name: string,
@@ -800,60 +797,66 @@ export function migrateStillTrains(): void {
     );
   };
 
-  const legacy = queryOne<{
+  const display = queryOne<{
     id: number;
     pos_x_ft: number;
     pos_y_ft: number;
     width_ft: number;
     depth_ft: number;
     capacity_gal: number;
+    status: string;
   }>(
-    `SELECT id, pos_x_ft, pos_y_ft, width_ft, depth_ft, capacity_gal
+    `SELECT id, pos_x_ft, pos_y_ft, width_ft, depth_ft, capacity_gal, status
      FROM floor_equipment WHERE name = ? COLLATE NOCASE`,
     [CARL_LEGACY_STILL_NAME],
   );
 
-  if (!legacy) return;
+  if (!display) {
+    if (existingTrain) return;
+    if (db && !postgresMode) persistDb();
+    return;
+  }
+
+  runQuery(
+    `UPDATE floor_equipment
+     SET icon = 'dual_column_still',
+         equipment_type = 'column_still',
+         status = CASE WHEN status = 'offline' THEN 'empty' ELSE status END
+     WHERE id = ?`,
+    [display.id],
+  );
 
   const layout = {
-    pos_x_ft: legacy.pos_x_ft,
-    pos_y_ft: legacy.pos_y_ft,
-    width_ft: legacy.width_ft,
-    depth_ft: legacy.depth_ft,
+    pos_x_ft: display.pos_x_ft,
+    pos_y_ft: display.pos_y_ft,
+    width_ft: display.width_ft,
+    depth_ft: display.depth_ft,
   };
-  const capacity = legacy.capacity_gal ?? 200;
+  const capacity = display.capacity_gal ?? 200;
 
   const potId = ensureEquipment(
     CARL_POT_NAME,
     'pot_still',
     capacity,
-    'Carl still shared pot',
+    'Carl still shared pot (maintenance record)',
     layout,
   );
   const col1Id = ensureEquipment(
     CARL_COLUMN_1_NAME,
     'column_still',
     capacity,
-    'Carl still column 1',
-    { ...layout, pos_x_ft: layout.pos_x_ft + 10 },
+    'Carl still column 1 (maintenance record)',
+    layout,
   );
   const col2Id = ensureEquipment(
     CARL_COLUMN_2_NAME,
     'column_still',
     capacity,
-    'Carl still column 2',
-    { ...layout, pos_x_ft: layout.pos_x_ft + 20 },
+    'Carl still column 2 (maintenance record)',
+    layout,
   );
 
-  linkCarlTrainIfReady(potId, col1Id, col2Id);
-
-  runQuery(
-    `UPDATE floor_equipment
-     SET status = 'offline',
-         notes = 'Legacy single record — use Carl train (pot + columns) on distillation.'
-     WHERE id = ?`,
-    [legacy.id],
-  );
+  linkCarlTrain(display.id, potId, col1Id, col2Id);
 
   if (db && !postgresMode) persistDb();
 }
