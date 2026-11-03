@@ -13,7 +13,7 @@ const item = (
   id: number,
   name: string,
   equipment_type: string,
-  icon: string | null = null,
+  icon = '',
 ) => ({ id, name, equipment_type, icon });
 
 describe('bottling equipment', () => {
