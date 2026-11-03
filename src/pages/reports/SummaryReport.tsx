@@ -27,7 +27,9 @@ import { sugarUses, totalSugarProcessedLbs } from '../../lib/reporting/sugar-pro
 import { formatAbvEstimate } from '../../lib/fermentation';
 import { buildFermentationPerformance } from '../../lib/reporting/fermentation-performance';
 import { buildPackagingConsumption } from '../../lib/reporting/packaging-consumption';
+import { OwnerKpiPanel } from '../../components/OwnerKpiPanel';
 import { ReportRecordLink } from '../../components/ReportRecordLink';
+import { buildOwnerKpis } from '../../lib/reporting/owner-kpis';
 import { useReportContext } from './report-context';
 import { ProductivityChart } from './ProductivityChart';
 import { CollapsibleSection } from '../../components/CollapsibleSection';
@@ -131,8 +133,20 @@ export function SummaryReport() {
     [range, employee],
   );
 
+  const ownerKpis = useMemo(
+    () => (employee ? null : buildOwnerKpis(range)),
+    [range, employee],
+  );
+
   return (
     <>
+      {ownerKpis && <OwnerKpiPanel kpis={ownerKpis} periodLabel={range.label} />}
+      {employee && (
+        <p className="field-hint" data-testid="owner-kpi-filter-hint" style={{ marginTop: 0 }}>
+          Owner KPIs show when Employee is set to All employees.
+        </p>
+      )}
+
       <div className="card-grid">
         <div className="stat-card">
           <div className="label">Completed Washes</div>
