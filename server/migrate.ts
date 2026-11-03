@@ -167,6 +167,17 @@ export async function migrateDatabase(): Promise<void> {
       `);
       await client.query(`INSERT INTO schema_migrations (version) VALUES ('008')`);
     }
+    const bottlingEquipmentFloorFkMigration = await client.query('SELECT version FROM schema_migrations WHERE version = $1', ['009']);
+    if (bottlingEquipmentFloorFkMigration.rowCount === 0) {
+      await client.query('ALTER TABLE bottling_run_equipment DROP CONSTRAINT IF EXISTS bottling_run_equipment_floor_equipment_id_fkey');
+      await client.query(`
+        ALTER TABLE bottling_run_equipment
+        ADD CONSTRAINT bottling_run_equipment_floor_equipment_id_fkey
+        FOREIGN KEY (floor_equipment_id) REFERENCES floor_equipment(id)
+        DEFERRABLE INITIALLY DEFERRED
+      `);
+      await client.query(`INSERT INTO schema_migrations (version) VALUES ('009')`);
+    }
     await client.query(`
       INSERT INTO inventory_categories (name)
       SELECT 'botanicals'
