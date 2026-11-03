@@ -1,4 +1,5 @@
 import type { FloorEquipment } from '../types';
+import { normalizeBottlingStatus } from './bottling-lines';
 import { CALENDAR_CLEANING_EQUIPMENT_TYPES } from './equipment-cleaning';
 import { resolveEquipmentIcon } from './equipment';
 
@@ -67,22 +68,29 @@ export function uniqueEquipmentIds(ids: (number | null | undefined)[] | null | u
 }
 
 /**
- * Equipment to mark dirty when a running or finished bottling is saved.
- * Newly picked equipment is always marked. Equipment already on the run is marked again
- * only when a new session is recorded (status changed or more bottles), so editing notes
- * on a finished run does not undo a cleaning.
+ * Equipment to mark as needing cleaning after bottling.
+ * Only when the run is finished, or when equipment is newly added to a running/finished run.
  */
 export function bottlingEquipmentToMarkDirty(input: {
   selectedIds: number[];
   previousIds: number[];
-  previousUsed: boolean;
-  nowUsed: boolean;
-  newSession: boolean;
+  status: string;
+  previousStatus: string | null;
 }): number[] {
-  if (!input.nowUsed) return [];
-  return input.selectedIds.filter((id) => (
-    !input.previousUsed || !input.previousIds.includes(id) || input.newSession
-  ));
+  const status = normalizeBottlingStatus(input.status);
+  const previousStatus = input.previousStatus != null
+    ? normalizeBottlingStatus(input.previousStatus)
+    : null;
+  if (status === 'planned') return [];
+
+  const added = input.selectedIds.filter((id) => !input.previousIds.includes(id));
+
+  if (status === 'complete') {
+    if (previousStatus !== 'complete') return input.selectedIds;
+    return added;
+  }
+
+  return added;
 }
 
 /** Equipment whose dirty hold from this run should be released (run back to planned, item removed, or run deleted). */

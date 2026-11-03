@@ -5234,9 +5234,12 @@ export function saveBottlingRun(
     nowUsed: status !== 'planned',
   };
   const equipmentToMarkDirty = bottlingEquipmentToMarkDirty({
-    ...equipmentUse,
-    newSession: previousStatus !== status || totalCount > (previous?.bottle_count ?? 0),
+    selectedIds: equipmentIds,
+    previousIds: previousEquipmentIds,
+    status,
+    previousStatus: previous?.status ?? null,
   });
+  const newlySelectedEquipment = equipmentIds.filter((id) => !previousEquipmentIds.includes(id));
   for (const eqId of equipmentIds) {
     const eq = queryOne<FloorEquipment>('SELECT * FROM floor_equipment WHERE id = ?', [eqId]);
     if (!eq) throw new Error('Bottling equipment not found.');
@@ -5244,9 +5247,10 @@ export function saveBottlingRun(
       throw new Error(`${eq.name} is a tank, fermenter, or still. Pick it as the Spirit Source instead.`);
     }
   }
-  for (const eqId of equipmentToMarkDirty) {
-    const alreadyOnRun = equipmentUse.previousUsed && previousEquipmentIds.includes(eqId);
-    if (!alreadyOnRun) assertEquipmentUsableForProduction(eqId, 'Bottling equipment');
+  if (status !== 'planned') {
+    for (const eqId of newlySelectedEquipment) {
+      assertEquipmentUsableForProduction(eqId, 'Bottling equipment');
+    }
   }
   let bottledVolumeGal = totalCount > 0
     ? activeLines.reduce((sum, line) => sum + mlToGallons(line.bottle_count * line.bottle_size_ml), 0)
@@ -5417,9 +5421,7 @@ export function saveBottlingRun(
     releaseEquipmentWithoutCleaningHold(eqId);
   }
   for (const eqId of equipmentToMarkDirty) {
-    if (status === 'complete') {
-      markEquipmentDirtyAfterBottling(eqId, header.batch_number);
-    }
+    markEquipmentDirtyAfterBottling(eqId, header.batch_number);
   }
   syncBottlingPackagingInventory(previousLines, nextInventory);
   syncHoldingTankStatuses();

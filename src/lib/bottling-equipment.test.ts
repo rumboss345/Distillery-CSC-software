@@ -55,22 +55,34 @@ describe('bottling equipment', () => {
     expect(uniqueEquipmentIds(undefined)).toEqual([]);
   });
 
-  it('marks nothing dirty while planned', () => {
+  it('marks nothing dirty while planned or when a run starts running', () => {
     expect(bottlingEquipmentToMarkDirty({
-      selectedIds: [1, 2], previousIds: [], previousUsed: false, nowUsed: false, newSession: true,
+      selectedIds: [1, 2], previousIds: [], status: 'planned', previousStatus: null,
+    })).toEqual([]);
+    expect(bottlingEquipmentToMarkDirty({
+      selectedIds: [1, 2], previousIds: [1, 2], status: 'running', previousStatus: 'planned',
+    })).toEqual([]);
+    expect(bottlingEquipmentToMarkDirty({
+      selectedIds: [1, 2], previousIds: [1, 2], status: 'running', previousStatus: 'running',
     })).toEqual([]);
   });
 
-  it('marks all picks dirty when the run starts', () => {
+  it('marks all picks dirty when the run is finished', () => {
     expect(bottlingEquipmentToMarkDirty({
-      selectedIds: [1, 2], previousIds: [1, 2], previousUsed: false, nowUsed: true, newSession: true,
+      selectedIds: [1, 2], previousIds: [1, 2], status: 'complete', previousStatus: 'running',
     })).toEqual([1, 2]);
   });
 
-  it('marks only new picks dirty on a plain edit, and all picks on a new session', () => {
-    const base = { selectedIds: [1, 2], previousIds: [1], previousUsed: true, nowUsed: true };
-    expect(bottlingEquipmentToMarkDirty({ ...base, newSession: false })).toEqual([2]);
-    expect(bottlingEquipmentToMarkDirty({ ...base, newSession: true })).toEqual([1, 2]);
+  it('marks only newly added picks while running or on a finished edit', () => {
+    expect(bottlingEquipmentToMarkDirty({
+      selectedIds: [1, 2], previousIds: [1], status: 'running', previousStatus: 'running',
+    })).toEqual([2]);
+    expect(bottlingEquipmentToMarkDirty({
+      selectedIds: [1, 2], previousIds: [1], status: 'complete', previousStatus: 'complete',
+    })).toEqual([2]);
+    expect(bottlingEquipmentToMarkDirty({
+      selectedIds: [1], previousIds: [1], status: 'complete', previousStatus: 'complete',
+    })).toEqual([]);
   });
 
   it('releases holds when the run goes back to planned or a pick is removed', () => {

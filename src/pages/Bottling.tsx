@@ -60,6 +60,9 @@ import {
 import { equipmentTypeLabel } from '../lib/equipment';
 import { equipmentNeedsCleaning } from '../lib/equipment-cleaning';
 import { equipmentBlocksProduction } from '../lib/equipment-maintenance';
+import { EquipmentVisual } from '../components/equipment/EquipmentVisual';
+import { buildEquipmentVisualData } from '../components/equipment/equipment-visual-shared';
+import type { FloorEquipmentView } from '../types';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
 import type { BottlingRunLineInput, BottlingRunReturnInput, BottlingRunView, RunStatus } from '../types';
 
@@ -252,7 +255,15 @@ export function Bottling() {
     : null;
   const bottlingStatus = normalizeBottlingStatus(form.status);
   const isPlanned = bottlingStatus === 'planned';
+  const isRunning = bottlingStatus === 'running';
   const isFinished = bottlingStatus === 'complete';
+  const runningLinePreview = useMemo(() => {
+    if (!isRunning || !bottlingLineId) return null;
+    const line = floorEquipment.find((item) => item.id === bottlingLineId);
+    if (!line) return null;
+    const view: FloorEquipmentView = { ...line, status: 'in_use' };
+    return buildEquipmentVisualData(view);
+  }, [bottlingLineId, floorEquipment, isRunning]);
   const volumeNeedsReason = isFinished && bottlingVarianceGal != null && Math.abs(bottlingVarianceGal) >= 0.01;
   const alcoholNeedsReason = isFinished && bottlingAlcoholGal != null && Math.abs(bottlingAlcoholGal) >= 0.01;
   const unbottledInTankGal = tankVolumeGal != null
@@ -1000,13 +1011,18 @@ export function Bottling() {
               {lineOptions.length === 0 && (
                 <p className="field-hint">Add floor equipment with the bottling line icon to pick a line here.</p>
               )}
+              {runningLinePreview && (
+                <div className="bottling-line-run-preview" data-testid="bottling-line-run-preview">
+                  <EquipmentVisual data={runningLinePreview} preview />
+                </div>
+              )}
             </div>
             <div className="form-group full-width" data-testid="bottling-equipment">
               <label>Other equipment</label>
               <p className="field-hint">
                 {isPlanned
-                  ? 'Optional pumps, hoses, or filters. The line shows as in use on the process view while the run is Running; everything is marked for cleaning when the run is Finished.'
-                  : 'Optional auxiliary gear. Marked for cleaning when the run is Finished.'}
+                  ? 'Optional pumps, hoses, or filters. The line animates while the run is Running and is marked for cleaning only when the run is Finished or you change equipment.'
+                  : 'Optional auxiliary gear. Marked for cleaning when the run is Finished or newly added to this run.'}
               </p>
               {equipmentChoices.length === 0 ? (
                 <p className="field-hint">No pumps, hoses, or other auxiliary equipment set up yet.</p>
