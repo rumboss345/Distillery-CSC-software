@@ -81,3 +81,28 @@ export function applyAbvTemperatureCorrection(
     applied: needsTemperatureCorrection(temp),
   };
 }
+
+export interface ProofTemperatureCorrectionResult {
+  observedProof: number;
+  temperatureF: number;
+  correctedProof: number;
+  correctedAbv: number;
+  applied: boolean;
+}
+
+/** True proof and ABV at 60 °F from a hydrometer proof reading at sample temperature. */
+export function applyProofTemperatureCorrection(
+  observedProof: number | null | undefined,
+  temperatureF: number | null | undefined,
+): ProofTemperatureCorrectionResult | null {
+  if (observedProof == null || !Number.isFinite(observedProof) || observedProof <= 0) return null;
+  const temp = temperatureF != null && Number.isFinite(temperatureF) ? temperatureF : STANDARD_GAUGING_TEMP_F;
+  const correctedProof = correctProofTo60F(observedProof, temp);
+  return {
+    observedProof,
+    temperatureF: temp,
+    correctedProof,
+    correctedAbv: abvFromProof(correctedProof),
+    applied: needsTemperatureCorrection(temp),
+  };
+}
