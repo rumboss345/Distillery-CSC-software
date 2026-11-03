@@ -9,11 +9,13 @@ import {
   gaugeFromWeightLb,
   gaugeFromWeighingWorkflow,
   gaugeFromWineGallons,
+  abvFromProof,
   proofFromAbv,
   type SpiritGaugingResult,
 } from '../services/spirit-gauging';
 import {
   applyAbvTemperatureCorrection,
+  applyProofTemperatureCorrection,
   STANDARD_GAUGING_TEMP_F,
 } from '../services/temperature-correction';
 import {
@@ -27,7 +29,8 @@ import {
 } from '../lib/unit-converter';
 import { limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
 import { BatchCorrectionPanel, ConcentrationPanel } from '../components/FormulationCalculatorPanels';
-type CalculatorTab = 'gauging' | 'dilution' | 'concentration' | 'correction' | 'volume' | 'weight';
+type CalculatorTab = 'gauging' | 'hydrometer' | 'dilution' | 'concentration' | 'correction' | 'volume' | 'weight';
+type HydrometerScale = 'proof' | 'abv';
 type InputMode = 'weight' | 'volume';
 type WeightUnit = 'lb' | 'kg';
 type VolumeUnit = 'gal' | 'l';
@@ -686,6 +689,108 @@ function WeightConverter() {
   );
 }
 
+function HydrometerCorrectionPanel() {
+  const [scale, setScale] = useState<HydrometerScale>('proof');
+  const [observed, setObserved] = useState('');
+  const [sampleTempF, setSampleTempF] = useState('68');
+
+  const parsed = useMemo(() => {
+    const value = observed.trim() ? parseFloat(observed) : null;
+    const temp = sampleTempF.trim() ? parseFloat(sampleTempF) : STANDARD_GAUGING_TEMP_F;
+    if (value == null || !Number.isFinite(value) || value <= 0) return null;
+    if (!Number.isFinite(temp)) return null;
+    const observedProof = scale === 'proof' ? value : proofFromAbv(value);
+    const observedAbv = scale === 'abv' ? value : abvFromProof(value);
+    const correction = scale === 'proof'
+      ? applyProofTemperatureCorrection(value, temp)
+      : applyAbvTemperatureCorrection(value, temp);
+    if (!correction) return null;
+    return { observedProof, observedAbv, temp, correction };
+  }, [observed, sampleTempF, scale]);
+
+  return (
+    <div className="card gauge-known" data-testid="hydrometer-correction-panel">
+      <h3>Hydrometer &amp; temperature</h3>
+      <p className="field-hint">
+        Enter what the hydrometer shows in the sample and the sample temperature. The calculator returns
+        the <strong>actual proof and ABV at {STANDARD_GAUGING_TEMP_F} °F</strong> (TTB Gauging Manual Table 1 slope)
+        for gauging and records.
+      </p>
+      <div className="measure-mode-buttons" style={{ marginBottom: '1rem' }}>
+        <button
+          type="button"
+          className={`btn btn-sm ${scale === 'proof' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => setScale('proof')}
+        >
+          Hydrometer in proof
+        </button>
+        <button
+          type="button"
+          className={`btn btn-sm ${scale === 'abv' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => setScale('abv')}
+        >
+          Hydrometer in ABV %
+        </button>
+      </div>
+      <div className="form-grid">
+        <div className="form-group">
+          <label htmlFor="hydrometer-observed">
+            {scale === 'proof' ? 'Observed proof (at sample temp)' : 'Observed ABV % (at sample temp)'}
+          </label>
+          <input
+            id="hydrometer-observed"
+            data-testid="hydrometer-observed"
+            type="number"
+            step="0.1"
+            min={0}
+            max={scale === 'abv' ? MAX_ENTERED_ABV : undefined}
+            value={observed}
+            onChange={(e) => setObserved(scale === 'abv' ? limitAbvInput(e.target.value) : e.target.value)}
+            placeholder={scale === 'proof' ? 'e.g. 80.3' : 'e.g. 40.2'}
+          />
+        </div>
+        <div className="form-group">
+          <label htmlFor="hydrometer-temp">Sample temperature (°F)</label>
+          <input
+            id="hydrometer-temp"
+            data-testid="hydrometer-temp"
+            type="number"
+            step="0.1"
+            value={sampleTempF}
+            onChange={(e) => setSampleTempF(e.target.value)}
+            placeholder="60"
+          />
+        </div>
+      </div>
+      {parsed && (
+        <div className="wizard-result-banner" style={{ marginTop: '1rem' }} data-testid="hydrometer-correction-result">
+          <p style={{ margin: 0 }}>
+            Observed:{' '}
+            <strong>{parsed.observedProof.toFixed(1)} proof</strong>
+            {' '}({parsed.observedAbv.toFixed(2)}% ABV) at {parsed.temp.toFixed(1)} °F
+          </p>
+          <p style={{ margin: '0.5rem 0 0' }}>
+            Actual at {STANDARD_GAUGING_TEMP_F} °F:{' '}
+            <strong>{parsed.correction.correctedProof.toFixed(1)} proof</strong>
+            {' '}({parsed.correction.correctedAbv.toFixed(2)}% ABV)
+          </p>
+          {!parsed.correction.applied && (
+            <p className="field-hint" style={{ margin: '0.5rem 0 0' }}>
+              Sample is at {STANDARD_GAUGING_TEMP_F} °F; no temperature correction was applied.
+            </p>
+          )}
+          {parsed.correction.applied && (
+            <p className="field-hint abv-temp-note" style={{ margin: '0.5rem 0 0' }}>
+              Use the {STANDARD_GAUGING_TEMP_F} °F values for Table No. 3 gauging and for saving strength in the app.
+              For sugared or flavored spirits this is apparent proof, not true proof.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function SpiritWeightCalculator() {
   const [tab, setTab] = useState<CalculatorTab>('gauging');
   const [inputMode, setInputMode] = useState<InputMode>('weight');
@@ -774,6 +879,14 @@ export function SpiritWeightCalculator() {
         </button>
         <button
           type="button"
+          className={`btn btn-sm ${tab === 'hydrometer' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => setTab('hydrometer')}
+          data-testid="spirit-calc-tab-hydrometer"
+        >
+          Hydrometer &amp; temp
+        </button>
+        <button
+          type="button"
           className={`btn btn-sm ${tab === 'dilution' ? 'btn-primary' : 'btn-secondary'}`}
           onClick={() => setTab('dilution')}
         >
@@ -809,7 +922,9 @@ export function SpiritWeightCalculator() {
         </button>
       </div>
 
-      {tab === 'dilution' ? (
+      {tab === 'hydrometer' ? (
+        <HydrometerCorrectionPanel />
+      ) : tab === 'dilution' ? (
         <AlcoholDilutionCalculator />
       ) : tab === 'concentration' ? (
         <ConcentrationPanel />

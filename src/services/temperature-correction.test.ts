@@ -4,6 +4,7 @@ import {
   correctAbvTo60F,
   correctProofTo60F,
   applyAbvTemperatureCorrection,
+  applyProofTemperatureCorrection,
 } from './temperature-correction';
 
 describe('temperature-correction', () => {
@@ -34,6 +35,15 @@ describe('temperature-correction', () => {
     expect(result).not.toBeNull();
     expect(result!.applied).toBe(true);
     expect(result!.correctedAbv).toBeLessThan(result!.observedAbv);
+  });
+
+  it('corrects hydrometer proof to 60 °F actual strength', () => {
+    const result = applyProofTemperatureCorrection(193, 75);
+    expect(result).not.toBeNull();
+    expect(result!.correctedProof).toBeGreaterThanOrEqual(189.4);
+    expect(result!.correctedProof).toBeLessThanOrEqual(189.5);
+    expect(result!.correctedAbv).toBeCloseTo(94.75, 1);
+    expect(result!.applied).toBe(true);
   });
 
   it('blends volume-weighted ABV on 60 °F basis', () => {
