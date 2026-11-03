@@ -37,6 +37,7 @@ import { ApproveUser } from './pages/ApproveUser';
 import { AdminUsers } from './pages/AdminUsers';
 import { SpiritWeightCalculator } from './pages/SpiritWeightCalculator';
 import { useDatabaseReady } from './db/client-actions';
+import { AppErrorBoundary } from './components/AppErrorBoundary';
 
 function AppContent() {
   const { ready, error } = useDatabaseReady();
@@ -108,8 +109,10 @@ function AppContent() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <AppErrorBoundary>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </AppErrorBoundary>
   );
 }
