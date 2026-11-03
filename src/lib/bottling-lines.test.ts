@@ -14,6 +14,7 @@ import {
   formatBottleSizes,
   formatLinesSummary,
   isRumBottlingProduct,
+  bottlingCompleteOutputError,
   bottlingCountsTowardProduction,
   bottlingIsPlanned,
   normalizeBottlingStatus,
@@ -26,6 +27,39 @@ import {
 } from './bottling-lines';
 
 describe('bottling-lines', () => {
+  it('requires bottled or transferred output before finishing', () => {
+    expect(bottlingCompleteOutputError({
+      status: 'running',
+      bottledCount: 0,
+      returnGal: 0,
+      fromTank: true,
+    })).toBeNull();
+    expect(bottlingCompleteOutputError({
+      status: 'complete',
+      bottledCount: 0,
+      returnGal: 0,
+      fromTank: true,
+    })).toMatch(/transferred/i);
+    expect(bottlingCompleteOutputError({
+      status: 'complete',
+      bottledCount: 12,
+      returnGal: 0,
+      fromTank: true,
+    })).toBeNull();
+    expect(bottlingCompleteOutputError({
+      status: 'complete',
+      bottledCount: 0,
+      returnGal: 5,
+      fromTank: true,
+    })).toBeNull();
+    expect(bottlingCompleteOutputError({
+      status: 'complete',
+      bottledCount: 0,
+      returnGal: 0,
+      fromTank: false,
+    })).toMatch(/packaging line/i);
+  });
+
   it('treats a missing bottling status as finished', () => {
     expect(normalizeBottlingStatus(undefined)).toBe('complete');
     expect(normalizeBottlingStatus('running')).toBe('running');
