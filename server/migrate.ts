@@ -154,6 +154,19 @@ export async function migrateDatabase(): Promise<void> {
       await client.query('CREATE INDEX IF NOT EXISTS idx_bottling_run_equipment_equipment ON bottling_run_equipment(floor_equipment_id)');
       await client.query(`INSERT INTO schema_migrations (version) VALUES ('007')`);
     }
+    const bottlingEquipmentFkMigration = await client.query('SELECT version FROM schema_migrations WHERE version = $1', ['008']);
+    if (bottlingEquipmentFkMigration.rowCount === 0) {
+      // Migration 007 inlined REFERENCES (not deferrable). Full PG saves rewrite tables in
+      // name order, so child rows can be inserted before bottling_runs unless the FK defers.
+      await client.query('ALTER TABLE bottling_run_equipment DROP CONSTRAINT IF EXISTS bottling_run_equipment_bottling_run_id_fkey');
+      await client.query(`
+        ALTER TABLE bottling_run_equipment
+        ADD CONSTRAINT bottling_run_equipment_bottling_run_id_fkey
+        FOREIGN KEY (bottling_run_id) REFERENCES bottling_runs(id) ON DELETE CASCADE
+        DEFERRABLE INITIALLY DEFERRED
+      `);
+      await client.query(`INSERT INTO schema_migrations (version) VALUES ('008')`);
+    }
     await client.query(`
       INSERT INTO inventory_categories (name)
       SELECT 'botanicals'
