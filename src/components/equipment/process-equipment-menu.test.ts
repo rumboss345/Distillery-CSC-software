@@ -135,4 +135,28 @@ describe('buildProcessEquipmentContextMenu', () => {
     expect(idle.records).toEqual([]);
     expect(idle.maintenance.to).toBe('/equipment-maintenance?equipment=4');
   });
+
+  it('offers bottling in next step only while a bottling line is running', () => {
+    const running = buildProcessEquipmentContextMenu(source({
+      id: 20,
+      name: 'Main line',
+      equipment_type: 'other',
+      icon: 'bottling_line',
+      bottlingRunId: 8,
+      bottlingRunStatus: 'running',
+    }));
+    expect(running.next).toEqual([
+      { key: 'bottling-run', label: 'Bottling', to: '/bottling?record=8' },
+    ]);
+
+    const planned = buildProcessEquipmentContextMenu(source({
+      id: 20,
+      name: 'Main line',
+      equipment_type: 'other',
+      icon: 'bottling_line',
+      bottlingRunId: 9,
+      bottlingRunStatus: 'planned',
+    }));
+    expect(planned.next).toEqual([]);
+  });
 });
