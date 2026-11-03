@@ -47,6 +47,7 @@ import {
   bottlingEquipmentToMarkDirty,
   bottlingEquipmentToRelease,
   isBottlingEquipmentType,
+  isBottlingLineEquipment,
   uniqueEquipmentIds,
 } from '../lib/bottling-equipment';
 import { assertEnteredAbv } from '../lib/abv-limits';
@@ -974,6 +975,32 @@ export function getPotStills(options?: EquipmentListOptions): FloorEquipment[] {
   return listForProduction(getFloorEquipment().filter(
     (e) => e.equipment_type === 'pot_still' || e.equipment_type === 'column_still',
   ), options);
+}
+
+/** Floor equipment shown as a bottling line (bottling line icon). */
+export function getBottlingLines(options?: EquipmentListOptions): FloorEquipment[] {
+  return listForProduction(
+    getFloorEquipment().filter((e) => resolveEquipmentIcon(e.icon, e.equipment_type) === 'bottling_line'),
+    options,
+  );
+}
+
+export function getActiveBottlingRunOnEquipment(
+  equipmentId: number,
+  excludeRunId?: number,
+): { id: number; batch_number: string; status: string } | undefined {
+  if (equipmentId <= 0) return undefined;
+  return queryOne<{ id: number; batch_number: string; status: string }>(
+    `SELECT b.id, b.batch_number, b.status
+     FROM bottling_runs b
+     JOIN bottling_run_equipment e ON e.bottling_run_id = b.id
+     WHERE e.floor_equipment_id = ?
+       AND b.status IN ('running', 'planned')
+       AND (? IS NULL OR b.id != ?)
+     ORDER BY CASE b.status WHEN 'running' THEN 0 ELSE 1 END, b.id DESC
+     LIMIT 1`,
+    [equipmentId, excludeRunId ?? null, excludeRunId ?? -1],
+  ) ?? undefined;
 }
 
 export function getStillCapacityByName(stillName: string): number | null {
@@ -3116,6 +3143,49 @@ export function syncFermenterAndStillStatuses(): void {
       } else {
         markEquipmentNeedsCleaningAfterUse(s.id);
       }
+    }
+  }
+  syncBottlingEquipmentStatuses();
+}
+
+/** Bottling lines and auxiliary gear show in use while a run is running, like stills. */
+export function syncBottlingEquipmentStatuses(): void {
+  const ids = new Set<number>();
+  for (const row of queryAll<{ floor_equipment_id: number }>(
+    'SELECT DISTINCT floor_equipment_id FROM bottling_run_equipment',
+  )) {
+    ids.add(row.floor_equipment_id);
+  }
+  for (const eq of getFloorEquipment()) {
+    if (isBottlingLineEquipment(eq)) ids.add(eq.id);
+  }
+  for (const equipmentId of ids) {
+    const eq = queryOne<FloorEquipment>('SELECT * FROM floor_equipment WHERE id = ?', [equipmentId]);
+    if (!eq || eq.status === 'offline') continue;
+    const running = queryOne<{ id: number }>(
+      `SELECT b.id FROM bottling_runs b
+       JOIN bottling_run_equipment e ON e.bottling_run_id = b.id
+       WHERE e.floor_equipment_id = ? AND b.status = 'running' LIMIT 1`,
+      [equipmentId],
+    );
+    if (running) {
+      runQuery(`UPDATE floor_equipment SET status='in_use' WHERE id=?`, [equipmentId]);
+      continue;
+    }
+    const planned = queryOne<{ id: number }>(
+      `SELECT b.id FROM bottling_runs b
+       JOIN bottling_run_equipment e ON e.bottling_run_id = b.id
+       WHERE e.floor_equipment_id = ? AND b.status = 'planned' LIMIT 1`,
+      [equipmentId],
+    );
+    if (planned) {
+      if (eq.status === 'in_use') {
+        runQuery(`UPDATE floor_equipment SET status='empty' WHERE id=?`, [equipmentId]);
+      }
+      continue;
+    }
+    if (eq.status === 'in_use') {
+      markEquipmentNeedsCleaningAfterUse(equipmentId);
     }
   }
 }
@@ -5347,10 +5417,13 @@ export function saveBottlingRun(
     releaseEquipmentWithoutCleaningHold(eqId);
   }
   for (const eqId of equipmentToMarkDirty) {
-    markEquipmentDirtyAfterBottling(eqId, header.batch_number);
+    if (status === 'complete') {
+      markEquipmentDirtyAfterBottling(eqId, header.batch_number);
+    }
   }
   syncBottlingPackagingInventory(previousLines, nextInventory);
   syncHoldingTankStatuses();
+  syncBottlingEquipmentStatuses();
   recordStatusDateLog({
     recordKind: 'bottling',
     recordId: runId,
@@ -5380,6 +5453,7 @@ export function deleteBottlingRun(id: number): void {
   runQuery('DELETE FROM bottling_run_returns WHERE bottling_run_id = ?', [id]);
   runQuery('DELETE FROM bottling_runs WHERE id = ?', [id]);
   syncHoldingTankStatuses();
+  syncBottlingEquipmentStatuses();
 }
 
 // ── Blend Recipes ──────────────────────────────────────────

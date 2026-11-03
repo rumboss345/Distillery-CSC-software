@@ -8,6 +8,7 @@ import { StatusBadge } from '../StatusBadge';
 import { AssigneeSelect } from '../AssigneeSelect';
 import {
   completeFermenterAssignment,
+  getActiveBottlingRunOnEquipment,
   getDistillationRunForCuts,
   getDistillationRuns,
   getHoldingTankVolumeVariances,
@@ -15,6 +16,7 @@ import {
   markEquipmentCleaned,
   saveDistillationRun,
 } from '../../db/queries';
+import { isBottlingLineEquipment } from '../../lib/bottling-equipment';
 import { buildProcessEquipmentContextMenu } from './process-equipment-menu';
 import { formatTankVolumeVariance, tankVolumeMatchesRecord } from '../../lib/tank-volume-variance';
 import { STATUS_LABELS, formatGal } from './equipment-visual-shared';
@@ -102,11 +104,15 @@ export function ProcessEquipmentDetailPanel({
 
   const isStill = equipment.equipment_type === 'pot_still' || equipment.equipment_type === 'column_still';
   const stillRun = isStill ? getDistillationRunForCuts(equipment.name) ?? null : null;
+  const bottlingRun = isBottlingLineEquipment(equipment)
+    ? getActiveBottlingRunOnEquipment(equipment.id) ?? null
+    : null;
   const fermenting = equipment.equipment_type === 'fermenter' && equipment.active_mash_status === 'fermenting';
   const daysOverdue = equipment.equipment_type === 'fermenter'
     ? fermentationDaysOverdue(equipment.active_mash_status, equipment.active_expected_completion_date, localIsoDate())
     : 0;
   const distilling = stillRun?.status === 'running';
+  const bottling = bottlingRun?.status === 'running';
   const nextMenu = buildProcessEquipmentContextMenu({
     id: equipment.id,
     name: equipment.name,
@@ -120,8 +126,11 @@ export function ProcessEquipmentDetailPanel({
     liquidName: visual.liquidName,
     distillationRunId: stillRun?.id ?? null,
     distillationRunStatus: stillRun?.status ?? null,
+    icon: equipment.icon,
+    bottlingRunId: bottlingRun?.id ?? null,
+    bottlingRunStatus: bottlingRun?.status ?? null,
   });
-  const showNextStep = nextMenu.next.length > 0 || fermenting || distilling;
+  const showNextStep = nextMenu.next.length > 0 || fermenting || distilling || bottling;
 
   const handleMarkComplete = () => {
     try {
