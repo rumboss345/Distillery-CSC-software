@@ -102,6 +102,8 @@ CREATE TABLE IF NOT EXISTS distillation_runs (
   source_holding_tank_equipment_id INTEGER REFERENCES floor_equipment(id),
   dest_holding_tank_equipment_id INTEGER REFERENCES floor_equipment(id),
   still_name TEXT NOT NULL DEFAULT '',
+  still_pot_equipment_id INTEGER REFERENCES floor_equipment(id),
+  still_column_equipment_id INTEGER REFERENCES floor_equipment(id),
   run_date TEXT NOT NULL,
   charge_volume_gal REAL NOT NULL DEFAULT 0,
   charge_abv REAL,
@@ -520,6 +522,14 @@ CREATE TABLE IF NOT EXISTS floor_equipment (
 );
 
 CREATE INDEX IF NOT EXISTS idx_floor_equipment_plan ON floor_equipment(floor_plan_id);
+
+CREATE TABLE IF NOT EXISTS still_trains (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  label TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  pot_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
+  column1_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
+  column2_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id)
+);
 
 CREATE TABLE IF NOT EXISTS equipment_types (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { fetchProcessAssignments, type ProcessAssignmentEntry } from '../../lib/auth-api';
 import {
   getAllFloorEquipmentWithContext,
-  getDistillationRunForCuts,
+  getDistillationRunForStillEquipment,
   getEquipmentVolumeReport,
   getFloorPlans,
   getProductionSummary,
@@ -172,10 +172,10 @@ export function ProcessEquipmentCanvas({
       abv: visualById.get(contextMenuEquipment.id)?.abv ?? contextMenuEquipment.active_abv ?? null,
       liquidName: visualById.get(contextMenuEquipment.id)?.liquidName ?? null,
       distillationRunId: (contextMenuEquipment.equipment_type === 'pot_still' || contextMenuEquipment.equipment_type === 'column_still')
-        ? getDistillationRunForCuts(contextMenuEquipment.name)?.id ?? null
+        ? getDistillationRunForStillEquipment(contextMenuEquipment.id)?.id ?? null
         : null,
       distillationRunStatus: (contextMenuEquipment.equipment_type === 'pot_still' || contextMenuEquipment.equipment_type === 'column_still')
-        ? getDistillationRunForCuts(contextMenuEquipment.name)?.status ?? null
+        ? getDistillationRunForStillEquipment(contextMenuEquipment.id)?.status ?? null
         : null,
     })
     : null;

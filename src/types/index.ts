@@ -233,6 +233,10 @@ export interface DistillationRun {
   source_holding_tank_equipment_id: number | null;
   dest_holding_tank_equipment_id: number | null;
   still_name: string;
+  /** Shared pot on a multi-piece still train (e.g. Carl). */
+  still_pot_equipment_id?: number | null;
+  /** Column used on a still train run; the other column is untouched. */
+  still_column_equipment_id?: number | null;
   run_date: string;
   charge_volume_gal: number;
   charge_abv: number | null;

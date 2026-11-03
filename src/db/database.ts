@@ -11,6 +11,13 @@ import {
 import { buildBlendRecipeSnapshot } from '../lib/blend-recipe-version';
 import { isSqliteFile, missingBackupTablesError } from '../lib/database-backup';
 import { buildCscFloorEquipmentRows, CSC_FLOOR_PLAN_SIZE } from '../lib/csc-floor-equipment';
+import {
+  CARL_COLUMN_1_NAME,
+  CARL_COLUMN_2_NAME,
+  CARL_LEGACY_STILL_NAME,
+  CARL_POT_NAME,
+  CARL_TRAIN_LABEL,
+} from '../lib/still-train';
 import type { BlendIngredientInput } from '../types';
 import { SCHEMA, SEED_DATA } from './schema';
 import {
@@ -684,6 +691,7 @@ function runMigrations(): void {
   migrateHoldingTankDilutions();
   migrateGinRuns();
   migrateDistillationTankSources();
+  migrateStillTrains();
   db.run(`
     UPDATE floor_equipment
     SET equipment_type = 'stillage_tank'
@@ -707,6 +715,147 @@ function migrateDistillationTankSources(): void {
   `);
   db.run('CREATE INDEX IF NOT EXISTS idx_distillation_tank_sources_run ON distillation_run_tank_sources(distillation_run_id)');
   db.run('CREATE INDEX IF NOT EXISTS idx_distillation_tank_sources_tank ON distillation_run_tank_sources(holding_tank_equipment_id)');
+}
+
+export function migrateStillTrains(): void {
+  const hasPotColumn = queryOne<{ name: string }>(
+    "SELECT name FROM pragma_table_info('distillation_runs') WHERE name='still_pot_equipment_id'",
+  );
+  if (!hasPotColumn) {
+    runQuery('ALTER TABLE distillation_runs ADD COLUMN still_pot_equipment_id INTEGER REFERENCES floor_equipment(id)');
+    runQuery('ALTER TABLE distillation_runs ADD COLUMN still_column_equipment_id INTEGER REFERENCES floor_equipment(id)');
+    if (db && !postgresMode) persistDb();
+  }
+
+  runQuery(`
+    CREATE TABLE IF NOT EXISTS still_trains (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      label TEXT NOT NULL UNIQUE COLLATE NOCASE,
+      pot_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
+      column1_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
+      column2_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id)
+    )
+  `);
+
+  const existingTrain = queryOne<{ id: number }>(
+    'SELECT id FROM still_trains WHERE label = ? COLLATE NOCASE',
+    [CARL_TRAIN_LABEL],
+  );
+  if (existingTrain) return;
+
+  const linkCarlTrainIfReady = (potId: number, col1Id: number, col2Id: number): void => {
+    insertRow(
+      `INSERT INTO still_trains (label, pot_equipment_id, column1_equipment_id, column2_equipment_id)
+       VALUES (?, ?, ?, ?)`,
+      [CARL_TRAIN_LABEL, potId, col1Id, col2Id],
+    );
+  };
+
+  const seededPot = queryOne<{ id: number }>(
+    'SELECT id FROM floor_equipment WHERE name = ? COLLATE NOCASE',
+    [CARL_POT_NAME],
+  );
+  const seededCol1 = queryOne<{ id: number }>(
+    'SELECT id FROM floor_equipment WHERE name = ? COLLATE NOCASE',
+    [CARL_COLUMN_1_NAME],
+  );
+  const seededCol2 = queryOne<{ id: number }>(
+    'SELECT id FROM floor_equipment WHERE name = ? COLLATE NOCASE',
+    [CARL_COLUMN_2_NAME],
+  );
+  if (seededPot && seededCol1 && seededCol2) {
+    linkCarlTrainIfReady(seededPot.id, seededCol1.id, seededCol2.id);
+    if (db && !postgresMode) persistDb();
+    return;
+  }
+
+  const ensureEquipment = (
+    name: string,
+    equipmentType: string,
+    capacityGal: number,
+    notes: string,
+    layoutFrom?: { pos_x_ft: number; pos_y_ft: number; width_ft: number; depth_ft: number },
+  ): number => {
+    const found = queryOne<{ id: number }>(
+      'SELECT id FROM floor_equipment WHERE name = ? COLLATE NOCASE',
+      [name],
+    );
+    if (found) return found.id;
+    const defaults = layoutFrom ?? { pos_x_ft: 28, pos_y_ft: 28, width_ft: 8, depth_ft: 20 };
+    return insertRow(
+      `INSERT INTO floor_equipment (
+        floor_plan_id, name, equipment_type, pos_x_ft, pos_y_ft, width_ft, depth_ft,
+        capacity_gal, status, linked_mash_batch_id, notes
+      ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, 'empty', NULL, ?)`,
+      [
+        name,
+        equipmentType,
+        defaults.pos_x_ft,
+        defaults.pos_y_ft,
+        defaults.width_ft,
+        defaults.depth_ft,
+        capacityGal,
+        notes,
+      ],
+    );
+  };
+
+  const legacy = queryOne<{
+    id: number;
+    pos_x_ft: number;
+    pos_y_ft: number;
+    width_ft: number;
+    depth_ft: number;
+    capacity_gal: number;
+  }>(
+    `SELECT id, pos_x_ft, pos_y_ft, width_ft, depth_ft, capacity_gal
+     FROM floor_equipment WHERE name = ? COLLATE NOCASE`,
+    [CARL_LEGACY_STILL_NAME],
+  );
+
+  if (!legacy) return;
+
+  const layout = {
+    pos_x_ft: legacy.pos_x_ft,
+    pos_y_ft: legacy.pos_y_ft,
+    width_ft: legacy.width_ft,
+    depth_ft: legacy.depth_ft,
+  };
+  const capacity = legacy.capacity_gal ?? 200;
+
+  const potId = ensureEquipment(
+    CARL_POT_NAME,
+    'pot_still',
+    capacity,
+    'Carl still shared pot',
+    layout,
+  );
+  const col1Id = ensureEquipment(
+    CARL_COLUMN_1_NAME,
+    'column_still',
+    capacity,
+    'Carl still column 1',
+    { ...layout, pos_x_ft: layout.pos_x_ft + 10 },
+  );
+  const col2Id = ensureEquipment(
+    CARL_COLUMN_2_NAME,
+    'column_still',
+    capacity,
+    'Carl still column 2',
+    { ...layout, pos_x_ft: layout.pos_x_ft + 20 },
+  );
+
+  linkCarlTrainIfReady(potId, col1Id, col2Id);
+
+  runQuery(
+    `UPDATE floor_equipment
+     SET status = 'offline',
+         notes = 'Legacy single record — use Carl train (pot + columns) on distillation.'
+     WHERE id = ?`,
+    [legacy.id],
+  );
+
+  if (db && !postgresMode) persistDb();
 }
 
 function migrateGinRuns(): void {

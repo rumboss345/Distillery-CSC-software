@@ -8,6 +8,7 @@ import { PG_BACKUP_FORMAT, PG_BACKUP_VERSION, pgBackupError, type PgBackupFile }
 import { SCHEMA } from '../src/db/schema.ts';
 import { setMutationActorRole } from '../src/db/mutation-actor.ts';
 import { bindSqlHandle, type SqlHandle } from '../src/db/sql-session.ts';
+import { migrateStillTrains } from '../src/db/database.ts';
 import * as queries from '../src/db/queries.ts';
 import {
   ARCHIVE_OLD_AUDIT_DELETE,
@@ -188,6 +189,7 @@ async function reloadFromPostgres(client: import('pg').PoolClient): Promise<void
   memoryRevision = Number(meta.rows[0]?.revision ?? 0);
   if (memory) memory.close();
   attach(db);
+  migrateStillTrains();
 }
 
 async function persistToPostgres(
