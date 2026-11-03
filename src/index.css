@@ -2845,6 +2845,24 @@ tr.volume-change-kind:hover td {
   background: var(--bg-elevated);
 }
 
+.bottling-line-run-preview {
+  margin-top: 0.75rem;
+  max-width: 220px;
+  height: 100px;
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  pointer-events: none;
+}
+
+.bottling-line-run-preview .equipment-visual--preview {
+  transform: scale(0.42);
+  transform-origin: top center;
+  padding: 0;
+  gap: 0;
+}
+
 .bottling-equipment-list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
