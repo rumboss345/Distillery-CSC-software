@@ -1,11 +1,13 @@
 import type { EquipmentType } from '../types';
 import { TYPE_DEFAULTS } from './equipment';
+import { CARL_LEGACY_STILL_NAME } from './still-train';
 
 export type CscFloorEquipmentSeed = {
   name: string;
   equipment_type: EquipmentType;
   capacity_gal?: number;
   notes?: string;
+  icon?: string;
 };
 
 /** CSC distillery floor equipment catalog. Order controls default layout zones. */
@@ -34,7 +36,13 @@ export const CSC_FLOOR_EQUIPMENT: CscFloorEquipmentSeed[] = [
   { name: 'Groen kettle', equipment_type: 'mash_tun', capacity_gal: 100, notes: 'Groen wash kettle' },
   { name: 'Wash tank', equipment_type: 'mash_tun', capacity_gal: 2000, notes: 'Primary wash tank' },
   { name: 'Vendome', equipment_type: 'pot_still', capacity_gal: 1200, notes: '1200 gal pot still' },
-  { name: 'Carl column still', equipment_type: 'column_still', capacity_gal: 200, notes: '200 gal column still' },
+  {
+    name: CARL_LEGACY_STILL_NAME,
+    equipment_type: 'column_still',
+    capacity_gal: 200,
+    notes: '200 gal dual-column still',
+    icon: 'dual_column_still',
+  },
   { name: 'Hill billy', equipment_type: 'column_still', capacity_gal: 50, notes: '50 gal column still' },
   { name: 'Gin Storage milk can 1', equipment_type: 'holding_tank', capacity_gal: 50 },
   { name: 'Gin Storage milk can 2', equipment_type: 'holding_tank', capacity_gal: 50 },
@@ -83,12 +91,13 @@ function layoutPosition(
 }
 
 export function buildCscFloorEquipmentRows(
-  planId = 1,
-  options?: { startIndex?: number; demoStatusForFirstTwo?: boolean },
+  floorPlanId: number,
+  options?: { demoStatusForFirstTwo?: boolean },
 ): Array<{
   floor_plan_id: number;
   name: string;
-  equipment_type: EquipmentType;
+  equipment_type: string;
+  icon: string;
   pos_x_ft: number;
   pos_y_ft: number;
   width_ft: number;
@@ -98,24 +107,24 @@ export function buildCscFloorEquipmentRows(
   linked_mash_batch_id: number | null;
   notes: string;
 }> {
-  const typeCounts: Partial<Record<EquipmentType, number>> = {};
-  const startIndex = options?.startIndex ?? 0;
-
+  const counts = new Map<string, number>();
   return CSC_FLOOR_EQUIPMENT.map((item, index) => {
-    const typeIndex = typeCounts[item.equipment_type] ?? 0;
-    typeCounts[item.equipment_type] = typeIndex + 1;
-    const layout = layoutPosition(item, typeIndex);
-    const globalIndex = startIndex + index;
-    const isDemoFermenter = options?.demoStatusForFirstTwo && globalIndex < 2;
-
+    const typeIndex = counts.get(item.equipment_type) ?? 0;
+    counts.set(item.equipment_type, typeIndex + 1);
+    const pos = layoutPosition(item, typeIndex);
+    const defaults = TYPE_DEFAULTS[item.equipment_type];
     return {
-      floor_plan_id: planId,
+      floor_plan_id: floorPlanId,
       name: item.name,
       equipment_type: item.equipment_type,
-      ...layout,
-      capacity_gal: item.capacity_gal ?? TYPE_DEFAULTS[item.equipment_type].capacity_gal,
-      status: isDemoFermenter ? 'in_use' : 'empty',
-      linked_mash_batch_id: isDemoFermenter ? 2 : null,
+      icon: item.icon ?? '',
+      pos_x_ft: pos.pos_x_ft,
+      pos_y_ft: pos.pos_y_ft,
+      width_ft: pos.width_ft,
+      depth_ft: pos.depth_ft,
+      capacity_gal: item.capacity_gal ?? defaults.capacity_gal,
+      status: options?.demoStatusForFirstTwo && index < 2 ? 'in_use' : 'empty',
+      linked_mash_batch_id: null,
       notes: item.notes ?? '',
     };
   });

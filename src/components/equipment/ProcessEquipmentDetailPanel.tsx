@@ -8,7 +8,7 @@ import { StatusBadge } from '../StatusBadge';
 import { AssigneeSelect } from '../AssigneeSelect';
 import {
   completeFermenterAssignment,
-  getDistillationRunForCuts,
+  getDistillationRunForStillEquipment,
   getDistillationRuns,
   getHoldingTankVolumeVariances,
   holdingTankIntakeKey,
@@ -101,7 +101,7 @@ export function ProcessEquipmentDetailPanel({
     && !isBrixReadyForDistillation(equipment.active_latest_brix);
 
   const isStill = equipment.equipment_type === 'pot_still' || equipment.equipment_type === 'column_still';
-  const stillRun = isStill ? getDistillationRunForCuts(equipment.name) ?? null : null;
+  const stillRun = isStill ? getDistillationRunForStillEquipment(equipment.id) ?? null : null;
   const fermenting = equipment.equipment_type === 'fermenter' && equipment.active_mash_status === 'fermenting';
   const daysOverdue = equipment.equipment_type === 'fermenter'
     ? fermentationDaysOverdue(equipment.active_mash_status, equipment.active_expected_completion_date, localIsoDate())

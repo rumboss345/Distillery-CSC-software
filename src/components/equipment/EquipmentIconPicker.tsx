@@ -6,7 +6,7 @@ function previewData(icon: EquipmentIcon, label: string): EquipmentVisualData {
   const tank = icon === 'holding_tank' || icon === 'jug' || icon === 'stillage_tank' || icon === 'collection_vessel';
   const fermenter = icon === 'fermenter';
   const wash = icon === 'mash_tun';
-  const still = icon === 'pot_still' || icon === 'column_still';
+  const still = icon === 'pot_still' || icon === 'column_still' || icon === 'dual_column_still';
   const showsFill = tank || fermenter || wash || still;
   const fillPercent = tank ? (icon === 'collection_vessel' ? 46 : 68) : fermenter ? 62 : wash ? 74 : still ? 40 : 0;
   const capacityGal = showsFill ? 100 : 0;

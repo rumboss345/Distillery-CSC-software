@@ -37,6 +37,17 @@ import {
   distillationRunAllowsCutChanges,
 } from '../lib/still-charge';
 import {
+  buildDistillationStillTargets,
+  distillationRunUsesStillTrain,
+  getStillTrainByPotId,
+  getStillTrainByDisplayEquipmentId,
+  getStillTrainMemberIds,
+  getStillTrains,
+  stillTrainEquipmentToRelease,
+  type DistillationStillTarget,
+  type StillTrain,
+} from '../lib/still-train';
+import {
   equipmentBlocksProduction,
   equipmentUnavailableForProduction,
   maintenanceStatusLabel,
@@ -970,9 +981,69 @@ function listForProduction<T extends FloorEquipment>(
 }
 
 export function getPotStills(options?: EquipmentListOptions): FloorEquipment[] {
+  const memberIds = getStillTrainMemberIds();
   return listForProduction(getFloorEquipment().filter(
-    (e) => e.equipment_type === 'pot_still' || e.equipment_type === 'column_still',
+    (e) => (e.equipment_type === 'pot_still' || e.equipment_type === 'column_still')
+      && !memberIds.has(e.id),
   ), options);
+}
+
+export function getDistillationStillTargets(options?: EquipmentListOptions): DistillationStillTarget[] {
+  const equipment = getFloorEquipment();
+  const listed = options?.includeUnavailable
+    ? equipment
+    : equipment.filter((item) => item.status !== 'offline');
+  return buildDistillationStillTargets(listed);
+}
+
+export function getActiveDistillationRunOnPot(
+  potEquipmentId: number,
+  excludeRunId?: number,
+): { id: number; batch_number: string; status: string; charge_volume_gal: number } | undefined {
+  if (potEquipmentId <= 0) return undefined;
+  return queryOne<{ id: number; batch_number: string; status: string; charge_volume_gal: number }>(
+    `SELECT id, batch_number, status, charge_volume_gal FROM distillation_runs
+     WHERE still_pot_equipment_id = ? AND status = 'running'
+     AND (? IS NULL OR id != ?)
+     LIMIT 1`,
+    [potEquipmentId, excludeRunId ?? null, excludeRunId ?? -1],
+  ) ?? undefined;
+}
+
+export function getDistillationRunForStillEquipment(
+  equipmentId: number,
+): { id: number; batch_number: string; status: string } | undefined {
+  if (equipmentId <= 0) return undefined;
+  const train = getStillTrainByDisplayEquipmentId(equipmentId);
+  if (train) {
+    const byTrainPot = queryOne<{ id: number; batch_number: string; status: string }>(
+      `SELECT id, batch_number, status FROM distillation_runs
+       WHERE still_pot_equipment_id = ? AND status IN ('running', 'planned')
+       ORDER BY CASE status WHEN 'running' THEN 0 ELSE 1 END, id DESC LIMIT 1`,
+      [train.pot_equipment_id],
+    );
+    if (byTrainPot) return byTrainPot;
+  }
+  const byPot = queryOne<{ id: number; batch_number: string; status: string }>(
+    `SELECT id, batch_number, status FROM distillation_runs
+     WHERE still_pot_equipment_id = ? AND status IN ('running', 'planned')
+     ORDER BY CASE status WHEN 'running' THEN 0 ELSE 1 END, id DESC LIMIT 1`,
+    [equipmentId],
+  );
+  if (byPot) return byPot;
+  const byColumn = queryOne<{ id: number; batch_number: string; status: string }>(
+    `SELECT id, batch_number, status FROM distillation_runs
+     WHERE still_column_equipment_id = ? AND status IN ('running', 'planned')
+     ORDER BY CASE status WHEN 'running' THEN 0 ELSE 1 END, id DESC LIMIT 1`,
+    [equipmentId],
+  );
+  if (byColumn) return byColumn;
+  const name = queryOne<{ name: string }>(
+    'SELECT name FROM floor_equipment WHERE id = ?',
+    [equipmentId],
+  )?.name;
+  if (!name) return undefined;
+  return getDistillationRunForCuts(name);
 }
 
 export function getStillCapacityByName(stillName: string): number | null {
@@ -1035,6 +1106,21 @@ function assertStillAvailableForCharge(stillName: string, excludeRunId?: number)
   throw new Error(
     stillAlreadyOccupiedMessage(
       stillName.trim(),
+      occupied.batch_number,
+      occupied.status,
+      occupied.charge_volume_gal,
+    ),
+  );
+}
+
+function assertStillAvailableOnPot(potEquipmentId: number, excludeRunId?: number): void {
+  const train = getStillTrainByPotId(potEquipmentId);
+  const label = train?.label ?? 'Still';
+  const occupied = getActiveDistillationRunOnPot(potEquipmentId, excludeRunId);
+  if (!occupied) return;
+  throw new Error(
+    stillAlreadyOccupiedMessage(
+      label,
       occupied.batch_number,
       occupied.status,
       occupied.charge_volume_gal,
@@ -3093,10 +3179,16 @@ export function syncFermenterAndStillStatuses(): void {
     }
   }
 
+  const trainMemberIds = getStillTrainMemberIds();
+  for (const train of getStillTrains()) {
+    syncStillTrainStatuses(train);
+  }
+
   const stills = queryAll<FloorEquipment>(
     "SELECT * FROM floor_equipment WHERE equipment_type IN ('pot_still', 'column_still')",
   );
   for (const s of stills) {
+    if (trainMemberIds.has(s.id)) continue;
     if (s.status === 'offline') continue;
     const runningRun = queryOne<{ id: number }>(
       "SELECT id FROM distillation_runs WHERE still_name = ? AND status = 'running' LIMIT 1",
@@ -3116,6 +3208,76 @@ export function syncFermenterAndStillStatuses(): void {
         markEquipmentNeedsCleaningAfterUse(s.id);
       }
     }
+  }
+}
+
+function syncStillTrainStatuses(train: StillTrain): void {
+  const running = queryOne<{ still_column_equipment_id: number | null }>(
+    `SELECT still_column_equipment_id FROM distillation_runs
+     WHERE still_pot_equipment_id = ? AND status = 'running' LIMIT 1`,
+    [train.pot_equipment_id],
+  );
+  const planned = running ? null : queryOne<{ id: number }>(
+    `SELECT id FROM distillation_runs
+     WHERE still_pot_equipment_id = ? AND status = 'planned' LIMIT 1`,
+    [train.pot_equipment_id],
+  );
+
+  const applyTrainPiece = (equipmentId: number, shouldBeInUse: boolean): void => {
+    const piece = queryOne<{ status: string }>(
+      'SELECT status FROM floor_equipment WHERE id = ?',
+      [equipmentId],
+    );
+    if (!piece || piece.status === 'offline') return;
+    if (shouldBeInUse) {
+      runQuery(`UPDATE floor_equipment SET status='in_use' WHERE id=?`, [equipmentId]);
+      return;
+    }
+    if (piece.status !== 'in_use') return;
+    if (planned) {
+      runQuery(`UPDATE floor_equipment SET status='empty' WHERE id=?`, [equipmentId]);
+    } else {
+      markEquipmentNeedsCleaningAfterUse(equipmentId);
+    }
+  };
+
+  applyTrainPiece(train.pot_equipment_id, Boolean(running));
+  applyTrainPiece(train.column1_equipment_id, running?.still_column_equipment_id === train.column1_equipment_id);
+  applyTrainPiece(train.column2_equipment_id, running?.still_column_equipment_id === train.column2_equipment_id);
+
+  const displayId = train.display_equipment_id ?? 0;
+  if (displayId <= 0) return;
+  const display = queryOne<{ status: string }>(
+    'SELECT status FROM floor_equipment WHERE id = ?',
+    [displayId],
+  );
+  if (!display || display.status === 'offline') return;
+
+  const pieceStatus = (id: number) => queryOne<{ status: string }>(
+    'SELECT status FROM floor_equipment WHERE id = ?',
+    [id],
+  )?.status;
+
+  const potStatus = pieceStatus(train.pot_equipment_id);
+  const col1Status = pieceStatus(train.column1_equipment_id);
+  const col2Status = pieceStatus(train.column2_equipment_id);
+
+  let nextStatus: 'in_use' | 'cleaning' | 'empty' = 'empty';
+  if (potStatus === 'in_use' || col1Status === 'in_use' || col2Status === 'in_use') {
+    nextStatus = 'in_use';
+  } else if (
+    potStatus === 'cleaning'
+    || col1Status === 'cleaning'
+    || col2Status === 'cleaning'
+  ) {
+    nextStatus = 'cleaning';
+  }
+
+  if (nextStatus === display.status) return;
+  if (nextStatus === 'cleaning') {
+    markEquipmentNeedsCleaningAfterUse(displayId);
+  } else {
+    runQuery(`UPDATE floor_equipment SET status=? WHERE id=?`, [nextStatus, displayId]);
   }
 }
 
@@ -4066,24 +4228,45 @@ function stillEquipmentByName(stillName: string): FloorEquipment | undefined {
   ) ?? undefined;
 }
 
+function markStillPieceCleaningIfInUse(equipmentId: number): void {
+  const still = queryOne<{ status: string }>(
+    'SELECT status FROM floor_equipment WHERE id = ?',
+    [equipmentId],
+  );
+  if (still?.status === 'in_use') markEquipmentNeedsCleaningAfterUse(equipmentId);
+}
+
 /** When a running charge leaves a still, that still needs cleaning. A planned run does not. */
 function releaseStillAfterRunningRun(
   previous: DistillationRun | null | undefined,
-  nextStillName: string,
-  nextStatus: string,
+  next: Pick<DistillationRun, 'still_name' | 'still_pot_equipment_id' | 'still_column_equipment_id' | 'status'>,
 ): void {
   if (!previous || !stillRunOccupiesEquipment(previous.status)) return;
-  const leftThisStill = previous.still_name !== nextStillName || !stillRunOccupiesEquipment(nextStatus);
+  const nextOccupies = stillRunOccupiesEquipment(next.status);
+
+  if (distillationRunUsesStillTrain(previous)) {
+    const sameTrain = previous.still_pot_equipment_id === next.still_pot_equipment_id
+      && previous.still_column_equipment_id === next.still_column_equipment_id;
+    if (sameTrain && nextOccupies) return;
+    for (const equipmentId of stillTrainEquipmentToRelease(previous)) {
+      if (plannedRecordSkipsEquipmentStatus(next.status)) {
+        releaseEquipmentWithoutCleaningHold(equipmentId, false);
+      } else {
+        markStillPieceCleaningIfInUse(equipmentId);
+      }
+    }
+    return;
+  }
+
+  const leftThisStill = previous.still_name !== next.still_name || !nextOccupies;
   if (!leftThisStill) return;
   const still = stillEquipmentByName(previous.still_name);
   if (!still) return;
-  if (plannedRecordSkipsEquipmentStatus(nextStatus)) {
+  if (plannedRecordSkipsEquipmentStatus(next.status)) {
     releaseEquipmentWithoutCleaningHold(still.id, false);
     return;
   }
-  if (still.status === 'in_use') {
-    markEquipmentNeedsCleaningAfterUse(still.id);
-  }
+  markStillPieceCleaningIfInUse(still.id);
 }
 
 function tankHasLiquid(equipmentId: number): boolean {
@@ -4092,8 +4275,14 @@ function tankHasLiquid(equipmentId: number): boolean {
 
 /** Equipment touched by a run that is planned again is not left needing cleaning. */
 function releaseDistillationEquipmentForReturnToPlan(run: DistillationRun, runId?: number): void {
-  const still = stillEquipmentByName(run.still_name);
-  if (still) releaseEquipmentWithoutCleaningHold(still.id, false);
+  if (distillationRunUsesStillTrain(run)) {
+    for (const equipmentId of stillTrainEquipmentToRelease(run)) {
+      releaseEquipmentWithoutCleaningHold(equipmentId, false);
+    }
+  } else {
+    const still = stillEquipmentByName(run.still_name);
+    if (still) releaseEquipmentWithoutCleaningHold(still.id, false);
+  }
   if (run.source_fermenter_equipment_id) {
     const stillHoldingWash = queryOne<{ volume_gal: number }>(
       `SELECT a.volume_gal
@@ -4286,8 +4475,47 @@ export function saveDistillationRun(
   const previousRun = id
     ? queryOne<DistillationRun>('SELECT * FROM distillation_runs WHERE id = ?', [id])
     : null;
-  if (!planOnly) {
+  const stillPotId = run.still_pot_equipment_id ?? null;
+  const stillColumnId = run.still_column_equipment_id ?? null;
+  let stillNameToStore = run.still_name.trim();
+  let stillCapacity: number | null = null;
+
+  if (stillPotId) {
+    const train = getStillTrainByPotId(stillPotId);
+    if (!train) throw new Error('That still train is not configured on the floor plan.');
+    stillNameToStore = train.label;
+    if (!planOnly && !stillColumnId) {
+      throw new Error('Choose which column was used on this still (column 1 or column 2).');
+    }
+    if (
+      stillColumnId
+      && stillColumnId !== train.column1_equipment_id
+      && stillColumnId !== train.column2_equipment_id
+    ) {
+      throw new Error('That column is not part of this still train.');
+    }
+    if (!planOnly) {
+      assertEquipmentUsableForProduction(stillPotId, 'Still pot');
+      if (stillColumnId) assertEquipmentUsableForProduction(stillColumnId, 'Still column');
+    }
+    stillCapacity = queryOne<{ capacity_gal: number }>(
+      'SELECT capacity_gal FROM floor_equipment WHERE id = ?',
+      [stillPotId],
+    )?.capacity_gal ?? null;
+    if (stillRunOccupiesEquipment(run.status)) {
+      assertStillAvailableOnPot(stillPotId, id);
+    }
+  } else if (!planOnly) {
     assertStillUsableByName(run.still_name);
+    stillCapacity = getStillCapacityByName(run.still_name);
+    if (run.still_name.trim() && stillRunOccupiesEquipment(run.status)) {
+      assertStillAvailableForCharge(run.still_name, id);
+    }
+  } else {
+    stillCapacity = getStillCapacityByName(run.still_name);
+  }
+
+  if (!planOnly) {
     if (
       isFermenterSourcedRun(runType)
       && run.source_fermenter_equipment_id
@@ -4315,14 +4543,14 @@ export function saveDistillationRun(
       || ((run.source_holding_tank_equipment_id ?? 0) > 0 && run.charge_volume_gal > 0);
     if (!hasPull) throw new Error(DISTILLATION_SOURCE_TANK_REQUIRED);
   }
-  const stillCapacity = getStillCapacityByName(run.still_name);
   if (chargeExceedsStillCapacity(run.charge_volume_gal, stillCapacity)) {
     throw new Error(
-      stillChargeCapacityMessage(run.charge_volume_gal, run.still_name, stillCapacity!),
+      stillChargeCapacityMessage(
+        run.charge_volume_gal,
+        stillNameToStore || run.still_name,
+        stillCapacity!,
+      ),
     );
-  }
-  if (run.still_name.trim() && stillRunOccupiesEquipment(run.status)) {
-    assertStillAvailableForCharge(run.still_name, id);
   }
   assertDistillationRunCompleteHasCuts(id, run.status);
   const stillageError = stillageSaveError({
@@ -4351,7 +4579,7 @@ export function saveDistillationRun(
   let runId = id ?? 0;
   if (id) {
     runQuery(
-      `UPDATE distillation_runs SET batch_number=?, run_type=?, source_mash_batch_id=?, source_fermenter_equipment_id=?, source_holding_tank_equipment_id=?, dest_holding_tank_equipment_id=?, still_name=?, run_date=?, charge_volume_gal=?, charge_abv=?, proof_spirit_gal=?, proof_spirit_abv=?, proof_water_gal=?, proof_place=?, stillage_volume_gal=?, stillage_discarded=?, stillage_holding_tank_equipment_id=?, status=?, assigned_user_id=?, assigned_user_name=?, notes=? WHERE id=?`,
+      `UPDATE distillation_runs SET batch_number=?, run_type=?, source_mash_batch_id=?, source_fermenter_equipment_id=?, source_holding_tank_equipment_id=?, dest_holding_tank_equipment_id=?, still_name=?, still_pot_equipment_id=?, still_column_equipment_id=?, run_date=?, charge_volume_gal=?, charge_abv=?, proof_spirit_gal=?, proof_spirit_abv=?, proof_water_gal=?, proof_place=?, stillage_volume_gal=?, stillage_discarded=?, stillage_holding_tank_equipment_id=?, status=?, assigned_user_id=?, assigned_user_name=?, notes=? WHERE id=?`,
       [
         run.batch_number,
         runType,
@@ -4359,7 +4587,9 @@ export function saveDistillationRun(
         isFermenterSourcedRun(runType) ? run.source_fermenter_equipment_id : null,
         primarySourceId,
         null,
-        run.still_name,
+        stillNameToStore,
+        stillPotId,
+        stillColumnId,
         runDate,
         run.charge_volume_gal,
         chargeAbvToStore,
@@ -4379,7 +4609,7 @@ export function saveDistillationRun(
     );
   } else {
     runId = insertRow(
-      `INSERT INTO distillation_runs (batch_number, run_type, source_mash_batch_id, source_fermenter_equipment_id, source_holding_tank_equipment_id, dest_holding_tank_equipment_id, still_name, run_date, charge_volume_gal, charge_abv, proof_spirit_gal, proof_spirit_abv, proof_water_gal, proof_place, stillage_volume_gal, stillage_discarded, stillage_holding_tank_equipment_id, status, assigned_user_id, assigned_user_name, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO distillation_runs (batch_number, run_type, source_mash_batch_id, source_fermenter_equipment_id, source_holding_tank_equipment_id, dest_holding_tank_equipment_id, still_name, still_pot_equipment_id, still_column_equipment_id, run_date, charge_volume_gal, charge_abv, proof_spirit_gal, proof_spirit_abv, proof_water_gal, proof_place, stillage_volume_gal, stillage_discarded, stillage_holding_tank_equipment_id, status, assigned_user_id, assigned_user_name, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         run.batch_number,
         runType,
@@ -4387,7 +4617,9 @@ export function saveDistillationRun(
         isFermenterSourcedRun(runType) ? run.source_fermenter_equipment_id : null,
         primarySourceId,
         null,
-        run.still_name,
+        stillNameToStore,
+        stillPotId,
+        stillColumnId,
         runDate,
         run.charge_volume_gal,
         chargeAbvToStore,
@@ -4427,7 +4659,9 @@ export function saveDistillationRun(
       source_holding_tank_equipment_id: previousRun.source_holding_tank_equipment_id ?? run.source_holding_tank_equipment_id,
       dest_holding_tank_equipment_id: previousRun.dest_holding_tank_equipment_id ?? run.dest_holding_tank_equipment_id,
     }, id);
-    if (run.still_name.trim() && run.still_name !== previousRun.still_name) {
+    if (stillPotId && stillPotId !== previousRun.still_pot_equipment_id) {
+      releaseEquipmentWithoutCleaningHold(stillPotId, false);
+    } else if (run.still_name.trim() && run.still_name !== previousRun.still_name) {
       const movedStill = stillEquipmentByName(run.still_name);
       if (movedStill) releaseEquipmentWithoutCleaningHold(movedStill.id, false);
     }
@@ -4438,7 +4672,12 @@ export function saveDistillationRun(
       releaseEquipmentWithoutCleaningHold(run.dest_holding_tank_equipment_id, tankHasLiquid(run.dest_holding_tank_equipment_id));
     }
   }
-  releaseStillAfterRunningRun(previousRun, run.still_name, run.status);
+  releaseStillAfterRunningRun(previousRun, {
+    still_name: stillNameToStore,
+    still_pot_equipment_id: stillPotId,
+    still_column_equipment_id: stillColumnId,
+    status: run.status,
+  });
 
   if (runType === 'gin') {
     if (botanicals) persistRunBotanicals(runId, botanicals);
@@ -4585,7 +4824,12 @@ export function deleteDistillationRun(id: number): void {
     revertFermenterChargeFromRun(run);
   }
   if (run && stillRunOccupiesEquipment(run.status)) {
-    releaseStillAfterRunningRun(run, '', 'complete');
+    releaseStillAfterRunningRun(run, {
+      still_name: '',
+      still_pot_equipment_id: null,
+      still_column_equipment_id: null,
+      status: 'complete',
+    });
   }
   releaseRunBotanicalInventory(id);
   runQuery('DELETE FROM distillation_run_tank_sources WHERE distillation_run_id = ?', [id]);
@@ -6583,15 +6827,17 @@ export function getEquipmentVolumeReport(): EquipmentVolumeReport[] {
     if (eq.equipment_type === 'pot_still' || eq.equipment_type === 'column_still') {
       const running = queryOne<{ batch_number: string; charge_volume_gal: number; charge_abv: number | null; status: string; run_type: string; source_holding_tank_equipment_id: number | null }>(
         `SELECT batch_number, charge_volume_gal, charge_abv, status, run_type, source_holding_tank_equipment_id FROM distillation_runs
-         WHERE still_name = ? AND status = 'running'
+         WHERE status = 'running'
+           AND (still_pot_equipment_id = ? OR still_column_equipment_id = ? OR still_name = ?)
          ORDER BY run_date DESC LIMIT 1`,
-        [eq.name],
+        [eq.id, eq.id, eq.name],
       );
       const planned = running ? null : queryOne<{ batch_number: string; charge_volume_gal: number; charge_abv: number | null; status: string; run_type: string; source_holding_tank_equipment_id: number | null }>(
         `SELECT batch_number, charge_volume_gal, charge_abv, status, run_type, source_holding_tank_equipment_id FROM distillation_runs
-         WHERE still_name = ? AND status = 'planned'
+         WHERE status = 'planned'
+           AND (still_pot_equipment_id = ? OR still_column_equipment_id = ? OR still_name = ?)
          ORDER BY run_date DESC LIMIT 1`,
-        [eq.name],
+        [eq.id, eq.id, eq.name],
       );
       const run = running ?? planned;
       let detail = running

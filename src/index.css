@@ -1736,6 +1736,22 @@ tr.volume-change-kind:hover td {
   border-radius: 4px;
 }
 
+.eq-dual-column-still {
+  width: 72%;
+  height: 80%;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 18%;
+}
+
+.eq-dual-column-still span {
+  flex: 0 0 22%;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--eq-color, var(--accent));
+}
+
 .eq-mash-tun {
   width: 75%;
   height: 55%;

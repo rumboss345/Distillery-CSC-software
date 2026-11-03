@@ -21,8 +21,9 @@ import {
   saveDistillationCut,
   deleteDistillationCut,
   getMashBatches,
-  getPotStills,
+  getDistillationStillTargets,
   getActiveDistillationRunOnStill,
+  getActiveDistillationRunOnPot,
   getFloorEquipment,
   getFermenterWashSourceFermenters,
   getPlannedDistillationForFermenter,
@@ -95,6 +96,7 @@ import {
   stillAlreadyOccupiedMessage,
   stillRunOccupiesEquipment,
 } from '../lib/still-charge';
+import { formatDistillationStillDisplay } from '../lib/still-train';
 import {
   planSpiritChargeForFinishedVolume,
   planSpiritChargeProof,
@@ -132,6 +134,8 @@ const emptyRun = (runType: DistillationRunType = 'wash'): Omit<DistillationRun, 
   source_holding_tank_equipment_id: null,
   dest_holding_tank_equipment_id: null,
   still_name: '',
+  still_pot_equipment_id: null,
+  still_column_equipment_id: null,
   run_date: localIsoDate(),
   charge_volume_gal: 0,
   charge_abv: null,
@@ -183,7 +187,30 @@ export function Distillation() {
   const [plannedScheduleDate, setPlannedScheduleDate] = useState<string | null>(null);
   const planOnly = plannedRecordSkipsEquipmentStatus(runForm.status);
   const equipmentListOptions = planOnly ? { includeUnavailable: true as const } : undefined;
-  const stills = getPotStills(equipmentListOptions);
+  const stillTargets = getDistillationStillTargets(equipmentListOptions);
+  const selectedTrainTarget = runForm.still_pot_equipment_id
+    ? stillTargets.find(
+      (target): target is Extract<(typeof stillTargets)[number], { kind: 'train' }> => (
+        target.kind === 'train' && target.train.pot_equipment_id === runForm.still_pot_equipment_id
+      ),
+    )
+    : undefined;
+  const selectedStill = selectedTrainTarget?.pot
+    ?? stillTargets.find(
+      (target): target is Extract<(typeof stillTargets)[number], { kind: 'single' }> => (
+        target.kind === 'single' && target.equipment.name === runForm.still_name
+      ),
+    )?.equipment;
+  const stillSelectValue = runForm.still_pot_equipment_id
+    ? `train:${runForm.still_pot_equipment_id}`
+    : (() => {
+      const match = stillTargets.find(
+        (target): target is Extract<(typeof stillTargets)[number], { kind: 'single' }> => (
+          target.kind === 'single' && target.equipment.name === runForm.still_name
+        ),
+      );
+      return match ? `single:${match.equipment.id}` : '';
+    })();
   const [selectedRunId, setSelectedRunId] = useState<number | null>(null);
   const [appliedCutsRunId, setAppliedCutsRunId] = useState(0);
   const [adminDeleteRunId, setAdminDeleteRunId] = useState<number | null>(null);
@@ -295,7 +322,6 @@ export function Distillation() {
   const primarySourceTank = chargeableSourceTanks.find((tank) => tank.id === tankPulls[0]?.tankId)
     ?? chargeableSourceTanks.find((tank) => tank.id === runForm.source_holding_tank_equipment_id);
 
-  const selectedStill = stills.find((s) => s.name === runForm.still_name);
   const fermenterSourceOptionLabel = (
     row: (typeof fermenterSourceOptions)[number],
   ) => {
@@ -330,6 +356,8 @@ export function Distillation() {
       ...emptyRun(runType),
       batch_number: runForm.batch_number,
       still_name: runForm.still_name,
+      still_pot_equipment_id: runForm.still_pot_equipment_id ?? null,
+      still_column_equipment_id: runForm.still_column_equipment_id ?? null,
       run_date: runForm.run_date,
       status: runForm.status,
       assigned_user_id: runForm.assigned_user_id,
@@ -445,9 +473,49 @@ export function Distillation() {
     setRunForm({ ...runForm, status, run_date, stillage_volume_gal });
   };
 
-  const handleStillChange = (stillId: number | '') => {
-    const still = stillId ? stills.find((s) => s.id === stillId) : null;
-    setRunForm({ ...runForm, still_name: still?.name ?? '' });
+  const handleStillChange = (value: string) => {
+    if (!value) {
+      setRunForm({
+        ...runForm,
+        still_name: '',
+        still_pot_equipment_id: null,
+        still_column_equipment_id: null,
+      });
+      return;
+    }
+    if (value.startsWith('train:')) {
+      const potId = Number.parseInt(value.slice(6), 10);
+      const target = stillTargets.find(
+        (item): item is Extract<(typeof stillTargets)[number], { kind: 'train' }> => (
+          item.kind === 'train' && item.train.pot_equipment_id === potId
+        ),
+      );
+      setRunForm({
+        ...runForm,
+        still_name: target?.train.label ?? '',
+        still_pot_equipment_id: potId > 0 ? potId : null,
+        still_column_equipment_id: null,
+      });
+      return;
+    }
+    if (value.startsWith('single:')) {
+      const stillId = Number.parseInt(value.slice(7), 10);
+      const target = stillTargets.find(
+        (item): item is Extract<(typeof stillTargets)[number], { kind: 'single' }> => (
+          item.kind === 'single' && item.equipment.id === stillId
+        ),
+      );
+      setRunForm({
+        ...runForm,
+        still_name: target?.equipment.name ?? '',
+        still_pot_equipment_id: null,
+        still_column_equipment_id: null,
+      });
+    }
+  };
+
+  const handleStillColumnChange = (columnEquipmentId: number | null) => {
+    setRunForm({ ...runForm, still_column_equipment_id: columnEquipmentId });
   };
 
   const openNewRun = (runType: DistillationRunType = 'wash', planDate?: string) => {
@@ -647,17 +715,25 @@ export function Distillation() {
       }
       return true;
     }
-    if (stillRunOccupiesEquipment(runForm.status) && runForm.still_name.trim()) {
-      const occupied = getActiveDistillationRunOnStill(runForm.still_name, editRunId);
+    if (stillRunOccupiesEquipment(runForm.status)) {
+      const occupied = runForm.still_pot_equipment_id
+        ? getActiveDistillationRunOnPot(runForm.still_pot_equipment_id, editRunId)
+        : runForm.still_name.trim()
+          ? getActiveDistillationRunOnStill(runForm.still_name, editRunId)
+          : undefined;
       if (occupied) {
         alert(stillAlreadyOccupiedMessage(
-          runForm.still_name,
+          runForm.still_name || selectedStill?.name || 'Still',
           occupied.batch_number,
           occupied.status,
           occupied.charge_volume_gal,
         ));
         return false;
       }
+    }
+    if (selectedTrainTarget && !planOnly && !runForm.still_column_equipment_id) {
+      alert('Choose which column was used on the Carl still.');
+      return false;
     }
     if (chargeExceedsStillCapacity(chargeGal, selectedStill.capacity_gal)) {
       alert(
@@ -1236,7 +1312,7 @@ export function Distillation() {
                           <td><strong>{r.batch_number}</strong></td>
                           <td>{runTypeLabel(runType)}</td>
                           <td>{runSourceSummary(r)}</td>
-                          <td>{r.still_name}</td>
+                          <td>{formatDistillationStillDisplay(r)}</td>
                           <td>{formatDateDisplay(r.run_date)}</td>
                           <td><AssigneeCell name={r.assigned_user_name} /></td>
                           <td className="num">
@@ -1571,31 +1647,77 @@ export function Distillation() {
             )}
 
             <div className="form-group">
-              <label>Pot Still</label>
+              <label>Still</label>
               <select
-                value={stills.find((s) => s.name === runForm.still_name)?.id ?? ''}
-                onChange={(e) => handleStillChange(e.target.value ? parseInt(e.target.value) : '')}
+                value={stillSelectValue}
+                onChange={(e) => handleStillChange(e.target.value)}
               >
                 <option value="">— Select still —</option>
-                {stills.map((s) => {
+                {stillTargets.map((target) => {
+                  if (target.kind === 'train') {
+                    const occupied = planOnly
+                      ? undefined
+                      : getActiveDistillationRunOnPot(target.train.pot_equipment_id, editRunId);
+                    return (
+                      <option
+                        key={`train-${target.train.pot_equipment_id}`}
+                        value={`train:${target.train.pot_equipment_id}`}
+                        disabled={occupied != null}
+                      >
+                        {target.train.label}
+                        {occupied ? ` — in use (${occupied.batch_number})` : ''}
+                        {target.pot.capacity_gal > 0 ? ` (${target.pot.capacity_gal} gal pot)` : ''}
+                      </option>
+                    );
+                  }
                   const occupied = planOnly
                     ? undefined
-                    : getActiveDistillationRunOnStill(s.name, editRunId);
+                    : getActiveDistillationRunOnStill(target.equipment.name, editRunId);
                   return (
-                    <option key={s.id} value={s.id} disabled={occupied != null}>
-                      {s.name}
+                    <option
+                      key={target.equipment.id}
+                      value={`single:${target.equipment.id}`}
+                      disabled={occupied != null}
+                    >
+                      {target.equipment.name}
                       {occupied ? ` — in use (${occupied.batch_number})` : ''}
-                      {s.capacity_gal > 0 ? ` (${s.capacity_gal} gal cap)` : ''}
+                      {target.equipment.capacity_gal > 0 ? ` (${target.equipment.capacity_gal} gal cap)` : ''}
                     </option>
                   );
                 })}
               </select>
-              {!planOnly && runForm.still_name && getActiveDistillationRunOnStill(runForm.still_name, editRunId) && (
+              {!planOnly && runForm.still_pot_equipment_id && getActiveDistillationRunOnPot(runForm.still_pot_equipment_id, editRunId) && (
+                <p className="field-hint" style={{ color: 'var(--danger, #dc2626)' }}>
+                  This still already has an active run. Complete it or pick another still.
+                </p>
+              )}
+              {!planOnly && !runForm.still_pot_equipment_id && runForm.still_name && getActiveDistillationRunOnStill(runForm.still_name, editRunId) && (
                 <p className="field-hint" style={{ color: 'var(--danger, #dc2626)' }}>
                   This still already has an active run. Complete it or pick another still.
                 </p>
               )}
             </div>
+            {selectedTrainTarget && (
+              <div className="form-group" data-testid="still-train-column-picker">
+                <label>Column used</label>
+                <div className="radio-row">
+                  {selectedTrainTarget.columns.map((column) => (
+                    <label key={column.id} className="radio-label">
+                      <input
+                        type="radio"
+                        name="still-column"
+                        checked={runForm.still_column_equipment_id === column.id}
+                        onChange={() => handleStillColumnChange(column.id)}
+                      />
+                      {column.label}
+                    </label>
+                  ))}
+                </div>
+                <p className="field-hint">
+                  The shared pot and the column you select are marked for cleaning when this run leaves Running.
+                </p>
+              </div>
+            )}
             <div className="form-group">
               <label>Run Date</label>
               <DatePicker

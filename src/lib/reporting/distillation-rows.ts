@@ -5,6 +5,7 @@ import { tankOriginDetail } from '../tank-menu-label';
 import { ALL_RUN_TYPES, runTypeLabel } from '../distillation-run-types';
 import type { DistillationRunType } from '../../types';
 import { laaGalFromVolumeAbv, roundAbv, roundVolume } from './alcohol-units';
+import { formatDistillationStillDisplay } from '../still-train';
 import { eventInReportRange, type ReportDateRange } from './period';
 
 export interface DistillationReportRow {
@@ -44,6 +45,8 @@ export function buildDistillationReportRows(range: ReportDateRange): Distillatio
     batch_number: string;
     run_date: string;
     still_name: string;
+    still_pot_equipment_id: number | null;
+    still_column_equipment_id: number | null;
     run_type: string;
     status: string;
     charge_volume_gal: number;
@@ -67,7 +70,8 @@ export function buildDistillationReportRows(range: ReportDateRange): Distillatio
     start_brix: number | null;
     final_brix: number | null;
   }>(`
-    SELECT r.id, r.batch_number, r.run_date, r.still_name, r.run_type, r.status,
+    SELECT r.id, r.batch_number, r.run_date, r.still_name, r.still_pot_equipment_id, r.still_column_equipment_id,
+           r.run_type, r.status,
            r.charge_volume_gal, r.charge_abv, r.proof_spirit_gal, r.proof_spirit_abv, r.proof_water_gal,
            r.alcohol_charged_gal, r.alcohol_collected_gal, r.alcohol_loss_gal, r.alcohol_charge_basis,
            r.stillage_volume_gal,
@@ -215,7 +219,7 @@ export function buildDistillationReportRows(range: ReportDateRange): Distillatio
       run_id: r.id,
       batch_number: r.batch_number,
       run_date: r.run_date,
-      still_name: r.still_name,
+      still_name: formatDistillationStillDisplay(r),
       run_type_key: r.run_type,
       run_type: runTypeLabel(r.run_type),
       status: r.status,

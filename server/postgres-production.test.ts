@@ -832,6 +832,69 @@ describe('PostgreSQL production modules', () => {
     expect(reportLoss()).toBeCloseTo(4, 3);
   });
 
+  it('marks Carl still pot and the used column for cleaning when a train run completes', async () => {
+    const {
+      CARL_COLUMN_1_NAME,
+      CARL_COLUMN_2_NAME,
+      CARL_LEGACY_STILL_NAME,
+      CARL_POT_NAME,
+      getStillTrains,
+    } = await import('../src/lib/still-train');
+    const { migrateStillTrains } = await import('../src/db/database');
+    await saveEquipment(CARL_LEGACY_STILL_NAME, 'column_still', 200);
+    await saveEquipment(CARL_POT_NAME, 'pot_still', 200);
+    await saveEquipment(CARL_COLUMN_1_NAME, 'column_still', 200);
+    await saveEquipment(CARL_COLUMN_2_NAME, 'column_still', 200);
+    const train = engine.readProduction(() => {
+      migrateStillTrains();
+      return getStillTrains().find((row) => row.label === 'Carl');
+    });
+    expect(train).toBeDefined();
+    await saveEquipment('Carl Cuts Vessel', 'collection_vessel', 50);
+    const vesselId = engine.readProduction((api) => (
+      api.getFloorEquipment().find((item) => item.name === 'Carl Cuts Vessel')!.id
+    ));
+    const header = {
+      batch_number: 'D-CARL-TRAIN',
+      run_type: 'wash',
+      source_mash_batch_id: null,
+      source_fermenter_equipment_id: null,
+      source_holding_tank_equipment_id: null,
+      dest_holding_tank_equipment_id: null,
+      still_name: 'Carl',
+      still_pot_equipment_id: train!.pot_equipment_id,
+      still_column_equipment_id: train!.column1_equipment_id,
+      run_date: '2026-11-03',
+      charge_volume_gal: 40,
+      charge_abv: 10,
+      assigned_user_id: null,
+      assigned_user_name: '',
+      notes: '',
+      stillage_volume_gal: 30,
+      stillage_discarded: 1,
+      stillage_holding_tank_equipment_id: null,
+    };
+    const saved = await save('saveDistillationRun', [{ ...header, status: 'running' }, undefined, undefined, undefined]);
+    const runId = Number(saved.result);
+    await save('saveDistillationCut', [{
+      distillation_run_id: runId,
+      cut_type: 'hearts',
+      holding_tank_equipment_id: vesselId,
+      start_time: '2026-11-03T10:00:00',
+      end_time: '2026-11-03T12:00:00',
+      volume_gal: 5,
+      abv: 60,
+      notes: '',
+    }]);
+    await save('saveDistillationRun', [{ ...header, status: 'complete' }, runId, undefined, undefined]);
+    const status = (id: number) => engine.readProduction((api) => (
+      api.getFloorEquipment().find((item) => item.id === id)!.status
+    ));
+    expect(status(train!.pot_equipment_id)).toBe('cleaning');
+    expect(status(train!.column1_equipment_id)).toBe('cleaning');
+    expect(status(train!.column2_equipment_id)).toBe('empty');
+  });
+
   it('lets only owners change cuts on completed distillation runs', async () => {
     await saveEquipment('Owner Cuts Still', 'pot_still', 500);
     await saveEquipment('Owner Cuts Vessel', 'collection_vessel', 50);

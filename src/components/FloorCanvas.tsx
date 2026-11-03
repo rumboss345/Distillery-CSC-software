@@ -164,6 +164,11 @@ export function FloorCanvas({
                 )}
                 {icon === 'pot_still' && <div className="eq-shape eq-pot-still" />}
                 {icon === 'column_still' && <div className="eq-shape eq-column-still" />}
+                {icon === 'dual_column_still' && (
+                  <div className="eq-shape eq-dual-column-still" aria-hidden>
+                    <span /><span />
+                  </div>
+                )}
                 {icon === 'mash_tun' && <div className="eq-shape eq-mash-tun" />}
                 {icon === 'pump' && <div className="eq-shape eq-pump" />}
                 {icon === 'hose' && <div className="eq-shape eq-hose" />}

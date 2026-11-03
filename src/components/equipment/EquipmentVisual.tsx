@@ -64,6 +64,7 @@ export function EquipmentVisual(props: EquipmentVisualProps) {
       return <FermenterVisual {...view} />;
     case 'pot_still':
     case 'column_still':
+    case 'dual_column_still':
       return <StillVisual {...view} />;
     case 'mash_tun':
       return <MashTunVisual {...view} />;
