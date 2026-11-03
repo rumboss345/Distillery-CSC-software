@@ -21,6 +21,7 @@ import {
 } from '../lib/permissions';
 import { isAdminRole } from '../lib/roles';
 import { ensureSharedDatabase } from '../db/database';
+import { setMutationActorRole } from '../db/mutation-actor';
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -58,6 +59,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     refreshUser().finally(() => setLoading(false));
   }, [refreshUser]);
+
+  useEffect(() => {
+    setMutationActorRole(user?.role ?? null);
+  }, [user?.role]);
 
   const login = useCallback(async (email: string, password: string) => {
     const { token, user: loggedInUser } = await apiLogin(email, password);

@@ -4,6 +4,7 @@ import { AssigneeCell, AssigneeSelect } from '../components/AssigneeSelect';
 import { DatePicker, DateTimePicker } from '../components/DatePicker';
 import { useAuth } from '../context/AuthContext';
 import { limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
+import { isOwnerRole } from '../lib/roles';
 import { defaultAssignee } from '../lib/assignee';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
 import { formatDateDisplay, formatRecordedAt } from '../lib/date-input';
@@ -936,6 +937,8 @@ export function Distillation() {
 
   const selectedRun = runs.find((r) => r.id === selectedRunId);
   const selectedRunIsComplete = selectedRun?.status === 'complete';
+  const canEditCompletedRunCuts = isOwnerRole(user?.role);
+  const cutsModalEditable = !selectedRunIsComplete || canEditCompletedRunCuts;
   const selectedStillageLabel = selectedRun
     ? stillageSummary({
       status: selectedRun.status,
@@ -965,7 +968,7 @@ export function Distillation() {
   };
 
   const openAddCutForm = () => {
-    if (selectedRunIsComplete) {
+    if (selectedRunIsComplete && !canEditCompletedRunCuts) {
       alert('This run is complete — cuts cannot be added.');
       return;
     }
@@ -986,7 +989,7 @@ export function Distillation() {
   };
 
   const openEditCutForm = (cut: DistillationCutView) => {
-    if (selectedRunIsComplete) {
+    if (selectedRunIsComplete && !canEditCompletedRunCuts) {
       alert('This run is complete — cuts cannot be edited.');
       return;
     }
@@ -1060,7 +1063,7 @@ export function Distillation() {
 
   const handleSaveCut = () => {
     if (!selectedRunId) return;
-    if (selectedRunIsComplete) {
+    if (selectedRunIsComplete && !canEditCompletedRunCuts) {
       alert('This run is complete — cuts cannot be changed.');
       return;
     }
@@ -1136,7 +1139,7 @@ export function Distillation() {
   const tankOptionLabel = (tank: { id: number; name: string }) => tankDropdownLabel(tank.name, tank.id);
 
   const handleDeleteCut = (id: number) => {
-    if (selectedRunIsComplete) {
+    if (selectedRunIsComplete && !canEditCompletedRunCuts) {
       alert('This run is complete — cuts are read-only.');
       return;
     }
@@ -1257,7 +1260,9 @@ export function Distillation() {
                           <td className="td-actions">
                             {distillationRunShowsCuts(r.status) && (
                               <button className="btn btn-sm btn-secondary" onClick={() => setSelectedRunId(r.id)}>
-                                {r.status === 'complete' ? 'View cuts' : 'Cuts'}
+                                {r.status === 'complete'
+                                  ? (canEditCompletedRunCuts ? 'Edit cuts' : 'View cuts')
+                                  : 'Cuts'}
                               </button>
                             )}
                             <button className="btn btn-sm btn-ghost" onClick={() => openEditRun(r)}>Edit</button>
@@ -1284,7 +1289,7 @@ export function Distillation() {
       {selectedRunId && distillationRunShowsCuts(selectedRun?.status) && (
         <Modal
           wide
-          title={`${selectedRunIsComplete ? 'View cuts' : 'Cuts'} — ${runs.find((r) => r.id === selectedRunId)?.batch_number ?? ''}${selectedRun ? ` · ${formatDateDisplay(selectedRun.run_date)}` : ''}`}
+          title={`${selectedRunIsComplete && !canEditCompletedRunCuts ? 'View cuts' : 'Cuts'} — ${runs.find((r) => r.id === selectedRunId)?.batch_number ?? ''}${selectedRun ? ` · ${formatDateDisplay(selectedRun.run_date)}` : ''}`}
           onClose={() => {
             setSelectedRunId(null);
             if (searchParams.has('cutsRun')) {
@@ -1309,10 +1314,15 @@ export function Distillation() {
             {selectedStillageLabel && (
               <span className="text-muted">{selectedStillageLabel}</span>
             )}
-            {selectedRunIsComplete ? (
-              <span className="text-muted">This run is complete — cuts are read-only.</span>
+            {cutsModalEditable ? (
+              <>
+                {selectedRunIsComplete && (
+                  <span className="text-muted">Owner: you may edit cuts on this completed run.</span>
+                )}
+                <button type="button" className="btn btn-primary btn-sm" onClick={openAddCutForm}>+ Add Cut</button>
+              </>
             ) : (
-              <button type="button" className="btn btn-primary btn-sm" onClick={openAddCutForm}>+ Add Cut</button>
+              <span className="text-muted">This run is complete — cuts are read-only.</span>
             )}
           </div>
 
@@ -1326,7 +1336,7 @@ export function Distillation() {
                 <thead>
                   <tr>
                     <th>Cut</th><th>Tank</th><th>Start</th><th>End</th><th className="num">Volume</th><th className="num">ABV</th><th className="num">GPA</th><th>Notes</th>
-                    {!selectedRunIsComplete && <th></th>}
+                    {cutsModalEditable && <th></th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -1340,7 +1350,7 @@ export function Distillation() {
                       <td className="num">{c.abv}%</td>
                       <td className="num">{(c.volume_gal * c.abv / 100).toFixed(2)} gal</td>
                       <td>{c.notes}</td>
-                      {!selectedRunIsComplete && (
+                      {cutsModalEditable && (
                         <td className="td-actions">
                           <button type="button" className="btn btn-sm btn-ghost" onClick={() => openEditCutForm(c)}>
                             Edit

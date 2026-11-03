@@ -6,6 +6,7 @@ import initSqlJs, { type Database as SqlDatabase } from 'sql.js';
 import { mutationTargetId, PRODUCTION_MUTATIONS } from '../src/db/production-catalog.ts';
 import { PG_BACKUP_FORMAT, PG_BACKUP_VERSION, pgBackupError, type PgBackupFile } from '../src/lib/pg-backup.ts';
 import { SCHEMA } from '../src/db/schema.ts';
+import { setMutationActorRole } from '../src/db/mutation-actor.ts';
 import { bindSqlHandle, type SqlHandle } from '../src/db/sql-session.ts';
 import * as queries from '../src/db/queries.ts';
 import {
@@ -35,6 +36,7 @@ export class ProductionConflict extends Error {
 interface Actor {
   id: number;
   email: string;
+  role?: string;
 }
 
 let SQL: Awaited<ReturnType<typeof initSqlJs>> | null = null;
@@ -296,7 +298,13 @@ export async function runProductionMutation(
       }
     }
     snapshotBefore = memory!.export();
-    const result = callMutation(name, args);
+    setMutationActorRole(actor.role ?? null);
+    let result: unknown;
+    try {
+      result = callMutation(name, args);
+    } finally {
+      setMutationActorRole(null);
+    }
     const nextRevision = memoryRevision + 1;
     await persistToPostgres(client, nextRevision, hashesBefore);
     const summary = auditSummary(name, targetId);
