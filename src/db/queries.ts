@@ -3156,7 +3156,8 @@ export function syncBottlingEquipmentStatuses(): void {
   )) {
     ids.add(row.floor_equipment_id);
   }
-  for (const eq of getFloorEquipment()) {
+  // Query directly — getFloorEquipment() runs syncFermenterAndStillStatuses(), which calls this again.
+  for (const eq of queryAll<FloorEquipment>('SELECT * FROM floor_equipment')) {
     if (isBottlingLineEquipment(eq)) ids.add(eq.id);
   }
   for (const equipmentId of ids) {
