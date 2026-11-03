@@ -85,7 +85,7 @@ export function buildProcessEquipmentContextMenu(
     });
   }
   const bottlingLine = isBottlingLineEquipment({
-    icon: source.icon ?? '',
+    icon: source.icon ?? null,
     equipment_type: source.equipment_type,
   });
   const bottling = bottlingLine
