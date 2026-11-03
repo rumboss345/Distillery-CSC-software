@@ -1,3 +1,6 @@
+import { getMutationActorRole } from '../db/mutation-actor';
+import { isOwnerRole } from './roles';
+
 /** A planned run does not occupy the still. Only a running run does. */
 export function stillRunOccupiesEquipment(status: string): boolean {
   return status === 'running';
@@ -16,9 +19,14 @@ export function runConsumesSource(status: string): boolean {
   return status === 'running' || status === 'complete';
 }
 
-/** Cuts can be recorded only while the run is distilling. A planned run has no cuts. */
-export function distillationRunAllowsCutChanges(status: string | null | undefined): boolean {
-  return status === 'running';
+/** Cuts can be recorded while the run is distilling. Owners may also edit cuts on completed runs. */
+export function distillationRunAllowsCutChanges(
+  status: string | null | undefined,
+  actorRole: string | null | undefined = getMutationActorRole(),
+): boolean {
+  if (status === 'running') return true;
+  if (status === 'complete' && isOwnerRole(actorRole)) return true;
+  return false;
 }
 
 /** The cuts list opens for a running run and stays available to view after the run is complete. */
