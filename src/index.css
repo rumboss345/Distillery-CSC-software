@@ -324,6 +324,39 @@ body.nav-open {
   border-bottom-color: var(--accent);
 }
 
+.owner-kpi-panel {
+  margin-bottom: 1.25rem;
+  padding: 1.25rem;
+}
+
+.owner-kpi-header {
+  margin-bottom: 1rem;
+}
+
+.owner-kpi-subheading {
+  margin: 1.25rem 0 0.75rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.owner-kpi-grid {
+  margin-bottom: 0;
+}
+
+.owner-kpi-stat-link {
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.owner-kpi-stat-link:hover {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border-subtle));
+  box-shadow: 0 2px 8px rgb(0 0 0 / 6%);
+}
+
 .report-section-header {
   display: flex;
   flex-wrap: wrap;
