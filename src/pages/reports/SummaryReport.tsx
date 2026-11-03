@@ -34,8 +34,6 @@ import { useReportContext } from './report-context';
 import { ProductivityChart } from './ProductivityChart';
 import { CollapsibleSection } from '../../components/CollapsibleSection';
 import { useMemo } from 'react';
-import { Link } from 'react-router-dom';
-import { buildProductionEfficiency } from '../../lib/reporting/production-efficiency';
 
 export function SummaryReport() {
   const { range, employee } = useReportContext();
@@ -140,27 +138,6 @@ export function SummaryReport() {
     [range, employee],
   );
 
-  const productionEfficiency = useMemo(
-    () => buildProductionEfficiency(range, employee),
-    [range, employee],
-  );
-
-  const efficiencySummary = productionEfficiency.still_by_run_type.length > 0
-    || productionEfficiency.wash_batches_with_yield > 0
-    || productionEfficiency.avg_ferment_days != null
-    ? [
-      productionEfficiency.hearts_recovery_pct != null
-        ? `${productionEfficiency.hearts_recovery_pct.toFixed(1)}% hearts recovery`
-        : null,
-      productionEfficiency.avg_wash_yield_pct != null
-        ? `${productionEfficiency.avg_wash_yield_pct.toFixed(1)}% avg wash yield`
-        : null,
-      productionEfficiency.avg_ferment_days != null
-        ? `${productionEfficiency.avg_ferment_days}d avg ferment`
-        : null,
-    ].filter(Boolean).join(' · ')
-    : 'No efficiency data';
-
   return (
     <>
       {ownerKpis && <OwnerKpiPanel kpis={ownerKpis} periodLabel={range.label} />}
@@ -210,101 +187,6 @@ export function SummaryReport() {
       </div>
 
       <ProductivityChart />
-
-      <CollapsibleSection
-        className="section"
-        headingClassName="section-title"
-        title="Production efficiency"
-        summary={efficiencySummary}
-        storageKey="report-summary-production-efficiency"
-      >
-        <p className="report-section-desc">
-          How much alcohol you recover from the still and from sugar in this period. Hearts recovery is hearts LAA divided by alcohol charged on completed runs. Wash yield is GPA per pound of sugar on batches tied to distillation in this period.{' '}
-          <Link to="/reports/distillation">Open distillation report</Link> for run-by-run detail.
-        </p>
-        <div className="card-grid" style={{ marginBottom: '1rem' }}>
-          <div className="stat-card" data-testid="production-efficiency-hearts-recovery">
-            <div className="label">Hearts recovery</div>
-            <div className="value accent">
-              {productionEfficiency.hearts_recovery_pct != null
-                ? `${productionEfficiency.hearts_recovery_pct.toFixed(1)}%`
-                : '—'}
-            </div>
-            <div className="sub">
-              {productionEfficiency.completed_still_runs > 0
-                ? `${productionEfficiency.completed_still_runs} completed run${productionEfficiency.completed_still_runs === 1 ? '' : 's'}`
-                : 'No completed still runs'}
-            </div>
-          </div>
-          <div className="stat-card" data-testid="production-efficiency-net-balance">
-            <div className="label">Net alcohol balance</div>
-            <div className="value">{productionEfficiency.net_alcohol_balance_label}</div>
-            <div className="sub">Loss or gain when runs were marked complete</div>
-          </div>
-          <div className="stat-card" data-testid="production-efficiency-wash-yield">
-            <div className="label">Avg wash yield</div>
-            <div className="value">
-              {productionEfficiency.avg_wash_yield_pct != null
-                ? `${productionEfficiency.avg_wash_yield_pct.toFixed(1)}%`
-                : '—'}
-            </div>
-            <div className="sub">
-              {productionEfficiency.wash_batches_with_yield > 0
-                ? `${productionEfficiency.wash_batches_with_yield} batch${productionEfficiency.wash_batches_with_yield === 1 ? '' : 'es'} with yield`
-                : 'Record hearts cuts linked to washes'}
-            </div>
-          </div>
-          <div className="stat-card" data-testid="production-efficiency-ferment-days">
-            <div className="label">Avg ferment time</div>
-            <div className="value">
-              {productionEfficiency.avg_ferment_days != null
-                ? `${productionEfficiency.avg_ferment_days} days`
-                : '—'}
-            </div>
-            <div className="sub">Finished fermentations in period</div>
-          </div>
-        </div>
-        {productionEfficiency.still_by_run_type.length === 0 ? (
-          <div className="empty-state">
-            <p>
-              {employee
-                ? `No completed distillation runs for ${employee.label} in this period.`
-                : 'No completed distillation runs in this period.'}
-            </p>
-          </div>
-        ) : (
-          <div className="table-wrap">
-            <table data-testid="production-efficiency-still-table">
-              <thead>
-                <tr>
-                  <th>Run type</th>
-                  <th className="num">Runs</th>
-                  <th className="num">Hearts recovery</th>
-                  <th className="num">Hearts LAA</th>
-                  <th className="num">Alcohol charged</th>
-                  <th className="num">Net loss or gain</th>
-                </tr>
-              </thead>
-              <tbody>
-                {productionEfficiency.still_by_run_type.map((row) => (
-                  <tr key={row.run_type_key}>
-                    <td><strong>{row.run_type_label}</strong></td>
-                    <td className="num">{row.completed_runs}</td>
-                    <td className="num">
-                      {row.avg_hearts_recovery_pct != null ? `${row.avg_hearts_recovery_pct.toFixed(1)}%` : '—'}
-                    </td>
-                    <td className="num">{row.total_hearts_laa_gal.toFixed(2)} gal</td>
-                    <td className="num">
-                      {row.total_alcohol_charged_gal > 0 ? `${row.total_alcohol_charged_gal.toFixed(2)} gal` : '—'}
-                    </td>
-                    <td className="num">{row.net_loss_gain_label}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </CollapsibleSection>
 
       <CollapsibleSection
         className="section"
