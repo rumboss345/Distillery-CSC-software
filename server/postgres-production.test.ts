@@ -12,7 +12,7 @@ import { mutationSnapshot } from '../src/db/production-client';
 
 const LOCAL_URL = 'postgres://distillery:distillery@127.0.0.1:5432/distillery_pg_test';
 const SAMPLE_BATCHES = ['M-2025-001', 'M-2025-002', 'D-2025-001', 'BT-2024-012'];
-const actor = { id: 1, email: 'admin@example.com' };
+const actor = { id: 1, email: 'admin@example.com', role: 'admin' };
 
 describe('PostgreSQL connection rules', () => {
   it('uses SSL only for external Render URLs', () => {
@@ -830,6 +830,86 @@ describe('PostgreSQL production modules', () => {
     }, runId, undefined, undefined]);
     expect(storedLoss()).toBeCloseTo(4, 3);
     expect(reportLoss()).toBeCloseTo(4, 3);
+  });
+
+  it('lets only owners change cuts on completed distillation runs', async () => {
+    await saveEquipment('Owner Cuts Still', 'pot_still', 500);
+    await saveEquipment('Owner Cuts Vessel', 'collection_vessel', 50);
+    const ownerUser = await auth.createUserByAdmin(
+      'owner-cuts@test.com',
+      'Owner-Cuts-1',
+      'Owner Cuts',
+      [],
+      [],
+      'owner',
+      'owner',
+    );
+    const ownerActor = { id: ownerUser.id, email: ownerUser.email, role: 'owner' };
+    const adminActor = { ...actor, role: 'admin' as const };
+    const vesselId = engine.readProduction((api) => (
+      api.getFloorEquipment().find((item) => item.name === 'Owner Cuts Vessel')!.id
+    ));
+    const header = {
+      batch_number: 'D-OWNER-CUTS',
+      run_type: 'wash',
+      source_mash_batch_id: null,
+      source_fermenter_equipment_id: null,
+      source_holding_tank_equipment_id: null,
+      dest_holding_tank_equipment_id: null,
+      still_name: 'Owner Cuts Still',
+      run_date: '2026-11-03',
+      charge_volume_gal: 50,
+      charge_abv: 10,
+      assigned_user_id: null,
+      assigned_user_name: '',
+      notes: '',
+      stillage_volume_gal: 40,
+      stillage_discarded: 1,
+      stillage_holding_tank_equipment_id: null,
+    };
+    const saved = await save('saveDistillationRun', [{ ...header, status: 'running' }, undefined, undefined, undefined]);
+    const runId = Number(saved.result);
+    const cutSaved = await save('saveDistillationCut', [{
+      distillation_run_id: runId,
+      cut_type: 'hearts',
+      holding_tank_equipment_id: vesselId,
+      start_time: '2026-11-03T10:00:00',
+      end_time: '2026-11-03T12:00:00',
+      volume_gal: 5,
+      abv: 60,
+      notes: '',
+    }]);
+    const cutId = engine.readProduction((api) => api.getDistillationCuts(runId)[0]?.id);
+    expect(cutId).toBeGreaterThan(0);
+    await save('saveDistillationRun', [{ ...header, status: 'complete' }, runId, undefined, undefined]);
+
+    await expect(
+      engine.runProductionMutation('saveDistillationCut', [{
+        distillation_run_id: runId,
+        cut_type: 'hearts',
+        holding_tank_equipment_id: vesselId,
+        start_time: '2026-11-03T10:00:00',
+        end_time: '2026-11-03T12:00:00',
+        volume_gal: 6,
+        abv: 60,
+        notes: 'admin try',
+      }, cutId], adminActor, engine.productionRevision()),
+    ).rejects.toThrow(/owner/i);
+
+    await engine.runProductionMutation('saveDistillationCut', [{
+      distillation_run_id: runId,
+      cut_type: 'hearts',
+      holding_tank_equipment_id: vesselId,
+      start_time: '2026-11-03T10:00:00',
+      end_time: '2026-11-03T12:00:00',
+      volume_gal: 7,
+      abv: 60,
+      notes: 'owner edit',
+    }, cutId], ownerActor, engine.productionRevision());
+
+    const volume = engine.readProduction((api) => api.getDistillationCuts(runId)[0]?.volume_gal);
+    expect(volume).toBeCloseTo(7, 3);
+    void cutSaved;
   });
 
   it('builds the fermentation report without saving anything', async () => {

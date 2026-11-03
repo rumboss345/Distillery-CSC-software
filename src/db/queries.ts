@@ -4618,7 +4618,7 @@ export function saveDistillationCut(cut: Omit<DistillationCut, 'id'>, id?: numbe
   if (run && !distillationRunAllowsCutChanges(run.status)) {
     throw new Error(
       run.status === 'complete'
-        ? 'Cannot add or change cuts on a completed distillation run.'
+        ? 'Cannot add or change cuts on a completed distillation run. Only an owner may edit cuts after a run is complete.'
         : 'Cuts cannot be recorded while this distillation is still planned.',
     );
   }
@@ -4710,7 +4710,7 @@ export function deleteDistillationCut(id: number): void {
     if (run && !distillationRunAllowsCutChanges(run.status)) {
       throw new Error(
         run.status === 'complete'
-          ? 'Cannot add or change cuts on a completed distillation run.'
+          ? 'Cannot add or change cuts on a completed distillation run. Only an owner may edit cuts after a run is complete.'
           : 'Cuts cannot be recorded while this distillation is still planned.',
       );
     }

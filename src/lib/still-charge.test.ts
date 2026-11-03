@@ -42,6 +42,8 @@ describe('still-charge', () => {
     expect(distillationRunAllowsCutChanges('running')).toBe(true);
     expect(distillationRunShowsCuts('running')).toBe(true);
     expect(distillationRunAllowsCutChanges('complete')).toBe(false);
+    expect(distillationRunAllowsCutChanges('complete', 'owner')).toBe(true);
+    expect(distillationRunAllowsCutChanges('complete', 'admin')).toBe(false);
     expect(distillationRunShowsCuts('complete')).toBe(true);
   });
 
