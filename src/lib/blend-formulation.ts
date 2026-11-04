@@ -17,7 +17,7 @@ import {
   type ProofingRequest,
 } from './calc-engine/proofing';
 import { formulationSpiritWeightLb } from './formulation-spirit';
-import { designFormulation, gaugePouredBlend, type FormulationComponent } from './formulation-engine';
+import { analyzeFormulation, gaugePouredBlend, type FormulationComponent } from './formulation-engine';
 import type { BlendIngredientType } from '../types';
 
 export interface SpiritSourceInput {
@@ -381,35 +381,74 @@ export function solveWaterForTargetAbv(
       },
     };
   }
-  const pureAlcohol = spirits.reduce((s, sp) => s + Math.max(0, sp.volumeGal) * Math.max(0, sp.abv) / 100, 0)
-    + nonWater.reduce(
-      (s, a) => s + ingredientPureAlcoholGal({ ...a, ingredient_type: a.ingredientType }),
-      0,
-    );
-  if (pureAlcohol <= 0) return null;
+  const formulatedAbvWithWater = (waterGal: number): number | null => {
+    const withWater: AdditiveInput[] = [...nonWater];
+    if (waterGal > 0) {
+      withWater.push({
+        ingredientType: 'water',
+        name: 'Proofing water (calculated)',
+        amount: waterGal,
+        unit: 'gal',
+      });
+    }
+    const analyzed = analyzeFormulation(toFormulationComponents(spirits, withWater));
+    if (!analyzed.ok || !(analyzed.abv > 0)) return null;
+    return analyzed.abv;
+  };
 
-  const targetVolumeGal = pureAlcohol / (targetAbv / 100);
-  const designed = designFormulation({
-    targetVolumeGal,
-    targetAbv,
-    fixed: toFormulationComponents(spirits, nonWater),
-  });
-  if (!designed.ok || designed.spiritGal > 0.05) return null;
+  const withoutWaterAbv = formulatedAbvWithWater(0);
+  if (withoutWaterAbv == null) return null;
+  if (withoutWaterAbv <= targetAbv + 0.001) {
+    if (Math.abs(withoutWaterAbv - targetAbv) <= 0.3) {
+      const result = computeTheoreticalBlend(spirits, nonWater, targetAbv);
+      return { waterGal: 0, result: { ...result, abv: round2(withoutWaterAbv) } };
+    }
+    return null;
+  }
 
-  const waterGal = round3(Math.max(0, designed.waterGal));
+  let lo = 0;
+  let hi = Math.max(
+    100,
+    spirits.reduce((sum, spirit) => sum + Math.max(0, spirit.volumeGal), 0) * 20,
+  );
+  for (let expand = 0; expand < 12; expand += 1) {
+    const abv = formulatedAbvWithWater(hi);
+    if (abv != null && abv <= targetAbv) break;
+    hi *= 2;
+    if (hi > 1_000_000) return null;
+  }
+  if ((formulatedAbvWithWater(hi) ?? targetAbv + 1) > targetAbv) return null;
+
+  for (let step = 0; step < 50; step += 1) {
+    const mid = (lo + hi) / 2;
+    const abv = formulatedAbvWithWater(mid);
+    if (abv == null) return null;
+    if (abv > targetAbv) lo = mid;
+    else hi = mid;
+  }
+
+  const waterGal = round3(hi);
   const waterAdditive: AdditiveInput = {
     ingredientType: 'water',
     name: 'Proofing water (calculated)',
     amount: waterGal,
     unit: 'gal',
   };
-  const result = computeTheoreticalBlend(spirits, [...nonWater, ...(waterGal > 0 ? [waterAdditive] : [])]);
+  const result = computeTheoreticalBlend(
+    spirits,
+    [...nonWater, ...(waterGal > 0 ? [waterAdditive] : [])],
+    targetAbv,
+  );
+  const verified = analyzeFormulation(toFormulationComponents(
+    spirits,
+    [...nonWater, ...(waterGal > 0 ? [waterAdditive] : [])],
+  ));
   return {
     waterGal,
     result: {
       ...result,
-      volumeGal: round3(targetVolumeGal),
-      abv: round2(targetAbv),
+      volumeGal: verified.ok ? round3(verified.volumeGal) : result.volumeGal,
+      abv: verified.ok ? round2(verified.abv) : round2(targetAbv),
     },
   };
 }

@@ -87,6 +87,24 @@ describe('blend-abv-confirm', () => {
     expect(abvMatchesTarget(after.abv ?? 0, 2)).toBe(true);
   });
 
+  it('adjusts proofing water when sugar, syrup, and flavoring are in the batch', () => {
+    const spirits = [{ spirit_label: 'Rum', volume_gal: 88.29, abv: 93 }];
+    const additives = [
+      { ingredient_type: 'sugar' as const, name: 'Sugar', amount: 406, unit: 'lbs', notes: '' },
+      { ingredient_type: 'syrup' as const, name: 'Simple syrup', amount: 5, unit: 'gal', notes: '' },
+      { ingredient_type: 'flavoring' as const, name: 'Vanilla', amount: 2, unit: 'l', notes: '', abv: null },
+    ];
+    const solved = proofingWaterGalForTarget(spirits, additives, 35);
+    expect('waterGal' in solved).toBe(true);
+    if (!('waterGal' in solved)) return;
+    expect(solved.waterGal).toBeGreaterThan(0);
+    const after = computeRecipeTheoreticalAbv(spirits, [
+      ...additives,
+      { ingredient_type: 'water', name: 'Proofing water', amount: solved.waterGal, unit: 'gal', notes: '' },
+    ]);
+    expect(abvMatchesTarget(after.abv ?? 0, 35)).toBe(true);
+  });
+
   it('agrees with a blend the designer solved to a target', () => {
     const designed = designFormulation({
       targetVolumeGal: 0.2,
