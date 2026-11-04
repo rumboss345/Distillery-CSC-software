@@ -1,5 +1,5 @@
-import { convertIngredientAmount, ingredientVolumeGal } from './blending';
-import { solveWaterForTargetAbv } from './blend-formulation';
+import { convertIngredientAmount, ingredientVolumeGal, spiritVolumeGalFromAmount } from './blending';
+import { solveWaterForTargetAbv, type SpiritSourceInput } from './blend-formulation';
 import { analyzeFormulation, type FormulationComponent } from './formulation-engine';
 import type { BlendIngredientInput, BlendIngredientType, BlendRecipeSpiritSourceInput } from '../types';
 
@@ -21,6 +21,29 @@ export function proofGapDescription(calculatedAbv: number, targetAbv: number): s
   }
   const direction = delta > 0 ? 'above' : 'below';
   return `calculated is ${Math.abs(delta).toFixed(1)}% ${direction} the target`;
+}
+
+/** Spirit volume for proofing math — matches analyze (entered qty) and Table 6 solve paths. */
+export function resolveSpiritSourceVolumeGal(spirit: BlendRecipeSpiritSourceInput): number | null {
+  if (!(spirit.abv > 0)) return null;
+  const entered = spirit.entered_amount != null && spirit.entered_amount > 0 && spirit.entered_unit;
+  if (entered) {
+    const gal = spiritVolumeGalFromAmount(spirit.entered_amount!, spirit.entered_unit!, spirit.abv);
+    return gal > 0 ? gal : null;
+  }
+  return spirit.volume_gal > 0 ? spirit.volume_gal : null;
+}
+
+function spiritInputsForProofing(spirits: BlendRecipeSpiritSourceInput[]): SpiritSourceInput[] {
+  return spirits.flatMap((spirit) => {
+    const volumeGal = resolveSpiritSourceVolumeGal(spirit);
+    if (volumeGal == null) return [];
+    return [{
+      volumeGal,
+      abv: spirit.abv,
+      label: spirit.spirit_label?.trim() || 'Spirit',
+    }];
+  });
 }
 
 function recipeComponents(
@@ -115,14 +138,12 @@ export function proofingWaterGalForTarget(
     };
   }
 
+  const spiritInputs = spiritInputsForProofing(spirits);
+  if (spiritInputs.length === 0) {
+    return { error: 'Enter a spirit pull before adjusting proofing water.' };
+  }
   const solved = solveWaterForTargetAbv(
-    spirits
-      .filter((spirit) => spirit.volume_gal > 0 && spirit.abv > 0)
-      .map((spirit) => ({
-        volumeGal: spirit.volume_gal,
-        abv: spirit.abv,
-        label: spirit.spirit_label,
-      })),
+    spiritInputs,
     ingredients
       .filter((ingredient) => ingredient.ingredient_type !== 'water' && ingredient.amount > 0)
       .map((ingredient) => ({

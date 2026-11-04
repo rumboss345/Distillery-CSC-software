@@ -48,6 +48,20 @@ describe('blend-abv-confirm', () => {
     expect(result.volumeGal!).toBeGreaterThan(0.2);
   });
 
+  it('solves proofing water from entered spirit weight when volume_gal is zero', () => {
+    const spirits = [{
+      spirit_label: 'Spirit',
+      volume_gal: 0,
+      abv: 93,
+      entered_amount: 0.25,
+      entered_unit: 'lbs',
+    }];
+    const solved = proofingWaterGalForTarget(spirits, [], 40);
+    expect('waterGal' in solved).toBe(true);
+    if (!('waterGal' in solved)) return;
+    expect(solved.waterGal).toBeGreaterThan(0);
+  });
+
   it('writes a confirmed water charge at formulation precision and still meets the target', () => {
     const spirits = [{
       spirit_label: 'Neutral',
