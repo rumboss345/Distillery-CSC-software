@@ -1,46 +1,56 @@
 import { NavLink, Outlet } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 import { useRefreshKey } from '../../db/queries';
 import { ReportFilters } from '../../components/ReportFilters';
+import { isOwnerRole } from '../../lib/roles';
 import { ReportProvider, useReportContext } from './report-context';
 
-const REPORT_GROUPS = [
-  {
-    label: 'Overview',
-    tabs: [{ to: '/reports', end: true as const, label: 'Summary' }],
-  },
-  {
-    label: 'Production',
-    tabs: [
-      { to: '/reports/wash', label: 'Wash' },
-      { to: '/reports/fermentation', label: 'Fermentation' },
-      { to: '/reports/distillation', label: 'Distillation' },
-      { to: '/reports/blending', label: 'Blending' },
-      { to: '/reports/bottling', label: 'Bottling' },
-    ],
-  },
-  {
-    label: 'Inventory & liquid',
-    tabs: [
-      { to: '/reports/tanks', label: 'Tanks' },
-      { to: '/reports/movements', label: 'Movements' },
-      { to: '/reports/volume-changes', label: 'Volume changes' },
-    ],
-  },
-  {
-    label: 'Quality & audit',
-    tabs: [
-      { to: '/reports/exceptions', label: 'Exceptions' },
-      { to: '/reports/traceability', label: 'Traceability' },
-    ],
-  },
-  {
-    label: 'Facilities',
-    tabs: [{ to: '/reports/maintenance', label: 'Maintenance' }],
-  },
-];
+function reportGroups(showOwnerCosting: boolean) {
+  return [
+    {
+      label: 'Overview',
+      tabs: [
+        { to: '/reports', end: true as const, label: 'Summary' },
+        ...(showOwnerCosting ? [{ to: '/reports/costing' as const, label: 'Production costing' }] : []),
+      ],
+    },
+    {
+      label: 'Production',
+      tabs: [
+        { to: '/reports/wash', label: 'Wash' },
+        { to: '/reports/fermentation', label: 'Fermentation' },
+        { to: '/reports/distillation', label: 'Distillation' },
+        { to: '/reports/blending', label: 'Blending' },
+        { to: '/reports/bottling', label: 'Bottling' },
+      ],
+    },
+    {
+      label: 'Inventory & liquid',
+      tabs: [
+        { to: '/reports/tanks', label: 'Tanks' },
+        { to: '/reports/movements', label: 'Movements' },
+        { to: '/reports/volume-changes', label: 'Volume changes' },
+      ],
+    },
+    {
+      label: 'Quality & audit',
+      tabs: [
+        { to: '/reports/exceptions', label: 'Exceptions' },
+        { to: '/reports/traceability', label: 'Traceability' },
+      ],
+    },
+    {
+      label: 'Facilities',
+      tabs: [{ to: '/reports/maintenance', label: 'Maintenance' }],
+    },
+  ];
+}
 
 function ReportsLayoutInner() {
+  const { user } = useAuth();
   const { key: sharedKey } = useRefreshKey();
+  const showOwnerCosting = isOwnerRole(user?.role);
+  const REPORT_GROUPS = reportGroups(showOwnerCosting);
   const {
     preset,
     customFrom,

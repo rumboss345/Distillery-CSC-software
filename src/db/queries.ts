@@ -159,6 +159,7 @@ import type {
   ProductionSummary,
   EquipmentVolumeReport,
   YieldReport,
+  ProductionCostSettings,
 } from '../types';
 import { mlToGallons } from '../types';
 import {
@@ -470,6 +471,7 @@ export function ensureInventoryItem(input: {
     quantity: 0,
     reorder_level: 0,
     notes: '',
+    cost_per_unit: null,
     package_size_ml: null,
     density_g_per_ml: null,
     density_reference: '',
@@ -490,17 +492,66 @@ export function saveInventoryItem(item: Omit<InventoryItem, 'id' | 'created_at' 
   const density = item.density_g_per_ml != null && item.density_g_per_ml > 0 ? item.density_g_per_ml : null;
   const densityReference = item.density_reference?.trim() ? item.density_reference.trim() : null;
   const abv = item.abv != null && Number.isFinite(item.abv) ? item.abv : null;
+  const costPerUnit = item.cost_per_unit != null && Number.isFinite(item.cost_per_unit) && item.cost_per_unit >= 0
+    ? item.cost_per_unit
+    : null;
   if (id) {
     runQuery(
-      `UPDATE inventory_items SET name=?, category=?, unit=?, quantity=?, reorder_level=?, notes=?, package_size_ml=?, density_g_per_ml=?, density_reference=?, abv=?, updated_at=datetime('now') WHERE id=?`,
-      [item.name, item.category, item.unit, item.quantity, item.reorder_level, item.notes, packageSizeMl, density, densityReference, abv, id],
+      `UPDATE inventory_items SET name=?, category=?, unit=?, quantity=?, reorder_level=?, cost_per_unit=?, notes=?, package_size_ml=?, density_g_per_ml=?, density_reference=?, abv=?, updated_at=datetime('now') WHERE id=?`,
+      [item.name, item.category, item.unit, item.quantity, item.reorder_level, costPerUnit, item.notes, packageSizeMl, density, densityReference, abv, id],
     );
   } else {
     insertRow(
-      `INSERT INTO inventory_items (name, category, unit, quantity, reorder_level, notes, package_size_ml, density_g_per_ml, density_reference, abv) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [item.name, item.category, item.unit, item.quantity, item.reorder_level, item.notes, packageSizeMl, density, densityReference, abv],
+      `INSERT INTO inventory_items (name, category, unit, quantity, reorder_level, cost_per_unit, notes, package_size_ml, density_g_per_ml, density_reference, abv) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [item.name, item.category, item.unit, item.quantity, item.reorder_level, costPerUnit, item.notes, packageSizeMl, density, densityReference, abv],
     );
   }
+}
+
+export const DEFAULT_PRODUCTION_COST_SETTINGS: ProductionCostSettings = {
+  sugar_cost_per_lb: 0,
+  default_yeast_cost_per_lb: 0,
+  labour_wash_per_batch: 0,
+  labour_ferment_per_day: 0,
+  labour_distill_per_run: 0,
+  labour_bottle_per_run: 0,
+  labour_per_bottle: 0,
+};
+
+export function getProductionCostSettings(): ProductionCostSettings {
+  const row = queryOne<ProductionCostSettings>(
+    `SELECT sugar_cost_per_lb, default_yeast_cost_per_lb, labour_wash_per_batch,
+            labour_ferment_per_day, labour_distill_per_run, labour_bottle_per_run, labour_per_bottle
+     FROM production_cost_settings WHERE id = 1`,
+  );
+  return row ?? DEFAULT_PRODUCTION_COST_SETTINGS;
+}
+
+export function saveProductionCostSettings(settings: ProductionCostSettings): void {
+  const __remote = forwardProductionMutation('saveProductionCostSettings', [settings]);
+  if (__remote.forwarded) return __remote.value as never;
+
+  runQuery(
+    `UPDATE production_cost_settings SET
+      sugar_cost_per_lb = ?,
+      default_yeast_cost_per_lb = ?,
+      labour_wash_per_batch = ?,
+      labour_ferment_per_day = ?,
+      labour_distill_per_run = ?,
+      labour_bottle_per_run = ?,
+      labour_per_bottle = ?,
+      updated_at = datetime('now')
+     WHERE id = 1`,
+    [
+      settings.sugar_cost_per_lb,
+      settings.default_yeast_cost_per_lb,
+      settings.labour_wash_per_batch,
+      settings.labour_ferment_per_day,
+      settings.labour_distill_per_run,
+      settings.labour_bottle_per_run,
+      settings.labour_per_bottle,
+    ],
+  );
 }
 
 export function adjustInventory(id: number, delta: number): void {

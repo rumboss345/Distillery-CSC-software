@@ -31,6 +31,7 @@ const emptyItem = (): Omit<InventoryItem, 'id' | 'created_at' | 'updated_at'> =>
   unit: 'lbs',
   quantity: 0,
   reorder_level: 0,
+  cost_per_unit: null,
   notes: '',
   package_size_ml: null,
   density_g_per_ml: null,
@@ -59,6 +60,7 @@ export function Inventory() {
   const [sizeInput, setSizeInput] = useState('');
   const [densityInput, setDensityInput] = useState('');
   const [abvInput, setAbvInput] = useState('');
+  const [costInput, setCostInput] = useState('');
   const [filter, setFilter] = useState<InventoryCategory | 'all'>('all');
 
   void key;
@@ -77,6 +79,7 @@ export function Inventory() {
     setSizeInput('');
     setDensityInput('');
     setAbvInput('');
+    setCostInput('');
     setShowForm(true);
   };
 
@@ -93,6 +96,7 @@ export function Inventory() {
     setQuantityInput(String(item.quantity));
     setDensityInput(item.density_g_per_ml != null ? String(item.density_g_per_ml) : '');
     setAbvInput(item.abv != null ? String(item.abv) : '');
+    setCostInput(item.cost_per_unit != null ? String(item.cost_per_unit) : '');
     const size = item.category === 'packaging' ? packagingItemSizeMl(item) : null;
     setSizeInput(size ? String(size) : '');
     setShowForm(true);
@@ -112,12 +116,14 @@ export function Inventory() {
       : null;
     const density = parseFloat(densityInput);
     const abv = parseFloat(abvInput);
+    const cost = parseFloat(costInput);
     saveInventoryItem({
       ...form,
       quantity: Number.isFinite(quantity) ? quantity : 0,
       package_size_ml,
       density_g_per_ml: Number.isFinite(density) && density > 0 ? density : null,
       abv: abvInput.trim() === '' || !Number.isFinite(abv) ? null : abv,
+      cost_per_unit: costInput.trim() === '' || !Number.isFinite(cost) || cost < 0 ? null : cost,
     }, editId);
     setShowForm(false);
     refresh();
@@ -239,8 +245,9 @@ export function Inventory() {
                 <th>Item</th>
                 <th>Category</th>
                 <th className="num">On Hand</th>
-                <th className="num">Reorder Level</th>
-                <th>Status</th>
+                  <th className="num">Reorder Level</th>
+                  <th className="num">Unit cost</th>
+                  <th>Status</th>
                 <th>Notes</th>
                 <th></th>
               </tr>
@@ -260,6 +267,7 @@ export function Inventory() {
                     <td>{inventoryCategoryLabel(i.category)}</td>
                     <td className={low ? 'num low-stock' : 'num'}>{i.quantity} {i.unit}</td>
                     <td className="num">{i.reorder_level} {i.unit}</td>
+                    <td className="num">{i.cost_per_unit != null ? `$${i.cost_per_unit.toFixed(2)}` : '—'}</td>
                     <td>
                       {negative
                         ? <span className="badge badge-low-stock">Negative</span>
@@ -321,6 +329,17 @@ export function Inventory() {
                 <span className="field-hint">Used when you bottle with this item.</span>
               </div>
             )}
+            <div className="form-group">
+              <label>Unit cost ($)</label>
+              <input
+                type="number"
+                min={0}
+                step={0.01}
+                value={costInput}
+                onChange={(e) => setCostInput(e.target.value)}
+                placeholder="Optional — used on owner Production costing"
+              />
+            </div>
             <div className="form-group">
               <label>Measure</label>
               <select

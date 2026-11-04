@@ -128,6 +128,8 @@ export interface InventoryItem {
   unit: string;
   quantity: number;
   reorder_level: number;
+  /** Purchase or standard cost per inventory unit (e.g. per lb, per bottle). Owner costing uses this. */
+  cost_per_unit: number | null;
   notes: string;
   /** Bottle or package size in milliliters. Set for packaging items. */
   package_size_ml: number | null;
@@ -711,6 +713,17 @@ export interface YieldReport {
   heartsAbv: number;
   gpa: number;
   yieldPercent: number;
+}
+
+/** Owner-only production costing defaults and labour rates (USD). */
+export interface ProductionCostSettings {
+  sugar_cost_per_lb: number;
+  default_yeast_cost_per_lb: number;
+  labour_wash_per_batch: number;
+  labour_ferment_per_day: number;
+  labour_distill_per_run: number;
+  labour_bottle_per_run: number;
+  labour_per_bottle: number;
 }
 
 export interface EquipmentVolumeReport {
