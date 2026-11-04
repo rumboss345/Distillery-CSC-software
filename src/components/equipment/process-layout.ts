@@ -46,9 +46,16 @@ export function columnsForStage(itemCount: number, maxColumns: number): number {
   return Math.max(1, Math.min(itemCount, maxColumns));
 }
 
-export function computeMaxColumnsForViewport(viewportWidth: number): number {
+export function computeMaxColumnsForViewport(
+  viewportWidth: number,
+  options?: { touchLayout?: boolean },
+): number {
   const usable = Math.max(240, viewportWidth - 40);
-  return Math.max(3, Math.floor((usable - 2 * PROCESS_CANVAS_PAD) / PROCESS_CELL_WIDTH));
+  const cols = Math.floor((usable - 2 * PROCESS_CANVAS_PAD) / PROCESS_CELL_WIDTH);
+  if (options?.touchLayout) {
+    return Math.max(1, Math.min(2, cols));
+  }
+  return Math.max(3, cols);
 }
 
 export function computeStageBands(
@@ -341,5 +348,27 @@ export function computeFitToViewportTransform(
       x: (viewportSize.width - scaledW) / 2,
       y: (viewportSize.height - scaledH) / 2,
     },
+  };
+}
+
+/** Phone layout: fit floor width, scroll vertically; scroll area matches scaled canvas size. */
+export function computeWidthFitViewportTransform(
+  canvasSize: { width: number; height: number },
+  viewportSize: { width: number; height: number },
+  padding = 12,
+): { scale: number; pan: { x: number; y: number }; scrollWidth: number; scrollHeight: number } {
+  if (viewportSize.width <= 0 || canvasSize.width <= 0) {
+    return { scale: 1, pan: { x: 0, y: 0 }, scrollWidth: canvasSize.width, scrollHeight: canvasSize.height };
+  }
+
+  const scale = Math.max(0.12, (viewportSize.width - padding * 2) / canvasSize.width);
+  const scrollWidth = Math.ceil(canvasSize.width * scale);
+  const scrollHeight = Math.ceil(canvasSize.height * scale);
+
+  return {
+    scale,
+    pan: { x: padding, y: padding },
+    scrollWidth,
+    scrollHeight,
   };
 }

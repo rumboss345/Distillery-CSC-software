@@ -6,7 +6,9 @@ import {
   clampEquipmentProcessPosition,
   clampProcessPositionToStage,
   computeProcessLayoutPlan,
+  computeMaxColumnsForViewport,
   computeStageBands,
+  computeWidthFitViewportTransform,
   findNearestEmptySlot,
   positionToSlot,
   slotKey,
@@ -16,6 +18,30 @@ import {
   snapToProcessGrid,
 } from './process-layout';
 import type { FloorEquipmentView } from '../../types';
+
+describe('computeMaxColumnsForViewport', () => {
+  it('uses at least three columns on desktop widths', () => {
+    expect(computeMaxColumnsForViewport(1200)).toBeGreaterThanOrEqual(3);
+  });
+
+  it('caps at two columns for touch layout on a narrow screen', () => {
+    expect(computeMaxColumnsForViewport(360, { touchLayout: true })).toBeLessThanOrEqual(2);
+    expect(computeMaxColumnsForViewport(360, { touchLayout: true })).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('computeWidthFitViewportTransform', () => {
+  it('matches scroll size to width-scaled canvas height', () => {
+    const result = computeWidthFitViewportTransform(
+      { width: 400, height: 1200 },
+      { width: 320, height: 400 },
+      12,
+    );
+    expect(result.scale).toBeCloseTo((320 - 24) / 400, 4);
+    expect(result.scrollWidth).toBe(Math.ceil(400 * result.scale));
+    expect(result.scrollHeight).toBe(Math.ceil(1200 * result.scale));
+  });
+});
 
 describe('snapToProcessGrid', () => {
   it('snaps to nearest grid line', () => {
