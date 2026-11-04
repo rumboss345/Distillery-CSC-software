@@ -42,8 +42,23 @@ describe('computeTheoreticalBlend', () => {
       [{ ingredientType: 'sugar', name: 'Cane', amount: 2, unit: 'lbs' }],
     );
     expect(result.densityFromAbvUnreliable).toBe(true);
-    expect(result.density).toBeNull();
+    expect(result.density).toBeGreaterThan(0);
     expect(result.brix).not.toBeNull();
+  });
+
+  it('matches target ABV on review after proofing water solve (sugar and flavoring)', () => {
+    const spirits = [{ volumeGal: 10, abv: 75 }];
+    const additives = [
+      { ingredientType: 'sugar' as const, name: 'Sugar', amount: 50, unit: 'lbs' },
+      { ingredientType: 'flavoring' as const, name: 'Banana', amount: 2, unit: 'l' },
+    ];
+    const solved = solveWaterForTargetAbv(spirits, additives, 35);
+    expect(solved).not.toBeNull();
+    const theoretical = computeTheoreticalBlend(spirits, [
+      ...additives,
+      { ingredientType: 'water', name: 'Proofing water', amount: solved!.waterGal, unit: 'gal' },
+    ]);
+    expect(theoretical.abv).toBeCloseTo(35, 0);
   });
 
   it('includes sugar volume when calculating final ABV', () => {
