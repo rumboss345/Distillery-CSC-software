@@ -1414,13 +1414,19 @@ export function Blending() {
     setWizardProofingPreview(preview);
   };
 
-  const confirmWizardProofingWater = () => {
-    if (!wizardProofingPreview || form.target_abv == null) return;
+  const syncWizardProofingWaterToTarget = () => {
+    if (form.target_abv == null || !(form.target_abv > 0)) return;
     const spirits = spiritSources
       .map(syncSpiritVolume)
       .filter((source) => source.volume_gal > 0 && source.abv > 0)
       .map((source) => ({ volumeGal: source.volume_gal, abv: source.abv }));
+    if (spirits.length === 0) return;
     setIngredients((current) => ingredientsWithProofingWater(current, spirits, form.target_abv));
+  };
+
+  const confirmWizardProofingWater = () => {
+    if (!wizardProofingPreview || form.target_abv == null) return;
+    syncWizardProofingWaterToTarget();
     setWaterAdjustmentNote(
       `Proofing water confirmed at ${formatGallonDisplay(wizardProofingPreview.proposedWaterGal)} gal. Predicted ABV ${wizardProofingPreview.proposedAbv != null ? formatAbvDisplay(wizardProofingPreview.proposedAbv) : ''}.`,
     );
@@ -1518,6 +1524,9 @@ export function Blending() {
   const goNext = () => {
     if (!validateStep(wizardStep)) return;
     if (wizardStep === 2 && !confirmMixedSpirits()) return;
+    if (wizardStep === 4) {
+      syncWizardProofingWaterToTarget();
+    }
     if (wizardStep === 5) {
       try {
         const id = persistFormula('draft');

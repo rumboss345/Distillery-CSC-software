@@ -288,10 +288,19 @@ export function computeTheoreticalBlend(
     }
   }
   if (!(volumeGal > 0)) {
-    const gauged = gaugePouredBlend(toFormulationComponents(spirits, additives), targetAbv);
-    volumeGal = gauged?.volumeGal ?? 0;
-    abv = gauged?.abv ?? 0;
-    density = !sugarOrFlavor && abv > 0 ? round3(spiritDensityGPerMl(abv)) : null;
+    if (sugarOrFlavor) {
+      const analyzed = analyzeFormulation(toFormulationComponents(spirits, additives));
+      if (analyzed.ok) {
+        volumeGal = analyzed.volumeGal;
+        abv = analyzed.abv;
+        density = analyzed.densityGPerMl;
+      }
+    } else {
+      const gauged = gaugePouredBlend(toFormulationComponents(spirits, additives), targetAbv);
+      volumeGal = gauged?.volumeGal ?? 0;
+      abv = gauged?.abv ?? 0;
+      density = abv > 0 ? round3(spiritDensityGPerMl(abv)) : null;
+    }
   }
   const brixParts = additives.map((a) => estimatedSugarBrixContribution(a, volumeGal));
   const brix = volumeGal > 0 && brixParts.some((b) => b > 0)
