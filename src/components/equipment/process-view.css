@@ -83,6 +83,12 @@
   background: #d8dce2;
 }
 
+.process-viewport--static {
+  overflow: visible;
+  cursor: default;
+  touch-action: pan-y;
+}
+
 .process-viewport--panning {
   cursor: grabbing;
 }
@@ -1440,6 +1446,17 @@
 
   .process-toolbar-hint-touch {
     display: block;
+  }
+
+  .process-viewport {
+    overflow: visible;
+    cursor: default;
+    touch-action: pan-y;
+  }
+
+  .process-equipment-node {
+    touch-action: pan-y;
+    cursor: pointer;
   }
 }
 

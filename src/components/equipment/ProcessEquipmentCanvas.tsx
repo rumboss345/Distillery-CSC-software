@@ -28,6 +28,7 @@ import { fermentationDaysOverdue, formatDaysOverdue } from '../../lib/fermentati
 import { localIsoDate } from '../../lib/planned-event-date';
 import {
   isEquipmentContextMenuPointer,
+  processCanvasAllowsPanAndDrag,
   processEquipmentNodeTitle,
 } from './process-equipment-gesture';
 import { processEquipmentVisualScale } from './process-visual-scale';
@@ -87,6 +88,7 @@ export function ProcessEquipmentCanvas({
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressMenuRef = useRef(false);
   const [coarsePointer, setCoarsePointer] = useState(false);
+  const allowPanAndDrag = processCanvasAllowsPanAndDrag(coarsePointer);
   const [assignmentsByStage, setAssignmentsByStage] = useState<
     Record<string, ProcessAssignmentEntry[]>
   >({});
@@ -168,6 +170,10 @@ export function ProcessEquipmentCanvas({
     setScale(fit.scale);
     setPan(fit.pan);
   }, [canvasSize, viewportSize]);
+
+  useEffect(() => {
+    if (!allowPanAndDrag) applyFitToViewport();
+  }, [allowPanAndDrag, applyFitToViewport, canvasSize, viewportSize]);
 
   const summary = getProductionSummary();
   const offlineCount = allEquipment.filter(
@@ -255,7 +261,7 @@ export function ProcessEquipmentCanvas({
       if (dragging) {
         if (!dragMovedRef.current) {
           onSelect(dragging.id);
-        } else if (livePosRef.current) {
+        } else if (livePosRef.current && allowPanAndDrag) {
           const dragged = allEquipment.find((e) => e.id === dragging.id);
           const volumeOrderedTank = dragged?.equipment_type === 'holding_tank'
             || dragged?.equipment_type === 'stillage_tank'
@@ -278,9 +284,10 @@ export function ProcessEquipmentCanvas({
       window.removeEventListener('pointermove', onMovePointer);
       window.removeEventListener('pointerup', onUp);
     };
-  }, [allEquipment, dragging, getCanvasPoint, layoutPlan, onLayoutChange, onSelect]);
+  }, [allEquipment, allowPanAndDrag, dragging, getCanvasPoint, layoutPlan, onLayoutChange, onSelect]);
 
   const onViewportPointerDown = (e: React.PointerEvent) => {
+    if (!allowPanAndDrag || e.pointerType === 'touch') return;
     if ((e.target as HTMLElement).closest('.process-equipment-node')) return;
     setPanning(true);
     panStart.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y };
@@ -338,18 +345,15 @@ export function ProcessEquipmentCanvas({
     if (contextMenuGestureRef.current) return;
 
     if (e.pointerType === 'touch') {
-      e.preventDefault();
       setContextMenu(null);
       longPressMenuRef.current = false;
       cancelTouchPending();
       dragMovedRef.current = false;
       dragStartRef.current = { x: e.clientX, y: e.clientY };
-      const pos = resolvePosition(item);
-      const pt = getCanvasPoint(e.clientX, e.clientY);
       const pending = {
         item,
-        offsetX: pt.x - pos.x,
-        offsetY: pt.y - pos.y,
+        offsetX: 0,
+        offsetY: 0,
         startX: e.clientX,
         startY: e.clientY,
       };
@@ -365,18 +369,12 @@ export function ProcessEquipmentCanvas({
       const onTouchMove = (ev: PointerEvent) => {
         if (ev.pointerId !== e.pointerId) return;
         if (!touchPendingRef.current) return;
-        if (Math.hypot(ev.clientX - pending.startX, ev.clientY - pending.startY) <= 4) return;
+        if (Math.hypot(ev.clientX - pending.startX, ev.clientY - pending.startY) <= 10) return;
         if (longPressTimerRef.current) {
           clearTimeout(longPressTimerRef.current);
           longPressTimerRef.current = null;
         }
-        dragMovedRef.current = true;
         touchPendingRef.current = null;
-        setDragging({
-          id: item.id,
-          offsetX: pending.offsetX,
-          offsetY: pending.offsetY,
-        });
       };
 
       const onTouchEnd = (ev: PointerEvent) => {
@@ -390,7 +388,7 @@ export function ProcessEquipmentCanvas({
         }
         const stillPending = touchPendingRef.current;
         touchPendingRef.current = null;
-        if (stillPending && !dragMovedRef.current && !longPressMenuRef.current) {
+        if (stillPending && !longPressMenuRef.current) {
           onSelect(item.id);
         }
       };
@@ -440,7 +438,7 @@ export function ProcessEquipmentCanvas({
           Drag a vessel to rearrange · drag the background to pan · Fit shows the whole floor
         </span>
         <span className="process-toolbar-hint process-toolbar-hint-touch">
-          Tap equipment for details and next steps below · hold for the action menu · pinch or use Fit to see the floor
+          Tap equipment for details and next steps below · hold for the action menu · scroll the page to reach the panel
         </span>
         <nav className="process-toolbar-links" aria-label="Production shortcuts">
           <Link to="/wash" className="process-toolbar-link">Wash</Link>
@@ -463,10 +461,10 @@ export function ProcessEquipmentCanvas({
       <div className="process-body">
         <div
           ref={viewportRef}
-          className={`process-viewport${panning ? ' process-viewport--panning' : ''}${dragging ? ' process-viewport--dragging' : ''}`}
-          onPointerDown={onViewportPointerDown}
-          onPointerMove={onViewportPointerMove}
-          onPointerUp={onViewportPointerUp}
+          className={`process-viewport${panning ? ' process-viewport--panning' : ''}${dragging ? ' process-viewport--dragging' : ''}${allowPanAndDrag ? '' : ' process-viewport--static'}`}
+          onPointerDown={allowPanAndDrag ? onViewportPointerDown : undefined}
+          onPointerMove={allowPanAndDrag ? onViewportPointerMove : undefined}
+          onPointerUp={allowPanAndDrag ? onViewportPointerUp : undefined}
           onClick={(e) => {
             if ((e.target as HTMLElement).closest('.process-equipment-node')) return;
             onSelect(null);

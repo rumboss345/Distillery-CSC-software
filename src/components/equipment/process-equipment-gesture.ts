@@ -6,6 +6,11 @@ export function isEquipmentContextMenuPointer(button: number, ctrlKey: boolean):
   return button === 2 || (button === 0 && ctrlKey);
 }
 
+/** Pan and drag rearrange the floor; on touch phones that blocks page scroll. */
+export function processCanvasAllowsPanAndDrag(coarsePointer: boolean): boolean {
+  return !coarsePointer;
+}
+
 /** Tooltip on process equipment nodes — depends on pointer type. */
 export function processEquipmentNodeTitle(options: {
   coarsePointer: boolean;

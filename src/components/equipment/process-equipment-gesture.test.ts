@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { isEquipmentContextMenuPointer, processEquipmentNodeTitle } from './process-equipment-gesture';
+import {
+  isEquipmentContextMenuPointer,
+  processCanvasAllowsPanAndDrag,
+  processEquipmentNodeTitle,
+} from './process-equipment-gesture';
 
 describe('isEquipmentContextMenuPointer', () => {
   it('treats a right-click and a Mac ctrl-click as the context menu', () => {
@@ -10,6 +14,13 @@ describe('isEquipmentContextMenuPointer', () => {
   it('does not treat a normal click or drag as a right-click', () => {
     expect(isEquipmentContextMenuPointer(0, false)).toBe(false);
     expect(isEquipmentContextMenuPointer(1, false)).toBe(false);
+  });
+});
+
+describe('processCanvasAllowsPanAndDrag', () => {
+  it('disables pan and drag on coarse (touch) pointers', () => {
+    expect(processCanvasAllowsPanAndDrag(true)).toBe(false);
+    expect(processCanvasAllowsPanAndDrag(false)).toBe(true);
   });
 });
 
