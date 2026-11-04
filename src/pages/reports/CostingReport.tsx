@@ -61,7 +61,7 @@ export function CostingReport() {
     <div data-testid="production-costing-report">
       <CollapsibleSection
         title="Costing assumptions"
-        summary="Sugar fallback, yeast fallback, and labour rates"
+        summary="Sugar and yeast fallbacks, per-batch labour (water and monthly labour are set in Admin)"
         defaultOpen={false}
         storageKey="report-costing-assumptions"
       >
@@ -80,6 +80,9 @@ export function CostingReport() {
               onChange={(e) => setSettingsDraft({ ...settingsDraft, sugar_cost_per_lb: parseMoneyInput(e.target.value) })}
             />
           </div>
+          <p className="field-hint">
+            Water (${settingsDraft.water_cost_per_gal.toFixed(4)}/gal) and monthly labour are configured under Admin → Production costing defaults (owners only).
+          </p>
           <div className="form-group">
             <label>Yeast fallback ($ per lb)</label>
             <input
@@ -172,7 +175,11 @@ export function CostingReport() {
           <div className="label">Production spend</div>
           <div className="value">{money(summary.totalCost)}</div>
           <div className="sub">
-            Materials {money(summary.totalMaterialCost)} · Labour {money(summary.totalLabourCost)}
+            Materials {money(summary.totalMaterialCost)}
+            {summary.totalWaterCost > 0 ? ` (incl. water ${money(summary.totalWaterCost)})` : ''}
+            {' · '}
+            Labour {money(summary.totalLabourCost)}
+            {summary.totalMonthlyLabourCost > 0 ? ` (incl. monthly ${money(summary.totalMonthlyLabourCost)})` : ''}
           </div>
         </div>
         <div className="stat-card">

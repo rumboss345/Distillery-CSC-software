@@ -95,6 +95,23 @@ export function eventInReportRange(
   return true;
 }
 
+/** True when any day of YYYY-MM falls inside an inclusive report date range. */
+export function calendarMonthInReportRange(
+  yearMonth: string,
+  range: Pick<ReportDateRange, 'from' | 'to'>,
+): boolean {
+  if (!range.from && !range.to) return true;
+  const ym = yearMonth.slice(0, 7);
+  if (!/^\d{4}-\d{2}$/.test(ym)) return false;
+  const [y, m] = ym.split('-').map(Number);
+  const lastDay = new Date(y, m, 0).getDate();
+  const monthStart = `${ym}-01`;
+  const monthEnd = `${ym}-${String(lastDay).padStart(2, '0')}`;
+  const rangeFrom = range.from ?? '0000-01-01';
+  const rangeTo = range.to ?? '9999-12-31';
+  return monthStart <= rangeTo && monthEnd >= rangeFrom;
+}
+
 export function monthToRange(month: string): ReportDateRange {
   if (!month || month.length < 7) {
     return resolveReportPeriod('all');

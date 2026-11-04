@@ -201,6 +201,21 @@ export async function migrateDatabase(): Promise<void> {
       `);
       await client.query(`INSERT INTO schema_migrations (version) VALUES ('010')`);
     }
+    const waterAndMonthlyLabourMigration = await client.query('SELECT version FROM schema_migrations WHERE version = $1', ['011']);
+    if (waterAndMonthlyLabourMigration.rowCount === 0) {
+      await client.query(`
+        ALTER TABLE production_cost_settings
+        ADD COLUMN IF NOT EXISTS water_cost_per_gal DOUBLE PRECISION NOT NULL DEFAULT 0.04
+      `);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS production_cost_monthly_labour (
+          year_month TEXT PRIMARY KEY,
+          amount DOUBLE PRECISION NOT NULL DEFAULT 0,
+          updated_at TEXT NOT NULL DEFAULT to_char(CURRENT_TIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')
+        )
+      `);
+      await client.query(`INSERT INTO schema_migrations (version) VALUES ('011')`);
+    }
     await client.query(`
       INSERT INTO inventory_categories (name)
       SELECT 'botanicals'

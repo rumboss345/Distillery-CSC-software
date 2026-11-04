@@ -160,6 +160,7 @@ import type {
   EquipmentVolumeReport,
   YieldReport,
   ProductionCostSettings,
+  ProductionCostMonthlyLabour,
 } from '../types';
 import { mlToGallons } from '../types';
 import {
@@ -510,9 +511,12 @@ export function saveInventoryItem(item: Omit<InventoryItem, 'id' | 'created_at' 
   }
 }
 
+export const DEFAULT_WATER_COST_PER_GAL = 0.04;
+
 export const DEFAULT_PRODUCTION_COST_SETTINGS: ProductionCostSettings = {
   sugar_cost_per_lb: 0,
   default_yeast_cost_per_lb: 0,
+  water_cost_per_gal: DEFAULT_WATER_COST_PER_GAL,
   labour_wash_per_batch: 0,
   labour_ferment_per_day: 0,
   labour_distill_per_run: 0,
@@ -522,11 +526,16 @@ export const DEFAULT_PRODUCTION_COST_SETTINGS: ProductionCostSettings = {
 
 export function getProductionCostSettings(): ProductionCostSettings {
   const row = queryOne<ProductionCostSettings>(
-    `SELECT sugar_cost_per_lb, default_yeast_cost_per_lb, labour_wash_per_batch,
+    `SELECT sugar_cost_per_lb, default_yeast_cost_per_lb, water_cost_per_gal, labour_wash_per_batch,
             labour_ferment_per_day, labour_distill_per_run, labour_bottle_per_run, labour_per_bottle
      FROM production_cost_settings WHERE id = 1`,
   );
-  return row ?? DEFAULT_PRODUCTION_COST_SETTINGS;
+  if (!row) return DEFAULT_PRODUCTION_COST_SETTINGS;
+  return {
+    ...DEFAULT_PRODUCTION_COST_SETTINGS,
+    ...row,
+    water_cost_per_gal: row.water_cost_per_gal ?? DEFAULT_WATER_COST_PER_GAL,
+  };
 }
 
 export function saveProductionCostSettings(settings: ProductionCostSettings): void {
@@ -537,6 +546,7 @@ export function saveProductionCostSettings(settings: ProductionCostSettings): vo
     `UPDATE production_cost_settings SET
       sugar_cost_per_lb = ?,
       default_yeast_cost_per_lb = ?,
+      water_cost_per_gal = ?,
       labour_wash_per_batch = ?,
       labour_ferment_per_day = ?,
       labour_distill_per_run = ?,
@@ -547,6 +557,7 @@ export function saveProductionCostSettings(settings: ProductionCostSettings): vo
     [
       settings.sugar_cost_per_lb,
       settings.default_yeast_cost_per_lb,
+      settings.water_cost_per_gal,
       settings.labour_wash_per_batch,
       settings.labour_ferment_per_day,
       settings.labour_distill_per_run,
@@ -554,6 +565,29 @@ export function saveProductionCostSettings(settings: ProductionCostSettings): vo
       settings.labour_per_bottle,
     ],
   );
+}
+
+export function getProductionCostMonthlyLabour(): ProductionCostMonthlyLabour[] {
+  return queryAll<ProductionCostMonthlyLabour>(
+    `SELECT year_month, amount FROM production_cost_monthly_labour ORDER BY year_month DESC`,
+  );
+}
+
+export function saveProductionCostMonthlyLabour(entries: ProductionCostMonthlyLabour[]): void {
+  const __remote = forwardProductionMutation('saveProductionCostMonthlyLabour', [entries]);
+  if (__remote.forwarded) return __remote.value as never;
+
+  runQuery('DELETE FROM production_cost_monthly_labour');
+  for (const row of entries) {
+    const ym = row.year_month.trim().slice(0, 7);
+    const amount = row.amount;
+    if (!/^\d{4}-\d{2}$/.test(ym) || !(amount >= 0)) continue;
+    runQuery(
+      `INSERT INTO production_cost_monthly_labour (year_month, amount, updated_at)
+       VALUES (?, ?, datetime('now'))`,
+      [ym, amount],
+    );
+  }
 }
 
 export function adjustInventory(id: number, delta: number): void {
