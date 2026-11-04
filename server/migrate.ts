@@ -178,6 +178,29 @@ export async function migrateDatabase(): Promise<void> {
       `);
       await client.query(`INSERT INTO schema_migrations (version) VALUES ('009')`);
     }
+    const productionCostingMigration = await client.query('SELECT version FROM schema_migrations WHERE version = $1', ['010']);
+    if (productionCostingMigration.rowCount === 0) {
+      await client.query(`ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS cost_per_unit DOUBLE PRECISION`);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS production_cost_settings (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          sugar_cost_per_lb DOUBLE PRECISION NOT NULL DEFAULT 0,
+          default_yeast_cost_per_lb DOUBLE PRECISION NOT NULL DEFAULT 0,
+          labour_wash_per_batch DOUBLE PRECISION NOT NULL DEFAULT 0,
+          labour_ferment_per_day DOUBLE PRECISION NOT NULL DEFAULT 0,
+          labour_distill_per_run DOUBLE PRECISION NOT NULL DEFAULT 0,
+          labour_bottle_per_run DOUBLE PRECISION NOT NULL DEFAULT 0,
+          labour_per_bottle DOUBLE PRECISION NOT NULL DEFAULT 0,
+          updated_at TEXT NOT NULL DEFAULT to_char(CURRENT_TIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')
+        )
+      `);
+      await client.query(`
+        INSERT INTO production_cost_settings (id)
+        VALUES (1)
+        ON CONFLICT (id) DO NOTHING
+      `);
+      await client.query(`INSERT INTO schema_migrations (version) VALUES ('010')`);
+    }
     await client.query(`
       INSERT INTO inventory_categories (name)
       SELECT 'botanicals'

@@ -583,6 +583,18 @@ CREATE TABLE IF NOT EXISTS discarded_fermentations (
 );
 
 CREATE INDEX IF NOT EXISTS idx_discarded_fermentations_date ON discarded_fermentations(discarded_date);
+
+CREATE TABLE IF NOT EXISTS production_cost_settings (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  sugar_cost_per_lb REAL NOT NULL DEFAULT 0,
+  default_yeast_cost_per_lb REAL NOT NULL DEFAULT 0,
+  labour_wash_per_batch REAL NOT NULL DEFAULT 0,
+  labour_ferment_per_day REAL NOT NULL DEFAULT 0,
+  labour_distill_per_run REAL NOT NULL DEFAULT 0,
+  labour_bottle_per_run REAL NOT NULL DEFAULT 0,
+  labour_per_bottle REAL NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 `;
 
 export const SEED_DATA = `
