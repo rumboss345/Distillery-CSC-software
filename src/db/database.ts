@@ -706,6 +706,7 @@ function migrateProductionCosting(): void {
         id INTEGER PRIMARY KEY CHECK (id = 1),
         sugar_cost_per_lb REAL NOT NULL DEFAULT 0,
         default_yeast_cost_per_lb REAL NOT NULL DEFAULT 0,
+        water_cost_per_gal REAL NOT NULL DEFAULT 0.04,
         labour_wash_per_batch REAL NOT NULL DEFAULT 0,
         labour_ferment_per_day REAL NOT NULL DEFAULT 0,
         labour_distill_per_run REAL NOT NULL DEFAULT 0,
@@ -719,6 +720,15 @@ function migrateProductionCosting(): void {
     `);
     persistDb();
   }
+  addColumnIfMissing('production_cost_settings', 'water_cost_per_gal', 'REAL NOT NULL DEFAULT 0.04');
+  db.run(`
+    CREATE TABLE IF NOT EXISTS production_cost_monthly_labour (
+      year_month TEXT PRIMARY KEY,
+      amount REAL NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  persistDb();
 }
 
 function migrateDistillationTankSources(): void {

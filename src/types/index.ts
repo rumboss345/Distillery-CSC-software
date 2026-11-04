@@ -719,11 +719,19 @@ export interface YieldReport {
 export interface ProductionCostSettings {
   sugar_cost_per_lb: number;
   default_yeast_cost_per_lb: number;
+  /** Proofing / process water not covered by inventory unit costs. */
+  water_cost_per_gal: number;
   labour_wash_per_batch: number;
   labour_ferment_per_day: number;
   labour_distill_per_run: number;
   labour_bottle_per_run: number;
   labour_per_bottle: number;
+}
+
+/** Fixed labour spend for a calendar month (YYYY-MM), owner-entered in Admin. */
+export interface ProductionCostMonthlyLabour {
+  year_month: string;
+  amount: number;
 }
 
 export interface EquipmentVolumeReport {
