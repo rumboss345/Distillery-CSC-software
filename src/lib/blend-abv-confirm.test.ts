@@ -9,6 +9,32 @@ import {
 import { roundScaledAmount } from './blend-recipe-scale';
 import { spiritVolumeGalFromAmount } from './blending';
 import { designFormulation } from './formulation-engine';
+import type { BlendIngredientInput, BlendIngredientType } from '../types';
+
+const PROOFING_TEST_SPIRITS = [{ spirit_label: 'Spirit', volume_gal: 10, abv: 75 }];
+const PROOFING_TARGET_ABV = 40;
+
+const ADDITIVE_FIXTURES: Record<Exclude<BlendIngredientType, 'water'>, BlendIngredientInput> = {
+  sugar: { ingredient_type: 'sugar', name: 'Sugar', amount: 50, unit: 'lbs', notes: '' },
+  syrup: { ingredient_type: 'syrup', name: 'Syrup', amount: 3, unit: 'gal', notes: '' },
+  flavoring: {
+    ingredient_type: 'flavoring',
+    name: 'Extract',
+    amount: 1.5,
+    unit: 'l',
+    notes: '',
+    abv: 35,
+  },
+  color: {
+    ingredient_type: 'color',
+    name: 'Caramel',
+    amount: 0.25,
+    unit: 'l',
+    notes: '',
+    density_assumption: 'class-i-caramel',
+  },
+  other: { ingredient_type: 'other', name: 'Glycerin', amount: 2, unit: 'lbs', notes: '' },
+};
 
 describe('blend-abv-confirm', () => {
   it('detects when calculated ABV matches target within tolerance', () => {
@@ -85,6 +111,43 @@ describe('blend-abv-confirm', () => {
       { ingredient_type: 'water', name: 'Proofing water', amount, unit: preview.unit, notes: '' },
     ]);
     expect(abvMatchesTarget(after.abv ?? 0, 2)).toBe(true);
+  });
+
+  it.each(Object.keys(ADDITIVE_FIXTURES) as Exclude<BlendIngredientType, 'water'>[])(
+    'adjusts proofing water with a %s additive alone',
+    (kind) => {
+      const additive = ADDITIVE_FIXTURES[kind];
+      const solved = proofingWaterGalForTarget(
+        PROOFING_TEST_SPIRITS,
+        [additive],
+        PROOFING_TARGET_ABV,
+      );
+      expect('waterGal' in solved, `expected water solve for ${kind}, got ${JSON.stringify(solved)}`).toBe(true);
+      if (!('waterGal' in solved)) return;
+      const after = computeRecipeTheoreticalAbv(PROOFING_TEST_SPIRITS, [
+        additive,
+        {
+          ingredient_type: 'water',
+          name: 'Proofing water',
+          amount: solved.waterGal,
+          unit: 'gal',
+          notes: '',
+        },
+      ]);
+      expect(abvMatchesTarget(after.abv ?? 0, PROOFING_TARGET_ABV)).toBe(true);
+    },
+  );
+
+  it('adjusts proofing water with every additive type in one batch', () => {
+    const additives = Object.values(ADDITIVE_FIXTURES);
+    const solved = proofingWaterGalForTarget(PROOFING_TEST_SPIRITS, additives, PROOFING_TARGET_ABV);
+    expect('waterGal' in solved).toBe(true);
+    if (!('waterGal' in solved)) return;
+    const after = computeRecipeTheoreticalAbv(PROOFING_TEST_SPIRITS, [
+      ...additives,
+      { ingredient_type: 'water', name: 'Proofing water', amount: solved.waterGal, unit: 'gal', notes: '' },
+    ]);
+    expect(abvMatchesTarget(after.abv ?? 0, PROOFING_TARGET_ABV)).toBe(true);
   });
 
   it('adjusts proofing water when sugar, syrup, and flavoring are in the batch', () => {

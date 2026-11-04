@@ -18,12 +18,34 @@ import {
 } from './calc-engine/proofing';
 import { formulationSpiritWeightLb } from './formulation-spirit';
 import { analyzeFormulation, gaugePouredBlend, type FormulationComponent } from './formulation-engine';
-import type { BlendIngredientType } from '../types';
+import type { BlendIngredientInput, BlendIngredientType } from '../types';
 
 export interface SpiritSourceInput {
   volumeGal: number;
   abv: number;
   label?: string;
+}
+
+/** Map saved/wizard blend ingredient rows into formulation additive inputs (all types, with density). */
+export function additiveInputsFromBlendIngredients(
+  ingredients: BlendIngredientInput[],
+  options?: { includeWater?: boolean },
+): AdditiveInput[] {
+  const includeWater = options?.includeWater ?? false;
+  return ingredients
+    .filter((row) => (includeWater || row.ingredient_type !== 'water') && row.amount > 0)
+    .map((row) => ({
+      ingredientType: row.ingredient_type,
+      name: row.name,
+      amount: row.amount,
+      unit: row.unit,
+      abv: row.abv,
+      densityGPerMl: row.density_g_per_ml ?? null,
+      densityAssumption: row.density_assumption ?? null,
+      costPerUnit: row.cost_per_unit ?? undefined,
+      lotNumber: row.lot_number,
+      inventoryItemId: row.inventory_item_id ?? undefined,
+    }));
 }
 
 export interface AdditiveInput {
@@ -341,8 +363,8 @@ export function preBlendSpiritAndWater(
 
 /**
  * Proofing water that hits a target ABV.
- * Straight spirit uses the Table 6 mass balance. Sugar, syrup, flavor, or color
- * stays on the sucrose-volume formulation, which is not a Table 6 proof.
+ * Straight spirit uses the Table 6 mass balance. Any other blend additive (sugar,
+ * syrup, flavoring, color, other) uses analyzeFormulation — not Table 6 proof.
  */
 export function solveWaterForTargetAbv(
   spirits: SpiritSourceInput[],
@@ -351,7 +373,8 @@ export function solveWaterForTargetAbv(
 ): { waterGal: number; result: TheoreticalBlendResult } | null {
   if (targetAbv <= 0) return null;
   const nonWater = additives.filter((a) => a.ingredientType !== 'water');
-  if (!hasDissolvedSolids(nonWater)) {
+  const hasOtherAdditives = nonWater.some((a) => a.amount > 0);
+  if (!hasOtherAdditives) {
     const charges = spiritCharges(spirits);
     if (charges.length === 0) return null;
     const solved = previewProofing({
