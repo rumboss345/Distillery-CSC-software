@@ -1,12 +1,20 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { limitAbvInput } from '../lib/abv-limits';
 import { WATER_LBS_PER_US_GALLON } from '../lib/alcohol-dilution';
 import {
+  additiveSupportsAbv,
+  blendIngredientTypeForCategory,
+  blendInventoryCategories,
+  convertIngredientAmount,
+  defaultUnitForMode,
+  filterInventoryByCategory,
   ingredientVolumeGal,
   ingredientWeightLbs,
   isWeightUnit,
+  recommendMeasureMode,
   spiritVolumeGalFromAmount,
   toLbs,
+  unitOptionsForBlendIngredient,
 } from '../lib/blending';
 import { formatGallonDisplay, formatQuantityDisplay } from '../lib/formulation-quantity';
 import { formulationSpiritWeightLb } from '../lib/formulation-spirit';
@@ -19,8 +27,11 @@ import {
   type FormulationComponent,
   type FormulationDesign,
 } from '../lib/formulation-engine';
-import { getLatestBlendRecipeVersion, saveBlendRecipe } from '../db/queries';
+import { getInventoryCategories, getInventoryItems, getLatestBlendRecipeVersion, saveBlendRecipe, useRefreshKey } from '../db/queries';
+import { inventoryCategoryLabel } from '../lib/inventory-units';
 import { LITERS_PER_US_GALLON } from '../services/spirit-gauging';
+import { IngredientSelect } from './IngredientSelect';
+import type { FormulationKind } from '../lib/formulation-engine';
 import type { BlendIngredientInput, BlendIngredientType, BlendRecipeSpiritSourceInput } from '../types';
 
 interface SpiritRow {
@@ -32,23 +43,43 @@ interface SpiritRow {
 }
 
 interface OtherRow {
-  kind: 'syrup' | 'flavoring' | 'color' | 'other';
+  inventory_category: string;
+  inventory_item_id: number | null;
   name: string;
   amount: string;
   unit: string;
   abv: string;
   sucrosePercent: string;
+  density_g_per_ml: number | null;
+  density_assumption: 'water' | 'cs1-syrup' | 'class-i-caramel' | null;
 }
 
 const emptySpirit = (): SpiritRow => ({ name: '', amount: '', unit: 'gal', abv: '', temp: '60' });
 const emptyOther = (): OtherRow => ({
-  kind: 'flavoring',
+  inventory_category: '',
+  inventory_item_id: null,
   name: '',
   amount: '',
-  unit: 'gal',
+  unit: defaultUnitForMode('flavoring', recommendMeasureMode('flavoring').mode),
   abv: '',
   sucrosePercent: '',
+  density_g_per_ml: null,
+  density_assumption: null,
 });
+
+function otherRowFormulationKind(row: OtherRow): FormulationKind {
+  const category = row.inventory_category.trim();
+  if (!category) return 'other';
+  const type = blendIngredientTypeForCategory(category);
+  if (type === 'water') return 'other';
+  return type;
+}
+
+function otherRowIngredientType(row: OtherRow): BlendIngredientType {
+  const category = row.inventory_category.trim();
+  if (!category) return 'other';
+  return blendIngredientTypeForCategory(category);
+}
 
 function readNumber(value: string): number | null {
   if (value.trim() === '') return null;
@@ -89,6 +120,14 @@ function sugarDissolvedGal(lb: number): number {
 }
 
 export function BlendDesigner({ onUseForBatch }: { onUseForBatch: (recipeId: number) => void }) {
+  useRefreshKey();
+  const inventoryItems = getInventoryItems();
+  const inventoryCategories = blendInventoryCategories(getInventoryCategories());
+  const inventoryById = useMemo(
+    () => new Map(inventoryItems.map((item) => [item.id, item])),
+    [inventoryItems],
+  );
+
   const [spirits, setSpirits] = useState<SpiritRow[]>([emptySpirit()]);
   const [others, setOthers] = useState<OtherRow[]>([]);
   const [waterAmount, setWaterAmount] = useState('');
@@ -125,15 +164,78 @@ export function BlendDesigner({ onUseForBatch }: { onUseForBatch: (recipeId: num
     const amount = readNumber(row.amount);
     if (amount == null || amount <= 0) return [];
     const sucrose = readNumber(row.sucrosePercent);
+    const kind = otherRowFormulationKind(row);
+    const label = row.name.trim()
+      || (row.inventory_category ? inventoryCategoryLabel(row.inventory_category) : 'Other');
     return [{
-      kind: row.kind,
-      name: row.name.trim() || row.kind,
+      kind,
+      name: label,
       amount,
       unit: row.unit,
       abv: readNumber(row.abv),
-      sucroseMassFraction: sucrose == null ? null : sucrose / 100,
+      sucroseMassFraction: kind === 'syrup' && sucrose != null ? sucrose / 100 : null,
+      densityGPerMl: row.density_g_per_ml,
+      densityAssumption: row.density_assumption,
     }];
   });
+
+  const updateOther = (index: number, patch: Partial<OtherRow>) => {
+    setOthers((prev) => prev.map((row, i) => {
+      if (i !== index) return row;
+      const next = { ...row, ...patch };
+      if (patch.unit && patch.unit !== row.unit && patch.amount === undefined) {
+        const amount = readNumber(row.amount);
+        if (amount != null && amount > 0) {
+          const converted = convertIngredientAmount({
+            amount,
+            unit: row.unit,
+            ingredient_type: otherRowIngredientType(row),
+            abv: readNumber(row.abv),
+            density_g_per_ml: row.density_g_per_ml,
+          }, patch.unit);
+          next.amount = String(converted);
+        }
+      }
+      return next;
+    }));
+  };
+
+  const handleOtherCategorySelect = (index: number, category: string) => {
+    setOthers((prev) => prev.map((row, i) => {
+      if (i !== index) return row;
+      const ingredientType = blendIngredientTypeForCategory(category);
+      const linked = row.inventory_item_id != null ? inventoryById.get(row.inventory_item_id) : undefined;
+      const sameCategory = linked?.category.trim().toLowerCase() === category.trim().toLowerCase();
+      return {
+        ...row,
+        inventory_category: category,
+        inventory_item_id: sameCategory ? row.inventory_item_id : null,
+        name: sameCategory ? row.name : '',
+        unit: defaultUnitForMode(ingredientType, recommendMeasureMode(ingredientType).mode),
+        abv: sameCategory && additiveSupportsAbv(ingredientType) ? row.abv : '',
+        density_g_per_ml: sameCategory ? row.density_g_per_ml : null,
+        density_assumption: sameCategory ? row.density_assumption : null,
+      };
+    }));
+  };
+
+  const handleOtherItemSelect = (index: number, rawId: string) => {
+    if (!rawId) {
+      updateOther(index, { inventory_item_id: null, name: '' });
+      return;
+    }
+    const item = inventoryById.get(parseInt(rawId, 10));
+    if (!item) return;
+    updateOther(index, {
+      inventory_item_id: item.id,
+      inventory_category: item.category,
+      name: item.name,
+      unit: item.unit,
+      abv: item.abv != null ? String(item.abv) : '',
+      density_g_per_ml: item.density_g_per_ml ?? null,
+      density_assumption: null,
+    });
+  };
 
   const targetGal = () => {
     const volume = readNumber(targetVolume);
@@ -191,7 +293,6 @@ export function BlendDesigner({ onUseForBatch }: { onUseForBatch: (recipeId: num
         : { amount: gallons, unit: 'gal' }
     );
     const fixedSpirits = spiritComponents();
-    const fixedOthers = otherComponents();
     const spiritLines: BlendRecipeSpiritSourceInput[] = fixedSpirits.map((component) => ({
       spirit_label: component.name,
       volume_gal: spiritVolumeGalFromAmount(component.amount, component.unit, component.abv ?? 0),
@@ -244,14 +345,21 @@ export function BlendDesigner({ onUseForBatch }: { onUseForBatch: (recipeId: num
         });
       }
     }
-    for (const component of fixedOthers) {
-      if (component.kind === 'spirit' || component.kind === 'water' || component.kind === 'sugar') continue;
+    for (const row of others) {
+      const amount = readNumber(row.amount);
+      if (amount == null || amount <= 0) continue;
+      const ingredientType = otherRowIngredientType(row);
+      if (ingredientType === 'water') continue;
       ingredients.push({
-        ingredient_type: component.kind,
-        name: component.name,
-        amount: component.amount,
-        unit: component.unit,
-        abv: component.abv ?? null,
+        ingredient_type: ingredientType,
+        name: row.name.trim()
+          || (row.inventory_category ? inventoryCategoryLabel(row.inventory_category) : 'Additive'),
+        amount,
+        unit: row.unit,
+        abv: readNumber(row.abv),
+        inventory_item_id: row.inventory_item_id,
+        density_g_per_ml: row.density_g_per_ml,
+        density_assumption: row.density_assumption,
         notes: '',
       });
     }
@@ -465,47 +573,115 @@ export function BlendDesigner({ onUseForBatch }: { onUseForBatch: (recipeId: num
 
       <div className="card" style={{ marginTop: '1rem' }}>
         <h3>Other ingredients</h3>
-        {others.map((row, index) => (
-          <div className="formulation-grid" key={index}>
-            <div className="form-group">
-              <label>Type</label>
-              <select value={row.kind} onChange={(e) => setOthers((prev) => prev.map((item, i) => i === index ? { ...item, kind: e.target.value as OtherRow['kind'] } : item))}>
-                <option value="syrup">Syrup</option>
-                <option value="flavoring">Flavoring</option>
-                <option value="color">Color</option>
-                <option value="other">Other</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label>Name</label>
-              <input value={row.name} onChange={(e) => setOthers((prev) => prev.map((item, i) => i === index ? { ...item, name: e.target.value } : item))} />
-            </div>
-            <div className="form-group">
-              <label>Amount</label>
-              <input value={row.amount} onChange={(e) => setOthers((prev) => prev.map((item, i) => i === index ? { ...item, amount: e.target.value } : item))} inputMode="decimal" />
-            </div>
-            <div className="form-group">
-              <label>Unit</label>
-              <select value={row.unit} onChange={(e) => setOthers((prev) => prev.map((item, i) => i === index ? { ...item, unit: e.target.value } : item))}>
-                <option value="gal">gal</option>
-                <option value="L">L</option>
-                <option value="lbs">lbs</option>
-                <option value="kg">kg</option>
-                <option value="ml">ml</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label>ABV % if alcoholic</label>
-              <input value={row.abv} onChange={(e) => setOthers((prev) => prev.map((item, i) => i === index ? { ...item, abv: limitAbvInput(e.target.value) } : item))} inputMode="decimal" />
-            </div>
-            {row.kind === 'syrup' && (
+        <p className="field-hint">Pick an inventory category and item, same as blend recipes. Plain sugar and proofing water belong in the sections above.</p>
+        {others.map((row, index) => {
+          const selectedCategory = row.inventory_category;
+          const ingredientType = otherRowIngredientType(row);
+          const itemOptions = selectedCategory
+            ? filterInventoryByCategory(inventoryItems, selectedCategory)
+            : [];
+          const categoryChoices = selectedCategory
+            && !inventoryCategories.some((name) => name.toLowerCase() === selectedCategory.toLowerCase())
+            ? [...inventoryCategories, selectedCategory]
+            : inventoryCategories;
+          const unitOptions = unitOptionsForBlendIngredient({ ingredient_type: ingredientType, unit: row.unit });
+          return (
+            <div className="formulation-grid" key={index} style={{ marginBottom: '1rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border, #ddd)' }}>
               <div className="form-group">
-                <label>Sucrose % of syrup mass</label>
-                <input value={row.sucrosePercent} onChange={(e) => setOthers((prev) => prev.map((item, i) => i === index ? { ...item, sucrosePercent: e.target.value } : item))} inputMode="decimal" />
+                <label htmlFor={`designer-other-category-${index}`}>Category</label>
+                <select
+                  id={`designer-other-category-${index}`}
+                  data-testid={index === 0 ? 'designer-other-category' : `designer-other-category-${index}`}
+                  value={selectedCategory}
+                  onChange={(e) => handleOtherCategorySelect(index, e.target.value)}
+                >
+                  <option value="">— Category —</option>
+                  {categoryChoices.map((name) => (
+                    <option key={name} value={name}>{inventoryCategoryLabel(name)}</option>
+                  ))}
+                </select>
               </div>
-            )}
-          </div>
-        ))}
+              <div className="form-group">
+                <label htmlFor={`designer-other-item-${index}`}>Item</label>
+                {selectedCategory ? (
+                  <IngredientSelect
+                    testId={index === 0 ? 'designer-other-item' : `designer-other-item-${index}`}
+                    value={row.inventory_item_id != null ? String(row.inventory_item_id) : ''}
+                    emptyLabel="— Item —"
+                    noun={inventoryCategoryLabel(selectedCategory).toLowerCase()}
+                    category={selectedCategory}
+                    unit={row.unit}
+                    options={itemOptions.map((item) => ({
+                      value: String(item.id),
+                      label: `${item.name} (${item.quantity} ${item.unit})`,
+                    }))}
+                    orphanLabel={
+                      row.inventory_item_id != null
+                      && !itemOptions.some((item) => item.id === row.inventory_item_id)
+                        ? row.name
+                        : undefined
+                    }
+                    onSelect={(rawId) => handleOtherItemSelect(index, rawId)}
+                    onAdded={(item) => updateOther(index, {
+                      inventory_item_id: item.id,
+                      inventory_category: item.category,
+                      name: item.name,
+                      unit: item.unit,
+                      abv: item.abv != null ? String(item.abv) : '',
+                      density_g_per_ml: item.density_g_per_ml ?? null,
+                      density_assumption: null,
+                    })}
+                  />
+                ) : (
+                  <select id={`designer-other-item-${index}`} disabled value="">
+                    <option value="">— Choose a category first —</option>
+                  </select>
+                )}
+              </div>
+              <div className="form-group">
+                <label>Amount</label>
+                <input
+                  value={row.amount}
+                  onChange={(e) => updateOther(index, { amount: e.target.value })}
+                  inputMode="decimal"
+                />
+              </div>
+              <div className="form-group">
+                <label>Unit</label>
+                <select value={row.unit} onChange={(e) => updateOther(index, { unit: e.target.value })}>
+                  {unitOptions.map((unit) => (
+                    <option key={unit} value={unit}>{unit}</option>
+                  ))}
+                </select>
+              </div>
+              {additiveSupportsAbv(ingredientType) && (
+                <div className="form-group">
+                  <label>ABV % if alcoholic</label>
+                  <input
+                    value={row.abv}
+                    onChange={(e) => updateOther(index, { abv: limitAbvInput(e.target.value) })}
+                    inputMode="decimal"
+                  />
+                </div>
+              )}
+              {otherRowFormulationKind(row) === 'syrup' && (
+                <div className="form-group">
+                  <label>Sucrose % of syrup mass</label>
+                  <input
+                    value={row.sucrosePercent}
+                    onChange={(e) => updateOther(index, { sucrosePercent: e.target.value })}
+                    inputMode="decimal"
+                  />
+                </div>
+              )}
+              <div className="form-group" style={{ alignSelf: 'end' }}>
+                <button type="button" className="btn btn-sm btn-ghost" onClick={() => setOthers((prev) => prev.filter((_, i) => i !== index))}>
+                  Remove
+                </button>
+              </div>
+            </div>
+          );
+        })}
         <button type="button" className="btn btn-secondary btn-sm" onClick={() => setOthers((prev) => [...prev, emptyOther()])}>
           Add ingredient
         </button>
