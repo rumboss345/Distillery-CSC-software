@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS inventory_items (
   unit TEXT NOT NULL DEFAULT 'lbs',
   quantity REAL NOT NULL DEFAULT 0,
   reorder_level REAL NOT NULL DEFAULT 0,
+  cost_per_unit REAL,
   notes TEXT NOT NULL DEFAULT '',
   package_size_ml REAL,
   density_g_per_ml REAL,

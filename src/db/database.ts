@@ -684,6 +684,7 @@ function runMigrations(): void {
   migrateHoldingTankDilutions();
   migrateGinRuns();
   migrateDistillationTankSources();
+  migrateProductionCosting();
   db.run(`
     UPDATE floor_equipment
     SET equipment_type = 'stillage_tank'
@@ -691,6 +692,33 @@ function runMigrations(): void {
       AND name LIKE '%stillage%' COLLATE NOCASE
   `);
   persistDb();
+}
+
+function migrateProductionCosting(): void {
+  if (!db) return;
+  addColumnIfMissing('inventory_items', 'cost_per_unit', 'REAL');
+  const hasSettings = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='production_cost_settings'",
+  );
+  if (!hasSettings) {
+    db.run(`
+      CREATE TABLE production_cost_settings (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        sugar_cost_per_lb REAL NOT NULL DEFAULT 0,
+        default_yeast_cost_per_lb REAL NOT NULL DEFAULT 0,
+        labour_wash_per_batch REAL NOT NULL DEFAULT 0,
+        labour_ferment_per_day REAL NOT NULL DEFAULT 0,
+        labour_distill_per_run REAL NOT NULL DEFAULT 0,
+        labour_bottle_per_run REAL NOT NULL DEFAULT 0,
+        labour_per_bottle REAL NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
+    db.run(`
+      INSERT OR IGNORE INTO production_cost_settings (id) VALUES (1)
+    `);
+    persistDb();
+  }
 }
 
 function migrateDistillationTankSources(): void {

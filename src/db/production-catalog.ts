@@ -88,6 +88,7 @@ export const PRODUCTION_MUTATIONS: Record<string, ProductionMutation> = {
   moveEquipmentToPlan: { access: 'equipment', table: 'floor_equipment', idIndex: 0 },
   deleteFloorEquipment: { access: 'admin', table: 'floor_equipment', idIndex: 0 },
   emptyAllHoldingTanks: { access: 'owner' },
+  saveProductionCostSettings: { access: 'owner' },
 };
 
 export function userMayMutate(
