@@ -1304,6 +1304,9 @@ export function Blending() {
     setIngredients((prev) => prev.map((ing, i) => {
       if (i !== index) return ing;
       const next = { ...ing, ...patch };
+      if (patch.unit != null && patch.unit !== ing.unit && patch.amount === undefined && !patch.ingredient_type) {
+        next.amount = convertIngredientAmount(ing, patch.unit);
+      }
       if (patch.ingredient_type) {
         const rec = recommendMeasureMode(patch.ingredient_type);
         next.unit = defaultUnitForMode(patch.ingredient_type, rec.mode);
@@ -1317,7 +1320,13 @@ export function Blending() {
   const setIngredientMeasureMode = (index: number, mode: MeasureMode) => {
     setIngredients((prev) => prev.map((ing, i) => {
       if (i !== index) return ing;
-      return { ...ing, unit: defaultUnitForMode(ing.ingredient_type, mode) };
+      if (inferMeasureMode(ing.unit) === mode) return ing;
+      const unit = defaultUnitForMode(ing.ingredient_type, mode);
+      return {
+        ...ing,
+        unit,
+        amount: convertIngredientAmount(ing, unit),
+      };
     }));
   };
 
