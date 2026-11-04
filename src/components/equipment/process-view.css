@@ -34,6 +34,10 @@
   line-height: 1.35;
 }
 
+.process-toolbar-hint-touch {
+  display: none;
+}
+
 .process-toolbar-links {
   display: flex;
   flex-wrap: nowrap;
@@ -1429,6 +1433,16 @@
   border-color: var(--accent);
 }
 
+@media (pointer: coarse) {
+  .process-toolbar-hint-desktop {
+    display: none;
+  }
+
+  .process-toolbar-hint-touch {
+    display: block;
+  }
+}
+
 @media (max-width: 1100px) {
   .process-body {
     grid-template-columns: 1fr;
@@ -1452,8 +1466,12 @@
     overflow-y: visible;
   }
 
-  .process-toolbar-hint {
+  .process-toolbar-hint-desktop {
     display: none;
+  }
+
+  .process-toolbar-hint-touch {
+    display: block;
   }
 
   .process-toolbar-links {
