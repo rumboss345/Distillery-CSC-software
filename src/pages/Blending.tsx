@@ -1376,25 +1376,30 @@ export function Blending() {
   };
   const removeIngredient = (index: number) => setIngredients((prev) => prev.filter((_, i) => i !== index));
 
+  const wizardSpiritRecipeInputs = (): BlendRecipeSpiritSourceInput[] => (
+    spiritSources
+      .map(syncSpiritVolume)
+      .filter((source) => source.abv > 0 && (source.volume_gal > 0 || source.amount > 0))
+      .map((source) => ({
+        spirit_label: source.spirit_label?.trim() || 'Spirit',
+        volume_gal: source.volume_gal,
+        abv: source.abv,
+        entered_amount: source.amount > 0 ? source.amount : null,
+        entered_unit: source.amount > 0 ? source.unit : null,
+      }))
+  );
+
   const requestWizardProofingWater = () => {
     if (form.target_abv == null) return;
-    const spirits = spiritSources
-      .map(syncSpiritVolume)
-      .filter((source) => source.volume_gal > 0 && source.abv > 0);
-    if (spirits.length === 0) {
+    const spiritInputs = wizardSpiritRecipeInputs();
+    if (spiritInputs.length === 0) {
       alert(isBarrelBlendWizard
         ? 'Select aging barrels and enter pull volumes on step 2 before calculating water.'
         : 'Select a source tank and enter pull volumes on step 2 before calculating water.');
       return;
     }
     const preview = previewProofingWaterAdjustment(
-      spirits.map((source) => ({
-        spirit_label: 'Spirit',
-        volume_gal: source.volume_gal,
-        abv: source.abv,
-        entered_amount: source.amount,
-        entered_unit: source.unit,
-      })),
+      spiritInputs,
       ingredients,
       form.target_abv,
     );
@@ -1837,6 +1842,34 @@ export function Blending() {
       </div>
     );
   };
+
+  const renderWizardProofingWaterPreview = () => (
+    <>
+      {wizardProofingPreview && (
+        <ProofingWaterConfirm
+          preview={wizardProofingPreview}
+          onConfirm={confirmWizardProofingWater}
+          onCancel={() => setWizardProofingPreview(null)}
+        />
+      )}
+      {wizardOriginalWater != null && (
+        <button type="button" className="btn btn-sm btn-secondary" onClick={restoreWizardWater}>
+          Restore original recipe water
+        </button>
+      )}
+      {ingredients.some((i) => i.ingredient_type === 'water' && i.amount > 0) && (() => {
+        const water = ingredients.find((i) => i.ingredient_type === 'water')!;
+        const alt = measureAlternate(water);
+        return (
+          <p className="wizard-result-banner">
+            Add <strong>{water.amount.toFixed(2)} {water.unit}</strong> of proofing water
+            {alt ? ` (${alt.label})` : ''}.
+            <span className="measure-tip-inline"> Water is always measured by volume.</span>
+          </p>
+        );
+      })()}
+    </>
+  );
 
   const renderStepContent = () => {
     switch (wizardStep) {
@@ -2315,29 +2348,7 @@ export function Blending() {
                 Adjust proofing water
               </button>
             )}
-            {wizardProofingPreview && (
-              <ProofingWaterConfirm
-                preview={wizardProofingPreview}
-                onConfirm={confirmWizardProofingWater}
-                onCancel={() => setWizardProofingPreview(null)}
-              />
-            )}
-            {wizardOriginalWater != null && (
-              <button type="button" className="btn btn-sm btn-secondary" onClick={restoreWizardWater}>
-                Restore original recipe water
-              </button>
-            )}
-            {ingredients.some((i) => i.ingredient_type === 'water' && i.amount > 0) && (() => {
-              const water = ingredients.find((i) => i.ingredient_type === 'water')!;
-              const alt = measureAlternate(water);
-              return (
-                <p className="wizard-result-banner">
-                  Add <strong>{water.amount.toFixed(2)} {water.unit}</strong> of proofing water
-                  {alt ? ` (${alt.label})` : ''}.
-                  <span className="measure-tip-inline"> Water is always measured by volume.</span>
-                </p>
-              );
-            })()}
+            {renderWizardProofingWaterPreview()}
           </>
         );
 
@@ -2618,6 +2629,7 @@ export function Blending() {
                 ? 'Straight spirit uses TTB Table 6 at 60 °F (27 CFR §30.66). Water is 8.32823 lb per wine gallon. Finished volume is mass divided by that density.'
                 : `${PREDICTED_VOLUME_ESTIMATE_NOTE} Sugar mass stays the weighed charge. Dissolved sugar uses 0.6219 mL/g as an apparent-volume approximation, not crystalline density. Water is 8.328 lb/gal (27 CFR §30.41). Class I color and CS1 syrup densities are used only when that documented assumption is selected. Unknown flavor density is not treated as water. ${MEASURED_VOLUME_AUTHORITY_NOTE}`}
             </p>
+            {renderWizardProofingWaterPreview()}
             <BlendAbvConfirmation
               calculatedAbv={formulation.theoretical.abv}
               calculatedVolumeGal={formulation.theoretical.volumeGal}
@@ -2628,6 +2640,7 @@ export function Blending() {
                 ...form,
                 target_abv: Math.round(formulation.theoretical.abv * 10) / 10,
               })}
+              onAdjustProofingWater={form.target_abv != null ? requestWizardProofingWater : undefined}
             />
             <p className="field-hint">Next: run a lab test on a trial batch, or approve if you are confident in the numbers.</p>
           </div>
