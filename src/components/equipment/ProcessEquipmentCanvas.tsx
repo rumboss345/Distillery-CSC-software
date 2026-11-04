@@ -20,6 +20,7 @@ import {
   computeFitToViewportTransform,
   computeMaxColumnsForViewport,
   computeProcessLayoutPlan,
+  computeWidthFitViewportTransform,
   resolveDropSlotPosition,
 } from './process-layout';
 import { EquipmentVisual } from './EquipmentVisual';
@@ -154,16 +155,25 @@ export function ProcessEquipmentCanvas({
   }, [allEquipment, volumeById]);
 
   const maxColumns = useMemo(
-    () => computeMaxColumnsForViewport(viewportSize.width),
-    [viewportSize.width],
+    () => computeMaxColumnsForViewport(viewportSize.width, { touchLayout: !allowPanAndDrag }),
+    [viewportSize.width, allowPanAndDrag],
   );
 
   const layoutPlan = useMemo(
-    () => computeProcessLayoutPlan(allEquipment, maxColumns),
-    [allEquipment, maxColumns],
+    () => computeProcessLayoutPlan(
+      allEquipment,
+      maxColumns,
+      allowPanAndDrag ? undefined : { ignoreSavedPositions: true },
+    ),
+    [allEquipment, maxColumns, allowPanAndDrag],
   );
 
   const { stages, stageBands, canvasSize, positions: layoutPositions } = layoutPlan;
+
+  const mobileFit = useMemo(
+    () => (allowPanAndDrag ? null : computeWidthFitViewportTransform(canvasSize, viewportSize)),
+    [allowPanAndDrag, canvasSize, viewportSize],
+  );
 
   const applyFitToViewport = useCallback(() => {
     const fit = computeFitToViewportTransform(canvasSize, viewportSize);
@@ -172,8 +182,11 @@ export function ProcessEquipmentCanvas({
   }, [canvasSize, viewportSize]);
 
   useEffect(() => {
-    if (!allowPanAndDrag) applyFitToViewport();
-  }, [allowPanAndDrag, applyFitToViewport, canvasSize, viewportSize]);
+    if (!allowPanAndDrag && mobileFit) {
+      setScale(mobileFit.scale);
+      setPan(mobileFit.pan);
+    }
+  }, [allowPanAndDrag, mobileFit]);
 
   const summary = getProductionSummary();
   const offlineCount = allEquipment.filter(
@@ -438,7 +451,7 @@ export function ProcessEquipmentCanvas({
           Drag a vessel to rearrange · drag the background to pan · Fit shows the whole floor
         </span>
         <span className="process-toolbar-hint process-toolbar-hint-touch">
-          Tap equipment for details and next steps below · hold for the action menu · scroll the page to reach the panel
+          Tap equipment for details · hold for the action menu · scroll the floor diagram or the page for more
         </span>
         <nav className="process-toolbar-links" aria-label="Production shortcuts">
           <Link to="/wash" className="process-toolbar-link">Wash</Link>
@@ -471,11 +484,21 @@ export function ProcessEquipmentCanvas({
           }}
         >
           <div
+            className={allowPanAndDrag ? 'process-canvas' : 'process-canvas-scaler'}
+            style={allowPanAndDrag ? undefined : {
+              width: mobileFit?.scrollWidth ?? canvasSize.width,
+              height: mobileFit?.scrollHeight ?? canvasSize.height,
+            }}
+          >
+          <div
             className="process-canvas"
             style={{
               width: canvasSize.width,
               height: canvasSize.height,
-              transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`,
+              transform: allowPanAndDrag
+                ? `translate(${pan.x}px, ${pan.y}px) scale(${scale})`
+                : `scale(${mobileFit?.scale ?? scale})`,
+              transformOrigin: allowPanAndDrag ? undefined : '0 0',
               ['--process-item-width' as string]: `${PROCESS_ITEM_WIDTH}px`,
               ['--process-node-height' as string]: `${PROCESS_NODE_HEIGHT}px`,
               ['--process-visual-slot' as string]: `${PROCESS_VISUAL_SLOT}px`,
@@ -580,6 +603,7 @@ export function ProcessEquipmentCanvas({
                 </div>
               );
             })}
+          </div>
           </div>
         </div>
 

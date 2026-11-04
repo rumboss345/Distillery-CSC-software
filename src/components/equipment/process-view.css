@@ -84,9 +84,17 @@
 }
 
 .process-viewport--static {
-  overflow: visible;
+  overflow: auto;
   cursor: default;
-  touch-action: pan-y;
+  touch-action: pan-x pan-y;
+  -webkit-overflow-scrolling: touch;
+  max-height: min(72dvh, 640px);
+  min-height: 12rem;
+}
+
+.process-canvas-scaler {
+  position: relative;
+  margin: 0 auto;
 }
 
 .process-viewport--panning {
@@ -1449,24 +1457,34 @@
   }
 
   .process-viewport {
-    overflow: visible;
     cursor: default;
-    touch-action: pan-y;
+  }
+
+  .process-viewport--static {
+    max-height: min(68dvh, 560px);
   }
 
   .process-equipment-node {
-    touch-action: pan-y;
+    touch-action: pan-x pan-y;
     cursor: pointer;
   }
 }
 
 @media (max-width: 1100px) {
+  .process-view {
+    overflow: visible;
+  }
+
   .process-body {
     grid-template-columns: 1fr;
     min-height: 0;
   }
 
   .process-viewport {
+    min-height: 12rem;
+  }
+
+  .process-viewport:not(.process-viewport--static) {
     min-height: 22rem;
   }
 
