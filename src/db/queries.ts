@@ -332,6 +332,8 @@ function toAdditiveInputs(ingredients: BlendIngredientInput[]): AdditiveInput[] 
       amount: i.amount,
       unit: i.unit,
       abv: i.abv,
+      densityGPerMl: i.density_g_per_ml ?? null,
+      densityAssumption: i.density_assumption ?? null,
       costPerUnit: i.cost_per_unit ?? undefined,
       lotNumber: i.lot_number,
       inventoryItemId: i.inventory_item_id ?? undefined,

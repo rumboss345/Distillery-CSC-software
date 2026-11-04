@@ -1,5 +1,5 @@
 import { convertIngredientAmount, ingredientVolumeGal, spiritVolumeGalFromAmount } from './blending';
-import { solveWaterForTargetAbv, type SpiritSourceInput } from './blend-formulation';
+import { additiveInputsFromBlendIngredients, solveWaterForTargetAbv, type SpiritSourceInput } from './blend-formulation';
 import { analyzeFormulation, type FormulationComponent } from './formulation-engine';
 import type { BlendIngredientInput, BlendIngredientType, BlendRecipeSpiritSourceInput } from '../types';
 
@@ -144,17 +144,7 @@ export function proofingWaterGalForTarget(
   }
   const solved = solveWaterForTargetAbv(
     spiritInputs,
-    ingredients
-      .filter((ingredient) => ingredient.ingredient_type !== 'water' && ingredient.amount > 0)
-      .map((ingredient) => ({
-        ingredientType: ingredient.ingredient_type,
-        name: ingredient.name,
-        amount: ingredient.amount,
-        unit: ingredient.unit,
-        abv: ingredient.abv,
-        densityGPerMl: ingredient.density_g_per_ml,
-        densityAssumption: ingredient.density_assumption,
-      })),
+    additiveInputsFromBlendIngredients(ingredients),
     targetAbv,
   );
   if (!solved) return { error: 'Proofing water could not bring this blend to the target proof.' };
