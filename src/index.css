@@ -1027,6 +1027,43 @@ table {
   min-width: 40rem;
 }
 
+@media (pointer: coarse) {
+  .td-actions {
+    gap: 0.45rem;
+  }
+
+  .td-actions .btn-sm,
+  .td-actions .btn-ghost {
+    min-height: 2.75rem;
+    padding: 0.5rem 0.85rem;
+    font-size: 0.875rem;
+  }
+
+  .modal-header .btn-ghost {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+  }
+}
+
+@media (max-width: 1100px) {
+  .table-wrap > table {
+    min-width: 34rem;
+  }
+
+  .table-wrap > table th:first-child,
+  .table-wrap > table td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: var(--bg-card);
+    box-shadow: 1px 0 0 var(--border-subtle);
+  }
+
+  .table-wrap > table thead th:first-child {
+    background: color-mix(in srgb, var(--text) 8%, var(--bg-card));
+  }
+}
+
 thead {
   background: color-mix(in srgb, var(--text) 8%, var(--bg-card));
 }
@@ -4318,15 +4355,15 @@ tr.calendar-record-focus td {
 }
 
 .equipment-maintenance-badge--blocked {
-  background: #fef2f2;
-  color: #b91c1c;
-  border: 1px solid #fecaca;
+  background: var(--danger-bg);
+  color: var(--danger);
+  border: 1px solid rgba(224, 138, 138, 0.35);
 }
 
 .equipment-maintenance-badge--note {
-  background: #fffbeb;
-  color: #b45309;
-  border: 1px solid #fde68a;
+  background: var(--warning-bg);
+  color: var(--warning);
+  border: 1px solid rgba(224, 177, 90, 0.35);
 }
 
 @media (min-width: 1400px) {
@@ -4608,6 +4645,19 @@ tr.calendar-record-focus td {
 
   .td-actions {
     flex-wrap: wrap;
+    gap: 0.45rem;
+  }
+
+  .td-actions .btn-sm,
+  .td-actions .btn-ghost {
+    min-height: 2.75rem;
+    padding: 0.5rem 0.85rem;
+    font-size: 0.875rem;
+  }
+
+  .modal-header .btn-ghost {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
   }
 
   .auth-screen {

@@ -26,7 +26,10 @@ import { EquipmentVisual } from './EquipmentVisual';
 import { ProcessEquipmentDetailPanel } from './ProcessEquipmentDetailPanel';
 import { fermentationDaysOverdue, formatDaysOverdue } from '../../lib/fermentation';
 import { localIsoDate } from '../../lib/planned-event-date';
-import { isEquipmentContextMenuPointer } from './process-equipment-gesture';
+import {
+  isEquipmentContextMenuPointer,
+  processEquipmentNodeTitle,
+} from './process-equipment-gesture';
 import { processEquipmentVisualScale } from './process-visual-scale';
 import type { EquipmentVisualData } from './equipment-visual.types';
 import type { FloorEquipmentView } from '../../types';
@@ -74,6 +77,16 @@ export function ProcessEquipmentCanvas({
   const dragStartRef = useRef({ x: 0, y: 0 });
   /** Set on pointer down. Chrome fires a fake contextmenu after preventDefault on a left click. */
   const contextMenuGestureRef = useRef(false);
+  const touchPendingRef = useRef<{
+    item: EquipmentItem;
+    offsetX: number;
+    offsetY: number;
+    startX: number;
+    startY: number;
+  } | null>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressMenuRef = useRef(false);
+  const [coarsePointer, setCoarsePointer] = useState(false);
   const [assignmentsByStage, setAssignmentsByStage] = useState<
     Record<string, ProcessAssignmentEntry[]>
   >({});
@@ -82,6 +95,14 @@ export function ProcessEquipmentCanvas({
     x: number;
     y: number;
   } | null>(null);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(pointer: coarse)');
+    const updatePointer = () => setCoarsePointer(mq.matches);
+    updatePointer();
+    mq.addEventListener('change', updatePointer);
+    return () => mq.removeEventListener('change', updatePointer);
+  }, []);
 
   useEffect(() => {
     const el = viewportRef.current;
@@ -285,6 +306,20 @@ export function ProcessEquipmentCanvas({
     return () => window.removeEventListener('keydown', onKey);
   }, [contextMenu]);
 
+  const openEquipmentContextMenu = (item: EquipmentItem, clientX: number, clientY: number) => {
+    longPressMenuRef.current = true;
+    setContextMenu({ equipmentId: item.id, x: clientX, y: clientY });
+    onSelect(item.id);
+  };
+
+  const cancelTouchPending = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    touchPendingRef.current = null;
+  };
+
   const onEquipmentContextMenu = (e: React.MouseEvent, item: EquipmentItem) => {
     const fromRealGesture = contextMenuGestureRef.current;
     contextMenuGestureRef.current = false;
@@ -294,16 +329,82 @@ export function ProcessEquipmentCanvas({
     }
     e.preventDefault();
     e.stopPropagation();
-    setContextMenu({ equipmentId: item.id, x: e.clientX, y: e.clientY });
-    onSelect(item.id);
+    openEquipmentContextMenu(item, e.clientX, e.clientY);
   };
 
   const onEquipmentPointerDown = (e: React.PointerEvent, item: EquipmentItem) => {
     e.stopPropagation();
     contextMenuGestureRef.current = isEquipmentContextMenuPointer(e.button, e.ctrlKey);
     if (contextMenuGestureRef.current) return;
+
+    if (e.pointerType === 'touch') {
+      e.preventDefault();
+      setContextMenu(null);
+      longPressMenuRef.current = false;
+      cancelTouchPending();
+      dragMovedRef.current = false;
+      dragStartRef.current = { x: e.clientX, y: e.clientY };
+      const pos = resolvePosition(item);
+      const pt = getCanvasPoint(e.clientX, e.clientY);
+      const pending = {
+        item,
+        offsetX: pt.x - pos.x,
+        offsetY: pt.y - pos.y,
+        startX: e.clientX,
+        startY: e.clientY,
+      };
+      touchPendingRef.current = pending;
+
+      longPressTimerRef.current = setTimeout(() => {
+        longPressTimerRef.current = null;
+        if (touchPendingRef.current !== pending) return;
+        touchPendingRef.current = null;
+        openEquipmentContextMenu(item, pending.startX, pending.startY);
+      }, 500);
+
+      const onTouchMove = (ev: PointerEvent) => {
+        if (ev.pointerId !== e.pointerId) return;
+        if (!touchPendingRef.current) return;
+        if (Math.hypot(ev.clientX - pending.startX, ev.clientY - pending.startY) <= 4) return;
+        if (longPressTimerRef.current) {
+          clearTimeout(longPressTimerRef.current);
+          longPressTimerRef.current = null;
+        }
+        dragMovedRef.current = true;
+        touchPendingRef.current = null;
+        setDragging({
+          id: item.id,
+          offsetX: pending.offsetX,
+          offsetY: pending.offsetY,
+        });
+      };
+
+      const onTouchEnd = (ev: PointerEvent) => {
+        if (ev.pointerId !== e.pointerId) return;
+        window.removeEventListener('pointermove', onTouchMove);
+        window.removeEventListener('pointerup', onTouchEnd);
+        window.removeEventListener('pointercancel', onTouchEnd);
+        if (longPressTimerRef.current) {
+          clearTimeout(longPressTimerRef.current);
+          longPressTimerRef.current = null;
+        }
+        const stillPending = touchPendingRef.current;
+        touchPendingRef.current = null;
+        if (stillPending && !dragMovedRef.current && !longPressMenuRef.current) {
+          onSelect(item.id);
+        }
+      };
+
+      window.addEventListener('pointermove', onTouchMove);
+      window.addEventListener('pointerup', onTouchEnd);
+      window.addEventListener('pointercancel', onTouchEnd);
+      return;
+    }
+
     e.preventDefault();
     setContextMenu(null);
+    longPressMenuRef.current = false;
+    cancelTouchPending();
     dragMovedRef.current = false;
     dragStartRef.current = { x: e.clientX, y: e.clientY };
     const pos = resolvePosition(item);
@@ -335,8 +436,11 @@ export function ProcessEquipmentCanvas({
     <div className="process-view">
       <div className="process-toolbar">
         <span className="process-toolbar-title">Production flow</span>
-        <span className="process-toolbar-hint">
+        <span className="process-toolbar-hint process-toolbar-hint-desktop">
           Drag a vessel to rearrange · drag the background to pan · Fit shows the whole floor
+        </span>
+        <span className="process-toolbar-hint process-toolbar-hint-touch">
+          Tap equipment for details and next steps below · hold for the action menu · pinch or use Fit to see the floor
         </span>
         <nav className="process-toolbar-links" aria-label="Production shortcuts">
           <Link to="/wash" className="process-toolbar-link">Wash</Link>
@@ -424,17 +528,19 @@ export function ProcessEquipmentCanvas({
                   onPointerDown={(e) => onEquipmentPointerDown(e, item)}
                   onContextMenu={(e) => onEquipmentContextMenu(e, item)}
                   onClick={(e) => e.stopPropagation()}
-                  title={[
-                    visual.name,
-                    visual.liquidName,
-                    needsCleaning || visual.isWashing || visual.currentVolumeGal > 0
-                      ? `${visual.currentVolumeGal.toFixed(1)} gal`
-                      : 'Empty',
-                    visual.abv != null && visual.abv > 0 ? `${visual.abv.toFixed(1)}% ABV` : null,
-                    visual.fermenterLatestBrix != null ? `${visual.fermenterLatestBrix.toFixed(1)}° Brix` : null,
-                    daysOverdue > 0 ? formatDaysOverdue(daysOverdue) : null,
-                    'Right-click for next step, logs, cuts, or maintenance',
-                  ].filter(Boolean).join(' · ')}
+                  title={processEquipmentNodeTitle({
+                    coarsePointer,
+                    parts: [
+                      visual.name,
+                      visual.liquidName,
+                      needsCleaning || visual.isWashing || visual.currentVolumeGal > 0
+                        ? `${visual.currentVolumeGal.toFixed(1)} gal`
+                        : 'Empty',
+                      visual.abv != null && visual.abv > 0 ? `${visual.abv.toFixed(1)}% ABV` : null,
+                      visual.fermenterLatestBrix != null ? `${visual.fermenterLatestBrix.toFixed(1)}° Brix` : null,
+                      daysOverdue > 0 ? formatDaysOverdue(daysOverdue) : null,
+                    ],
+                  })}
                 >
                   <EquipmentVisual
                     data={visual}
@@ -485,7 +591,10 @@ export function ProcessEquipmentCanvas({
             menu={contextMenuModel}
             x={contextMenu.x}
             y={contextMenu.y}
-            onClose={() => setContextMenu(null)}
+            onClose={() => {
+              longPressMenuRef.current = false;
+              setContextMenu(null);
+            }}
           />
         )}
 
