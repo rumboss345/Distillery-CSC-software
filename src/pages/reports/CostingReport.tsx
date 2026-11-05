@@ -168,11 +168,12 @@ export function CostingReport() {
 
         <h4 style={{ marginTop: '1.25rem', marginBottom: '0.5rem' }}>Monthly overhead</h4>
         <p className="field-hint">
-          Included when the calendar month overlaps the report date range.
+          Enter costs once with an effective month; they apply to that month and every month after until you add a
+          newer row. Reports prorate by day when the date range covers only part of a month.
         </p>
         <div className="form-grid">
           <div className="form-group">
-            <label>Month</label>
+            <label>Effective from</label>
             <input
               type="month"
               data-testid="costing-overhead-month"
@@ -212,7 +213,7 @@ export function CostingReport() {
           </div>
           <div className="form-group" style={{ alignSelf: 'end' }}>
             <button type="button" className="btn btn-secondary btn-sm" onClick={addOverheadMonth}>
-              Add / update month
+              Add / update rate
             </button>
           </div>
         </div>
@@ -221,7 +222,7 @@ export function CostingReport() {
             <table>
               <thead>
                 <tr>
-                  <th>Month</th>
+                  <th>Effective from</th>
                   <th className="num">Master distiller</th>
                   <th className="num">Electric</th>
                   <th className="num">Gas / propane</th>

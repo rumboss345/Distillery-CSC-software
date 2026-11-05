@@ -16,7 +16,8 @@ import { ingredientVolumeGal } from '../blending';
 import { laaLitersFromVolumeAbv } from './alcohol-units';
 import { mlToGallons } from '../../types';
 import { buildFermentationPerformance } from './fermentation-performance';
-import { calendarMonthInReportRange, eventInReportRange, type ReportDateRange } from './period';
+import { computeMonthlyOverheadTotal } from './monthly-overhead';
+import { eventInReportRange, type ReportDateRange } from './period';
 
 const STANDARD_BOTTLE_ABV = 40;
 
@@ -149,14 +150,7 @@ function mashMaterialCost(
 }
 
 function monthlyOverheadTotal(range: ReportDateRange): number {
-  let total = 0;
-  for (const row of getProductionCostMonthlyOverhead()) {
-    if (!calendarMonthInReportRange(row.year_month, range)) continue;
-    total += (row.master_distiller > 0 ? row.master_distiller : 0)
-      + (row.electric > 0 ? row.electric : 0)
-      + (row.gas_propane > 0 ? row.gas_propane : 0);
-  }
-  return roundMoney(total);
+  return computeMonthlyOverheadTotal(range, getProductionCostMonthlyOverhead());
 }
 
 function processWaterGallonsInRange(range: ReportDateRange): number {
