@@ -335,7 +335,8 @@ export function BlendProductionWorksheet({
         <h2>Calculation status</h2>
         <p>
           Reference temperature {BLEND_REFERENCE_TEMPERATURE_F} °F. Predicted values are not a gauged yield.
-          {alcohol?.volumeStatus === 'provisional' ? ' Syrup, color, flavor, and similar additives are left out of the finished volume. Density converts their charge between volume and mass only. Sugar and solids percentages are optional.' : ''}
+          {alcohol?.volumeStatus === 'provisional' ? ' This batch is provisional until missing specifications are entered.' : ''}
+          {alcohol?.sugarSpecificationIncomplete ? ' Sugar g/L counts only ingredients with a sugar concentration. Syrup sugar is omitted when that specification is blank.' : ''}
           {alcohol?.sugarGPerL != null ? ` Estimated sugar from known charges: ${alcohol.sugarGPerL.toFixed(1)} g/L.` : ''}
         </p>
         {alcohol && alcohol.warnings.length > 0 && (
