@@ -1,50 +1,24 @@
 import { describe, expect, it } from 'vitest';
-import { equipmentNeedsCleaning, equipmentStatusWhenReturningToPlanned } from './equipment-cleaning';
-import { equipmentUnavailableForProduction } from './equipment-maintenance';
-import type { FloorEquipment } from '../types';
+import {
+  CLEANING_OVERDUE_FLASH_DAYS,
+  calendarDaysBetweenInclusiveStart,
+  equipmentCleaningDaysDirty,
+  equipmentCleaningOverdueFlash,
+} from './equipment-cleaning';
 
-const base = (overrides: Partial<FloorEquipment>): FloorEquipment => ({
-  id: 1,
-  floor_plan_id: 1,
-  name: 'Test',
-  equipment_type: 'fermenter',
-  pos_x_ft: 0,
-  pos_y_ft: 0,
-  process_pos_x: null,
-  process_pos_y: null,
-  width_ft: 10,
-  depth_ft: 10,
-  capacity_gal: 100,
-  status: 'empty',
-  linked_mash_batch_id: null,
-  notes: '',
-  icon: '',
-  maintenance_status: null,
-  maintenance_notes: '',
-  cleaned_at: null,
-  cleaned_by_user_id: null,
-  cleaned_by_user_name: null,
-  created_at: '',
-  ...overrides,
-});
-
-describe('equipment cleaning', () => {
-  it('flags cleaning status as needs cleaning', () => {
-    expect(equipmentNeedsCleaning(base({ status: 'cleaning' }))).toBe(true);
-    expect(equipmentNeedsCleaning(base({ status: 'empty' }))).toBe(false);
+describe('equipment cleaning overdue', () => {
+  it('counts calendar days since flagged', () => {
+    expect(equipmentCleaningDaysDirty('2026-11-01T08:00:00', '2026-11-01')).toBe(0);
+    expect(equipmentCleaningDaysDirty('2026-11-01T08:00:00', '2026-11-03')).toBe(2);
+    expect(equipmentCleaningDaysDirty('2026-11-01T08:00:00', '2026-11-04')).toBe(3);
   });
 
-  it('blocks production use when cleaning is required', () => {
-    expect(equipmentUnavailableForProduction(base({ status: 'cleaning' }))).toBe(true);
-    expect(equipmentUnavailableForProduction(base({ status: 'empty' }))).toBe(false);
+  it('flashes after more than two days dirty', () => {
+    expect(equipmentCleaningOverdueFlash(CLEANING_OVERDUE_FLASH_DAYS)).toBe(false);
+    expect(equipmentCleaningOverdueFlash(CLEANING_OVERDUE_FLASH_DAYS + 1)).toBe(true);
   });
 
-  it('does not require cleaning when a record returns to planned', () => {
-    expect(equipmentStatusWhenReturningToPlanned('in_use', false)).toBe('empty');
-    expect(equipmentStatusWhenReturningToPlanned('cleaning', false)).toBe('empty');
-    expect(equipmentStatusWhenReturningToPlanned('cleaning', true)).toBe('in_use');
-    expect(equipmentStatusWhenReturningToPlanned('in_use', true)).toBe('in_use');
-    expect(equipmentStatusWhenReturningToPlanned('empty', false)).toBeNull();
-    expect(equipmentStatusWhenReturningToPlanned('offline', false)).toBeNull();
+  it('measures inclusive calendar span', () => {
+    expect(calendarDaysBetweenInclusiveStart('2026-11-01', '2026-11-04')).toBe(3);
   });
 });

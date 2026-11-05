@@ -7,6 +7,7 @@ import {
   getDistillationRunForCuts,
   getEquipmentVolumeReport,
   getFloorPlans,
+  getCleaningFlaggedAtByEquipmentId,
   getProductionSummary,
   updateEquipmentProcessPosition,
 } from '../../db/queries';
@@ -35,7 +36,11 @@ import {
 import { processEquipmentVisualScale } from './process-visual-scale';
 import type { EquipmentVisualData } from './equipment-visual.types';
 import type { FloorEquipmentView } from '../../types';
-import { equipmentNeedsCleaning } from '../../lib/equipment-cleaning';
+import {
+  equipmentCleaningDaysDirty,
+  equipmentCleaningOverdueFlash,
+  equipmentNeedsCleaning,
+} from '../../lib/equipment-cleaning';
 import {
   equipmentBlocksProduction,
   equipmentHasMaintenanceTag,
@@ -153,6 +158,11 @@ export function ProcessEquipmentCanvas({
     }
     return map;
   }, [allEquipment, volumeById]);
+
+  const cleaningFlaggedAt = useMemo(
+    () => getCleaningFlaggedAtByEquipmentId(),
+    [refreshKey],
+  );
 
   const maxColumns = useMemo(
     () => computeMaxColumnsForViewport(viewportSize.width, { touchLayout: !allowPanAndDrag }),
@@ -535,6 +545,10 @@ export function ProcessEquipmentCanvas({
               const isDragging = dragging?.id === item.id;
               const outOfService = equipmentBlocksProduction(item);
               const needsCleaning = equipmentNeedsCleaning(item);
+              const cleaningDaysDirty = needsCleaning
+                ? equipmentCleaningDaysDirty(cleaningFlaggedAt.get(item.id), today)
+                : 0;
+              const cleaningOverdue = equipmentCleaningOverdueFlash(cleaningDaysDirty);
               const repairNote = equipmentShowsRepairNoteIndicator(item);
               const hasMaintenanceTag = equipmentHasMaintenanceTag(item);
               const daysOverdue = item.equipment_type === 'fermenter'
@@ -544,7 +558,7 @@ export function ProcessEquipmentCanvas({
               return (
                 <div
                   key={item.id}
-                  className={`process-equipment-node${isDragging ? ' process-equipment-node--dragging' : ''}${selectedId === item.id ? ' process-equipment-node--selected' : ''}${visual.isFermenting ? ' process-equipment-node--fermenting' : ''}${outOfService ? ' process-equipment-node--out-of-service' : ''}${needsCleaning ? ' process-equipment-node--needs-cleaning' : ''}${repairNote ? ' process-equipment-node--repair-note' : ''}${hasMaintenanceTag ? ' process-equipment-node--has-maintenance' : ''}${daysOverdue > 0 ? ' process-equipment-node--overdue' : ''}`}
+                  className={`process-equipment-node${isDragging ? ' process-equipment-node--dragging' : ''}${selectedId === item.id ? ' process-equipment-node--selected' : ''}${visual.isFermenting ? ' process-equipment-node--fermenting' : ''}${outOfService ? ' process-equipment-node--out-of-service' : ''}${needsCleaning ? ' process-equipment-node--needs-cleaning' : ''}${cleaningOverdue ? ' process-equipment-node--cleaning-overdue' : ''}${repairNote ? ' process-equipment-node--repair-note' : ''}${hasMaintenanceTag ? ' process-equipment-node--has-maintenance' : ''}${daysOverdue > 0 ? ' process-equipment-node--overdue' : ''}`}
                   style={{ left: pos.x, top: pos.y }}
                   onPointerDown={(e) => onEquipmentPointerDown(e, item)}
                   onContextMenu={(e) => onEquipmentContextMenu(e, item)}
@@ -560,6 +574,7 @@ export function ProcessEquipmentCanvas({
                       visual.abv != null && visual.abv > 0 ? `${visual.abv.toFixed(1)}% ABV` : null,
                       visual.fermenterLatestBrix != null ? `${visual.fermenterLatestBrix.toFixed(1)}° Brix` : null,
                       daysOverdue > 0 ? formatDaysOverdue(daysOverdue) : null,
+                      cleaningOverdue ? `Dirty ${cleaningDaysDirty} days — clean now` : null,
                     ],
                   })}
                 >
@@ -581,7 +596,10 @@ export function ProcessEquipmentCanvas({
                     </div>
                   )}
                   {needsCleaning && (
-                    <div className="process-equipment-cleaning-badge" aria-label="Needs cleaning">
+                    <div
+                      className={`process-equipment-cleaning-badge${cleaningOverdue ? ' process-equipment-cleaning-badge--overdue' : ''}`}
+                      aria-label={cleaningOverdue ? `Needs cleaning — ${cleaningDaysDirty} days overdue` : 'Needs cleaning'}
+                    >
                       <svg viewBox="0 0 24 24" className="process-equipment-cleaning-badge-icon">
                         <path d="M12 3v3M5.5 8.5l2 2M3 14h3M18.5 8.5l-2 2M21 14h-3M8 20h8M9 17h6" />
                         <path d="M7 11c0-2.8 2.2-5 5-5s5 2.2 5 5v2H7v-2z" />
