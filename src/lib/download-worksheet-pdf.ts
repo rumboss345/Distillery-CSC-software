@@ -1,4 +1,4 @@
-import { worksheetBreakPoints, worksheetOnePageScale, worksheetPageSlices } from './worksheet-pages';
+import { worksheetOnePageScale } from './worksheet-pages';
 
 const PAGE_MARGIN_MM = 10;
 const LETTER_WIDTH_MM = 215.9;
@@ -14,8 +14,7 @@ export function worksheetPdfFilename(batchNumber: string): string {
 }
 
 /**
- * Render a DOM worksheet to a letter-size PDF and trigger download. A worksheet slightly
- * taller than a page is shrunk onto one page; a longer one breaks between rows and sections.
+ * Render a DOM worksheet to a single letter-size PDF page and trigger download.
  * Optionally pass a scroll container to temporarily expand clipped preview areas.
  */
 export async function downloadWorksheetPdf(
@@ -45,9 +44,6 @@ export async function downloadWorksheetPdf(
       import('jspdf'),
     ]);
 
-    const breakPointsCss = worksheetBreakPoints(worksheetElement);
-    const cssHeight = worksheetElement.getBoundingClientRect().height || worksheetElement.offsetHeight;
-
     const canvas = await html2canvas(worksheetElement, {
       scale: 2,
       useCORS: true,
@@ -63,47 +59,17 @@ export async function downloadWorksheetPdf(
     const mmPerCanvasPx = contentWidth / canvas.width;
     const imgHeight = canvas.height * mmPerCanvasPx;
 
-    const onePage = worksheetOnePageScale(imgHeight, pageContentHeight);
-    if (onePage != null) {
-      const width = contentWidth * onePage;
-      const height = imgHeight * onePage;
-      pdf.addImage(
-        canvas.toDataURL('image/jpeg', 0.95),
-        'JPEG',
-        PAGE_MARGIN_MM + (contentWidth - width) / 2,
-        PAGE_MARGIN_MM,
-        width,
-        height,
-      );
-    } else {
-      const canvasPxPerCss = cssHeight > 0 ? canvas.height / cssHeight : 1;
-      const pageCanvasPx = pageContentHeight / mmPerCanvasPx;
-      const slices = worksheetPageSlices(
-        canvas.height,
-        pageCanvasPx,
-        breakPointsCss.map((top) => top * canvasPxPerCss),
-      );
-      slices.forEach((slice, index) => {
-        const sliceHeight = Math.max(1, Math.round(slice.end - slice.start));
-        const page = document.createElement('canvas');
-        page.width = canvas.width;
-        page.height = sliceHeight;
-        const ctx = page.getContext('2d');
-        if (!ctx) throw new Error('Could not draw the PDF page.');
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, page.width, page.height);
-        ctx.drawImage(canvas, 0, Math.round(slice.start), canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight);
-        if (index > 0) pdf.addPage();
-        pdf.addImage(
-          page.toDataURL('image/jpeg', 0.95),
-          'JPEG',
-          PAGE_MARGIN_MM,
-          PAGE_MARGIN_MM,
-          contentWidth,
-          sliceHeight * mmPerCanvasPx,
-        );
-      });
-    }
+    const scale = worksheetOnePageScale(imgHeight, pageContentHeight);
+    const width = contentWidth * scale;
+    const height = imgHeight * scale;
+    pdf.addImage(
+      canvas.toDataURL('image/jpeg', 0.95),
+      'JPEG',
+      PAGE_MARGIN_MM + (contentWidth - width) / 2,
+      PAGE_MARGIN_MM,
+      width,
+      height,
+    );
 
     pdf.save(sanitizePdfFilename(filename.replace(/\.pdf$/i, '')) + '.pdf');
   } finally {

@@ -52,7 +52,7 @@ export function printWorksheet(worksheet: HTMLElement): void {
     if (sheet) {
       sheet.classList.add('is-paper');
       const scale = worksheetOnePageScale(sheet.scrollHeight, contentHeightPx);
-      if (scale != null && scale < 1) {
+      if (scale < 1) {
         sheet.style.setProperty('zoom', String(Math.floor(scale * 1000) / 1000));
       }
     }
