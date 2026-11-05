@@ -147,6 +147,12 @@ export function listRecordedReportNames(): string[] {
         SELECT TRIM(changed_by) FROM holding_tank_dilutions
         UNION ALL
         SELECT TRIM(recorded_by_user_name) FROM equipment_maintenance_log
+        UNION ALL
+        SELECT TRIM(assigned_user_name) FROM recipes
+        UNION ALL
+        SELECT TRIM(assigned_user_name) FROM gin_recipes
+        UNION ALL
+        SELECT TRIM(assigned_user_name) FROM blend_recipes
       )
       WHERE name IS NOT NULL AND name != ''
     `);

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   getBlendRecipes,
@@ -16,7 +16,10 @@ import { IngredientSelect } from '../components/IngredientSelect';
 import { BlendDesigner } from '../components/BlendDesigner';
 import { BlendRecipesTab } from '../components/BlendRecipesTab';
 import { GinRecipesTab } from '../components/GinRecipesTab';
+import { AssigneeCell, AssigneeSelect } from '../components/AssigneeSelect';
+import { RecipeUserFilter, useRecipeUserFilter } from '../components/RecipeUserFilter';
 import { useAuth } from '../context/AuthContext';
+import { defaultAssignee, type AssignedEmployee } from '../lib/assignee';
 import { importRecipeCsv } from '../lib/recipe-import';
 import { buildRecipeExport } from '../lib/recipe-export';
 import { downloadCsv, rowsToCsv } from '../lib/reporting/csv';
@@ -40,18 +43,27 @@ const emptyRecipe = (): Omit<Recipe, 'id' | 'created_at' | 'updated_at'> => ({
   target_brix: null,
   target_final_brix: null,
   notes: '',
+  assigned_user_id: null,
+  assigned_user_name: null,
 });
 
 type RecipeTab = 'wash' | 'gin' | 'blend';
 export function Recipes() {
   const navigate = useNavigate();
-  const { hasPermission } = useAuth();
+  const { user, hasPermission } = useAuth();
   const canWash = hasPermission('wash');
   const canGin = hasPermission('distillation');
   const canBlend = hasPermission('blending');
   const defaultTab: RecipeTab = canWash ? 'wash' : canGin ? 'gin' : 'blend';
   const { key, refresh } = useRefreshKey();
-  const recipes = getRecipes();
+  const allWashRecipes = getRecipes();
+  const allGinRecipes = canGin ? getGinRecipes() : [];
+  const allBlendRecipes = useMemo(
+    () => (canBlend
+      ? getBlendRecipes().filter((recipe) => (recipe.source_type ?? 'tank') !== 'barrel')
+      : []),
+    [key, canBlend],
+  );
   const sugarItems = getInventoryByCategory('sugar');
   const yeastItems = getInventoryByCategory('yeast');
   const nutrientItems = getInventoryByCategory('nutrients');
@@ -69,7 +81,17 @@ export function Recipes() {
 
   void key;
 
-  const selected = recipes.find((r) => r.id === selectedId);
+  const washUserFilter = useRecipeUserFilter(allWashRecipes);
+  const ginUserFilter = useRecipeUserFilter(allGinRecipes);
+  const blendUserFilter = useRecipeUserFilter(allBlendRecipes);
+  const recipeUserFilter = showDesigner || tab === 'blend'
+    ? blendUserFilter
+    : tab === 'gin'
+      ? ginUserFilter
+      : washUserFilter;
+
+  const washRecipes = washUserFilter.filtered;
+  const selected = washRecipes.find((r) => r.id === selectedId);
 
   const selectTab = (next: RecipeTab) => {
     setShowDesigner(false);
@@ -84,13 +106,18 @@ export function Recipes() {
 
   const openNew = () => {
     setEditId(undefined);
-    setForm(emptyRecipe());
+    const assignee = defaultAssignee(user);
+    setForm({
+      ...emptyRecipe(),
+      assigned_user_id: assignee.assigned_user_id,
+      assigned_user_name: assignee.assigned_user_name,
+    });
     setNutrients([]);
     setShowForm(true);
   };
 
   const openEdit = (recipe: Recipe) => {
-    const full = recipes.find((r) => r.id === recipe.id);
+    const full = allWashRecipes.find((r) => r.id === recipe.id);
     setEditId(recipe.id);
     setForm({
       name: recipe.name,
@@ -103,6 +130,8 @@ export function Recipes() {
       target_brix: recipe.target_brix,
       target_final_brix: recipe.target_final_brix,
       notes: recipe.notes,
+      assigned_user_id: recipe.assigned_user_id,
+      assigned_user_name: recipe.assigned_user_name,
     });
     setNutrients(
       (full?.nutrients ?? []).map((n) => ({
@@ -129,7 +158,7 @@ export function Recipes() {
 
   const exportRecipes = () => {
     const sheet = buildRecipeExport({
-      wash: canWash ? recipes : [],
+      wash: canWash ? allWashRecipes : [],
       gin: canGin ? getGinRecipes() : [],
       blend: canBlend ? getBlendRecipes() : [],
     });
@@ -150,7 +179,11 @@ export function Recipes() {
       const existing = new Map(getRecipes().map((recipe) => [recipe.name.trim().toLowerCase(), recipe.id]));
       for (const recipe of imported.wash) {
         const id = existing.get(recipe.name.trim().toLowerCase());
-        const savedId = saveRecipe(recipe, id, recipe.nutrients);
+        const savedId = saveRecipe({
+          ...recipe,
+          assigned_user_id: null,
+          assigned_user_name: null,
+        }, id, recipe.nutrients);
         existing.set(recipe.name.trim().toLowerCase(), savedId);
         if (id) updated += 1;
         else added += 1;
@@ -164,7 +197,12 @@ export function Recipes() {
       for (const recipe of imported.gin) {
         const id = existing.get(recipe.name.trim().toLowerCase());
         try {
-          const savedId = saveGinRecipe({ name: recipe.name, notes: recipe.notes }, id, recipe.botanicals);
+          const savedId = saveGinRecipe({
+            name: recipe.name,
+            notes: recipe.notes,
+            assigned_user_id: null,
+            assigned_user_name: null,
+          }, id, recipe.botanicals);
           existing.set(recipe.name.trim().toLowerCase(), savedId);
           if (id) updated += 1;
           else added += 1;
@@ -181,7 +219,11 @@ export function Recipes() {
       for (const recipe of imported.blend) {
         const id = existing.get(recipe.name.trim().toLowerCase());
         try {
-          const savedId = saveBlendRecipe(recipe, recipe.spirit_sources, recipe.ingredients, id);
+          const savedId = saveBlendRecipe({
+            ...recipe,
+            assigned_user_id: null,
+            assigned_user_name: null,
+          }, recipe.spirit_sources, recipe.ingredients, id);
           existing.set(recipe.name.trim().toLowerCase(), savedId);
           if (id) updated += 1;
           else added += 1;
@@ -217,6 +259,7 @@ export function Recipes() {
       </div>
 
       <div className="recipe-page-bar">
+        <div className="recipe-page-bar-top">
         {[canWash, canGin, canBlend].filter(Boolean).length > 1 && (
           <div className="recipe-tabs" role="tablist" aria-label="Recipe type">
             {canWash && (
@@ -254,6 +297,14 @@ export function Recipes() {
             )}
           </div>
         )}
+        {!showDesigner && (
+          <RecipeUserFilter
+            employeeKey={recipeUserFilter.employeeKey}
+            employees={recipeUserFilter.employees}
+            onChange={recipeUserFilter.setEmployeeKey}
+          />
+        )}
+        </div>
 
         <div className="recipe-action-row">
           {!showDesigner && tab === 'wash' && canWash && (
@@ -343,9 +394,11 @@ export function Recipes() {
         />
       ) : tab === 'wash' && canWash && (
         <>
-          {recipes.length === 0 ? (
+          {washRecipes.length === 0 ? (
             <div className="empty-state card">
-              <p>No wash recipes yet. Create a formula to reuse when starting new wash batches.</p>
+              <p>{allWashRecipes.length === 0
+                ? 'No wash recipes yet. Create a formula to reuse when starting new wash batches.'
+                : 'No wash recipes match this employee filter.'}</p>
             </div>
           ) : (
             <div className="table-wrap">
@@ -353,6 +406,7 @@ export function Recipes() {
                 <thead>
                   <tr>
                     <th>Recipe</th>
+                    <th>Employee</th>
                     <th>Spirit Type</th>
                     <th>Sugar</th>
                     <th className="num">Sugar (lbs)</th>
@@ -364,7 +418,7 @@ export function Recipes() {
                   </tr>
                 </thead>
                 <tbody>
-                  {recipes.map((r) => (
+                  {washRecipes.map((r) => (
                     <tr
                       key={r.id}
                       className={selectedId === r.id ? 'selected-row' : ''}
@@ -372,6 +426,7 @@ export function Recipes() {
                       style={{ cursor: 'pointer' }}
                     >
                       <td><strong>{r.name}</strong></td>
+                      <td><AssigneeCell name={r.assigned_user_name} /></td>
                       <td>{r.spirit_type || '—'}</td>
                       <td>{r.grain_type || '—'}</td>
                       <td className="num">{r.grain_lbs || '—'}</td>
@@ -398,6 +453,7 @@ export function Recipes() {
             <div className="detail-panel card" style={{ marginTop: '1rem' }}>
               <h3>{selected.name}</h3>
               <dl className="detail-grid">
+                <dt>Employee</dt><dd><AssigneeCell name={selected.assigned_user_name} /></dd>
                 <dt>Spirit type</dt><dd>{selected.spirit_type || '—'}</dd>
                 <dt>Sugar type</dt><dd>{selected.grain_type || '—'}</dd>
                 <dt>Sugar (lbs)</dt><dd>{selected.grain_lbs}</dd>
@@ -428,11 +484,21 @@ export function Recipes() {
       )}
 
       {!showDesigner && tab === 'gin' && canGin && (
-        <GinRecipesTab openForm={openGinForm} onFormOpened={() => setOpenGinForm(false)} />
+        <GinRecipesTab
+          openForm={openGinForm}
+          onFormOpened={() => setOpenGinForm(false)}
+          recipes={ginUserFilter.filtered}
+          totalRecipeCount={allGinRecipes.length}
+        />
       )}
 
       {!showDesigner && tab === 'blend' && canBlend && (
-        <BlendRecipesTab openForm={openBlendForm} onFormOpened={() => setOpenBlendForm(false)} />
+        <BlendRecipesTab
+          openForm={openBlendForm}
+          onFormOpened={() => setOpenBlendForm(false)}
+          recipes={blendUserFilter.filtered}
+          totalRecipeCount={allBlendRecipes.length}
+        />
       )}
 
       {showForm && (
@@ -444,6 +510,21 @@ export function Recipes() {
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 placeholder="Molasses Wash"
+              />
+            </div>
+            <div className="form-group">
+              <label htmlFor="wash-recipe-assignee">Employee</label>
+              <AssigneeSelect
+                id="wash-recipe-assignee"
+                value={{
+                  assigned_user_id: form.assigned_user_id,
+                  assigned_user_name: form.assigned_user_name,
+                }}
+                onChange={(assignee: AssignedEmployee) => setForm({
+                  ...form,
+                  assigned_user_id: assignee.assigned_user_id,
+                  assigned_user_name: assignee.assigned_user_name,
+                })}
               />
             </div>
             <div className="form-group">

@@ -627,8 +627,22 @@ export function Distillation() {
 
   const handleSaveGinRecipe = () => {
     try {
+      const existing = typeof ginRecipeId === 'number'
+        ? ginRecipes.find((item) => item.id === ginRecipeId)
+        : undefined;
+      const assignee = existing
+        ? {
+          assigned_user_id: existing.assigned_user_id,
+          assigned_user_name: existing.assigned_user_name,
+        }
+        : defaultAssignee(user);
       const savedId = saveGinRecipe(
-        { name: ginRecipeName, notes: '' },
+        {
+          name: ginRecipeName,
+          notes: '',
+          assigned_user_id: assignee.assigned_user_id,
+          assigned_user_name: assignee.assigned_user_name,
+        },
         typeof ginRecipeId === 'number' ? ginRecipeId : undefined,
         botanicals,
       );

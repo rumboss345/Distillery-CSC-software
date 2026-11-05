@@ -27,7 +27,16 @@ import {
   type FormulationComponent,
   type FormulationDesign,
 } from '../lib/formulation-engine';
-import { getInventoryCategories, getInventoryItems, getLatestBlendRecipeVersion, saveBlendRecipe, useRefreshKey } from '../db/queries';
+import {
+  getBlendRecipe,
+  getInventoryCategories,
+  getInventoryItems,
+  getLatestBlendRecipeVersion,
+  saveBlendRecipe,
+  useRefreshKey,
+} from '../db/queries';
+import { useAuth } from '../context/AuthContext';
+import { defaultAssignee } from '../lib/assignee';
 import { inventoryCategoryLabel } from '../lib/inventory-units';
 import { LITERS_PER_US_GALLON } from '../services/spirit-gauging';
 import { IngredientSelect } from './IngredientSelect';
@@ -120,6 +129,7 @@ function sugarDissolvedGal(lb: number): number {
 }
 
 export function BlendDesigner({ onUseForBatch }: { onUseForBatch: (recipeId: number) => void }) {
+  const { user } = useAuth();
   useRefreshKey();
   const inventoryItems = getInventoryItems();
   const inventoryCategories = blendInventoryCategories(getInventoryCategories());
@@ -380,6 +390,13 @@ export function BlendDesigner({ onUseForBatch }: { onUseForBatch: (recipeId: num
       setMessage('Calculate the blend before saving it.');
       return null;
     }
+    const existing = recipeId ? getBlendRecipe(recipeId) : undefined;
+    const assignee = existing
+      ? {
+        assigned_user_id: existing.assigned_user_id,
+        assigned_user_name: existing.assigned_user_name,
+      }
+      : defaultAssignee(user);
     const id = saveBlendRecipe({
       name,
       product_name: productName.trim() || name,
@@ -390,6 +407,8 @@ export function BlendDesigner({ onUseForBatch }: { onUseForBatch: (recipeId: num
       scale_factor: 1,
       source_type: 'tank',
       notes: '',
+      assigned_user_id: assignee.assigned_user_id,
+      assigned_user_name: assignee.assigned_user_name,
     }, lines.spirits, lines.ingredients, recipeId ?? undefined);
     setRecipeId(id);
     const version = getLatestBlendRecipeVersion(id);

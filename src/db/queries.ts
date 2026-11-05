@@ -794,7 +794,7 @@ export function saveRecipe(
   let recipeId = id;
   if (recipeId) {
     runQuery(
-      `UPDATE recipes SET name=?, spirit_type=?, grain_type=?, grain_lbs=?, water_gal=?, yeast_strain=?, yeast_lbs=?, target_brix=?, target_final_brix=?, notes=?, updated_at=datetime('now') WHERE id=?`,
+      `UPDATE recipes SET name=?, spirit_type=?, grain_type=?, grain_lbs=?, water_gal=?, yeast_strain=?, yeast_lbs=?, target_brix=?, target_final_brix=?, notes=?, assigned_user_id=?, assigned_user_name=?, updated_at=datetime('now') WHERE id=?`,
       [
         recipe.name,
         recipe.spirit_type,
@@ -806,12 +806,14 @@ export function saveRecipe(
         recipe.target_brix,
         recipe.target_final_brix,
         recipe.notes,
+        recipe.assigned_user_id,
+        recipe.assigned_user_name ?? '',
         recipeId,
       ],
     );
   } else {
     recipeId = insertRow(
-      `INSERT INTO recipes (name, spirit_type, grain_type, grain_lbs, water_gal, yeast_strain, yeast_lbs, target_brix, target_final_brix, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO recipes (name, spirit_type, grain_type, grain_lbs, water_gal, yeast_strain, yeast_lbs, target_brix, target_final_brix, notes, assigned_user_id, assigned_user_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         recipe.name,
         recipe.spirit_type,
@@ -823,6 +825,8 @@ export function saveRecipe(
         recipe.target_brix,
         recipe.target_final_brix,
         recipe.notes,
+        recipe.assigned_user_id,
+        recipe.assigned_user_name ?? '',
       ],
     );
   }
@@ -4692,7 +4696,12 @@ export function getGinRecipes(): GinRecipe[] {
 }
 
 export function saveGinRecipe(
-  recipe: { name: string; notes: string },
+  recipe: {
+    name: string;
+    notes: string;
+    assigned_user_id?: number | null;
+    assigned_user_name?: string | null;
+  },
   id: number | undefined,
   botanicals: GinBotanicalInput[],
 ): number {
@@ -4714,15 +4723,17 @@ export function saveGinRecipe(
   if (named) throw new Error(`A gin recipe named "${name}" already exists.`);
   const notes = recipe.notes.trim();
   let recipeId = id ?? 0;
+  const assignedUserId = recipe.assigned_user_id ?? null;
+  const assignedUserName = recipe.assigned_user_name ?? '';
   if (id) {
     runQuery(
-      `UPDATE gin_recipes SET name=?, notes=?, updated_at=datetime('now') WHERE id=?`,
-      [name, notes, id],
+      `UPDATE gin_recipes SET name=?, notes=?, assigned_user_id=?, assigned_user_name=?, updated_at=datetime('now') WHERE id=?`,
+      [name, notes, assignedUserId, assignedUserName, id],
     );
   } else {
     recipeId = insertRow(
-      'INSERT INTO gin_recipes (name, notes) VALUES (?, ?)',
-      [name, notes],
+      'INSERT INTO gin_recipes (name, notes, assigned_user_id, assigned_user_name) VALUES (?, ?, ?, ?)',
+      [name, notes, assignedUserId, assignedUserName],
     );
   }
   runQuery('DELETE FROM gin_recipe_botanicals WHERE gin_recipe_id = ?', [recipeId]);
@@ -5736,7 +5747,7 @@ export function saveBlendRecipe(
     runQuery(
       `UPDATE blend_recipes SET
         name = ?, product_name = ?, target_abv = ?, target_brix = ?, target_sugar_g_per_l = ?, target_volume_gal = ?,
-        scale_factor = ?, source_type = ?, notes = ?, updated_at = datetime('now')
+        scale_factor = ?, source_type = ?, notes = ?, assigned_user_id = ?, assigned_user_name = ?, updated_at = datetime('now')
        WHERE id = ?`,
       [
         recipe.name.trim(),
@@ -5748,14 +5759,16 @@ export function saveBlendRecipe(
         recipe.scale_factor ?? 1,
         sourceType,
         recipe.notes,
+        recipe.assigned_user_id,
+        recipe.assigned_user_name ?? '',
         id,
       ],
     );
   } else {
     id = insertRow(
       `INSERT INTO blend_recipes (
-        name, product_name, target_abv, target_brix, target_sugar_g_per_l, target_volume_gal, scale_factor, source_type, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        name, product_name, target_abv, target_brix, target_sugar_g_per_l, target_volume_gal, scale_factor, source_type, notes, assigned_user_id, assigned_user_name
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         recipe.name.trim(),
         recipe.product_name,
@@ -5766,6 +5779,8 @@ export function saveBlendRecipe(
         recipe.scale_factor ?? 1,
         sourceType,
         recipe.notes,
+        recipe.assigned_user_id,
+        recipe.assigned_user_name ?? '',
       ],
     );
   }
@@ -5823,7 +5838,16 @@ export function blendRecipeSpiritSourcesFromWizard(
 
 export function saveBlendRecipeFromWizard(
   name: string,
-  product: Pick<BlendProduct, 'product_name' | 'target_abv' | 'target_brix' | 'scale_factor' | 'notes'>,
+  product: Pick<
+    BlendProduct,
+    | 'product_name'
+    | 'target_abv'
+    | 'target_brix'
+    | 'scale_factor'
+    | 'notes'
+    | 'assigned_user_id'
+    | 'assigned_user_name'
+  >,
   spiritSources: BlendSpiritSourceInput[],
   ingredients: BlendIngredientInput[],
   id?: number,
@@ -5842,6 +5866,8 @@ export function saveBlendRecipeFromWizard(
       notes: product.notes,
       target_sugar_g_per_l: null,
       target_volume_gal: null,
+      assigned_user_id: product.assigned_user_id ?? null,
+      assigned_user_name: product.assigned_user_name ?? null,
     },
     blendRecipeSpiritSourcesFromWizard(spiritSources),
     ingredients.filter((ingredient) => ingredient.amount > 0 || ingredient.name.trim()),

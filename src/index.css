@@ -3053,6 +3053,24 @@ tr.volume-change-kind:hover td {
   background: var(--bg-card);
 }
 
+.recipe-page-bar-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem 1.25rem;
+}
+
+.recipe-user-filter {
+  margin: 0;
+  min-width: 12rem;
+}
+
+.recipe-user-filter select {
+  width: 100%;
+  max-width: 16rem;
+}
+
 .recipe-action-row {
   display: flex;
   flex-wrap: wrap;
