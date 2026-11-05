@@ -1,6 +1,5 @@
 import {
   formatBlendRecipeAdditive,
-  formatBlendRecipeSpiritPull,
   isWeightUnit,
   measureAlternate,
   spiritMeasureAlternate,
@@ -52,6 +51,21 @@ export interface BlendProductionWorksheetProps {
   notes: string;
 }
 
+function spiritPullDisplay(line: WorksheetSpiritLine): string {
+  if (line.amount > 0) {
+    const alt = line.abv > 0 ? spiritMeasureAlternate(line.amount, line.unit, line.abv) : null;
+    const primary = `${formatQuantityDisplay(line.amount, 3)} ${line.unit}`;
+    return alt ? `${primary} (${alt.label})` : primary;
+  }
+  return `${formatGallonDisplay(line.volumeGal)} gal`;
+}
+
+function spiritWeightLbs(line: WorksheetSpiritLine): number | null {
+  if (line.amount > 0 && isWeightUnit(line.unit)) return toLbs(line.amount, line.unit);
+  if (line.volumeGal > 0 && line.abv > 0) return formulationSpiritWeightLb(line.volumeGal, line.abv);
+  return null;
+}
+
 export function BlendProductionWorksheet({
   batchNumber,
   productName,
@@ -71,10 +85,7 @@ export function BlendProductionWorksheet({
 }: BlendProductionWorksheetProps) {
   const waterLines = ingredients.filter((i) => i.amount > 0 && i.ingredient_type === 'water');
   const otherAdditives = ingredients.filter((i) => i.amount > 0 && i.ingredient_type !== 'water');
-  const totalSpiritWeightLbs = spiritLines.reduce((sum, line) => {
-    if (line.amount > 0 && isWeightUnit(line.unit)) return sum + toLbs(line.amount, line.unit);
-    return sum + formulationSpiritWeightLb(line.volumeGal, line.abv);
-  }, 0);
+  const totalSpiritWeightLbs = spiritLines.reduce((sum, line) => sum + (spiritWeightLbs(line) ?? 0), 0);
   const totalSpiritWeightLabel = totalSpiritWeightLbs > 0
     ? `${formatQuantityDisplay(totalSpiritWeightLbs, 3)} lbs`
     : null;
@@ -88,6 +99,22 @@ export function BlendProductionWorksheet({
   const waterStep = waterLines.length > 0 ? nextStep++ : null;
   const preBlendStep = showPreBlend ? nextStep++ : null;
   const otherStep = nextStep;
+
+  const volumeTag = alcohol?.volumeStatus === 'provisional'
+    ? ' (provisional volume)'
+    : alcohol?.volumeStatus === 'estimated'
+      ? ' (estimated volume)'
+      : '';
+  const statusBits: string[] = [];
+  if (alcohol?.sugarSpecificationIncomplete) {
+    statusBits.push('Sugar g/L counts only ingredients with a sugar concentration.');
+  }
+  if (alcohol?.sugarGPerL != null) {
+    statusBits.push(`Estimated sugar from known charges: ${alcohol.sugarGPerL.toFixed(1)} g/L.`);
+  }
+  if (alcohol?.warnings.length) {
+    statusBits.push(...alcohol.warnings);
+  }
 
   return (
     <div className="blend-production-worksheet">
@@ -116,23 +143,21 @@ export function BlendProductionWorksheet({
             <tr>
               <th>Batch scale</th>
               <td>{scaleFactor !== 1 ? `${scaleFactor}× recipe` : '1× recipe'}</td>
-              <th>Predicted finished volume</th>
+              <th>Predicted finish</th>
               <td>
-                {formatGallonDisplay(expectedYieldGal)} gal @ {expectedAbv.toFixed(2)}% predicted ABV
-                {alcohol?.volumeStatus === 'provisional' ? ' — provisional' : ''}
-                {alcohol?.volumeStatus === 'estimated' ? ' — estimated' : ''}
-              </td>
-            </tr>
-            <tr>
-              <th>Finished batch weight</th>
-              <td colSpan={3}>
-                Weigh the finished batch. Predicted volume is an estimate when sugar or flavor is present. Measured tank volume stays authoritative.
+                {formatGallonDisplay(expectedYieldGal)} gal @ {expectedAbv.toFixed(2)}% ABV{volumeTag}
               </td>
             </tr>
             <tr>
               <th>Output tank</th>
               <td colSpan={3}>{outputTankName ?? '—'}</td>
             </tr>
+            {statusBits.length > 0 && (
+              <tr className="blend-worksheet-status-row">
+                <th>Calculation notes</th>
+                <td colSpan={3}>{statusBits.join(' ')}</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </section>
@@ -140,15 +165,10 @@ export function BlendProductionWorksheet({
       {abvDeltas.length > 0 && (
         <section className="blend-worksheet-section blend-worksheet-alert">
           <h2>ABV adjustment</h2>
-          <p>Tank strength differs from recipe — proofing water was recalculated for the target ABV.</p>
-          <ul>
-            {abvDeltas.map((d) => (
-              <li key={d.index}>
-                {d.label}: tank {d.actualAbv.toFixed(1)}% vs recipe {d.recipeAbv.toFixed(1)}%
-              </li>
-            ))}
-          </ul>
-          {waterAdjustmentNote && <p>{waterAdjustmentNote}</p>}
+          <p>
+            Tank strength differs from recipe — proofing water was recalculated.
+            {waterAdjustmentNote ? ` ${waterAdjustmentNote}` : ''}
+          </p>
         </section>
       )}
 
@@ -159,42 +179,27 @@ export function BlendProductionWorksheet({
             <tr>
               <th className="blend-worksheet-check">Done</th>
               <th>Source tank</th>
-              <th className="num">Pull amount</th>
-              <th className="num">Expected weight</th>
+              <th className="num">Pull</th>
               <th className="num">ABV</th>
               <th>Notes</th>
             </tr>
           </thead>
           <tbody>
             {spiritLines.map((line, index) => {
-              const alt = line.amount > 0 && line.abv > 0
-                ? spiritMeasureAlternate(line.amount, line.unit, line.abv)
-                : null;
+              const weightLbs = spiritWeightLbs(line);
+              const enteredWeight = line.amount > 0 && isWeightUnit(line.unit);
               const abvNote = line.recipeAbv != null && Math.abs(line.abv - line.recipeAbv) > 0.05
                 ? `Recipe ${line.recipeAbv.toFixed(1)}%`
                 : '';
-              const enteredWeight = line.amount > 0 && isWeightUnit(line.unit);
-              const pullWeightLabel = enteredWeight
-                ? `${formatQuantityDisplay(toLbs(line.amount, line.unit), 3)} lbs entered`
-                : line.amount > 0
-                  ? `${formatQuantityDisplay(formulationSpiritWeightLb(line.volumeGal, line.abv), 3)} lbs calculated`
-                  : null;
+              const pullCell = spiritPullDisplay(line);
+              const weightSuffix = weightLbs != null && !enteredWeight
+                ? ` · ${formatQuantityDisplay(weightLbs, 3)} lbs`
+                : '';
               return (
                 <tr key={index}>
                   <td className="blend-worksheet-check"><span className="blend-worksheet-box" /></td>
                   <td>{line.tankName}</td>
-                  <td className="num">
-                    {line.amount > 0 ? `${formatQuantityDisplay(line.amount, 3)} ${line.unit}` : `${formatGallonDisplay(line.volumeGal)} gal`}
-                    {alt ? ` (${alt.label})` : ''}
-                    <br />
-                    <small>{formatBlendRecipeSpiritPull(
-                      line.label,
-                      line.volumeGal,
-                      line.abv,
-                      line.amount > 0 ? { amount: line.amount, unit: line.unit } : undefined,
-                    )}</small>
-                  </td>
-                  <td className="num">{pullWeightLabel ?? 'Original entered quantity not recorded'}</td>
+                  <td className="num">{pullCell}{weightSuffix}</td>
                   <td className="num">{line.abv.toFixed(1)}%</td>
                   <td>{abvNote}</td>
                 </tr>
@@ -204,7 +209,7 @@ export function BlendProductionWorksheet({
           {totalSpiritWeightLabel && (
             <tfoot>
               <tr>
-                <td colSpan={4}><strong>Total spirit pull weight</strong></td>
+                <td colSpan={3}><strong>Total spirit pull weight</strong></td>
                 <td colSpan={2}><strong>{totalSpiritWeightLabel}</strong></td>
               </tr>
             </tfoot>
@@ -243,7 +248,7 @@ export function BlendProductionWorksheet({
 
       {showPreBlend && (
         <section className="blend-worksheet-section blend-worksheet-preblend" data-testid="preblend-spirit-water">
-          <h2>{preBlendStep}. Alcohol + water before other ingredients</h2>
+          <h2>{preBlendStep}. Spirit + water check (before other ingredients)</h2>
           <table className="blend-worksheet-table">
             <tbody>
               <tr>
@@ -253,24 +258,18 @@ export function BlendProductionWorksheet({
                 <td className="num">{preBlend.hasWater ? `${formatQuantityDisplay(alcohol?.proofingWaterLb ?? preBlend.waterWeightLb, 3)} lbs` : '—'}</td>
               </tr>
               <tr>
-                <th>Ethanol mass</th>
-                <td className="num">{alcohol ? `${formatQuantityDisplay(alcohol.ethanolMassLb, 3)} lbs` : '—'}</td>
-                <th>Liters of absolute alcohol</th>
-                <td className="num">{alcohol ? alcohol.laaLiters.toFixed(2) : '—'}</td>
-              </tr>
-              <tr>
-                <th>Predicted ABV before additives</th>
-                <td className="num"><strong>{formatAbvDisplay(alcohol?.hydroAbv ?? preBlend.abv)}</strong></td>
-                <th>Alcohol by weight before additives</th>
-                <td className="num"><strong>{alcohol?.hydroAbw != null ? formatAbvDisplay(alcohol.hydroAbw) : '—'}</strong></td>
+                <th>Predicted ABV / ABW</th>
+                <td className="num" colSpan={3}>
+                  <strong>{formatAbvDisplay(alcohol?.hydroAbv ?? preBlend.abv)}</strong> ABV
+                  {alcohol?.hydroAbw != null ? ` · ${formatAbvDisplay(alcohol.hydroAbw)} ABW` : ''}
+                  {' · '}
+                  {alcohol ? `${formatQuantityDisplay(alcohol.ethanolMassLb, 3)} lbs ethanol (${alcohol.laaLiters.toFixed(2)} LAA)` : '—'}
+                </td>
               </tr>
             </tbody>
           </table>
           <p className="blend-worksheet-weight-hint">
-            Weigh the tank after spirit{preBlend.hasWater ? ' and proofing water are' : ' is'} in.
-            Spirit solution weight is the whole high-proof charge, not pure ethanol.
-            Alcohol by weight is ethanol mass divided by spirit-plus-water mass at {BLEND_REFERENCE_TEMPERATURE_F} °F (TTB Table 6).
-            Predicted ABV is a volume percent of that same mix and is a different number.
+            Weigh the tank after spirit{preBlend.hasWater ? ' and proofing water are' : ' is'} in ({BLEND_REFERENCE_TEMPERATURE_F} °F reference).
           </p>
         </section>
       )}
@@ -304,26 +303,6 @@ export function BlendProductionWorksheet({
         </table>
       </section>
 
-      <section className="blend-worksheet-section">
-        <h2>Production checklist</h2>
-        <ul className="blend-worksheet-steps">
-          <li><span className="blend-worksheet-box" /> Pull spirit from source tank(s) per amounts above</li>
-          {waterLines.length > 0 && (
-            <li><span className="blend-worksheet-box" /> Add proofing water</li>
-          )}
-          {showPreBlend && (
-            <li>
-              <span className="blend-worksheet-box" />
-              Check spirit-plus-water weight and the predicted ABV ({formatAbvDisplay(alcohol?.hydroAbv ?? preBlend.abv)}) before other ingredients. Alcohol by weight is {alcohol?.hydroAbw != null ? formatAbvDisplay(alcohol.hydroAbw) : '—'}, from ethanol mass, not from the spirit solution weight.
-            </li>
-          )}
-          <li><span className="blend-worksheet-box" /> Add sugar, flavors, color, and other additives</li>
-          <li><span className="blend-worksheet-box" /> Mix thoroughly; let rest per SOP if required</li>
-          <li><span className="blend-worksheet-box" /> Transfer finished batch to {outputTankName ?? 'output tank'}</li>
-          <li><span className="blend-worksheet-box" /> Record any deviations on this sheet</li>
-        </ul>
-      </section>
-
       {notes.trim() && (
         <section className="blend-worksheet-section">
           <h2>Recipe notes</h2>
@@ -331,25 +310,10 @@ export function BlendProductionWorksheet({
         </section>
       )}
 
-      <section className="blend-worksheet-section" data-testid="blend-account-warnings">
-        <h2>Calculation status</h2>
-        <p>
-          Reference temperature {BLEND_REFERENCE_TEMPERATURE_F} °F. Predicted values are not a gauged yield.
-          {alcohol?.volumeStatus === 'provisional' ? ' This batch is provisional until missing specifications are entered.' : ''}
-          {alcohol?.sugarSpecificationIncomplete ? ' Sugar g/L counts only ingredients with a sugar concentration. Syrup sugar is omitted when that specification is blank.' : ''}
-          {alcohol?.sugarGPerL != null ? ` Estimated sugar from known charges: ${alcohol.sugarGPerL.toFixed(1)} g/L.` : ''}
-        </p>
-        {alcohol && alcohol.warnings.length > 0 && (
-          <ul>
-            {alcohol.warnings.map((warning) => <li key={warning}>{warning}</li>)}
-          </ul>
-        )}
-      </section>
-
       <section className="blend-worksheet-section">
-        <h2>Stage 2 — final adjustment</h2>
-        <p>
-          After the ingredients are in the tank, record the measurements below. Do not treat a hydrometer or density reading as true ABV when sugar, syrup, or flavor is present. Use a validated proofing method before marking the batch verified. This sheet does not add water or spirit to a completed production record.
+        <h2>Final adjustment &amp; sign-off</h2>
+        <p className="blend-worksheet-final-hint">
+          After mixing, record actual weight/volume and verified strength (not hydrometer ABV when sugar or flavor is present).
         </p>
         <table className="blend-worksheet-table">
           <tbody>
@@ -362,23 +326,15 @@ export function BlendProductionWorksheet({
             <tr>
               <th>Batch temperature</th>
               <td>__________ °F</td>
-              <th>Measured strength</th>
+              <th>Verified finished ABV</th>
               <td>__________ %</td>
             </tr>
             <tr>
-              <th>Measurement method</th>
+              <th>Proof method</th>
               <td colSpan={3}>Distillation / other validated method: _________________________</td>
-            </tr>
-            <tr>
-              <th>Verified finished ABV</th>
-              <td colSpan={3}>__________ % (leave blank until the proof method above is complete)</td>
             </tr>
           </tbody>
         </table>
-      </section>
-
-      <section className="blend-worksheet-section">
-        <h2>Staff sign-off</h2>
         <div className="blend-worksheet-signoff">
           <div>Operator: _________________________ Date: __________</div>
           <div>Supervisor: _________________________ Date: __________</div>

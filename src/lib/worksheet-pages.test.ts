@@ -6,13 +6,10 @@ describe('worksheetOnePageScale', () => {
     expect(worksheetOnePageScale(900, 1000)).toBe(1);
   });
 
-  it('shrinks a worksheet that is a little too tall onto one page', () => {
+  it('shrinks any tall worksheet onto one page', () => {
     expect(worksheetOnePageScale(1250, 1000)).toBeCloseTo(0.8, 5);
     expect(worksheetOnePageScale(1400, 1000)).toBeCloseTo(1000 / 1400, 5);
-  });
-
-  it('breaks a long worksheet across pages instead of making it tiny', () => {
-    expect(worksheetOnePageScale(1600, 1000)).toBeNull();
+    expect(worksheetOnePageScale(1600, 1000)).toBeCloseTo(0.625, 5);
   });
 });
 

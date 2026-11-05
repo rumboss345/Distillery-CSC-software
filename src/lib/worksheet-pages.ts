@@ -1,6 +1,3 @@
-/** A worksheet up to this many pages tall is shrunk onto one page instead of split. */
-export const ONE_PAGE_SHRINK_LIMIT = 1.4;
-
 /**
  * Elements a page may start at, so a row, box, or section is never cut in half. First rows
  * and first checklist lines are left out so a heading never ends a page on its own.
@@ -13,15 +10,11 @@ export const WORKSHEET_BREAK_SELECTOR = [
   '.blend-worksheet-signoff > div',
 ].join(', ');
 
-/**
- * Scale that fits the worksheet on one page: 1 when it already fits, a shrink factor when it is
- * only a little too tall, or null when it is too long and should break across pages.
- */
-export function worksheetOnePageScale(contentHeight: number, pageHeight: number): number | null {
+/** Scale that fits the worksheet on one letter page (1 when it already fits). */
+export function worksheetOnePageScale(contentHeight: number, pageHeight: number): number {
   if (!(contentHeight > 0) || !(pageHeight > 0)) return 1;
   if (contentHeight <= pageHeight) return 1;
-  if (contentHeight <= pageHeight * ONE_PAGE_SHRINK_LIMIT) return pageHeight / contentHeight;
-  return null;
+  return pageHeight / contentHeight;
 }
 
 /**
