@@ -163,6 +163,8 @@ export interface Recipe {
   target_brix: number | null;
   target_final_brix: number | null;
   notes: string;
+  assigned_user_id: number | null;
+  assigned_user_name: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -306,6 +308,8 @@ export interface GinRecipe {
   id: number;
   name: string;
   notes: string;
+  assigned_user_id: number | null;
+  assigned_user_name: string | null;
   created_at: string;
   updated_at: string;
   botanicals: GinRecipeBotanical[];
@@ -642,6 +646,8 @@ export interface BlendRecipe {
   scale_factor: number;
   source_type: BlendRecipeSourceType;
   notes: string;
+  assigned_user_id: number | null;
+  assigned_user_name: string | null;
   created_at: string;
   updated_at: string;
 }

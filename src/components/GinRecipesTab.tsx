@@ -1,31 +1,37 @@
 import { useEffect, useState } from 'react';
 import {
   deleteGinRecipe,
-  getGinRecipes,
   saveGinRecipe,
   useRefreshKey,
 } from '../db/queries';
 import { GinBotanicalFields } from './GinBotanicalFields';
 import { Modal } from './Modal';
+import { AssigneeCell, AssigneeSelect } from './AssigneeSelect';
+import { useAuth } from '../context/AuthContext';
+import { defaultAssignee, type AssignedEmployee } from '../lib/assignee';
 import { botanicalsFromRecipe, emptyGinBotanical, formatGinBotanicalsSummary } from '../lib/gin-botanicals';
 import type { GinBotanicalInput, GinRecipe } from '../types';
 
 export function GinRecipesTab({
   openForm = false,
   onFormOpened,
+  recipes,
+  totalRecipeCount,
 }: {
   openForm?: boolean;
   onFormOpened?: () => void;
+  recipes: GinRecipe[];
+  totalRecipeCount: number;
 }) {
-  const { key, refresh } = useRefreshKey();
-  const recipes = getGinRecipes();
-  void key;
+  const { user } = useAuth();
+  const { refresh } = useRefreshKey();
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<number | undefined>();
   const [name, setName] = useState('');
   const [notes, setNotes] = useState('');
   const [lines, setLines] = useState<GinBotanicalInput[]>([emptyGinBotanical()]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [assignee, setAssignee] = useState<AssignedEmployee>(defaultAssignee(null));
 
   const selected = recipes.find((recipe) => recipe.id === selectedId);
 
@@ -34,6 +40,7 @@ export function GinRecipesTab({
     setName('');
     setNotes('');
     setLines([emptyGinBotanical()]);
+    setAssignee(defaultAssignee(user));
     setShowForm(true);
   };
 
@@ -48,12 +55,21 @@ export function GinRecipesTab({
     setName(recipe.name);
     setNotes(recipe.notes);
     setLines(botanicalsFromRecipe(recipe.botanicals));
+    setAssignee({
+      assigned_user_id: recipe.assigned_user_id,
+      assigned_user_name: recipe.assigned_user_name,
+    });
     setShowForm(true);
   };
 
   const handleSave = () => {
     try {
-      saveGinRecipe({ name, notes }, editId, lines);
+      saveGinRecipe({
+        name,
+        notes,
+        assigned_user_id: assignee.assigned_user_id,
+        assigned_user_name: assignee.assigned_user_name,
+      }, editId, lines);
       setShowForm(false);
       refresh();
     } catch (error) {
@@ -72,7 +88,9 @@ export function GinRecipesTab({
     <>
       {recipes.length === 0 ? (
         <div className="empty-state card">
-          <p>No gin recipes yet. Save a botanical formula here, then load it on a gin run.</p>
+          <p>{totalRecipeCount === 0
+            ? 'No gin recipes yet. Save a botanical formula here, then load it on a gin run.'
+            : 'No gin recipes match this employee filter.'}</p>
         </div>
       ) : (
         <div className="table-wrap">
@@ -80,6 +98,7 @@ export function GinRecipesTab({
             <thead>
               <tr>
                 <th>Recipe</th>
+                <th>Employee</th>
                 <th>Botanicals</th>
                 <th></th>
               </tr>
@@ -93,6 +112,7 @@ export function GinRecipesTab({
                   style={{ cursor: 'pointer' }}
                 >
                   <td><strong>{recipe.name}</strong></td>
+                  <td><AssigneeCell name={recipe.assigned_user_name} /></td>
                   <td>{formatGinBotanicalsSummary(recipe.botanicals) || '—'}</td>
                   <td className="td-actions" onClick={(e) => e.stopPropagation()}>
                     <button type="button" className="btn btn-sm btn-ghost" onClick={() => openEdit(recipe)}>Edit</button>
@@ -107,6 +127,7 @@ export function GinRecipesTab({
       {selected && (
         <div className="detail-panel card" style={{ marginTop: '1rem' }}>
           <h3>{selected.name}</h3>
+          <p><strong>Employee:</strong> <AssigneeCell name={selected.assigned_user_name} /></p>
           <p>{formatGinBotanicalsSummary(selected.botanicals) || 'No botanicals.'}</p>
           {selected.notes ? <p className="field-hint">{selected.notes}</p> : null}
         </div>
@@ -121,6 +142,14 @@ export function GinRecipesTab({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="House gin"
+              />
+            </div>
+            <div className="form-group">
+              <label htmlFor="gin-recipe-assignee">Employee</label>
+              <AssigneeSelect
+                id="gin-recipe-assignee"
+                value={assignee}
+                onChange={setAssignee}
               />
             </div>
             <GinBotanicalFields lines={lines} onChange={setLines} />

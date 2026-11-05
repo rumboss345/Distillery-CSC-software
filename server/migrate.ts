@@ -275,6 +275,14 @@ export async function migrateDatabase(): Promise<void> {
       }
       await client.query(`INSERT INTO schema_migrations (version) VALUES ('013')`);
     }
+    const recipeAssigneeMigration = await client.query('SELECT version FROM schema_migrations WHERE version = $1', ['014']);
+    if (recipeAssigneeMigration.rowCount === 0) {
+      for (const table of ['recipes', 'gin_recipes', 'blend_recipes']) {
+        await client.query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS assigned_user_id INTEGER`);
+        await client.query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS assigned_user_name TEXT NOT NULL DEFAULT ''`);
+      }
+      await client.query(`INSERT INTO schema_migrations (version) VALUES ('014')`);
+    }
     await client.query(`
       INSERT INTO inventory_categories (name)
       SELECT 'botanicals'

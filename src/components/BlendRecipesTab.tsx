@@ -7,7 +7,6 @@ import { computeRecipeTheoreticalAbv, previewProofingWaterAdjustment, type Proof
 import { buildRecipeAlcoholAccount } from '../lib/blend-alcohol-account';
 import {
   deleteBlendRecipe,
-  getBlendRecipes,
   getBlendRecipeVersions,
   getInventoryCategories,
   getInventoryItems,
@@ -15,6 +14,9 @@ import {
   useRefreshKey,
 } from '../db/queries';
 import { Modal } from './Modal';
+import { AssigneeCell, AssigneeSelect } from './AssigneeSelect';
+import { useAuth } from '../context/AuthContext';
+import { defaultAssignee, type AssignedEmployee } from '../lib/assignee';
 import { IngredientSelect } from './IngredientSelect';
 import { ProofingWaterConfirm } from './ProofingWaterConfirm';
 import {
@@ -169,15 +171,16 @@ const emptyRecipeForm = () => ({
 export function BlendRecipesTab({
   openForm = false,
   onFormOpened,
+  recipes,
+  totalRecipeCount,
 }: {
   openForm?: boolean;
   onFormOpened?: () => void;
+  recipes: BlendRecipeView[];
+  totalRecipeCount: number;
 }) {
+  const { user } = useAuth();
   const { key, refresh } = useRefreshKey();
-  const recipes = useMemo(
-    () => getBlendRecipes().filter((recipe) => (recipe.source_type ?? 'tank') !== 'barrel'),
-    [key],
-  );
   const inventoryItems = getInventoryItems();
   const inventoryById = new Map(inventoryItems.map((item) => [item.id, item]));
   const inventoryCategories = useMemo(
@@ -196,6 +199,7 @@ export function BlendRecipesTab({
   const [abvConfirmed, setAbvConfirmed] = useState(false);
   const [proofingPreview, setProofingPreview] = useState<ProofingWaterPreview | null>(null);
   const [originalWater, setOriginalWater] = useState<RecipeAdditiveRow[]>([]);
+  const [assignee, setAssignee] = useState<AssignedEmployee>(defaultAssignee(null));
 
   void key;
 
@@ -226,6 +230,7 @@ export function BlendRecipesTab({
     setOriginalWater([]);
     setProofingPreview(null);
     setAbvConfirmed(false);
+    setAssignee(defaultAssignee(user));
     setShowForm(true);
   };
 
@@ -272,6 +277,10 @@ export function BlendRecipesTab({
     setOriginalWater(loadedIngredients.filter((ingredient) => ingredient.ingredient_type === 'water'));
     setProofingPreview(null);
     setAbvConfirmed(false);
+    setAssignee({
+      assigned_user_id: recipe.assigned_user_id,
+      assigned_user_name: recipe.assigned_user_name,
+    });
     setShowForm(true);
   };
 
@@ -286,7 +295,12 @@ export function BlendRecipesTab({
     }
     try {
       saveBlendRecipe(
-        { ...form, source_type: 'tank' },
+        {
+          ...form,
+          source_type: 'tank',
+          assigned_user_id: assignee.assigned_user_id,
+          assigned_user_name: assignee.assigned_user_name,
+        },
         syncedSpiritSources.map(toSpiritRecipeInput),
         ingredients.map(toBlendIngredientInput),
         editId,
@@ -495,7 +509,9 @@ export function BlendRecipesTab({
     <>
       {recipes.length === 0 ? (
         <div className="empty-state card">
-          <p>No blend recipes yet. Save a formula from the blending wizard or create one here.</p>
+          <p>{totalRecipeCount === 0
+            ? 'No blend recipes yet. Save a formula from the blending wizard or create one here.'
+            : 'No blend recipes match this employee filter.'}</p>
         </div>
       ) : (
         <div className="table-wrap">
@@ -503,6 +519,7 @@ export function BlendRecipesTab({
             <thead>
               <tr>
                 <th>Recipe</th>
+                <th>Employee</th>
                 <th>Version</th>
                 <th>Product</th>
                 <th className="num">Target Proof</th>
@@ -520,6 +537,7 @@ export function BlendRecipesTab({
                   style={{ cursor: 'pointer' }}
                 >
                   <td><strong>{recipe.name}</strong></td>
+                  <td><AssigneeCell name={recipe.assigned_user_name} /></td>
                   <td>{recipe.current_version_number != null ? `V${recipe.current_version_number}` : '—'}</td>
                   <td>{recipe.product_name || '—'}</td>
                   <td className="num">{recipe.target_abv != null ? `${recipe.target_abv}%` : '—'}</td>
@@ -544,6 +562,7 @@ export function BlendRecipesTab({
         <div className="detail-panel card" style={{ marginTop: '1rem' }}>
           <h3>{selected.name}</h3>
           <dl className="detail-grid">
+            <dt>Employee</dt><dd><AssigneeCell name={selected.assigned_user_name} /></dd>
             <dt>Product</dt><dd>{selected.product_name || '—'}</dd>
             <dt>Target proof</dt><dd>{selected.target_abv != null ? `${selected.target_abv}%` : '—'}</dd>
             <dt>{ESTIMATED_SUGAR_BRIX_LABEL}</dt><dd>{selected.target_brix ?? '—'}</dd>
@@ -715,6 +734,14 @@ export function BlendRecipesTab({
                     value={form.product_name}
                     onChange={(e) => setForm({ ...form, product_name: e.target.value })}
                     placeholder="Default product name for new batches"
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="blend-recipe-assignee">Employee</label>
+                  <AssigneeSelect
+                    id="blend-recipe-assignee"
+                    value={assignee}
+                    onChange={setAssignee}
                   />
                 </div>
                 <div className="form-group">

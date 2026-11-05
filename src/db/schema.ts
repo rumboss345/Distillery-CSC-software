@@ -38,6 +38,8 @@ CREATE TABLE IF NOT EXISTS recipes (
   target_brix REAL,
   target_final_brix REAL,
   notes TEXT NOT NULL DEFAULT '',
+  assigned_user_id INTEGER,
+  assigned_user_name TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -169,6 +171,8 @@ CREATE TABLE IF NOT EXISTS gin_recipes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
   notes TEXT NOT NULL DEFAULT '',
+  assigned_user_id INTEGER,
+  assigned_user_name TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -294,6 +298,8 @@ CREATE TABLE IF NOT EXISTS blend_recipes (
   scale_factor REAL NOT NULL DEFAULT 1,
   source_type TEXT NOT NULL DEFAULT 'tank',
   notes TEXT NOT NULL DEFAULT '',
+  assigned_user_id INTEGER,
+  assigned_user_name TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
