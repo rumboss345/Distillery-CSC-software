@@ -85,6 +85,8 @@ export interface FormulationAnalysis {
   volumeStatus: 'gauged' | 'estimated' | 'provisional';
   /** Entered milliliters included 1:1 because density was not verified. Not a validated displacement. */
   unverifiedVolumeGal: number;
+  /** Bulk gallons withheld from the finished-volume prediction. */
+  bulkVolumeExcludedGal: number;
   sugarSpecificationIncomplete: boolean;
   warnings: string[];
   summary: string;
@@ -282,6 +284,10 @@ interface PreparedBlend {
   extraVolumeGal: number;
   extraWeightLb: number;
   unverifiedVolumeGal: number;
+  /** Bulk gallons of syrup, color, flavor, or other additives. Not added to finished volume. */
+  bulkVolumeExcludedGal: number;
+  /** True when an additive's mixing displacement is not known. Density does not supply it. */
+  displacementUnknown: boolean;
   massIncomplete: boolean;
   sugarSpecificationIncomplete: boolean;
   warnings: string[];
@@ -295,6 +301,8 @@ function prepareBlend(components: FormulationComponent[]): PreparedBlend | Formu
   let extraVolumeGal = 0;
   let extraWeightLb = 0;
   let unverifiedVolumeGal = 0;
+  let bulkVolumeExcludedGal = 0;
+  let displacementUnknown = false;
   let massIncomplete = false;
   let sugarSpecificationIncomplete = false;
   const warnings: string[] = [];
@@ -369,39 +377,32 @@ function prepareBlend(components: FormulationComponent[]): PreparedBlend | Formu
     if (grams == null && volumeGal == null) {
       return { ok: false, message: `${name} needs a volume or a weight.` };
     }
+    displacementUnknown = true;
+    const chargeGal = volumeGal ?? 0;
+    if (chargeGal > 0) bulkVolumeExcludedGal += chargeGal;
     if (resolved.density == null) {
       warnings.push(`${name}: ${DENSITY_NOT_VERIFIED}`);
       massIncomplete = true;
       if (volumeGal != null) {
-        extraVolumeGal += volumeGal;
-        unverifiedVolumeGal += volumeGal;
-        warnings.push(`${name} was entered by volume. That volume is not a validated contribution to finished gallons, and its weight is omitted. The predicted volume that includes it is provisional.`);
+        warnings.push(`${name} was entered by volume. Without a density its weight is omitted. That bulk volume is not added to the finished blend.`);
       } else if (grams != null) {
         extraWeightLb += grams / GRAMS_PER_LB;
-        warnings.push(`${name} was entered by weight. Its volume is omitted until density is verified or a documented assumption is selected.`);
+        warnings.push(`${name} was entered by weight. Its finished-blend volume increase is unknown, and no density was assumed.`);
       }
     } else {
       if (resolved.notice) warnings.push(`${name}: ${resolved.notice}`);
-      if (component.specStatus !== 'verified') {
-        warnings.push(`${name}: density is in the recipe but is not marked verified. The result stays estimated.`);
+      const estimated = component.specStatus !== 'verified';
+      if (estimated) {
+        warnings.push(`${name}: density is estimated. It is used for the charge weight only.`);
       }
       if (grams == null && volumeGal != null) {
         grams = volumeGal * ML_PER_GALLON * resolved.density;
       }
-      if (volumeGal == null && grams != null) {
-        volumeGal = grams / (resolved.density * ML_PER_GALLON);
-      }
-      extraVolumeGal += volumeGal ?? 0;
       extraWeightLb += (grams ?? 0) / GRAMS_PER_LB;
+      warnings.push(`${name}: density converts this charge between volume and mass. It does not set how much the finished blend volume increases after mixing.`);
     }
-    if (component.kind === 'syrup' || component.kind === 'flavoring') {
-      const fraction = component.sucroseMassFraction;
-      if (fraction != null && fraction > 0 && grams != null && resolved.density != null) {
-        sugarGrams += grams * Math.min(1, fraction);
-      } else if ((volumeGal ?? 0) > 0 || (grams ?? 0) > 0) {
-        sugarSpecificationIncomplete = true;
-        warnings.push(`${name} has no sugar concentration, so its sugar is not included in g/L.`);
-      }
+    if ((component.kind === 'syrup' || component.kind === 'flavoring') && component.sucroseMassFraction != null && component.sucroseMassFraction > 0 && grams != null && resolved.density != null) {
+      sugarGrams += grams * Math.min(1, component.sucroseMassFraction);
     }
     if ((volumeGal ?? 0) > 0 || (grams ?? 0) > 0) obscured = true;
   }
@@ -414,6 +415,8 @@ function prepareBlend(components: FormulationComponent[]): PreparedBlend | Formu
     extraVolumeGal,
     extraWeightLb,
     unverifiedVolumeGal,
+    bulkVolumeExcludedGal,
+    displacementUnknown,
     massIncomplete,
     sugarSpecificationIncomplete,
     warnings,
@@ -480,13 +483,15 @@ function finishAnalysis(prepared: PreparedBlend): FormulationAnalysis {
   const hydroAbw = hydroWeight > 0 && ethanolMassLb > 0 ? (ethanolMassLb / hydroWeight) * 100 : null;
   const massComplete = !prepared.massIncomplete && hydroWeight > 0;
   const alcoholByWeight = massComplete && totalWeightLb > 0 ? (ethanolMassLb / totalWeightLb) * 100 : null;
-  const volumeStatus: FormulationAnalysis['volumeStatus'] = prepared.unverifiedVolumeGal > 0 || prepared.massIncomplete
+  const volumeStatus: FormulationAnalysis['volumeStatus'] = prepared.displacementUnknown || prepared.unverifiedVolumeGal > 0 || prepared.massIncomplete
     ? 'provisional'
     : prepared.sugarGrams > 0 || prepared.extraVolumeGal > 0
       ? 'estimated'
       : 'gauged';
-  if (volumeStatus === 'provisional') {
-    warnings.push('Predicted finished volume is provisional. Missing ingredient density or sugar specification was not replaced with an assumed value.');
+  if (prepared.displacementUnknown) {
+    warnings.push('Predicted finished volume leaves out syrup, color, flavor, and other additives. A density, including an estimated one, converts that charge between volume and mass only. Sugar and solids percentages are optional and are not required for the density.');
+  } else if (volumeStatus === 'provisional') {
+    warnings.push('Predicted finished volume is provisional. Missing ingredient density was not replaced with an assumed value.');
   }
 
   const model = prepared.sugarGrams > 0 || prepared.extraVolumeGal > 0
@@ -525,6 +530,7 @@ function finishAnalysis(prepared: PreparedBlend): FormulationAnalysis {
     alcoholByWeight: alcoholByWeight == null ? null : round2(alcoholByWeight),
     volumeStatus,
     unverifiedVolumeGal: round4(prepared.unverifiedVolumeGal),
+    bulkVolumeExcludedGal: round4(prepared.bulkVolumeExcludedGal),
     sugarSpecificationIncomplete: prepared.sugarSpecificationIncomplete,
     warnings,
     summary,

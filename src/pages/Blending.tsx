@@ -2656,7 +2656,7 @@ export function Blending() {
               return (
                 <p className="field-hint" data-testid="blend-volume-provisional">
                   {account.volumeStatus === 'provisional'
-                    ? 'Predicted finished volume is provisional. Ingredient density or sugar concentration is missing, and no substitute density was used.'
+                    ? 'Predicted finished volume leaves out syrup, color, and flavor. Density, when you enter it, converts that charge to mass and does not require a sugar or solids percentage.'
                     : 'Predicted finished volume is estimated from the sugar volume model and any documented densities.'}
                   {account.hydroAbw != null ? ` Alcohol by weight of the spirit and proofing water is ${account.hydroAbw.toFixed(2)}%, from ethanol mass, not from the spirit solution weight.` : ''}
                 </p>
