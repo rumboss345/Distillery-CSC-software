@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { limitAbvInput } from '../lib/abv-limits';
 import { WATER_LBS_PER_US_GALLON } from '../lib/alcohol-dilution';
 import {
@@ -15,7 +15,15 @@ import {
   spiritVolumeGalFromAmount,
   toLbs,
   unitOptionsForBlendIngredient,
+  resolveIngredientDensity,
 } from '../lib/blending';
+import {
+  blendDesignerOtherCategories,
+  defaultBlendDesignerOtherCategory,
+  formulationKindToBlendIngredientType,
+  otherRowFormulationKind,
+  otherRowIngredientType,
+} from '../lib/blend-designer-rows';
 import { formatGallonDisplay, formatQuantityDisplay } from '../lib/formulation-quantity';
 import { formulationSpiritWeightLb } from '../lib/formulation-spirit';
 import {
@@ -31,7 +39,6 @@ import { getInventoryCategories, getInventoryItems, getLatestBlendRecipeVersion,
 import { inventoryCategoryLabel } from '../lib/inventory-units';
 import { LITERS_PER_US_GALLON } from '../services/spirit-gauging';
 import { IngredientSelect } from './IngredientSelect';
-import type { FormulationKind } from '../lib/formulation-engine';
 import type { BlendIngredientInput, BlendIngredientType, BlendRecipeSpiritSourceInput } from '../types';
 
 interface SpiritRow {
@@ -55,30 +62,21 @@ interface OtherRow {
 }
 
 const emptySpirit = (): SpiritRow => ({ name: '', amount: '', unit: 'gal', abv: '', temp: '60' });
-const emptyOther = (): OtherRow => ({
-  inventory_category: '',
-  inventory_item_id: null,
-  name: '',
-  amount: '',
-  unit: defaultUnitForMode('flavoring', recommendMeasureMode('flavoring').mode),
-  abv: '',
-  sucrosePercent: '',
-  density_g_per_ml: null,
-  density_assumption: null,
-});
-
-function otherRowFormulationKind(row: OtherRow): FormulationKind {
-  const category = row.inventory_category.trim();
-  if (!category) return 'other';
-  const type = blendIngredientTypeForCategory(category);
-  if (type === 'water') return 'other';
-  return type;
-}
-
-function otherRowIngredientType(row: OtherRow): BlendIngredientType {
-  const category = row.inventory_category.trim();
-  if (!category) return 'other';
-  return blendIngredientTypeForCategory(category);
+function emptyOther(defaultCategory: string): OtherRow {
+  const ingredientType = defaultCategory
+    ? blendIngredientTypeForCategory(defaultCategory)
+    : 'flavoring';
+  return {
+    inventory_category: defaultCategory,
+    inventory_item_id: null,
+    name: '',
+    amount: '',
+    unit: defaultUnitForMode(ingredientType, recommendMeasureMode(ingredientType).mode),
+    abv: '',
+    sucrosePercent: '',
+    density_g_per_ml: null,
+    density_assumption: null,
+  };
 }
 
 function readNumber(value: string): number | null {
@@ -123,6 +121,10 @@ export function BlendDesigner({ onUseForBatch }: { onUseForBatch: (recipeId: num
   useRefreshKey();
   const inventoryItems = getInventoryItems();
   const inventoryCategories = blendInventoryCategories(getInventoryCategories());
+  const otherInventoryCategories = useMemo(
+    () => blendDesignerOtherCategories(inventoryCategories),
+    [inventoryCategories],
+  );
   const inventoryById = useMemo(
     () => new Map(inventoryItems.map((item) => [item.id, item])),
     [inventoryItems],
@@ -146,6 +148,30 @@ export function BlendDesigner({ onUseForBatch }: { onUseForBatch: (recipeId: num
   const [message, setMessage] = useState('');
   const [recipeId, setRecipeId] = useState<number | null>(null);
 
+  const ingredientSnapshot = JSON.stringify({
+    spirits,
+    others,
+    waterAmount,
+    waterUnit,
+    sugarAmount,
+    sugarUnit,
+    targetVolume,
+    targetUnit,
+    targetAbv,
+    targetSugar,
+    spiritAbv,
+  });
+  const lastIngredientSnapshot = useRef(ingredientSnapshot);
+  useEffect(() => {
+    if (lastIngredientSnapshot.current === ingredientSnapshot) return;
+    lastIngredientSnapshot.current = ingredientSnapshot;
+    if (analysis || design?.ok) {
+      setAnalysis(null);
+      setDesign(null);
+      setMessage('Ingredients changed. Click Analyze or Design again.');
+    }
+  }, [ingredientSnapshot, analysis, design]);
+
   const spiritComponents = (): FormulationComponent[] => spirits.flatMap((row) => {
     const amount = readNumber(row.amount);
     const abv = readNumber(row.abv);
@@ -167,12 +193,13 @@ export function BlendDesigner({ onUseForBatch }: { onUseForBatch: (recipeId: num
     const kind = otherRowFormulationKind(row);
     const label = row.name.trim()
       || (row.inventory_category ? inventoryCategoryLabel(row.inventory_category) : 'Other');
+    const abv = readNumber(row.abv);
     return [{
       kind,
       name: label,
       amount,
       unit: row.unit,
-      abv: readNumber(row.abv),
+      abv: abv != null && abv > 0 ? abv : undefined,
       sucroseMassFraction: kind === 'syrup' && sucrose != null ? sucrose / 100 : null,
       densityGPerMl: row.density_g_per_ml,
       densityAssumption: row.density_assumption,
@@ -226,15 +253,32 @@ export function BlendDesigner({ onUseForBatch }: { onUseForBatch: (recipeId: num
     }
     const item = inventoryById.get(parseInt(rawId, 10));
     if (!item) return;
-    updateOther(index, {
-      inventory_item_id: item.id,
-      inventory_category: item.category,
-      name: item.name,
-      unit: item.unit,
-      abv: item.abv != null ? String(item.abv) : '',
-      density_g_per_ml: item.density_g_per_ml ?? null,
-      density_assumption: null,
-    });
+    setOthers((prev) => prev.map((row, i) => {
+      if (i !== index) return row;
+      const ingredientType = blendIngredientTypeForCategory(item.category);
+      let amount = row.amount;
+      const parsed = readNumber(row.amount);
+      if (parsed != null && parsed > 0 && row.unit.toLowerCase() !== item.unit.toLowerCase()) {
+        amount = String(convertIngredientAmount({
+          amount: parsed,
+          unit: row.unit,
+          ingredient_type: ingredientType,
+          abv: item.abv ?? readNumber(row.abv),
+          density_g_per_ml: item.density_g_per_ml ?? row.density_g_per_ml,
+        }, item.unit));
+      }
+      return {
+        ...row,
+        inventory_item_id: item.id,
+        inventory_category: item.category,
+        name: item.name,
+        unit: item.unit,
+        amount,
+        abv: item.abv != null && item.abv > 0 ? String(item.abv) : '',
+        density_g_per_ml: item.density_g_per_ml ?? null,
+        density_assumption: null,
+      };
+    }));
   };
 
   const targetGal = () => {
@@ -434,7 +478,13 @@ export function BlendDesigner({ onUseForBatch }: { onUseForBatch: (recipeId: num
       }
       for (const component of otherComponents()) {
         if (component.kind === 'spirit' || component.kind === 'water' || component.kind === 'sugar') continue;
-        pushAdditive(`${component.name} already included`, component.kind, component.amount, component.unit, component.abv);
+        pushAdditive(
+          `${component.name} already included`,
+          formulationKindToBlendIngredientType(component.kind),
+          component.amount,
+          component.unit,
+          component.abv,
+        );
       }
       if (design.spiritGal > 0) {
         pushSpirit(`Spirit to add (${design.spiritAbv.toFixed(1)}% ABV)`, design.spiritGal, design.spiritAbv);
@@ -460,7 +510,13 @@ export function BlendDesigner({ onUseForBatch }: { onUseForBatch: (recipeId: num
       if (sugar != null && sugar > 0) pushAdditive('Sugar', 'sugar', sugar, sugarUnit);
       for (const component of otherComponents()) {
         if (component.kind === 'spirit' || component.kind === 'water' || component.kind === 'sugar') continue;
-        pushAdditive(component.name, component.kind, component.amount, component.unit, component.abv);
+        pushAdditive(
+          component.name,
+          formulationKindToBlendIngredientType(component.kind),
+          component.amount,
+          component.unit,
+          component.abv,
+        );
       }
     }
 
@@ -581,9 +637,17 @@ export function BlendDesigner({ onUseForBatch }: { onUseForBatch: (recipeId: num
             ? filterInventoryByCategory(inventoryItems, selectedCategory)
             : [];
           const categoryChoices = selectedCategory
-            && !inventoryCategories.some((name) => name.toLowerCase() === selectedCategory.toLowerCase())
-            ? [...inventoryCategories, selectedCategory]
-            : inventoryCategories;
+            && !otherInventoryCategories.some((name) => name.toLowerCase() === selectedCategory.toLowerCase())
+            ? [...otherInventoryCategories, selectedCategory]
+            : otherInventoryCategories;
+          const measureIngredient = {
+            ingredient_type: ingredientType,
+            amount: readNumber(row.amount) ?? 0,
+            unit: row.unit,
+            abv: readNumber(row.abv),
+            density_g_per_ml: row.density_g_per_ml,
+            density_assumption: row.density_assumption,
+          };
           const unitOptions = unitOptionsForBlendIngredient({ ingredient_type: ingredientType, unit: row.unit });
           return (
             <div className="formulation-grid" key={index} style={{ marginBottom: '1rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border, #ddd)' }}>
@@ -639,6 +703,14 @@ export function BlendDesigner({ onUseForBatch }: { onUseForBatch: (recipeId: num
                 )}
               </div>
               <div className="form-group">
+                <label>Label on worksheet</label>
+                <input
+                  value={row.name}
+                  placeholder={selectedCategory ? inventoryCategoryLabel(selectedCategory) : 'Ingredient name'}
+                  onChange={(e) => updateOther(index, { name: e.target.value })}
+                />
+              </div>
+              <div className="form-group">
                 <label>Amount</label>
                 <input
                   value={row.amount}
@@ -674,6 +746,43 @@ export function BlendDesigner({ onUseForBatch }: { onUseForBatch: (recipeId: num
                   />
                 </div>
               )}
+              {ingredientType !== 'sugar' && ingredientType !== 'water' && (
+                <div className="form-group">
+                  <label>Density (g/mL)</label>
+                  <input
+                    type="number"
+                    step="0.001"
+                    min="0"
+                    placeholder="Leave blank if unknown"
+                    value={row.density_g_per_ml ?? ''}
+                    onChange={(e) => updateOther(index, {
+                      density_g_per_ml: e.target.value.trim() === '' ? null : parseFloat(e.target.value) || null,
+                      density_assumption: null,
+                    })}
+                  />
+                  {resolveIngredientDensity(measureIngredient).notice && (
+                    <p className="field-hint">{resolveIngredientDensity(measureIngredient).notice}</p>
+                  )}
+                  {row.density_g_per_ml == null && (
+                    <label className="checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={row.density_assumption != null}
+                        onChange={(e) => updateOther(index, {
+                          density_assumption: e.target.checked
+                            ? (ingredientType === 'syrup'
+                              ? 'cs1-syrup'
+                              : ingredientType === 'color'
+                                ? 'class-i-caramel'
+                                : 'water')
+                            : null,
+                        })}
+                      />
+                      Use a documented density assumption
+                    </label>
+                  )}
+                </div>
+              )}
               <div className="form-group" style={{ alignSelf: 'end' }}>
                 <button type="button" className="btn btn-sm btn-ghost" onClick={() => setOthers((prev) => prev.filter((_, i) => i !== index))}>
                   Remove
@@ -682,7 +791,11 @@ export function BlendDesigner({ onUseForBatch }: { onUseForBatch: (recipeId: num
             </div>
           );
         })}
-        <button type="button" className="btn btn-secondary btn-sm" onClick={() => setOthers((prev) => [...prev, emptyOther()])}>
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          onClick={() => setOthers((prev) => [...prev, emptyOther(defaultBlendDesignerOtherCategory(inventoryCategories))])}
+        >
           Add ingredient
         </button>
       </div>
