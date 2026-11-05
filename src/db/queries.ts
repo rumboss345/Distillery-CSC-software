@@ -7005,6 +7005,26 @@ export function getEquipmentMaintenanceReportLog(): EquipmentMaintenanceLogView[
 }
 
 /** Cleaning log rows for the daily staff sheet: tanks, fermenters, and stills. */
+/** Latest “needs cleaning” timestamp for each unit currently in cleaning status. */
+export function getCleaningFlaggedAtByEquipmentId(): Map<number, string> {
+  const rows = queryAll<{ floor_equipment_id: number; flagged_at: string | null }>(`
+    SELECT fe.id AS floor_equipment_id, (
+      SELECT l.created_at
+      FROM equipment_maintenance_log l
+      WHERE l.floor_equipment_id = fe.id AND l.event_type = 'needs_cleaning'
+      ORDER BY l.created_at DESC, l.id DESC
+      LIMIT 1
+    ) AS flagged_at
+    FROM floor_equipment fe
+    WHERE fe.status = 'cleaning'
+  `);
+  const map = new Map<number, string>();
+  for (const row of rows) {
+    if (row.flagged_at) map.set(row.floor_equipment_id, row.flagged_at);
+  }
+  return map;
+}
+
 export function getTankCleaningLog(): {
   id: number;
   equipmentId: number;

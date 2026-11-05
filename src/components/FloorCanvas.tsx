@@ -1,6 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FloorEquipment, FloorEquipmentView, FloorPlan } from '../types';
 import { TYPE_COLORS, IN_USE_COLORS, equipmentTypeLabel, getEquipmentDisplayColor, resolveEquipmentIcon } from '../lib/equipment';
+import {
+  equipmentCleaningDaysDirty,
+  equipmentCleaningOverdueFlash,
+  equipmentNeedsCleaning,
+} from '../lib/equipment-cleaning';
+import { getCleaningFlaggedAtByEquipmentId } from '../db/queries';
+import { localIsoDate } from '../lib/planned-event-date';
 
 const PX_PER_FT = 10;
 
@@ -39,6 +46,8 @@ export function FloorCanvas({
 
   const widthPx = plan.width_ft * PX_PER_FT;
   const heightPx = plan.height_ft * PX_PER_FT;
+  const today = localIsoDate();
+  const cleaningFlaggedAt = useMemo(() => getCleaningFlaggedAtByEquipmentId(), [equipment]);
 
   const clamp = useCallback(
     (item: FloorEquipment, x: number, y: number) => ({
@@ -122,6 +131,10 @@ export function FloorCanvas({
           const isSelected = selectedId === item.id;
           const isDragging = dragging?.id === item.id;
           const isFermenting = item.equipment_type === 'fermenter' && item.active_mash_status === 'fermenting';
+          const needsCleaning = equipmentNeedsCleaning(item);
+          const cleaningOverdue = needsCleaning && equipmentCleaningOverdueFlash(
+            equipmentCleaningDaysDirty(cleaningFlaggedAt.get(item.id), today),
+          );
           const icon = resolveEquipmentIcon(item.icon, item.equipment_type);
           const posX = isDragging && livePos ? livePos.x : item.pos_x_ft;
           const posY = isDragging && livePos ? livePos.y : item.pos_y_ft;
@@ -131,7 +144,7 @@ export function FloorCanvas({
           return (
             <div
               key={item.id}
-              className={`floor-equipment floor-equipment--${item.equipment_type}${isSelected ? ' selected' : ''}${item.status === 'in_use' ? ' in-use' : ''}${isFermenting ? ' fermenting' : ''}${item.status === 'cleaning' ? ' cleaning' : ''}${item.status === 'offline' ? ' offline' : ''}${isDragging ? ' dragging' : ''}`}
+              className={`floor-equipment floor-equipment--${item.equipment_type}${isSelected ? ' selected' : ''}${item.status === 'in_use' ? ' in-use' : ''}${isFermenting ? ' fermenting' : ''}${item.status === 'cleaning' ? ' cleaning' : ''}${cleaningOverdue ? ' cleaning-overdue' : ''}${item.status === 'offline' ? ' offline' : ''}${isDragging ? ' dragging' : ''}`}
               style={{
                 left: posX * PX_PER_FT,
                 top: posY * PX_PER_FT,

@@ -5,6 +5,7 @@ import { CollapsibleSection } from '../components/CollapsibleSection';
 import {
   getAllEquipmentMaintenanceLog,
   getAllFloorEquipment,
+  getCleaningFlaggedAtByEquipmentId,
   getEquipmentMaintenanceLog,
   getFloorPlans,
   markEquipmentCleaned,
@@ -17,7 +18,13 @@ import { RecentCompletedNote } from '../components/RecentCompletedNote';
 import { EquipmentMaintenanceLogTable } from '../components/equipment/EquipmentMaintenanceLogTable';
 import { latestCompleted, RECENT_COMPLETED_LIMIT } from '../lib/recent-completed';
 import { equipmentTypeLabel } from '../lib/equipment';
-import { equipmentCleaningStatusLabel, equipmentNeedsCleaning } from '../lib/equipment-cleaning';
+import {
+  equipmentCleaningDaysDirty,
+  equipmentCleaningOverdueFlash,
+  equipmentCleaningStatusLabel,
+  equipmentNeedsCleaning,
+} from '../lib/equipment-cleaning';
+import { localIsoDate } from '../lib/planned-event-date';
 import {
   equipmentBlocksProduction,
   groupEquipmentByCategory,
@@ -45,6 +52,8 @@ export function EquipmentMaintenance() {
   void key;
 
   const groups = useMemo(() => groupEquipmentByCategory(equipment), [equipment]);
+  const today = localIsoDate();
+  const cleaningFlaggedAt = useMemo(() => getCleaningFlaggedAtByEquipmentId(), [key]);
   useEffect(() => {
     if (!focusEquipmentId) return;
     document.getElementById(`equipment-row-${focusEquipmentId}`)?.scrollIntoView({ block: 'center' });
@@ -182,8 +191,13 @@ export function EquipmentMaintenance() {
             {shownItems.map((item) => {
               const blocked = equipmentBlocksProduction(item);
               const dirty = equipmentNeedsCleaning(item);
+              const cleaningOverdue = dirty && equipmentCleaningOverdueFlash(
+                equipmentCleaningDaysDirty(cleaningFlaggedAt.get(item.id), today),
+              );
               const statusLabel = dirty
-                ? equipmentCleaningStatusLabel()
+                ? (cleaningOverdue
+                  ? `${equipmentCleaningStatusLabel()} — overdue`
+                  : equipmentCleaningStatusLabel())
                 : maintenanceStatusLabel(item.maintenance_status);
               return (
                 <li
@@ -191,7 +205,7 @@ export function EquipmentMaintenance() {
                   id={`equipment-row-${item.id}`}
                   className={`equipment-maintenance-row${
                     item.id === focusEquipmentId ? ' equipment-maintenance-row--focus' : ''
-                  }`}
+                  }${cleaningOverdue ? ' equipment-maintenance-row--cleaning-overdue' : ''}`}
                 >
                   <div className="equipment-maintenance-row-main">
                     <span className="equipment-maintenance-name">{item.name}</span>

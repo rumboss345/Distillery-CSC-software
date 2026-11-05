@@ -252,6 +252,45 @@
   stroke-linejoin: round;
 }
 
+.process-equipment-cleaning-badge--overdue {
+  background: rgba(220, 38, 38, 0.95);
+  border-color: #fecaca;
+}
+
+@keyframes process-equipment-cleaning-overdue-flash {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.9);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.55), 0 0 18px 6px rgba(220, 38, 38, 0.45);
+  }
+}
+
+.process-equipment-node--cleaning-overdue {
+  animation: process-equipment-cleaning-overdue-flash 1.15s ease-in-out infinite;
+  border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .process-equipment-node--cleaning-overdue {
+    animation: none;
+    box-shadow: 0 0 0 2px #dc2626;
+  }
+}
+
+.process-equipment-cleaning-banner--overdue {
+  background: rgba(220, 38, 38, 0.12);
+  border-color: rgba(220, 38, 38, 0.55);
+  animation: process-equipment-cleaning-overdue-flash 1.15s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .process-equipment-cleaning-banner--overdue {
+    animation: none;
+  }
+}
+
 .process-equipment-cleaning-banner {
   margin-bottom: 0.75rem;
   padding: 0.65rem 0.75rem;

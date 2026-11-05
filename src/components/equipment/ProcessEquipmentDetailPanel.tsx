@@ -22,7 +22,13 @@ import { formatTankVolumeVariance, tankVolumeMatchesRecord } from '../../lib/tan
 import { STATUS_LABELS, formatGal } from './equipment-visual-shared';
 import type { EquipmentVisualData } from './equipment-visual.types';
 import type { FloorEquipmentView, HoldingTankIntakeEntry } from '../../types';
-import { equipmentCleaningStatusLabel, equipmentNeedsCleaning } from '../../lib/equipment-cleaning';
+import {
+  equipmentCleaningDaysDirty,
+  equipmentCleaningOverdueFlash,
+  equipmentCleaningStatusLabel,
+  equipmentNeedsCleaning,
+} from '../../lib/equipment-cleaning';
+import { getCleaningFlaggedAtByEquipmentId } from '../../db/queries';
 import {
   equipmentBlocksProduction,
   maintenanceStatusLabel,
@@ -88,6 +94,10 @@ export function ProcessEquipmentDetailPanel({
 
   const statusLabel = STATUS_LABELS[visual.status] ?? equipment.status.replace('_', ' ');
   const dirty = equipmentNeedsCleaning(equipment);
+  const cleaningDaysDirty = dirty
+    ? equipmentCleaningDaysDirty(getCleaningFlaggedAtByEquipmentId().get(equipment.id), localIsoDate())
+    : 0;
+  const cleaningOverdue = equipmentCleaningOverdueFlash(cleaningDaysDirty);
   const hasLiquid = visual.currentVolumeGal > 0;
   const isVolumeTank = equipment.equipment_type === 'holding_tank'
     || equipment.equipment_type === 'stillage_tank'
@@ -185,8 +195,14 @@ export function ProcessEquipmentDetailPanel({
       )}
 
       {dirty && (
-        <div className="process-equipment-cleaning-banner" role="status">
-          <strong>{equipmentCleaningStatusLabel()}</strong>
+        <div
+          className={`process-equipment-cleaning-banner${cleaningOverdue ? ' process-equipment-cleaning-banner--overdue' : ''}`}
+          role="status"
+        >
+          <strong>
+            {equipmentCleaningStatusLabel()}
+            {cleaningOverdue ? ` (${cleaningDaysDirty} days — clean now)` : ''}
+          </strong>
           <p className="field-hint" style={{ margin: '0.35rem 0 0' }}>
             Mark clean before the next batch, here or on{' '}
             <Link to={`/equipment-maintenance?equipment=${equipment.id}`} state={equipmentReturnState(equipment.id)}>Equipment Maintenance</Link>.
