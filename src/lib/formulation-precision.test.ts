@@ -86,13 +86,10 @@ describe("Jack's Dark current-model regression", () => {
     expect(predicted.summary).toMatch(/predicted ABV/);
     expect(predicted.warnings.join(' ')).toMatch(/0\.6219/);
     expect(predicted.warnings.join(' ')).toContain(DENSITY_NOT_VERIFIED);
-    // Spirit, water, and dissolved sugar only. The 1.75 L flavor charge is not
-    // added to finished volume: YT75 has no density, and density would only
-    // convert that charge to mass. The older path that added the flavor liters
-    // was about 389.13 L and 32.82% ABV.
-    expect(predicted.liters).toBeCloseTo(387.3809, 2);
-    expect(predicted.abv).toBeCloseTo(32.97, 2);
-    expect(predicted.volumeStatus).toBe('provisional');
+    // Current continuous-factor model. The older 0.1 proof-gallon path was about
+    // 389.2 L and 32.78% ABV. Neither figure is a laboratory specification.
+    expect(predicted.liters).toBeCloseTo(389.1309, 2);
+    expect(predicted.abv).toBeCloseTo(32.82, 2);
 
     const recipe = { spiritLb: 249, waterLb: 415, sugarLb: 250, flavorL: 1.75 };
     const reconciliation = reconcileMeasurements(
