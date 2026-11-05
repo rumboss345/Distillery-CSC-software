@@ -63,7 +63,14 @@ export function CostingReport() {
   }
 
   const saveSettings = () => {
-    saveProductionCostSettings(settingsDraft);
+    saveProductionCostSettings({
+      ...settingsDraft,
+      labour_wash_per_batch: 0,
+      labour_ferment_per_day: 0,
+      labour_distill_per_run: 0,
+      labour_bottle_per_run: 0,
+      labour_per_bottle: 0,
+    });
     saveProductionCostMonthlyOverhead(overheadDraft);
     refresh();
   };
@@ -90,13 +97,13 @@ export function CostingReport() {
     <div data-testid="production-costing-report">
       <CollapsibleSection
         title="Costing assumptions"
-        summary="Water, activity labour, and monthly overhead"
+        summary="Water, total labour, and monthly utilities"
         defaultOpen={false}
         storageKey="report-costing-assumptions"
       >
         <p className="field-hint" style={{ marginTop: 0 }}>
           Sugar, yeast, nutrients, bottles, and labels use unit costs from Inventory only.
-          Set those on each item; this panel covers water, labour rates, and fixed monthly overhead.
+          Set those on each item; this panel covers water cost and monthly overhead (total labour, electric, and gas).
         </p>
         <div className="form-grid">
           <div className="form-group">
@@ -113,56 +120,6 @@ export function CostingReport() {
               })}
             />
             <p className="field-hint">Default {DEFAULT_WATER_COST_PER_GAL.toFixed(2)}/gal. Wash, still proofing, tank dilution, and blend proofing water.</p>
-          </div>
-          <div className="form-group">
-            <label>Wash batch labour ($)</label>
-            <input
-              type="number"
-              min={0}
-              step={0.01}
-              value={settingsDraft.labour_wash_per_batch}
-              onChange={(e) => setSettingsDraft({ ...settingsDraft, labour_wash_per_batch: parseMoneyInput(e.target.value) })}
-            />
-          </div>
-          <div className="form-group">
-            <label>Fermentation labour ($ per day)</label>
-            <input
-              type="number"
-              min={0}
-              step={0.01}
-              value={settingsDraft.labour_ferment_per_day}
-              onChange={(e) => setSettingsDraft({ ...settingsDraft, labour_ferment_per_day: parseMoneyInput(e.target.value) })}
-            />
-          </div>
-          <div className="form-group">
-            <label>Distillation labour ($ per run)</label>
-            <input
-              type="number"
-              min={0}
-              step={0.01}
-              value={settingsDraft.labour_distill_per_run}
-              onChange={(e) => setSettingsDraft({ ...settingsDraft, labour_distill_per_run: parseMoneyInput(e.target.value) })}
-            />
-          </div>
-          <div className="form-group">
-            <label>Bottling labour ($ per run)</label>
-            <input
-              type="number"
-              min={0}
-              step={0.01}
-              value={settingsDraft.labour_bottle_per_run}
-              onChange={(e) => setSettingsDraft({ ...settingsDraft, labour_bottle_per_run: parseMoneyInput(e.target.value) })}
-            />
-          </div>
-          <div className="form-group">
-            <label>Bottling labour ($ per bottle)</label>
-            <input
-              type="number"
-              min={0}
-              step={0.001}
-              value={settingsDraft.labour_per_bottle}
-              onChange={(e) => setSettingsDraft({ ...settingsDraft, labour_per_bottle: parseMoneyInput(e.target.value) })}
-            />
           </div>
         </div>
 
@@ -182,7 +139,7 @@ export function CostingReport() {
             />
           </div>
           <div className="form-group">
-            <label>Master distiller ($)</label>
+            <label>Total labour ($)</label>
             <input
               type="number"
               min={0}
@@ -223,7 +180,7 @@ export function CostingReport() {
               <thead>
                 <tr>
                   <th>Effective from</th>
-                  <th className="num">Master distiller</th>
+                  <th className="num">Total labour</th>
                   <th className="num">Electric</th>
                   <th className="num">Gas / propane</th>
                   <th />
@@ -338,8 +295,8 @@ export function CostingReport() {
             Materials {money(summary.totalMaterialCost)}
             {summary.totalWaterCost > 0 ? ` (incl. water ${money(summary.totalWaterCost)})` : ''}
             {' · '}
-            Activity labour {money(summary.totalLabourCost)}
-            {summary.totalMonthlyOverheadCost > 0 ? ` · Monthly overhead ${money(summary.totalMonthlyOverheadCost)}` : ''}
+            Total labour {money(summary.totalLabourCost)}
+            {summary.totalMonthlyOverheadCost > 0 ? ` · Electric & gas ${money(summary.totalMonthlyOverheadCost)}` : ''}
           </div>
         </div>
         <div className="stat-card">
@@ -370,7 +327,6 @@ export function CostingReport() {
                   <th>Started</th>
                   <th className="num">Sugar (lbs)</th>
                   <th className="num">Materials</th>
-                  <th className="num">Labour</th>
                   <th className="num">Total</th>
                   <th className="num">Ferment ΔBrix</th>
                   <th className="num">Hearts GPA</th>
@@ -385,7 +341,6 @@ export function CostingReport() {
                     <td>{formatDateDisplay(row.startDate)}</td>
                     <td className="num">{row.sugarLbs}</td>
                     <td className="num">{money(row.materialCost)}</td>
-                    <td className="num">{money(row.labourCost)}</td>
                     <td className="num"><strong>{money(row.totalCost)}</strong></td>
                     <td className="num">{num(row.fermentBrixDrop, 1)}</td>
                     <td className="num">{num(row.heartsGpa, 2)}</td>
@@ -417,7 +372,6 @@ export function CostingReport() {
                   <th className="num">Bottles</th>
                   <th className="num">Packaging</th>
                   <th className="num">Spirit (alloc.)</th>
-                  <th className="num">Labour</th>
                   <th className="num">Total</th>
                   <th className="num">$/bottle</th>
                 </tr>
@@ -431,7 +385,6 @@ export function CostingReport() {
                     <td className="num">{row.bottleCount.toLocaleString()}</td>
                     <td className="num">{money(row.packagingCost)}</td>
                     <td className="num">{money(row.spiritCost)}</td>
-                    <td className="num">{money(row.labourCost)}</td>
                     <td className="num"><strong>{money(row.totalCost)}</strong></td>
                     <td className="num">{money(row.costPerBottle)}</td>
                   </tr>

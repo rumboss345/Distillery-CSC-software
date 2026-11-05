@@ -3,10 +3,18 @@ import type { ProductionCostMonthlyOverhead } from '../../types';
 import { localCalendarDayKey } from '../date-input';
 import type { ReportDateRange } from './period';
 
-export function monthlyOverheadAmount(row: ProductionCostMonthlyOverhead): number {
-  return (row.master_distiller > 0 ? row.master_distiller : 0)
-    + (row.electric > 0 ? row.electric : 0)
+/** Monthly total labour (stored in master_distiller column for compatibility). */
+export function monthlyLabourAmount(row: ProductionCostMonthlyOverhead): number {
+  return row.master_distiller > 0 ? row.master_distiller : 0;
+}
+
+export function monthlyUtilitiesAmount(row: ProductionCostMonthlyOverhead): number {
+  return (row.electric > 0 ? row.electric : 0)
     + (row.gas_propane > 0 ? row.gas_propane : 0);
+}
+
+export function monthlyOverheadAmount(row: ProductionCostMonthlyOverhead): number {
+  return monthlyLabourAmount(row) + monthlyUtilitiesAmount(row);
 }
 
 /** Latest saved rate row with year_month on or before the given calendar month. */
@@ -134,9 +142,10 @@ function resolveOverheadRangeBounds(
   };
 }
 
-export function computeMonthlyOverheadTotal(
+function computeMonthlyAmountTotal(
   range: ReportDateRange,
   entries: ProductionCostMonthlyOverhead[],
+  amountForRow: (row: ProductionCostMonthlyOverhead) => number,
   now = new Date(),
 ): number {
   if (entries.length === 0) return 0;
@@ -146,7 +155,7 @@ export function computeMonthlyOverheadTotal(
   for (const ym of calendarMonthsInRange(bounds)) {
     const effective = effectiveMonthlyOverheadForMonth(ym, entries);
     if (!effective) continue;
-    const monthly = monthlyOverheadAmount(effective);
+    const monthly = amountForRow(effective);
     if (monthly <= 0) continue;
 
     const overlapDays = overlapDaysInMonth(ym, bounds);
@@ -156,4 +165,28 @@ export function computeMonthlyOverheadTotal(
     total += (monthly / dim) * overlapDays;
   }
   return roundMoney(total);
+}
+
+export function computeMonthlyLabourTotal(
+  range: ReportDateRange,
+  entries: ProductionCostMonthlyOverhead[],
+  now = new Date(),
+): number {
+  return computeMonthlyAmountTotal(range, entries, monthlyLabourAmount, now);
+}
+
+export function computeMonthlyUtilitiesTotal(
+  range: ReportDateRange,
+  entries: ProductionCostMonthlyOverhead[],
+  now = new Date(),
+): number {
+  return computeMonthlyAmountTotal(range, entries, monthlyUtilitiesAmount, now);
+}
+
+export function computeMonthlyOverheadTotal(
+  range: ReportDateRange,
+  entries: ProductionCostMonthlyOverhead[],
+  now = new Date(),
+): number {
+  return computeMonthlyAmountTotal(range, entries, monthlyOverheadAmount, now);
 }

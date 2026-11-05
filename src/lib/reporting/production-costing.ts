@@ -16,7 +16,7 @@ import { ingredientVolumeGal } from '../blending';
 import { laaLitersFromVolumeAbv } from './alcohol-units';
 import { mlToGallons } from '../../types';
 import { buildFermentationPerformance } from './fermentation-performance';
-import { computeMonthlyOverheadTotal } from './monthly-overhead';
+import { computeMonthlyLabourTotal, computeMonthlyUtilitiesTotal } from './monthly-overhead';
 import { eventInReportRange, type ReportDateRange } from './period';
 
 const STANDARD_BOTTLE_ABV = 40;
@@ -149,8 +149,12 @@ function mashMaterialCost(
   return roundMoney(total);
 }
 
-function monthlyOverheadTotal(range: ReportDateRange): number {
-  return computeMonthlyOverheadTotal(range, getProductionCostMonthlyOverhead());
+function monthlyLabourTotal(range: ReportDateRange): number {
+  return computeMonthlyLabourTotal(range, getProductionCostMonthlyOverhead());
+}
+
+function monthlyUtilitiesTotal(range: ReportDateRange): number {
+  return computeMonthlyUtilitiesTotal(range, getProductionCostMonthlyOverhead());
 }
 
 function processWaterGallonsInRange(range: ReportDateRange): number {
@@ -239,24 +243,11 @@ export function buildProductionCostReport(
     brixDropByMash.set(row.mash_id, list);
   }
 
-  const runsInRange = getDistillationRuns().filter((r) => (
-    r.status === 'complete' && eventInReportRange(r.run_date, range)
-  ));
-  const distillRunsByMash = new Map<number, number>();
-  for (const run of runsInRange) {
-    if (!run.source_mash_batch_id) continue;
-    distillRunsByMash.set(
-      run.source_mash_batch_id,
-      (distillRunsByMash.get(run.source_mash_batch_id) ?? 0) + 1,
-    );
-  }
-
   const yieldsAll = getYieldReports();
   const yieldByMashNumber = new Map(yieldsAll.map((y) => [y.mashBatchNumber, y]));
 
   const washBatches: WashBatchCostRow[] = [];
   let totalMaterial = 0;
-  let totalLabour = 0;
   let totalGpa = 0;
 
   for (const mash of mashes) {
@@ -275,14 +266,7 @@ export function buildProductionCostReport(
       index,
     );
 
-    let labourCost = settings.labour_wash_per_batch;
-    const fermentDays = fermentPerf.rows
-      .filter((row) => row.mash_id === mash.id && row.duration_days != null)
-      .reduce((sum, row) => sum + (row.duration_days ?? 0), 0);
-    if (fermentDays > 0) labourCost += fermentDays * settings.labour_ferment_per_day;
-    const distillCount = distillRunsByMash.get(mash.id) ?? 0;
-    labourCost += distillCount * settings.labour_distill_per_run;
-    labourCost = roundMoney(labourCost);
+    const labourCost = 0;
 
     const totalCost = roundMoney(materialCost + labourCost);
     const drops = brixDropByMash.get(mash.id);
@@ -291,7 +275,6 @@ export function buildProductionCostReport(
       : null;
 
     totalMaterial += materialCost;
-    totalLabour += labourCost;
     totalGpa += heartsGpa;
 
     washBatches.push({
@@ -314,9 +297,10 @@ export function buildProductionCostReport(
 
   const processWaterGal = processWaterGallonsInRange(range);
   const processWaterCost = roundMoney(processWaterGal * waterCostPerGal(settings));
-  const monthlyOverhead = monthlyOverheadTotal(range);
+  const monthlyLabour = monthlyLabourTotal(range);
+  const monthlyUtilities = monthlyUtilitiesTotal(range);
 
-  const washCostSubtotal = roundMoney(totalMaterial + totalLabour);
+  const washCostSubtotal = roundMoney(totalMaterial);
   const avgCostPerLaaLiter = totalGpa > 0 && washCostSubtotal > 0
     ? washCostSubtotal / laaLitersFromGpa(totalGpa)
     : null;
@@ -327,7 +311,6 @@ export function buildProductionCostReport(
 
   const bottlingRuns: BottlingCostRow[] = [];
   let bottlingMaterial = 0;
-  let bottlingLabour = 0;
   let bottlingSpirit = 0;
 
   for (const run of getBottlingRuns()) {
@@ -340,13 +323,10 @@ export function buildProductionCostReport(
     const spiritCost = avgCostPerLaaLiter != null && laaLiters > 0
       ? roundMoney(avgCostPerLaaLiter * laaLiters)
       : 0;
-    const labourCost = roundMoney(
-      settings.labour_bottle_per_run + bottleCount * settings.labour_per_bottle,
-    );
+    const labourCost = 0;
     const totalCost = roundMoney(packagingCost + spiritCost + labourCost);
 
     bottlingMaterial += packagingCost;
-    bottlingLabour += labourCost;
     bottlingSpirit += spiritCost;
 
     bottlingRuns.push({
@@ -368,10 +348,9 @@ export function buildProductionCostReport(
 
   const totalWashCost = washCostSubtotal;
   const grandMaterial = roundMoney(totalMaterial + bottlingMaterial + processWaterCost);
-  const activityLabour = roundMoney(totalLabour + bottlingLabour);
-  /** Wash pipeline + bottling packaging and labour (spirit on bottles is an allocation of wash cost, not additive). */
+  /** Wash pipeline + bottling packaging (spirit on bottles is an allocation of wash cost, not additive). */
   const grandTotal = roundMoney(
-    totalWashCost + bottlingMaterial + bottlingLabour + processWaterCost + monthlyOverhead,
+    totalWashCost + bottlingMaterial + processWaterCost + monthlyLabour + monthlyUtilities,
   );
   const totalLaaLiters = laaLitersFromGpa(totalGpa);
   const costPerLaaLiter = totalLaaLiters > 0 && totalWashCost > 0
@@ -405,8 +384,8 @@ export function buildProductionCostReport(
     summary: {
       totalMaterialCost: grandMaterial,
       totalWaterCost: processWaterCost,
-      totalLabourCost: activityLabour,
-      totalMonthlyOverheadCost: monthlyOverhead,
+      totalLabourCost: monthlyLabour,
+      totalMonthlyOverheadCost: monthlyUtilities,
       totalCost: grandTotal,
       totalLaaLiters: roundMoney(totalLaaLiters),
       costPerLaaLiter,
