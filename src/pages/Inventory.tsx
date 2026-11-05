@@ -407,7 +407,7 @@ export function Inventory() {
                 onChange={(e) => setDensityInput(e.target.value)}
                 placeholder="Leave blank if unknown"
               />
-              <span className="field-hint">Leave blank when unknown. The blend calculator will not invent a density.</span>
+              <span className="field-hint">Optional, and it does not require a sugar or solids percentage. It converts this ingredient between volume and mass. It does not set how much the finished blend grows.</span>
             </div>
             <div className="form-group">
               <label>Density measured at (°C)</label>
@@ -443,7 +443,7 @@ export function Inventory() {
                 onChange={(e) => setSugarInput(e.target.value)}
                 placeholder="Blank if unknown"
               />
-              <span className="field-hint">Supplier sugar or Brix-as-mass for syrups. Leave blank rather than guessing.</span>
+              <span className="field-hint">Optional. Caramel colour and other ingredients can have a density with this left blank.</span>
             </div>
             <div className="form-group">
               <label>Solids by mass (%)</label>

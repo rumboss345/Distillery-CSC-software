@@ -47,27 +47,29 @@ describe('BL-2026-004 banana rum alcohol account', () => {
     expect(account.legacySpiritWeightPercent).not.toBeCloseTo(40.79, 1);
   });
 
-  it('marks the 192 gallon prediction provisional when syrup and flavor densities are missing', () => {
-    expect(account.predictedVolumeGal).toBeGreaterThan(190);
-    expect(account.predictedVolumeGal).toBeLessThan(194);
-    expect(account.predictedAbv).toBeCloseTo(35, 0);
+  it('does not treat CS1 or flavor milliliters as finished blend volume', () => {
+    expect(account.predictedVolumeGal).toBeGreaterThan(160);
+    expect(account.predictedVolumeGal).toBeLessThan(185);
     expect(account.volumeStatus).toBe('provisional');
     expect(account.predictedAbw).toBeNull();
-    expect(account.unverifiedVolumeGal).toBeGreaterThan(10);
     expect(account.warnings.join(' ')).toMatch(/CS1 syrup/);
     expect(account.warnings.join(' ')).toMatch(/DENSITY NOT VERIFIED/);
+    expect(account.warnings.join(' ')).toMatch(/does not set how much the finished blend volume increases|not added to the finished blend/);
     expect(account.warnings.join(' ')).not.toMatch(/1\.368/);
-    expect(account.sugarSpecificationIncomplete).toBe(true);
+    expect(account.warnings.join(' ')).not.toMatch(/no sugar concentration/);
+    expect(account.sugarSpecificationIncomplete).toBe(false);
   });
 
-  it('does not invent a CS1 density when the assumption is not selected', () => {
+  it('uses a CS1 density for mass only, and still omits that bulk volume from the finished gallons', () => {
     const withAssumption = buildBlendAlcoholAccount(BANANA_SPIRIT, BANANA_ADDITIVES.map((row) => (
-      row.name === 'CS1 syrup' ? { ...row, densityAssumption: 'cs1-syrup' as const } : row
+      row.name === 'CS1 syrup' ? { ...row, densityAssumption: 'cs1-syrup' as const, specStatus: 'estimated' as const } : row
     )));
     expect(withAssumption.ok).toBe(true);
     if (!withAssumption.ok) return;
     expect(withAssumption.warnings.join(' ')).toMatch(/1\.368/);
-    expect(withAssumption.unverifiedVolumeGal).toBeLessThan(account.unverifiedVolumeGal);
+    expect(withAssumption.warnings.join(' ')).toMatch(/does not set how much the finished blend volume increases/);
+    expect(withAssumption.predictedVolumeGal).toBeCloseTo(account.predictedVolumeGal, 2);
+    expect(withAssumption.predictedAbw).toBeNull();
   });
 });
 
@@ -148,7 +150,33 @@ describe('recipe shapes and a recipe that has not been entered', () => {
     expect(saved.warnings.join(' ')).not.toMatch(/1\.368/);
   });
 
-  it('counts syrup sugar only when a verified fraction and density are entered', () => {
+  it('accepts caramel density with no sugar or solids percentage', () => {
+    const color = buildBlendAlcoholAccount(
+      [{ volumeGal: 10, abv: 70, label: 'Rum' }],
+      [{
+        ingredientType: 'color',
+        name: 'Caramel',
+        amount: 500,
+        unit: 'ml',
+        densityGPerMl: 1.3,
+        specStatus: 'estimated',
+      }],
+    );
+    const withoutColor = buildBlendAlcoholAccount(
+      [{ volumeGal: 10, abv: 70, label: 'Rum' }],
+      [],
+    );
+    expect(color.ok && withoutColor.ok).toBe(true);
+    if (!color.ok || !withoutColor.ok) return;
+    expect(color.warnings.join(' ')).not.toMatch(/no sugar concentration|solids percentage is required/);
+    expect(color.warnings.join(' ')).toMatch(/does not set how much the finished blend volume increases/);
+    expect(color.predictedVolumeGal).toBeCloseTo(withoutColor.predictedVolumeGal, 3);
+    expect(color.predictedAbw).not.toBeNull();
+    expect(color.predictedAbw!).toBeLessThan(withoutColor.predictedAbw ?? 100);
+    expect(color.volumeStatus).toBe('provisional');
+  });
+
+  it('counts syrup sugar when a fraction is entered, without requiring it for the density', () => {
     const withSpec = buildBlendAlcoholAccount(
       [{ volumeGal: 10, abv: 70, label: 'Rum' }],
       [{
@@ -161,11 +189,26 @@ describe('recipe shapes and a recipe that has not been entered', () => {
         specStatus: 'verified',
       }],
     );
-    expect(withSpec.ok).toBe(true);
-    if (!withSpec.ok) return;
+    const densityOnly = buildBlendAlcoholAccount(
+      [{ volumeGal: 10, abv: 70, label: 'Rum' }],
+      [{
+        ingredientType: 'syrup',
+        name: 'CS1',
+        amount: 2,
+        unit: 'lbs',
+        densityGPerMl: 1.32,
+        specStatus: 'verified',
+      }],
+    );
+    expect(withSpec.ok && densityOnly.ok).toBe(true);
+    if (!withSpec.ok || !densityOnly.ok) return;
     expect(withSpec.sugarGPerL).toBeGreaterThan(0);
-    expect(withSpec.volumeStatus).not.toBe('provisional');
+    expect(densityOnly.sugarGPerL).toBeNull();
+    expect(densityOnly.warnings.join(' ')).not.toMatch(/no sugar concentration/);
     expect(withSpec.predictedAbw).not.toBeNull();
+    expect(densityOnly.predictedAbw).not.toBeNull();
+    expect(withSpec.volumeStatus).toBe('provisional');
+    expect(withSpec.predictedVolumeGal).toBeGreaterThan(densityOnly.predictedVolumeGal);
   });
 
   it('adds alcohol from a flavoring and from a second spirit', () => {

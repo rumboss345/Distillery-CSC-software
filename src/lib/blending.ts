@@ -676,8 +676,14 @@ export function measureAlternate(ingredient: IngredientMeasure): MeasureAlternat
       return notice ? { amount: 0, unit: '', label: notice } : null;
     }
     const liters = gal * LITERS_PER_US_GALLON;
-    const galLabel = `≈ ${formatGallonDisplay(gal)} gal added volume`;
-    const label = liters >= 1
+    const bulkOnly = ingredient.ingredient_type === 'syrup'
+      || ingredient.ingredient_type === 'color'
+      || ingredient.ingredient_type === 'flavoring'
+      || ingredient.ingredient_type === 'other';
+    const galLabel = bulkOnly
+      ? `≈ ${formatGallonDisplay(gal)} gal bulk volume from density, not the finished blend increase`
+      : `≈ ${formatGallonDisplay(gal)} gal`;
+    const label = !bulkOnly && liters >= 1
       ? `${galLabel} (${liters.toFixed(1)} L)`
       : galLabel;
     return { amount: Math.round(gal * 100) / 100, unit: 'gal', label };
@@ -693,7 +699,14 @@ export function measureAlternate(ingredient: IngredientMeasure): MeasureAlternat
       const oz = lbs * 16;
       return { amount: Math.round(oz * 10) / 10, unit: 'oz', label: `≈ ${oz.toFixed(1)} oz by weight` };
     }
-    return { amount: Math.round(lbs * 100) / 100, unit: 'lbs', label: `≈ ${lbs.toFixed(2)} lbs by weight` };
+    const bulkOnly = ingredient.ingredient_type === 'syrup'
+      || ingredient.ingredient_type === 'color'
+      || ingredient.ingredient_type === 'flavoring'
+      || ingredient.ingredient_type === 'other';
+    const weightLabel = bulkOnly
+      ? `≈ ${lbs.toFixed(2)} lbs from density. This does not set the finished blend volume increase.`
+      : `≈ ${lbs.toFixed(2)} lbs by weight`;
+    return { amount: Math.round(lbs * 100) / 100, unit: 'lbs', label: weightLabel };
   }
 
   return null;
