@@ -20,16 +20,9 @@ import {
 } from '../db/client-actions';
 import { isPostgresMode } from '../db/database';
 import {
-  DEFAULT_WATER_COST_PER_GAL,
   emptyAllHoldingTanks,
   getHoldingTanksWithContents,
-  getProductionCostMonthlyLabour,
-  getProductionCostSettings,
-  saveProductionCostMonthlyLabour,
-  saveProductionCostSettings,
-  useRefreshKey,
 } from '../db/queries';
-import type { ProductionCostMonthlyLabour, ProductionCostSettings } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { formatRecordedAt } from '../lib/date-input';
 import {
@@ -72,17 +65,6 @@ export function AdminUsers() {
   const [editProcessAssignments, setEditProcessAssignments] = useState<ProcessStageKey[]>([]);
   const [editName, setEditName] = useState('');
   const [editPassword, setEditPassword] = useState('');
-  const { key: productionCostRefreshKey, refresh: refreshProductionCost } = useRefreshKey();
-  const [costSettingsDraft, setCostSettingsDraft] = useState<ProductionCostSettings>(() => getProductionCostSettings());
-  const [monthlyLabourDraft, setMonthlyLabourDraft] = useState<ProductionCostMonthlyLabour[]>(() => getProductionCostMonthlyLabour());
-  const [newLabourMonth, setNewLabourMonth] = useState('');
-  const [newLabourAmount, setNewLabourAmount] = useState('');
-  const [costingNote, setCostingNote] = useState('');
-
-  useEffect(() => {
-    setCostSettingsDraft(getProductionCostSettings());
-    setMonthlyLabourDraft(getProductionCostMonthlyLabour());
-  }, [productionCostRefreshKey]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -112,34 +94,6 @@ export function AdminUsers() {
 
   if (!isAdminRole(user?.role)) {
     return <Navigate to="/" replace />;
-  }
-
-  function parseMoneyInput(raw: string): number {
-    const value = parseFloat(raw);
-    return Number.isFinite(value) && value >= 0 ? value : 0;
-  }
-
-  function saveOwnerCostingDefaults() {
-    saveProductionCostSettings(costSettingsDraft);
-    saveProductionCostMonthlyLabour(monthlyLabourDraft);
-    refreshProductionCost();
-    setCostingNote('Production costing defaults saved.');
-  }
-
-  function addMonthlyLabourRow() {
-    const ym = newLabourMonth.trim().slice(0, 7);
-    const amount = parseMoneyInput(newLabourAmount);
-    if (!/^\d{4}-\d{2}$/.test(ym)) {
-      setCostingNote('Choose a month for monthly labour.');
-      return;
-    }
-    setMonthlyLabourDraft((prev) => {
-      const without = prev.filter((row) => row.year_month !== ym);
-      return [{ year_month: ym, amount }, ...without].sort((a, b) => b.year_month.localeCompare(a.year_month));
-    });
-    setNewLabourMonth('');
-    setNewLabourAmount('');
-    setCostingNote('');
   }
 
   function togglePermission(list: PermissionKey[], key: PermissionKey, checked: boolean) {
@@ -539,128 +493,6 @@ export function AdminUsers() {
           </table>
         )}
       </div>
-
-      {isOwnerRole(user?.role) && (
-        <div className="card admin-section" data-testid="admin-production-costing">
-          <h2 className="admin-section-title">Production costing defaults</h2>
-          <p className="admin-hint">
-            Owners only. These rates feed the Production costing report (wash water, proofing water, and fixed monthly labour).
-          </p>
-          <div className="admin-form form-grid">
-            <label>
-              Water cost ($ per US gallon)
-              <input
-                type="number"
-                min={0}
-                step={0.0001}
-                data-testid="admin-water-cost-per-gal"
-                value={costSettingsDraft.water_cost_per_gal}
-                onChange={(e) => setCostSettingsDraft({
-                  ...costSettingsDraft,
-                  water_cost_per_gal: parseMoneyInput(e.target.value),
-                })}
-              />
-            </label>
-          </div>
-          <p className="admin-hint">
-            Default is ${DEFAULT_WATER_COST_PER_GAL.toFixed(2)}/gal when unset. Wash charge water, still proofing water, tank dilutions, and blend proofing water use this rate.
-          </p>
-
-          <h3 className="admin-subtitle">Monthly labour</h3>
-          <p className="admin-hint">
-            Enter total labour cost for a calendar month (salaries, contractor spend, etc.). The amount is included when that month falls inside the report period.
-          </p>
-          <div className="admin-form form-grid admin-labour-add-row">
-            <label>
-              Month
-              <input
-                type="month"
-                data-testid="admin-labour-month"
-                value={newLabourMonth}
-                onChange={(e) => setNewLabourMonth(e.target.value)}
-              />
-            </label>
-            <label>
-              Amount ($)
-              <input
-                type="number"
-                min={0}
-                step={0.01}
-                data-testid="admin-labour-amount"
-                value={newLabourAmount}
-                onChange={(e) => setNewLabourAmount(e.target.value)}
-              />
-            </label>
-            <div style={{ alignSelf: 'end' }}>
-              <button type="button" className="btn btn-secondary btn-sm" onClick={addMonthlyLabourRow}>
-                Add / update month
-              </button>
-            </div>
-          </div>
-          {monthlyLabourDraft.length > 0 ? (
-            <div className="table-wrap" style={{ marginTop: '0.75rem' }}>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Month</th>
-                    <th className="num">Labour ($)</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {monthlyLabourDraft.map((row) => (
-                    <tr key={row.year_month}>
-                      <td>{row.year_month}</td>
-                      <td className="num">
-                        <input
-                          type="number"
-                          min={0}
-                          step={0.01}
-                          style={{ maxWidth: '8rem' }}
-                          value={row.amount}
-                          onChange={(e) => setMonthlyLabourDraft((prev) => prev.map((item) => (
-                            item.year_month === row.year_month
-                              ? { ...item, amount: parseMoneyInput(e.target.value) }
-                              : item
-                          )))}
-                        />
-                      </td>
-                      <td className="table-actions">
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-sm"
-                          onClick={() => setMonthlyLabourDraft((prev) => prev.filter((item) => item.year_month !== row.year_month))}
-                        >
-                          Remove
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <p className="admin-hint">No monthly labour entered yet.</p>
-          )}
-          <div className="admin-data-actions" style={{ marginTop: '1rem' }}>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => {
-                setCostSettingsDraft(getProductionCostSettings());
-                setMonthlyLabourDraft(getProductionCostMonthlyLabour());
-                setCostingNote('');
-              }}
-            >
-              Reset
-            </button>
-            <button type="button" className="btn btn-primary" data-testid="admin-save-costing" onClick={saveOwnerCostingDefaults}>
-              Save costing defaults
-            </button>
-          </div>
-          {costingNote && <p className="admin-hint" role="status">{costingNote}</p>}
-        </div>
-      )}
 
       <div className="card admin-section" data-testid="admin-data-management">
         <h2 className="admin-section-title">Data Management</h2>

@@ -715,11 +715,9 @@ export interface YieldReport {
   yieldPercent: number;
 }
 
-/** Owner-only production costing defaults and labour rates (USD). */
+/** Owner-only production costing rates (USD). Materials use inventory unit costs. */
 export interface ProductionCostSettings {
-  sugar_cost_per_lb: number;
-  default_yeast_cost_per_lb: number;
-  /** Proofing / process water not covered by inventory unit costs. */
+  /** Proofing / process water — not inventoried as stock. */
   water_cost_per_gal: number;
   labour_wash_per_batch: number;
   labour_ferment_per_day: number;
@@ -728,10 +726,12 @@ export interface ProductionCostSettings {
   labour_per_bottle: number;
 }
 
-/** Fixed labour spend for a calendar month (YYYY-MM), owner-entered in Admin. */
-export interface ProductionCostMonthlyLabour {
+/** Fixed overhead for a calendar month (YYYY-MM), entered on Production costing. */
+export interface ProductionCostMonthlyOverhead {
   year_month: string;
-  amount: number;
+  master_distiller: number;
+  electric: number;
+  gas_propane: number;
 }
 
 export interface EquipmentVolumeReport {

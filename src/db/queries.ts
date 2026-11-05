@@ -160,7 +160,7 @@ import type {
   EquipmentVolumeReport,
   YieldReport,
   ProductionCostSettings,
-  ProductionCostMonthlyLabour,
+  ProductionCostMonthlyOverhead,
 } from '../types';
 import { mlToGallons } from '../types';
 import {
@@ -514,8 +514,6 @@ export function saveInventoryItem(item: Omit<InventoryItem, 'id' | 'created_at' 
 export const DEFAULT_WATER_COST_PER_GAL = 0.04;
 
 export const DEFAULT_PRODUCTION_COST_SETTINGS: ProductionCostSettings = {
-  sugar_cost_per_lb: 0,
-  default_yeast_cost_per_lb: 0,
   water_cost_per_gal: DEFAULT_WATER_COST_PER_GAL,
   labour_wash_per_batch: 0,
   labour_ferment_per_day: 0,
@@ -526,7 +524,7 @@ export const DEFAULT_PRODUCTION_COST_SETTINGS: ProductionCostSettings = {
 
 export function getProductionCostSettings(): ProductionCostSettings {
   const row = queryOne<ProductionCostSettings>(
-    `SELECT sugar_cost_per_lb, default_yeast_cost_per_lb, water_cost_per_gal, labour_wash_per_batch,
+    `SELECT water_cost_per_gal, labour_wash_per_batch,
             labour_ferment_per_day, labour_distill_per_run, labour_bottle_per_run, labour_per_bottle
      FROM production_cost_settings WHERE id = 1`,
   );
@@ -544,8 +542,6 @@ export function saveProductionCostSettings(settings: ProductionCostSettings): vo
 
   runQuery(
     `UPDATE production_cost_settings SET
-      sugar_cost_per_lb = ?,
-      default_yeast_cost_per_lb = ?,
       water_cost_per_gal = ?,
       labour_wash_per_batch = ?,
       labour_ferment_per_day = ?,
@@ -555,8 +551,6 @@ export function saveProductionCostSettings(settings: ProductionCostSettings): vo
       updated_at = datetime('now')
      WHERE id = 1`,
     [
-      settings.sugar_cost_per_lb,
-      settings.default_yeast_cost_per_lb,
       settings.water_cost_per_gal,
       settings.labour_wash_per_batch,
       settings.labour_ferment_per_day,
@@ -567,25 +561,30 @@ export function saveProductionCostSettings(settings: ProductionCostSettings): vo
   );
 }
 
-export function getProductionCostMonthlyLabour(): ProductionCostMonthlyLabour[] {
-  return queryAll<ProductionCostMonthlyLabour>(
-    `SELECT year_month, amount FROM production_cost_monthly_labour ORDER BY year_month DESC`,
+export function getProductionCostMonthlyOverhead(): ProductionCostMonthlyOverhead[] {
+  return queryAll<ProductionCostMonthlyOverhead>(
+    `SELECT year_month, master_distiller, electric, gas_propane
+     FROM production_cost_monthly_overhead ORDER BY year_month DESC`,
   );
 }
 
-export function saveProductionCostMonthlyLabour(entries: ProductionCostMonthlyLabour[]): void {
-  const __remote = forwardProductionMutation('saveProductionCostMonthlyLabour', [entries]);
+export function saveProductionCostMonthlyOverhead(entries: ProductionCostMonthlyOverhead[]): void {
+  const __remote = forwardProductionMutation('saveProductionCostMonthlyOverhead', [entries]);
   if (__remote.forwarded) return __remote.value as never;
 
-  runQuery('DELETE FROM production_cost_monthly_labour');
+  runQuery('DELETE FROM production_cost_monthly_overhead');
   for (const row of entries) {
     const ym = row.year_month.trim().slice(0, 7);
-    const amount = row.amount;
-    if (!/^\d{4}-\d{2}$/.test(ym) || !(amount >= 0)) continue;
+    if (!/^\d{4}-\d{2}$/.test(ym)) continue;
+    const master = row.master_distiller >= 0 ? row.master_distiller : 0;
+    const electric = row.electric >= 0 ? row.electric : 0;
+    const gas = row.gas_propane >= 0 ? row.gas_propane : 0;
+    if (master === 0 && electric === 0 && gas === 0) continue;
     runQuery(
-      `INSERT INTO production_cost_monthly_labour (year_month, amount, updated_at)
-       VALUES (?, ?, datetime('now'))`,
-      [ym, amount],
+      `INSERT INTO production_cost_monthly_overhead
+       (year_month, master_distiller, electric, gas_propane, updated_at)
+       VALUES (?, ?, ?, ?, datetime('now'))`,
+      [ym, master, electric, gas],
     );
   }
 }
