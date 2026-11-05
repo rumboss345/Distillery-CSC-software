@@ -216,6 +216,33 @@ export async function migrateDatabase(): Promise<void> {
       `);
       await client.query(`INSERT INTO schema_migrations (version) VALUES ('011')`);
     }
+    const monthlyOverheadMigration = await client.query('SELECT version FROM schema_migrations WHERE version = $1', ['012']);
+    if (monthlyOverheadMigration.rowCount === 0) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS production_cost_monthly_overhead (
+          year_month TEXT PRIMARY KEY,
+          master_distiller DOUBLE PRECISION NOT NULL DEFAULT 0,
+          electric DOUBLE PRECISION NOT NULL DEFAULT 0,
+          gas_propane DOUBLE PRECISION NOT NULL DEFAULT 0,
+          updated_at TEXT NOT NULL DEFAULT to_char(CURRENT_TIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')
+        )
+      `);
+      await client.query(`
+        DO $$
+        BEGIN
+          IF EXISTS (
+            SELECT 1 FROM information_schema.tables
+            WHERE table_name = 'production_cost_monthly_labour'
+          ) THEN
+            INSERT INTO production_cost_monthly_overhead (year_month, master_distiller, electric, gas_propane)
+            SELECT year_month, amount, 0, 0 FROM production_cost_monthly_labour
+            ON CONFLICT (year_month) DO NOTHING;
+            DROP TABLE production_cost_monthly_labour;
+          END IF;
+        END $$
+      `);
+      await client.query(`INSERT INTO schema_migrations (version) VALUES ('012')`);
+    }
     await client.query(`
       INSERT INTO inventory_categories (name)
       SELECT 'botanicals'

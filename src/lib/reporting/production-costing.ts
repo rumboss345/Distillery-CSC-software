@@ -7,7 +7,7 @@ import {
   getInventoryItems,
   getMashBatchNutrients,
   getMashBatches,
-  getProductionCostMonthlyLabour,
+  getProductionCostMonthlyOverhead,
   getYieldReports,
 } from '../../db/queries';
 import type { ProductionCostSettings } from '../../types';
@@ -24,7 +24,7 @@ export interface ProductionCostSummary {
   totalMaterialCost: number;
   totalWaterCost: number;
   totalLabourCost: number;
-  totalMonthlyLabourCost: number;
+  totalMonthlyOverheadCost: number;
   totalCost: number;
   totalLaaLiters: number;
   costPerLaaLiter: number | null;
@@ -100,22 +100,21 @@ function lookupInventoryCost(
   return null;
 }
 
-function sugarCostPerLb(settings: ProductionCostSettings, index: InventoryCostIndex): number {
+function sugarCostPerLb(index: InventoryCostIndex): number {
   for (const item of getInventoryItems()) {
     if (item.category === 'sugar' && item.cost_per_unit != null && item.cost_per_unit >= 0) {
       return item.cost_per_unit;
     }
   }
   const fromIndex = lookupInventoryCost(index, 'sugar', 'sugar');
-  return fromIndex ?? settings.sugar_cost_per_lb;
+  return fromIndex ?? 0;
 }
 
-function yeastCostPerLb(settings: ProductionCostSettings, index: InventoryCostIndex, strain: string): number {
+function yeastCostPerLb(index: InventoryCostIndex, strain: string): number {
   const byStrain = strain.trim() ? lookupInventoryCost(index, 'yeast', strain) : null;
   if (byStrain != null) return byStrain;
   const generic = lookupInventoryCost(index, 'yeast', 'yeast');
-  if (generic != null) return generic;
-  return settings.default_yeast_cost_per_lb;
+  return generic ?? 0;
 }
 
 function waterCostPerGal(settings: ProductionCostSettings): number {
@@ -132,9 +131,9 @@ function mashMaterialCost(
   settings: ProductionCostSettings,
   index: InventoryCostIndex,
 ): number {
-  let total = grainLbs * sugarCostPerLb(settings, index);
+  let total = grainLbs * sugarCostPerLb(index);
   if (yeastLbs > 0) {
-    total += yeastLbs * yeastCostPerLb(settings, index, yeastStrain);
+    total += yeastLbs * yeastCostPerLb(index, yeastStrain);
   }
   if (waterGal > 0) {
     total += roundMoney(waterGal * waterCostPerGal(settings));
@@ -149,11 +148,13 @@ function mashMaterialCost(
   return roundMoney(total);
 }
 
-function monthlyLabourTotal(range: ReportDateRange): number {
+function monthlyOverheadTotal(range: ReportDateRange): number {
   let total = 0;
-  for (const row of getProductionCostMonthlyLabour()) {
+  for (const row of getProductionCostMonthlyOverhead()) {
     if (!calendarMonthInReportRange(row.year_month, range)) continue;
-    if (row.amount > 0) total += row.amount;
+    total += (row.master_distiller > 0 ? row.master_distiller : 0)
+      + (row.electric > 0 ? row.electric : 0)
+      + (row.gas_propane > 0 ? row.gas_propane : 0);
   }
   return roundMoney(total);
 }
@@ -319,7 +320,7 @@ export function buildProductionCostReport(
 
   const processWaterGal = processWaterGallonsInRange(range);
   const processWaterCost = roundMoney(processWaterGal * waterCostPerGal(settings));
-  const monthlyLabour = monthlyLabourTotal(range);
+  const monthlyOverhead = monthlyOverheadTotal(range);
 
   const washCostSubtotal = roundMoney(totalMaterial + totalLabour);
   const avgCostPerLaaLiter = totalGpa > 0 && washCostSubtotal > 0
@@ -373,9 +374,11 @@ export function buildProductionCostReport(
 
   const totalWashCost = washCostSubtotal;
   const grandMaterial = roundMoney(totalMaterial + bottlingMaterial + processWaterCost);
-  const grandLabour = roundMoney(totalLabour + bottlingLabour + monthlyLabour);
+  const activityLabour = roundMoney(totalLabour + bottlingLabour);
   /** Wash pipeline + bottling packaging and labour (spirit on bottles is an allocation of wash cost, not additive). */
-  const grandTotal = roundMoney(totalWashCost + bottlingMaterial + bottlingLabour + processWaterCost + monthlyLabour);
+  const grandTotal = roundMoney(
+    totalWashCost + bottlingMaterial + bottlingLabour + processWaterCost + monthlyOverhead,
+  );
   const totalLaaLiters = laaLitersFromGpa(totalGpa);
   const costPerLaaLiter = totalLaaLiters > 0 && totalWashCost > 0
     ? roundMoney(totalWashCost / totalLaaLiters)
@@ -408,8 +411,8 @@ export function buildProductionCostReport(
     summary: {
       totalMaterialCost: grandMaterial,
       totalWaterCost: processWaterCost,
-      totalLabourCost: grandLabour,
-      totalMonthlyLabourCost: monthlyLabour,
+      totalLabourCost: activityLabour,
+      totalMonthlyOverheadCost: monthlyOverhead,
       totalCost: grandTotal,
       totalLaaLiters: roundMoney(totalLaaLiters),
       costPerLaaLiter,

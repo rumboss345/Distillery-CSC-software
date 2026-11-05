@@ -597,9 +597,11 @@ CREATE TABLE IF NOT EXISTS production_cost_settings (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE TABLE IF NOT EXISTS production_cost_monthly_labour (
+CREATE TABLE IF NOT EXISTS production_cost_monthly_overhead (
   year_month TEXT PRIMARY KEY,
-  amount REAL NOT NULL DEFAULT 0,
+  master_distiller REAL NOT NULL DEFAULT 0,
+  electric REAL NOT NULL DEFAULT 0,
+  gas_propane REAL NOT NULL DEFAULT 0,
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 `;

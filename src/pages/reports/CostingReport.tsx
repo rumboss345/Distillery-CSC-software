@@ -2,7 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import {
+  DEFAULT_WATER_COST_PER_GAL,
+  getProductionCostMonthlyOverhead,
   getProductionCostSettings,
+  saveProductionCostMonthlyOverhead,
   saveProductionCostSettings,
   useRefreshKey,
 } from '../../db/queries';
@@ -11,7 +14,7 @@ import { isOwnerRole } from '../../lib/roles';
 import { buildProductionCostReport } from '../../lib/reporting/production-costing';
 import { useReportContext } from './report-context';
 import { CollapsibleSection } from '../../components/CollapsibleSection';
-import type { ProductionCostSettings } from '../../types';
+import type { ProductionCostMonthlyOverhead, ProductionCostSettings } from '../../types';
 
 function money(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return '—';
@@ -28,17 +31,26 @@ function parseMoneyInput(raw: string): number {
   return Number.isFinite(value) && value >= 0 ? value : 0;
 }
 
+const emptyOverheadRow = (): ProductionCostMonthlyOverhead => ({
+  year_month: '',
+  master_distiller: 0,
+  electric: 0,
+  gas_propane: 0,
+});
+
 export function CostingReport() {
   const { user } = useAuth();
   const { range } = useReportContext();
   const { key, refresh } = useRefreshKey();
   void key;
 
-  const stored = getProductionCostSettings();
-  const [settingsDraft, setSettingsDraft] = useState<ProductionCostSettings>(stored);
+  const [settingsDraft, setSettingsDraft] = useState<ProductionCostSettings>(() => getProductionCostSettings());
+  const [overheadDraft, setOverheadDraft] = useState<ProductionCostMonthlyOverhead[]>(() => getProductionCostMonthlyOverhead());
+  const [newOverhead, setNewOverhead] = useState<ProductionCostMonthlyOverhead>(emptyOverheadRow);
 
   useEffect(() => {
     setSettingsDraft(getProductionCostSettings());
+    setOverheadDraft(getProductionCostMonthlyOverhead());
   }, [key]);
 
   const report = useMemo(
@@ -52,7 +64,24 @@ export function CostingReport() {
 
   const saveSettings = () => {
     saveProductionCostSettings(settingsDraft);
+    saveProductionCostMonthlyOverhead(overheadDraft);
     refresh();
+  };
+
+  const addOverheadMonth = () => {
+    const ym = newOverhead.year_month.trim().slice(0, 7);
+    if (!/^\d{4}-\d{2}$/.test(ym)) return;
+    const row: ProductionCostMonthlyOverhead = {
+      year_month: ym,
+      master_distiller: newOverhead.master_distiller,
+      electric: newOverhead.electric,
+      gas_propane: newOverhead.gas_propane,
+    };
+    setOverheadDraft((prev) => {
+      const without = prev.filter((item) => item.year_month !== ym);
+      return [row, ...without].sort((a, b) => b.year_month.localeCompare(a.year_month));
+    });
+    setNewOverhead(emptyOverheadRow());
   };
 
   const { summary } = report;
@@ -61,37 +90,29 @@ export function CostingReport() {
     <div data-testid="production-costing-report">
       <CollapsibleSection
         title="Costing assumptions"
-        summary="Sugar and yeast fallbacks, per-batch labour (water and monthly labour are set in Admin)"
+        summary="Water, activity labour, and monthly overhead"
         defaultOpen={false}
         storageKey="report-costing-assumptions"
       >
         <p className="field-hint" style={{ marginTop: 0 }}>
-          Enter unit costs on Inventory for sugar, yeast, nutrients, bottles, and labels when you can.
-          Assumptions here fill gaps and add labour. Amounts are in your distillery&apos;s currency (typically USD).
+          Sugar, yeast, nutrients, bottles, and labels use unit costs from Inventory only.
+          Set those on each item; this panel covers water, labour rates, and fixed monthly overhead.
         </p>
         <div className="form-grid">
           <div className="form-group">
-            <label>Sugar / molasses ($ per lb)</label>
+            <label>Water ($ per US gallon)</label>
             <input
               type="number"
               min={0}
-              step={0.01}
-              value={settingsDraft.sugar_cost_per_lb}
-              onChange={(e) => setSettingsDraft({ ...settingsDraft, sugar_cost_per_lb: parseMoneyInput(e.target.value) })}
+              step={0.0001}
+              data-testid="costing-water-per-gal"
+              value={settingsDraft.water_cost_per_gal}
+              onChange={(e) => setSettingsDraft({
+                ...settingsDraft,
+                water_cost_per_gal: parseMoneyInput(e.target.value),
+              })}
             />
-          </div>
-          <p className="field-hint">
-            Water (${settingsDraft.water_cost_per_gal.toFixed(4)}/gal) and monthly labour are configured under Admin → Production costing defaults (owners only).
-          </p>
-          <div className="form-group">
-            <label>Yeast fallback ($ per lb)</label>
-            <input
-              type="number"
-              min={0}
-              step={0.01}
-              value={settingsDraft.default_yeast_cost_per_lb}
-              onChange={(e) => setSettingsDraft({ ...settingsDraft, default_yeast_cost_per_lb: parseMoneyInput(e.target.value) })}
-            />
+            <p className="field-hint">Default {DEFAULT_WATER_COST_PER_GAL.toFixed(2)}/gal. Wash, still proofing, tank dilution, and blend proofing water.</p>
           </div>
           <div className="form-group">
             <label>Wash batch labour ($)</label>
@@ -144,9 +165,147 @@ export function CostingReport() {
             />
           </div>
         </div>
+
+        <h4 style={{ marginTop: '1.25rem', marginBottom: '0.5rem' }}>Monthly overhead</h4>
+        <p className="field-hint">
+          Included when the calendar month overlaps the report date range.
+        </p>
+        <div className="form-grid">
+          <div className="form-group">
+            <label>Month</label>
+            <input
+              type="month"
+              data-testid="costing-overhead-month"
+              value={newOverhead.year_month}
+              onChange={(e) => setNewOverhead({ ...newOverhead, year_month: e.target.value })}
+            />
+          </div>
+          <div className="form-group">
+            <label>Master distiller ($)</label>
+            <input
+              type="number"
+              min={0}
+              step={0.01}
+              value={newOverhead.master_distiller || ''}
+              onChange={(e) => setNewOverhead({ ...newOverhead, master_distiller: parseMoneyInput(e.target.value) })}
+            />
+          </div>
+          <div className="form-group">
+            <label>Electric ($)</label>
+            <input
+              type="number"
+              min={0}
+              step={0.01}
+              value={newOverhead.electric || ''}
+              onChange={(e) => setNewOverhead({ ...newOverhead, electric: parseMoneyInput(e.target.value) })}
+            />
+          </div>
+          <div className="form-group">
+            <label>Gas / propane ($)</label>
+            <input
+              type="number"
+              min={0}
+              step={0.01}
+              value={newOverhead.gas_propane || ''}
+              onChange={(e) => setNewOverhead({ ...newOverhead, gas_propane: parseMoneyInput(e.target.value) })}
+            />
+          </div>
+          <div className="form-group" style={{ alignSelf: 'end' }}>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={addOverheadMonth}>
+              Add / update month
+            </button>
+          </div>
+        </div>
+        {overheadDraft.length > 0 ? (
+          <div className="table-wrap" style={{ marginTop: '0.75rem' }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Month</th>
+                  <th className="num">Master distiller</th>
+                  <th className="num">Electric</th>
+                  <th className="num">Gas / propane</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {overheadDraft.map((row) => (
+                  <tr key={row.year_month}>
+                    <td>{row.year_month}</td>
+                    <td className="num">
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.01}
+                        style={{ maxWidth: '7rem' }}
+                        value={row.master_distiller}
+                        onChange={(e) => setOverheadDraft((prev) => prev.map((item) => (
+                          item.year_month === row.year_month
+                            ? { ...item, master_distiller: parseMoneyInput(e.target.value) }
+                            : item
+                        )))}
+                      />
+                    </td>
+                    <td className="num">
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.01}
+                        style={{ maxWidth: '7rem' }}
+                        value={row.electric}
+                        onChange={(e) => setOverheadDraft((prev) => prev.map((item) => (
+                          item.year_month === row.year_month
+                            ? { ...item, electric: parseMoneyInput(e.target.value) }
+                            : item
+                        )))}
+                      />
+                    </td>
+                    <td className="num">
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.01}
+                        style={{ maxWidth: '7rem' }}
+                        value={row.gas_propane}
+                        onChange={(e) => setOverheadDraft((prev) => prev.map((item) => (
+                          item.year_month === row.year_month
+                            ? { ...item, gas_propane: parseMoneyInput(e.target.value) }
+                            : item
+                        )))}
+                      />
+                    </td>
+                    <td className="table-actions">
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => setOverheadDraft((prev) => prev.filter((item) => item.year_month !== row.year_month))}
+                      >
+                        Remove
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="field-hint">No monthly overhead rows yet.</p>
+        )}
+
         <div className="form-actions">
-          <button type="button" className="btn btn-secondary" onClick={() => setSettingsDraft(stored)}>Reset</button>
-          <button type="button" className="btn btn-primary" onClick={saveSettings}>Save assumptions</button>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => {
+              setSettingsDraft(getProductionCostSettings());
+              setOverheadDraft(getProductionCostMonthlyOverhead());
+            }}
+          >
+            Reset
+          </button>
+          <button type="button" className="btn btn-primary" data-testid="save-costing-assumptions" onClick={saveSettings}>
+            Save assumptions
+          </button>
         </div>
       </CollapsibleSection>
 
@@ -178,8 +337,8 @@ export function CostingReport() {
             Materials {money(summary.totalMaterialCost)}
             {summary.totalWaterCost > 0 ? ` (incl. water ${money(summary.totalWaterCost)})` : ''}
             {' · '}
-            Labour {money(summary.totalLabourCost)}
-            {summary.totalMonthlyLabourCost > 0 ? ` (incl. monthly ${money(summary.totalMonthlyLabourCost)})` : ''}
+            Activity labour {money(summary.totalLabourCost)}
+            {summary.totalMonthlyOverheadCost > 0 ? ` · Monthly overhead ${money(summary.totalMonthlyOverheadCost)}` : ''}
           </div>
         </div>
         <div className="stat-card">

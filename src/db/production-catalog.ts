@@ -89,7 +89,7 @@ export const PRODUCTION_MUTATIONS: Record<string, ProductionMutation> = {
   deleteFloorEquipment: { access: 'admin', table: 'floor_equipment', idIndex: 0 },
   emptyAllHoldingTanks: { access: 'owner' },
   saveProductionCostSettings: { access: 'owner' },
-  saveProductionCostMonthlyLabour: { access: 'owner' },
+  saveProductionCostMonthlyOverhead: { access: 'owner' },
 };
 
 export function userMayMutate(

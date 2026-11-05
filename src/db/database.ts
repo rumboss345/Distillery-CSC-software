@@ -721,14 +721,40 @@ function migrateProductionCosting(): void {
     persistDb();
   }
   addColumnIfMissing('production_cost_settings', 'water_cost_per_gal', 'REAL NOT NULL DEFAULT 0.04');
+  migrateProductionCostMonthlyOverhead();
+  persistDb();
+}
+
+function migrateProductionCostMonthlyOverhead(): void {
+  if (!db) return;
   db.run(`
-    CREATE TABLE IF NOT EXISTS production_cost_monthly_labour (
+    CREATE TABLE IF NOT EXISTS production_cost_monthly_overhead (
       year_month TEXT PRIMARY KEY,
-      amount REAL NOT NULL DEFAULT 0,
+      master_distiller REAL NOT NULL DEFAULT 0,
+      electric REAL NOT NULL DEFAULT 0,
+      gas_propane REAL NOT NULL DEFAULT 0,
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `);
-  persistDb();
+  const hasLegacy = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='production_cost_monthly_labour'",
+  );
+  if (hasLegacy) {
+    const legacy = queryAll<{ year_month: string; amount: number }>(
+      'SELECT year_month, amount FROM production_cost_monthly_labour',
+    );
+    for (const row of legacy) {
+      const ym = row.year_month?.trim().slice(0, 7);
+      if (!ym || !/^\d{4}-\d{2}$/.test(ym)) continue;
+      db.run(
+        `INSERT OR REPLACE INTO production_cost_monthly_overhead
+         (year_month, master_distiller, electric, gas_propane, updated_at)
+         VALUES (?, ?, 0, 0, datetime('now'))`,
+        [ym, row.amount >= 0 ? row.amount : 0],
+      );
+    }
+    db.run('DROP TABLE production_cost_monthly_labour');
+  }
 }
 
 function migrateDistillationTankSources(): void {
