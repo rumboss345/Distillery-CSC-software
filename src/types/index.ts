@@ -139,6 +139,14 @@ export interface InventoryItem {
   density_reference?: string | null;
   /** Alcohol by volume when this ingredient contributes absolute alcohol. */
   abv?: number | null;
+  /** Sucrose share of the ingredient mass, from 0 to 1. Null when the supplier spec is unknown. */
+  sugar_mass_fraction?: number | null;
+  /** Dissolved solids share of the ingredient mass, from 0 to 1. Null when unknown. */
+  solids_mass_fraction?: number | null;
+  /** Temperature the density was measured at, in °C. Not a gauging correction. */
+  density_temp_c?: number | null;
+  /** verified = accepted supplier or lab spec. estimated = entered but not confirmed. */
+  spec_status?: 'verified' | 'estimated' | null;
   created_at: string;
   updated_at: string;
 }
@@ -569,6 +577,13 @@ export interface BlendIngredient {
   unit: string;
   /** ABV % when this additive contributes alcohol (e.g. vanilla extract). */
   abv: number | null;
+  density_g_per_ml?: number | null;
+  density_assumption?: 'water' | 'cs1-syrup' | 'class-i-caramel' | null;
+  sugar_mass_fraction?: number | null;
+  solids_mass_fraction?: number | null;
+  density_temp_c?: number | null;
+  spec_status?: 'verified' | 'estimated' | null;
+  spec_source?: string | null;
   cost_per_unit: number | null;
   lot_number: string;
   inventory_item_id: number | null;
@@ -596,6 +611,11 @@ export interface BlendIngredientInput {
    * water = water density. cs1-syrup = 1.368 g/mL. class-i-caramel = SG 1.30.
    */
   density_assumption?: 'water' | 'cs1-syrup' | 'class-i-caramel' | null;
+  sugar_mass_fraction?: number | null;
+  solids_mass_fraction?: number | null;
+  density_temp_c?: number | null;
+  spec_status?: 'verified' | 'estimated' | null;
+  spec_source?: string | null;
   cost_per_unit?: number | null;
   lot_number?: string;
   inventory_item_id?: number | null;
@@ -662,6 +682,11 @@ export interface BlendRecipeIngredient {
   abv: number | null;
   density_g_per_ml?: number | null;
   density_assumption?: 'water' | 'cs1-syrup' | 'class-i-caramel' | null;
+  sugar_mass_fraction?: number | null;
+  solids_mass_fraction?: number | null;
+  density_temp_c?: number | null;
+  spec_status?: 'verified' | 'estimated' | null;
+  spec_source?: string | null;
   cost_per_unit: number | null;
   lot_number: string;
   inventory_item_id: number | null;

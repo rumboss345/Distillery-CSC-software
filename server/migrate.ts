@@ -243,6 +243,38 @@ export async function migrateDatabase(): Promise<void> {
       `);
       await client.query(`INSERT INTO schema_migrations (version) VALUES ('012')`);
     }
+    const ingredientSpecMigration = await client.query('SELECT version FROM schema_migrations WHERE version = $1', ['013']);
+    if (ingredientSpecMigration.rowCount === 0) {
+      const numericColumns = [
+        'inventory_items.sugar_mass_fraction',
+        'inventory_items.solids_mass_fraction',
+        'inventory_items.density_temp_c',
+        'blend_recipe_ingredients.sugar_mass_fraction',
+        'blend_recipe_ingredients.solids_mass_fraction',
+        'blend_recipe_ingredients.density_temp_c',
+        'blend_ingredients.density_g_per_ml',
+        'blend_ingredients.sugar_mass_fraction',
+        'blend_ingredients.solids_mass_fraction',
+        'blend_ingredients.density_temp_c',
+      ];
+      const textColumns = [
+        'inventory_items.spec_status',
+        'blend_recipe_ingredients.spec_status',
+        'blend_recipe_ingredients.spec_source',
+        'blend_ingredients.density_assumption',
+        'blend_ingredients.spec_status',
+        'blend_ingredients.spec_source',
+      ];
+      for (const qualified of numericColumns) {
+        const [table, column] = qualified.split('.');
+        await client.query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${column} DOUBLE PRECISION`);
+      }
+      for (const qualified of textColumns) {
+        const [table, column] = qualified.split('.');
+        await client.query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${column} TEXT`);
+      }
+      await client.query(`INSERT INTO schema_migrations (version) VALUES ('013')`);
+    }
     await client.query(`
       INSERT INTO inventory_categories (name)
       SELECT 'botanicals'

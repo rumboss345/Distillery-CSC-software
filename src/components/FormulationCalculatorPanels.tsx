@@ -27,8 +27,12 @@ function AnalysisReadout({ analysis }: { analysis: FormulationAnalysis }) {
       <dl className="detail-grid">
         <dt>Volume</dt>
         <dd>{analysis.liters.toFixed(2)} L · {analysis.volumeGal.toFixed(2)} gal</dd>
-        <dt>ABV at 60 °F</dt>
-        <dd>{analysis.abv.toFixed(2)}% ({analysis.proof.toFixed(1)} proof)</dd>
+        <dt>Predicted ABV at 60 °F</dt>
+        <dd>{analysis.abv.toFixed(2)}% ({analysis.proof.toFixed(1)} proof) · {analysis.volumeStatus}</dd>
+        <dt>Ethanol mass</dt>
+        <dd>{analysis.ethanolMassLb.toFixed(2)} lb</dd>
+        <dt>Alcohol by weight</dt>
+        <dd>{analysis.alcoholByWeight != null ? `${analysis.alcoholByWeight.toFixed(2)}%` : '— mass incomplete'}</dd>
         <dt>Pure alcohol</dt>
         <dd>{analysis.laaLiters.toFixed(2)} LAA liters · {analysis.pureAlcoholGal.toFixed(3)} LAA gal</dd>
         <dt>Weight</dt>

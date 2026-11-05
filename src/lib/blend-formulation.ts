@@ -42,6 +42,8 @@ export function additiveInputsFromBlendIngredients(
       abv: row.abv,
       densityGPerMl: row.density_g_per_ml ?? null,
       densityAssumption: row.density_assumption ?? null,
+      sucroseMassFraction: row.sugar_mass_fraction ?? null,
+      specStatus: row.spec_status ?? null,
       costPerUnit: row.cost_per_unit ?? undefined,
       lotNumber: row.lot_number,
       inventoryItemId: row.inventory_item_id ?? undefined,
@@ -59,6 +61,9 @@ export interface AdditiveInput {
   brixPerGal?: number;
   densityGPerMl?: number | null;
   densityAssumption?: 'water' | 'cs1-syrup' | 'class-i-caramel' | null;
+  /** Share of syrup or flavor mass that is sugar, from 0 to 1. Omitted when unknown. */
+  sucroseMassFraction?: number | null;
+  specStatus?: 'verified' | 'estimated' | null;
   costPerUnit?: number;
   lotNumber?: string;
   inventoryItemId?: number | null;
@@ -169,6 +174,8 @@ function toFormulationComponents(
       abv: additive.abv ?? null,
       densityGPerMl: additive.densityGPerMl,
       densityAssumption: additive.densityAssumption,
+      sucroseMassFraction: additive.sucroseMassFraction,
+      specStatus: additive.specStatus,
     });
   }
   return components;

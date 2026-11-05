@@ -37,6 +37,10 @@ const emptyItem = (): Omit<InventoryItem, 'id' | 'created_at' | 'updated_at'> =>
   density_g_per_ml: null,
   density_reference: '',
   abv: null,
+  sugar_mass_fraction: null,
+  solids_mass_fraction: null,
+  density_temp_c: null,
+  spec_status: null,
 });
 
 function formatAdjustQty(value: number): string {
@@ -60,6 +64,9 @@ export function Inventory() {
   const [sizeInput, setSizeInput] = useState('');
   const [densityInput, setDensityInput] = useState('');
   const [abvInput, setAbvInput] = useState('');
+  const [sugarInput, setSugarInput] = useState('');
+  const [solidsInput, setSolidsInput] = useState('');
+  const [densityTempInput, setDensityTempInput] = useState('');
   const [costInput, setCostInput] = useState('');
   const [filter, setFilter] = useState<InventoryCategory | 'all'>('all');
 
@@ -79,6 +86,9 @@ export function Inventory() {
     setSizeInput('');
     setDensityInput('');
     setAbvInput('');
+    setSugarInput('');
+    setSolidsInput('');
+    setDensityTempInput('');
     setCostInput('');
     setShowForm(true);
   };
@@ -96,6 +106,9 @@ export function Inventory() {
     setQuantityInput(String(item.quantity));
     setDensityInput(item.density_g_per_ml != null ? String(item.density_g_per_ml) : '');
     setAbvInput(item.abv != null ? String(item.abv) : '');
+    setSugarInput(item.sugar_mass_fraction != null ? String(item.sugar_mass_fraction * 100) : '');
+    setSolidsInput(item.solids_mass_fraction != null ? String(item.solids_mass_fraction * 100) : '');
+    setDensityTempInput(item.density_temp_c != null ? String(item.density_temp_c) : '');
     setCostInput(item.cost_per_unit != null ? String(item.cost_per_unit) : '');
     const size = item.category === 'packaging' ? packagingItemSizeMl(item) : null;
     setSizeInput(size ? String(size) : '');
@@ -116,6 +129,9 @@ export function Inventory() {
       : null;
     const density = parseFloat(densityInput);
     const abv = parseFloat(abvInput);
+    const sugarPercent = parseFloat(sugarInput);
+    const solidsPercent = parseFloat(solidsInput);
+    const densityTemp = parseFloat(densityTempInput);
     const cost = parseFloat(costInput);
     saveInventoryItem({
       ...form,
@@ -123,6 +139,9 @@ export function Inventory() {
       package_size_ml,
       density_g_per_ml: Number.isFinite(density) && density > 0 ? density : null,
       abv: abvInput.trim() === '' || !Number.isFinite(abv) ? null : abv,
+      sugar_mass_fraction: sugarInput.trim() === '' || !Number.isFinite(sugarPercent) ? null : sugarPercent / 100,
+      solids_mass_fraction: solidsInput.trim() === '' || !Number.isFinite(solidsPercent) ? null : solidsPercent / 100,
+      density_temp_c: densityTempInput.trim() === '' || !Number.isFinite(densityTemp) ? null : densityTemp,
       cost_per_unit: costInput.trim() === '' || !Number.isFinite(cost) || cost < 0 ? null : cost,
     }, editId);
     setShowForm(false);
@@ -388,10 +407,57 @@ export function Inventory() {
                 onChange={(e) => setDensityInput(e.target.value)}
                 placeholder="Leave blank if unknown"
               />
-              <span className="field-hint">Unknown density is not treated as water. The blend screen shows DENSITY NOT VERIFIED until a value is saved.</span>
+              <span className="field-hint">Leave blank when unknown. The blend calculator will not invent a density.</span>
             </div>
             <div className="form-group">
-              <label>Density source or reference temperature</label>
+              <label>Density measured at (°C)</label>
+              <input
+                type="number"
+                step="0.1"
+                value={densityTempInput}
+                onChange={(e) => setDensityTempInput(e.target.value)}
+                placeholder="Blank if unknown"
+              />
+            </div>
+            <div className="form-group">
+              <label>Specification status</label>
+              <select
+                value={form.spec_status ?? ''}
+                onChange={(e) => setForm({
+                  ...form,
+                  spec_status: e.target.value === 'verified' || e.target.value === 'estimated' ? e.target.value : null,
+                })}
+              >
+                <option value="">Not recorded</option>
+                <option value="estimated">Estimated — entered, not confirmed</option>
+                <option value="verified">Verified — supplier or lab spec</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Sugar by mass (%)</label>
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                value={sugarInput}
+                onChange={(e) => setSugarInput(e.target.value)}
+                placeholder="Blank if unknown"
+              />
+              <span className="field-hint">Supplier sugar or Brix-as-mass for syrups. Leave blank rather than guessing.</span>
+            </div>
+            <div className="form-group">
+              <label>Solids by mass (%)</label>
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                value={solidsInput}
+                onChange={(e) => setSolidsInput(e.target.value)}
+                placeholder="Blank if unknown"
+              />
+            </div>
+            <div className="form-group">
+              <label>Specification source</label>
               <input
                 value={form.density_reference ?? ''}
                 onChange={(e) => setForm({ ...form, density_reference: e.target.value })}

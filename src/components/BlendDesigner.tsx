@@ -173,9 +173,10 @@ export function BlendDesigner({ onUseForBatch }: { onUseForBatch: (recipeId: num
       amount,
       unit: row.unit,
       abv: readNumber(row.abv),
-      sucroseMassFraction: kind === 'syrup' && sucrose != null ? sucrose / 100 : null,
+      sucroseMassFraction: (kind === 'syrup' || kind === 'flavoring') && sucrose != null ? sucrose / 100 : null,
       densityGPerMl: row.density_g_per_ml,
       densityAssumption: row.density_assumption,
+      specStatus: row.density_g_per_ml != null ? 'estimated' : null,
     }];
   });
 
@@ -234,6 +235,7 @@ export function BlendDesigner({ onUseForBatch }: { onUseForBatch: (recipeId: num
       abv: item.abv != null ? String(item.abv) : '',
       density_g_per_ml: item.density_g_per_ml ?? null,
       density_assumption: null,
+      sucrosePercent: item.sugar_mass_fraction != null ? String(item.sugar_mass_fraction * 100) : '',
     });
   };
 
@@ -723,9 +725,11 @@ export function BlendDesigner({ onUseForBatch }: { onUseForBatch: (recipeId: num
           )}
           {analysis && (
             <dl className="detail-grid">
-              <dt>Volume</dt><dd>{analysis.liters.toFixed(2)} L · {analysis.volumeGal.toFixed(2)} gal</dd>
+              <dt>Volume</dt><dd>{analysis.liters.toFixed(2)} L · {analysis.volumeGal.toFixed(2)} gal ({analysis.volumeStatus})</dd>
               <dt>Weight</dt><dd>{formatWeightLb(analysis.weightLb)}</dd>
-              <dt>ABV</dt><dd>{analysis.abv.toFixed(2)}%</dd>
+              <dt>Predicted ABV</dt><dd>{analysis.abv.toFixed(2)}%</dd>
+              <dt>Ethanol mass</dt><dd>{analysis.ethanolMassLb.toFixed(2)} lb</dd>
+              <dt>Alcohol by weight</dt><dd>{analysis.alcoholByWeight != null ? `${analysis.alcoholByWeight.toFixed(2)}%` : '— until every ingredient mass is known'}</dd>
               <dt>LAA</dt><dd>{analysis.pureAlcoholGal.toFixed(2)} gal · {analysis.laaLiters.toFixed(2)} L</dd>
               <dt>Sugar</dt><dd>{analysis.sugarGPerL != null ? `${analysis.sugarGPerL.toFixed(1)} g/L · ${analysis.sugarGrams.toFixed(0)} g` : 'None'}</dd>
               <dt>Contraction</dt><dd>{analysis.contractionGal.toFixed(3)} gal</dd>

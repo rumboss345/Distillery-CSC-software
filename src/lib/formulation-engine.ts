@@ -13,6 +13,7 @@ import {
   SYRUP_BULK_DENSITY_G_PER_ML,
 } from './material-densities';
 import { laaLitersFromVolumeAbv } from './reporting/alcohol-units';
+import { compositionFromProof } from './calc-engine/composition';
 import { proofFromAbv, weightFromWineGallons } from '../services/spirit-gauging';
 import { correctAbvTo60F } from '../services/temperature-correction';
 
@@ -49,6 +50,8 @@ export interface FormulationComponent {
   densityGPerMl?: number | null;
   /** Used only when the distiller explicitly selects a documented assumption. */
   densityAssumption?: 'water' | 'cs1-syrup' | 'class-i-caramel' | null;
+  /** verified = lab or supplier spec accepted. estimated = entered but not confirmed. */
+  specStatus?: 'verified' | 'estimated' | null;
 }
 
 export interface FormulationAnalysis {
@@ -64,10 +67,25 @@ export interface FormulationAnalysis {
   sugarGPerL: number | null;
   sucroseMassPercent: number | null;
   contractionGal: number;
-  /** Total mass divided by estimated volume. Not a hydrometer proof. */
+  /** Total mass divided by estimated volume. Not a hydrometer proof. Null when mass is incomplete. */
   densityGPerMl: number | null;
   obscured: boolean;
   model: 'ttb-table-3' | 'ttb-table-3-and-sucrose-volume';
+  /** Ethanol mass from Table 6 mass percent of the ethanol-water portion. Not the spirit solution weight. */
+  ethanolMassLb: number;
+  /** Gauged ethanol-water gallons after contraction, before sugar and other additions. */
+  hydroVolumeGal: number;
+  /** ABV of the ethanol-water portion only. */
+  hydroAbv: number;
+  /** Ethanol mass / ethanol-water mass × 100. Null when that mass is unknown. */
+  hydroAbw: number | null;
+  /** Ethanol mass / total known blend mass × 100. Null when any ingredient mass is missing. */
+  alcoholByWeight: number | null;
+  /** gauged = alcohol and water only. estimated = sugar model or a documented density. provisional = a volume or mass is missing. */
+  volumeStatus: 'gauged' | 'estimated' | 'provisional';
+  /** Entered milliliters included 1:1 because density was not verified. Not a validated displacement. */
+  unverifiedVolumeGal: number;
+  sugarSpecificationIncomplete: boolean;
   warnings: string[];
   summary: string;
 }
@@ -193,6 +211,8 @@ interface HydroPart {
   volumeGal: number;
   weightLb: number;
   pureAlcoholGal: number;
+  /** Ethanol mass from each charge's ABV and Table 6 mass percent. Not the solution weight. */
+  ethanolMassLb: number;
 }
 
 /**
@@ -233,15 +253,24 @@ function wineGallonsAtProof(weightLb: number, proof: number): number {
   return weightLb / perGallon;
 }
 
+function ethanolMassLbForCharge(weightLb: number, abv: number): number {
+  if (!(weightLb > 0) || !(abv > 0)) return 0;
+  const composition = compositionFromProof(proofFromAbv(abv).toFixed(8));
+  if (!composition.ok) return 0;
+  return weightLb * (Number(composition.massPercentAlcohol) / 100);
+}
+
 function spiritPart(
   volumeGal: number,
   abv: number,
 ): HydroPart {
   const proof = proofFromAbv(abv);
+  const weightLb = weightLbAtProof(volumeGal, proof);
   return {
     volumeGal,
-    weightLb: weightLbAtProof(volumeGal, proof),
+    weightLb,
     pureAlcoholGal: volumeGal * abv / 100,
+    ethanolMassLb: ethanolMassLbForCharge(weightLb, abv),
   };
 }
 
@@ -252,16 +281,22 @@ interface PreparedBlend {
   sugarGrams: number;
   extraVolumeGal: number;
   extraWeightLb: number;
+  unverifiedVolumeGal: number;
+  massIncomplete: boolean;
+  sugarSpecificationIncomplete: boolean;
   warnings: string[];
   obscured: boolean;
 }
 
 function prepareBlend(components: FormulationComponent[]): PreparedBlend | FormulationFailure {
-  const hydro: HydroPart = { volumeGal: 0, weightLb: 0, pureAlcoholGal: 0 };
+  const hydro: HydroPart = { volumeGal: 0, weightLb: 0, pureAlcoholGal: 0, ethanolMassLb: 0 };
   let inputHydroGal = 0;
   let sugarGrams = 0;
   let extraVolumeGal = 0;
   let extraWeightLb = 0;
+  let unverifiedVolumeGal = 0;
+  let massIncomplete = false;
+  let sugarSpecificationIncomplete = false;
   const warnings: string[] = [];
   let obscured = false;
 
@@ -290,6 +325,7 @@ function prepareBlend(components: FormulationComponent[]): PreparedBlend | Formu
       const part = spiritPart(volumeGal, abv);
       hydro.weightLb += part.weightLb;
       hydro.pureAlcoholGal += part.pureAlcoholGal;
+      hydro.ethanolMassLb += part.ethanolMassLb;
       inputHydroGal += volumeGal;
       if (component.kind !== 'spirit') {
         obscured = true;
@@ -335,15 +371,20 @@ function prepareBlend(components: FormulationComponent[]): PreparedBlend | Formu
     }
     if (resolved.density == null) {
       warnings.push(`${name}: ${DENSITY_NOT_VERIFIED}`);
+      massIncomplete = true;
       if (volumeGal != null) {
         extraVolumeGal += volumeGal;
-        warnings.push(`${name} was entered by volume. Its weight is omitted until density is verified or a documented assumption is selected.`);
+        unverifiedVolumeGal += volumeGal;
+        warnings.push(`${name} was entered by volume. That volume is not a validated contribution to finished gallons, and its weight is omitted. The predicted volume that includes it is provisional.`);
       } else if (grams != null) {
         extraWeightLb += grams / GRAMS_PER_LB;
         warnings.push(`${name} was entered by weight. Its volume is omitted until density is verified or a documented assumption is selected.`);
       }
     } else {
       if (resolved.notice) warnings.push(`${name}: ${resolved.notice}`);
+      if (component.specStatus !== 'verified') {
+        warnings.push(`${name}: density is in the recipe but is not marked verified. The result stays estimated.`);
+      }
       if (grams == null && volumeGal != null) {
         grams = volumeGal * ML_PER_GALLON * resolved.density;
       }
@@ -353,12 +394,13 @@ function prepareBlend(components: FormulationComponent[]): PreparedBlend | Formu
       extraVolumeGal += volumeGal ?? 0;
       extraWeightLb += (grams ?? 0) / GRAMS_PER_LB;
     }
-    if (component.kind === 'syrup') {
+    if (component.kind === 'syrup' || component.kind === 'flavoring') {
       const fraction = component.sucroseMassFraction;
       if (fraction != null && fraction > 0 && grams != null && resolved.density != null) {
         sugarGrams += grams * Math.min(1, fraction);
       } else if ((volumeGal ?? 0) > 0 || (grams ?? 0) > 0) {
-        warnings.push(`${name} has no sucrose fraction, so it adds volume but not sugar g/L.`);
+        sugarSpecificationIncomplete = true;
+        warnings.push(`${name} has no sugar concentration, so its sugar is not included in g/L.`);
       }
     }
     if ((volumeGal ?? 0) > 0 || (grams ?? 0) > 0) obscured = true;
@@ -371,6 +413,9 @@ function prepareBlend(components: FormulationComponent[]): PreparedBlend | Formu
     sugarGrams,
     extraVolumeGal,
     extraWeightLb,
+    unverifiedVolumeGal,
+    massIncomplete,
+    sugarSpecificationIncomplete,
     warnings,
     obscured,
   };
@@ -424,10 +469,24 @@ function finishAnalysis(prepared: PreparedBlend): FormulationAnalysis {
   const obscured = prepared.obscured || prepared.sugarGrams > 0;
   const warnings = [...prepared.warnings];
   if (obscured) {
-    warnings.push('Sugar or other dissolved material is in this blend. Do not turn a density reading into proof. Use a lab ABV.');
+    warnings.push('Sugar or other dissolved material is in this blend. A hydrometer or density reading is not true ABV. Use a lab ABV from a validated proofing method before calling the batch verified.');
   }
   if (prepared.sugarGrams > 0) {
     warnings.push(SUCROSE_VOLUME_MODEL_NOTE);
+  }
+
+  const hydroAbv = hydroWineGal > 0 ? (pureAlcoholGal / hydroWineGal) * 100 : 0;
+  const ethanolMassLb = prepared.hydro.ethanolMassLb;
+  const hydroAbw = hydroWeight > 0 && ethanolMassLb > 0 ? (ethanolMassLb / hydroWeight) * 100 : null;
+  const massComplete = !prepared.massIncomplete && hydroWeight > 0;
+  const alcoholByWeight = massComplete && totalWeightLb > 0 ? (ethanolMassLb / totalWeightLb) * 100 : null;
+  const volumeStatus: FormulationAnalysis['volumeStatus'] = prepared.unverifiedVolumeGal > 0 || prepared.massIncomplete
+    ? 'provisional'
+    : prepared.sugarGrams > 0 || prepared.extraVolumeGal > 0
+      ? 'estimated'
+      : 'gauged';
+  if (volumeStatus === 'provisional') {
+    warnings.push('Predicted finished volume is provisional. Missing ingredient density or sugar specification was not replaced with an assumed value.');
   }
 
   const model = prepared.sugarGrams > 0 || prepared.extraVolumeGal > 0
@@ -436,9 +495,12 @@ function finishAnalysis(prepared: PreparedBlend): FormulationAnalysis {
 
   const summary = volumeGal > 0
     ? `Predicted finished volume ${formatGallonDisplay(liters)} L (${formatGallonDisplay(volumeGal)} gal) at ${round2(abv).toFixed(2)}% predicted ABV`
-      + (sugarGPerL != null ? `, ${round2(sugarGPerL).toFixed(1)} g/L sugar` : '')
+      + (sugarGPerL != null ? `, ${round2(sugarGPerL).toFixed(1)} g/L estimated sugar` : '')
       + `. ${round2(pureAlcoholGal * LITERS_PER_US_GALLON).toFixed(3)} LAA liters.`
+      + (volumeStatus === 'provisional' ? ' Not a gauged yield.' : '')
     : 'Nothing to calculate yet.';
+
+  const reliableDensity = massComplete && densityGPerMl != null ? round4(densityGPerMl) : null;
 
   return {
     ok: true,
@@ -451,11 +513,19 @@ function finishAnalysis(prepared: PreparedBlend): FormulationAnalysis {
     weightLb: round2(totalWeightLb),
     sugarGrams: round2(prepared.sugarGrams),
     sugarGPerL: sugarGPerL == null ? null : round2(sugarGPerL),
-    sucroseMassPercent: sucroseMassPercent == null ? null : round2(sucroseMassPercent),
+    sucroseMassPercent: !massComplete || sucroseMassPercent == null ? null : round2(sucroseMassPercent),
     contractionGal: round4(contractionGal),
-    densityGPerMl: !obscured && densityGPerMl != null ? round4(densityGPerMl) : densityGPerMl == null ? null : round4(densityGPerMl),
+    densityGPerMl: reliableDensity,
     obscured,
     model,
+    ethanolMassLb: round4(ethanolMassLb),
+    hydroVolumeGal: round4(hydroWineGal),
+    hydroAbv: round2(hydroAbv),
+    hydroAbw: hydroAbw == null ? null : round2(hydroAbw),
+    alcoholByWeight: alcoholByWeight == null ? null : round2(alcoholByWeight),
+    volumeStatus,
+    unverifiedVolumeGal: round4(prepared.unverifiedVolumeGal),
+    sugarSpecificationIncomplete: prepared.sugarSpecificationIncomplete,
     warnings,
     summary,
   };

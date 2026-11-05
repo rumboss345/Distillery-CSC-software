@@ -335,6 +335,8 @@ function toAdditiveInputs(ingredients: BlendIngredientInput[]): AdditiveInput[] 
       abv: i.abv,
       densityGPerMl: i.density_g_per_ml ?? null,
       densityAssumption: i.density_assumption ?? null,
+      sucroseMassFraction: i.sugar_mass_fraction ?? null,
+      specStatus: i.spec_status ?? null,
       costPerUnit: i.cost_per_unit ?? undefined,
       lotNumber: i.lot_number,
       inventoryItemId: i.inventory_item_id ?? undefined,
@@ -498,17 +500,26 @@ export function saveInventoryItem(item: Omit<InventoryItem, 'id' | 'created_at' 
   const costPerUnit = item.cost_per_unit != null && Number.isFinite(item.cost_per_unit) && item.cost_per_unit >= 0
     ? item.cost_per_unit
     : null;
+  const sugarFraction = fractionOrNull(item.sugar_mass_fraction);
+  const solidsFraction = fractionOrNull(item.solids_mass_fraction);
+  const densityTemp = item.density_temp_c != null && Number.isFinite(item.density_temp_c) ? item.density_temp_c : null;
+  const specStatus = item.spec_status === 'verified' || item.spec_status === 'estimated' ? item.spec_status : null;
   if (id) {
     runQuery(
-      `UPDATE inventory_items SET name=?, category=?, unit=?, quantity=?, reorder_level=?, cost_per_unit=?, notes=?, package_size_ml=?, density_g_per_ml=?, density_reference=?, abv=?, updated_at=datetime('now') WHERE id=?`,
-      [item.name, item.category, item.unit, item.quantity, item.reorder_level, costPerUnit, item.notes, packageSizeMl, density, densityReference, abv, id],
+      `UPDATE inventory_items SET name=?, category=?, unit=?, quantity=?, reorder_level=?, cost_per_unit=?, notes=?, package_size_ml=?, density_g_per_ml=?, density_reference=?, abv=?, sugar_mass_fraction=?, solids_mass_fraction=?, density_temp_c=?, spec_status=?, updated_at=datetime('now') WHERE id=?`,
+      [item.name, item.category, item.unit, item.quantity, item.reorder_level, costPerUnit, item.notes, packageSizeMl, density, densityReference, abv, sugarFraction, solidsFraction, densityTemp, specStatus, id],
     );
   } else {
     insertRow(
-      `INSERT INTO inventory_items (name, category, unit, quantity, reorder_level, cost_per_unit, notes, package_size_ml, density_g_per_ml, density_reference, abv) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [item.name, item.category, item.unit, item.quantity, item.reorder_level, costPerUnit, item.notes, packageSizeMl, density, densityReference, abv],
+      `INSERT INTO inventory_items (name, category, unit, quantity, reorder_level, cost_per_unit, notes, package_size_ml, density_g_per_ml, density_reference, abv, sugar_mass_fraction, solids_mass_fraction, density_temp_c, spec_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [item.name, item.category, item.unit, item.quantity, item.reorder_level, costPerUnit, item.notes, packageSizeMl, density, densityReference, abv, sugarFraction, solidsFraction, densityTemp, specStatus],
     );
   }
+}
+
+function fractionOrNull(value: number | null | undefined): number | null {
+  if (value == null || !Number.isFinite(value) || value < 0) return null;
+  return value > 1 ? value / 100 : value;
 }
 
 export const DEFAULT_WATER_COST_PER_GAL = 0.04;
@@ -5619,8 +5630,8 @@ function persistBlendRecipeIngredients(
       insertRow(
         `INSERT INTO blend_recipe_ingredients (
           blend_recipe_id, ingredient_type, name, amount, unit, abv, cost_per_unit, lot_number, inventory_item_id, notes,
-          density_g_per_ml, density_assumption
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          density_g_per_ml, density_assumption, sugar_mass_fraction, solids_mass_fraction, density_temp_c, spec_status, spec_source
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           recipeId,
           ingredient.ingredient_type,
@@ -5634,6 +5645,11 @@ function persistBlendRecipeIngredients(
           ingredient.notes,
           ingredient.density_g_per_ml != null && ingredient.density_g_per_ml > 0 ? ingredient.density_g_per_ml : null,
           ingredient.density_assumption ?? null,
+          fractionOrNull(ingredient.sugar_mass_fraction),
+          fractionOrNull(ingredient.solids_mass_fraction),
+          ingredient.density_temp_c ?? null,
+          ingredient.spec_status ?? null,
+          ingredient.spec_source ?? null,
         ],
       );
     });
@@ -5919,8 +5935,9 @@ function persistIngredients(blendProductId: number, ingredients: BlendIngredient
     if (ing.amount <= 0 && !ing.name.trim()) continue;
     insertRow(
       `INSERT INTO blend_ingredients
-       (blend_product_id, ingredient_type, name, amount, unit, abv, cost_per_unit, lot_number, inventory_item_id, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (blend_product_id, ingredient_type, name, amount, unit, abv, cost_per_unit, lot_number, inventory_item_id, notes,
+        density_g_per_ml, density_assumption, sugar_mass_fraction, solids_mass_fraction, density_temp_c, spec_status, spec_source)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         blendProductId,
         ing.ingredient_type,
@@ -5932,6 +5949,13 @@ function persistIngredients(blendProductId: number, ingredients: BlendIngredient
         ing.lot_number ?? '',
         ing.inventory_item_id ?? null,
         ing.notes,
+        ing.density_g_per_ml != null && ing.density_g_per_ml > 0 ? ing.density_g_per_ml : null,
+        ing.density_assumption ?? null,
+        fractionOrNull(ing.sugar_mass_fraction),
+        fractionOrNull(ing.solids_mass_fraction),
+        ing.density_temp_c ?? null,
+        ing.spec_status ?? null,
+        ing.spec_source ?? null,
       ],
     );
   }
