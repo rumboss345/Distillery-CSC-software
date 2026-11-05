@@ -1178,6 +1178,22 @@ function migrateFormulationPrecisionColumns(): void {
     addColumnIfMissing('inventory_items', 'abv', 'REAL'),
     addColumnIfMissing('blend_recipe_ingredients', 'density_g_per_ml', 'REAL'),
     addColumnIfMissing('blend_recipe_ingredients', 'density_assumption', 'TEXT'),
+    addColumnIfMissing('inventory_items', 'sugar_mass_fraction', 'REAL'),
+    addColumnIfMissing('inventory_items', 'solids_mass_fraction', 'REAL'),
+    addColumnIfMissing('inventory_items', 'density_temp_c', 'REAL'),
+    addColumnIfMissing('inventory_items', 'spec_status', 'TEXT'),
+    addColumnIfMissing('blend_recipe_ingredients', 'sugar_mass_fraction', 'REAL'),
+    addColumnIfMissing('blend_recipe_ingredients', 'solids_mass_fraction', 'REAL'),
+    addColumnIfMissing('blend_recipe_ingredients', 'density_temp_c', 'REAL'),
+    addColumnIfMissing('blend_recipe_ingredients', 'spec_status', 'TEXT'),
+    addColumnIfMissing('blend_recipe_ingredients', 'spec_source', 'TEXT'),
+    addColumnIfMissing('blend_ingredients', 'density_g_per_ml', 'REAL'),
+    addColumnIfMissing('blend_ingredients', 'density_assumption', 'TEXT'),
+    addColumnIfMissing('blend_ingredients', 'sugar_mass_fraction', 'REAL'),
+    addColumnIfMissing('blend_ingredients', 'solids_mass_fraction', 'REAL'),
+    addColumnIfMissing('blend_ingredients', 'density_temp_c', 'REAL'),
+    addColumnIfMissing('blend_ingredients', 'spec_status', 'TEXT'),
+    addColumnIfMissing('blend_ingredients', 'spec_source', 'TEXT'),
   ];
   if (added.some(Boolean)) persistDb();
 }

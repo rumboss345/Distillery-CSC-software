@@ -182,7 +182,9 @@ describe('postgres password reset', () => {
 
   it('stores reset links in PostgreSQL and applies migration 002 once', async () => {
     const versions = await pg.getPool().query(`SELECT version FROM schema_migrations ORDER BY version`);
-    expect(versions.rows.map((row) => row.version)).toEqual(['001', '002', '003', '004', '005', '006', '007', '008', '009', '010']);
+    expect(versions.rows.map((row) => row.version)).toEqual([
+      '001', '002', '003', '004', '005', '006', '007', '008', '009', '010', '011', '012', '013',
+    ]);
     const employee = await auth.createUserByAdmin(
       'casey.lee@csc.test',
       ORIGINAL_PASSWORD,

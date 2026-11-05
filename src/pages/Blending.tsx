@@ -124,6 +124,7 @@ import {
   type AdditiveInput,
   type SpiritSourceInput,
 } from '../lib/blend-formulation';
+import { buildBlendAlcoholAccount } from '../lib/blend-alcohol-account';
 import {
   adjacentSugarBagLbs,
   batchSizeUnitForRecipe,
@@ -1372,6 +1373,11 @@ export function Blending() {
       abv: item.abv ?? null,
       density_g_per_ml: item.density_g_per_ml ?? null,
       density_assumption: null,
+      sugar_mass_fraction: item.sugar_mass_fraction ?? null,
+      solids_mass_fraction: item.solids_mass_fraction ?? null,
+      density_temp_c: item.density_temp_c ?? null,
+      spec_status: item.spec_status ?? null,
+      spec_source: item.density_reference ?? null,
     });
   };
   const removeIngredient = (index: number) => setIngredients((prev) => prev.filter((_, i) => i !== index));
@@ -2416,10 +2422,15 @@ export function Blending() {
                           ingredient_type: blendIngredientTypeForCategory(item.category),
                           name: item.name,
                           unit: item.unit,
-                          abv: item.abv ?? null,
-                          density_g_per_ml: item.density_g_per_ml ?? null,
-                          density_assumption: null,
-                        })}
+          abv: item.abv ?? null,
+          density_g_per_ml: item.density_g_per_ml ?? null,
+          density_assumption: null,
+          sugar_mass_fraction: item.sugar_mass_fraction ?? null,
+          solids_mass_fraction: item.solids_mass_fraction ?? null,
+          density_temp_c: item.density_temp_c ?? null,
+          spec_status: item.spec_status ?? null,
+          spec_source: item.density_reference ?? null,
+        })}
                       />
                     ) : (
                       <select disabled value="">
@@ -2626,6 +2637,31 @@ export function Blending() {
             {form.scale_factor !== 1 && (
               <p className="field-hint">Batch sized at {Number(form.scale_factor.toFixed(2))}× the saved recipe.</p>
             )}
+            {(() => {
+              const account = buildBlendAlcoholAccount(
+                activeSources.map((source) => ({ volumeGal: source.volume_gal, abv: source.abv })),
+                ingredients.filter((row) => row.amount > 0).map((row) => ({
+                  ingredientType: row.ingredient_type,
+                  name: row.name,
+                  amount: row.amount,
+                  unit: row.unit,
+                  abv: row.abv,
+                  densityGPerMl: row.density_g_per_ml,
+                  densityAssumption: row.density_assumption,
+                  sucroseMassFraction: row.sugar_mass_fraction,
+                  specStatus: row.spec_status,
+                })),
+              );
+              if (!account.ok || account.volumeStatus === 'gauged') return null;
+              return (
+                <p className="field-hint" data-testid="blend-volume-provisional">
+                  {account.volumeStatus === 'provisional'
+                    ? 'Predicted finished volume is provisional. Ingredient density or sugar concentration is missing, and no substitute density was used.'
+                    : 'Predicted finished volume is estimated from the sugar volume model and any documented densities.'}
+                  {account.hydroAbw != null ? ` Alcohol by weight of the spirit and proofing water is ${account.hydroAbw.toFixed(2)}%, from ethanol mass, not from the spirit solution weight.` : ''}
+                </p>
+              );
+            })()}
             {contractionGal > 0.05 && (
               <p className="field-hint" data-testid="blend-contraction-note">
                 Poured volume is {pouredGal.toFixed(2)} gal. Mixing contracts the blend by {contractionGal.toFixed(2)} gal
@@ -2689,6 +2725,11 @@ export function Blending() {
                 />
               </label>
             </div>
+            {ingredients.some((row) => row.amount > 0 && row.ingredient_type !== 'water') && (
+              <p className="field-hint" data-testid="obscured-proof-warning">
+                This blend has sugar, syrup, or flavor. A hydrometer or density reading is not true ABV. Enter strength only from a validated proofing method. Applying an adjustment updates this open recipe. It does not add water or spirit to a completed batch.
+              </p>
+            )}
             {form.actual_abv != null && form.target_abv != null && (
               <p className="wizard-result-banner">
                 Lab: {form.actual_abv.toFixed(1)}% vs target {form.target_abv}% —
