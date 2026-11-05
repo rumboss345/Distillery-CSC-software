@@ -87,6 +87,8 @@ function recipeComponents(
       abv: ingredient.abv,
       densityGPerMl: ingredient.density_g_per_ml,
       densityAssumption: ingredient.density_assumption,
+      sucroseMassFraction: ingredient.sugar_mass_fraction,
+      specStatus: ingredient.spec_status,
     });
   }
   const waterGal = waterGalOverride ?? ingredients

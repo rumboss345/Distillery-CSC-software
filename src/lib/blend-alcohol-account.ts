@@ -1,5 +1,7 @@
-import type { AdditiveInput, SpiritSourceInput } from './blend-formulation';
+import { resolveSpiritSourceVolumeGal } from './blend-abv-confirm';
+import { additiveInputsFromBlendIngredients, type AdditiveInput, type SpiritSourceInput } from './blend-formulation';
 import { analyzeFormulation, type FormulationAnalysis, type FormulationComponent } from './formulation-engine';
+import type { BlendIngredientInput, BlendRecipeSpiritSourceInput } from '../types';
 
 /** US distilled-spirits gauging temperature. OIML R22 at 20 °C is a different standard and is not used. */
 export const BLEND_REFERENCE_TEMPERATURE_F = 60;
@@ -70,6 +72,27 @@ function componentsFrom(
 
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+/** Saved recipes and a recipe that has not been saved yet share this account. */
+export function buildRecipeAlcoholAccount(
+  spirits: BlendRecipeSpiritSourceInput[],
+  ingredients: BlendIngredientInput[],
+): BlendAlcoholAccount | { ok: false; message: string } {
+  const spiritInputs: SpiritSourceInput[] = spirits.flatMap((spirit) => {
+    const volumeGal = resolveSpiritSourceVolumeGal(spirit);
+    if (volumeGal == null) return [];
+    return [{
+      volumeGal,
+      abv: spirit.abv,
+      label: spirit.spirit_label?.trim() || 'Spirit',
+    }];
+  });
+  const additives = additiveInputsFromBlendIngredients(ingredients, { includeWater: true });
+  if (spiritInputs.length === 0 && additives.length === 0) {
+    return { ok: false, message: 'Nothing entered yet.' };
+  }
+  return buildBlendAlcoholAccount(spiritInputs, additives);
 }
 
 export function buildBlendAlcoholAccount(

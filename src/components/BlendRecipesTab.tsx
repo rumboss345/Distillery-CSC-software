@@ -4,6 +4,7 @@ import { limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
 import { roundScaledAmount } from '../lib/blend-recipe-scale';
 import { parseBlendRecipeSnapshot } from '../lib/blend-recipe-version';
 import { computeRecipeTheoreticalAbv, previewProofingWaterAdjustment, type ProofingWaterPreview } from '../lib/blend-abv-confirm';
+import { buildRecipeAlcoholAccount } from '../lib/blend-alcohol-account';
 import {
   deleteBlendRecipe,
   getBlendRecipes,
@@ -632,6 +633,14 @@ export function BlendRecipesTab({
                     <p>
                       {formatGallonDisplay(liters)} L ({formatGallonDisplay(predicted.volumeGal)} gal)
                       {predicted.abv != null ? ` at ${formatAbvDisplay(predicted.abv)} predicted ABV` : ''}
+                      {(() => {
+                        const account = buildRecipeAlcoholAccount(selected.spirit_sources, selected.ingredients);
+                        if (!account.ok) return '';
+                        const abw = account.predictedAbw != null
+                          ? `, ${account.predictedAbw.toFixed(2)}% alcohol by weight`
+                          : ', alcohol by weight withheld until ingredient mass is known';
+                        return ` (${account.volumeStatus}${abw})`;
+                      })()}
                     </p>
                     <p className="field-hint">{PREDICTED_VOLUME_ESTIMATE_NOTE}</p>
                     <p className="field-hint">{view.note}</p>
