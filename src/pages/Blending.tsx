@@ -1571,12 +1571,13 @@ export function Blending() {
   };
 
   const handlePrintWorksheet = () => {
-    const worksheet = worksheetPrintRef.current?.querySelector('.blend-production-worksheet') as HTMLElement | null;
+    const container = worksheetPrintRef.current;
+    const worksheet = container?.querySelector('.blend-production-worksheet') as HTMLElement | null;
     if (!worksheet) {
       window.print();
       return;
     }
-    printWorksheet(worksheet);
+    void printWorksheet(worksheet, container);
   };
 
   const handleDownloadWorksheetPdf = async () => {
