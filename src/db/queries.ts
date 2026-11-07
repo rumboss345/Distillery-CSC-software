@@ -6215,7 +6215,7 @@ function assertSpiritAvailability(
       }
       if (source.volume_gal > barrel.current_volume_gal + 0.01) {
         throw new Error(
-          `Only ${barrel.current_volume_gal.toFixed(1)} gal available in ${barrel.barrel_number}; formula requires ${source.volume_gal.toFixed(1)} gal.`,
+          `Only ${barrel.current_volume_gal.toFixed(1)} gal available in ${barrel.barrel_number}, but the formula requires ${source.volume_gal.toFixed(1)} gal.`,
         );
       }
       continue;
@@ -6228,7 +6228,7 @@ function assertSpiritAvailability(
         [source.holding_tank_equipment_id],
       );
       throw new Error(
-        `Only ${available.volume_gal.toFixed(1)} gal available in ${tank?.name ?? 'tank'}; formula requires ${source.volume_gal.toFixed(1)} gal.`,
+        `Only ${available.volume_gal.toFixed(1)} gal available in ${tank?.name ?? 'tank'}, but the formula requires ${source.volume_gal.toFixed(1)} gal.`,
       );
     }
   }

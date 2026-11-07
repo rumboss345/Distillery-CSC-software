@@ -62,7 +62,7 @@ export function stillChargeCapacityMessage(
   stillName: string,
   stillCapacityGal: number,
 ): string {
-  return `Charge volume (${chargeGal} gal) exceeds ${stillName} capacity (${stillCapacityGal} gal).`;
+  return `Charge volume (${chargeGal} gal) exceeds ${stillName}'s capacity (${stillCapacityGal} gal).`;
 }
 
 export function stillAlreadyOccupiedMessage(

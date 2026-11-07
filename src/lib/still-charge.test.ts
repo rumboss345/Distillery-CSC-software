@@ -21,7 +21,7 @@ describe('still-charge', () => {
 
   it('formats capacity error message', () => {
     expect(stillChargeCapacityMessage(250, 'Pot Still #1', 200)).toBe(
-      'Charge volume (250 gal) exceeds Pot Still #1 capacity (200 gal).',
+      'Charge volume (250 gal) exceeds Pot Still #1\'s capacity (200 gal).',
     );
   });
 

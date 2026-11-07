@@ -664,7 +664,7 @@ export function BlendRecipesTab({
                 if (known.length === 0) {
                   return (
                     <p className="field-hint" style={{ marginTop: '0.35rem' }}>
-                      Original entered quantity not recorded for these spirit pulls. Stored gallons are shown as saved.
+                      The originally entered quantity was not recorded for these spirit pulls. Stored gallons are shown as recorded.
                     </p>
                   );
                 }
@@ -947,7 +947,7 @@ export function BlendRecipesTab({
                       {synced.volume_gal > 0 && (
                         <p className="measure-alt blend-recipe-stored-volume">
                           Calculated volume <strong>{formatGallonDisplay(synced.volume_gal)} gal</strong>
-                          {!source.enteredQuantityKnown && ' · original entered quantity not recorded'}
+                          {!source.enteredQuantityKnown && ' · originally entered quantity was not recorded'}
                           {alternate ? ` · ${alternate.label}` : ''}
                         </p>
                       )}

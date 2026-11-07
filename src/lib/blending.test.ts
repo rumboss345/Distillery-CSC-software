@@ -180,7 +180,7 @@ describe('spirit measurement', () => {
     expect(entered).toContain('249.0 lbs');
     expect(entered).toContain('93% rum');
     const historical = formatBlendRecipeSpiritPull('93% rum', 83.57, 93);
-    expect(historical).toContain('original entered quantity not recorded');
+    expect(historical).toContain('originally entered quantity was not recorded');
     expect(historical).not.toContain('lbs');
   });
 });

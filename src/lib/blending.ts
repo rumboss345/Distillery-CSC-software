@@ -411,7 +411,7 @@ export function formatBlendRecipeSpiritPull(
     const charge = `${formatQuantityDisplay(entered.amount, 3)} ${entered.unit}`;
     return `${name}: ${charge} @ ${proof} · ${gallons} calculated`;
   }
-  return `${name}: ${gallons} @ ${proof} · original entered quantity not recorded`;
+  return `${name}: ${gallons} @ ${proof} · originally entered quantity was not recorded`;
 }
 
 function formatAdditiveWeightLbs(lbs: number): string | null {

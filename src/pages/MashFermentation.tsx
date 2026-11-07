@@ -578,7 +578,7 @@ export function MashFermentation() {
                 onChange={(start_date) => setForm({ ...form, start_date })}
               />
               {form.status !== 'planned' && plannedScheduleDate && (
-                <p className="field-hint">Date set to today because this left planned.</p>
+                <p className="field-hint">Set to today because this run is no longer planned.</p>
               )}
             </div>
             <div className="form-group">
