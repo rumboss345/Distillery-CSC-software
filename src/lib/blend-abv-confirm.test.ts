@@ -5,6 +5,7 @@ import {
   previewProofingWaterAdjustment,
   proofGapDescription,
   proofingWaterGalForTarget,
+  reconcileRecipeProofingWater,
 } from './blend-abv-confirm';
 import { roundScaledAmount } from './blend-recipe-scale';
 import { spiritVolumeGalFromAmount } from './blending';
@@ -181,5 +182,20 @@ describe('blend-abv-confirm', () => {
     );
     expect(abvMatchesTarget(result.abv!, 35)).toBe(true);
     expect(abvMatchesTarget(designed.analysis?.abv ?? 0, 35)).toBe(true);
+  });
+
+  it('reconcileRecipeProofingWater replaces stale water on saved-style recipes', () => {
+    const spirits = [{ spirit_label: 'Spiced base', volume_gal: 35.708, abv: 93.3 }];
+    const ingredients = [
+      { ingredient_type: 'sugar' as const, name: 'Sugar', amount: 80, unit: 'lbs', notes: '' },
+      { ingredient_type: 'syrup' as const, name: 'CS1', amount: 15000, unit: 'ml', notes: '', density_assumption: 'cs1-syrup' as const },
+      { ingredient_type: 'water' as const, name: 'Proofing water', amount: 86, unit: 'gal', notes: '' },
+    ];
+    const reconciled = reconcileRecipeProofingWater(spirits, ingredients, 35);
+    const water = reconciled.find((row) => row.ingredient_type === 'water');
+    expect(water).toBeDefined();
+    expect(water!.amount).toBeLessThan(86);
+    const result = computeRecipeTheoreticalAbv(spirits, reconciled);
+    expect(abvMatchesTarget(result.abv ?? 0, 35)).toBe(true);
   });
 });
