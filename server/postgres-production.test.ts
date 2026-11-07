@@ -617,6 +617,49 @@ describe('PostgreSQL production modules', () => {
     expect(varianceRun?.source_volume_gal).toBeCloseTo(10, 3);
     expect(varianceRun?.volume_variance_gal).toBeCloseTo(bottledGal - 10, 3);
     expect(engine.readProduction((api) => api.getHoldingTankContents(varianceId).volume_gal)).toBeCloseTo(0, 3);
+    expect(engine.readProduction((api) => api.getHoldingTankContents(varianceId).abv)).toBe(0);
+  });
+
+  it('shows 0% ABV on a source tank emptied by bottling when bottled proof differs from tank proof', async () => {
+    await saveEquipment('Proof Mismatch Tank', 'holding_tank', 50);
+    const sourceId = engine.readProduction((api) => (
+      api.getFloorEquipment().find((item) => item.name === 'Proof Mismatch Tank')!.id
+    ));
+    await save('saveHoldingTankOnHand', [{
+      tankEquipmentId: sourceId,
+      volumeGal: 10,
+      abv: 45,
+      recordedAt: '2026-11-01',
+      notes: 'High-wine fill',
+      changedBy: 'Admin',
+    }]);
+    const bottledGal = (750 * 12) / ML_PER_GALLON;
+    await save('saveBottlingRun', [{
+      batch_number: 'BT-PROOF-MISMATCH',
+      source_barrel_id: null,
+      source_holding_tank_equipment_id: sourceId,
+      source_volume_gal: null,
+      source_abv: null,
+      bottled_volume_gal: null,
+      volume_variance_gal: null,
+      alcohol_variance_gal: null,
+      variance_reason: 'Bottled at label proof',
+      variance_changed_by: 'Admin',
+      source_run_id: null,
+      bottling_date: '2026-11-01',
+      packaging_bottle: '',
+      bottle_size_ml: 750,
+      bottle_count: 12,
+      final_abv: 35,
+      product_name: 'Label strength rum',
+      lot_number: 'LOT-PM-1',
+      notes: '',
+      returns: [],
+    }, [{ packaging_bottle: '750 ml bottle', bottle_size_ml: 750, bottle_count: 12 }]]);
+
+    const contents = engine.readProduction((api) => api.getHoldingTankContents(sourceId));
+    expect(contents.volume_gal).toBeCloseTo(0, 2);
+    expect(contents.abv).toBe(0);
   });
 
   it('lets a bottling stay planned, then take bottles in sessions, then finish leftover in the source tank', async () => {

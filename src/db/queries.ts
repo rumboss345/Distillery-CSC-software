@@ -1441,7 +1441,9 @@ function computeHoldingTankContents(
   const bottlingOuts = queryOne<{ volume_gal: number; gpa: number }>(`
     SELECT
       COALESCE(SUM(source_volume_gal), 0) as volume_gal,
-      COALESCE(SUM(source_volume_gal * COALESCE(final_abv, 0) / 100), 0) as gpa
+      COALESCE(SUM(
+        source_volume_gal * COALESCE(source_abv, final_abv, 0) / 100
+      ), 0) as gpa
     FROM bottling_runs
     WHERE source_holding_tank_equipment_id = ?
       AND source_volume_gal > 0
@@ -1536,9 +1538,16 @@ function computeHoldingTankContents(
   const productionGpa = gpaIn - gpaOut;
   const netVolume = productionVolume + (opening?.volume_gal ?? 0);
   const netGpa = productionGpa + (opening?.alcohol_gal ?? 0);
-  const volume_gal = Math.max(0, netVolume);
+  const TANK_EMPTY_GAL = 0.05;
+  let volume_gal = Math.max(0, netVolume);
   const gpaRemaining = Math.max(0, netGpa);
-  const abv = volume_gal > 0 ? (gpaRemaining / volume_gal) * 100 : 0;
+  let abv = 0;
+  if (volume_gal <= TANK_EMPTY_GAL) {
+    volume_gal = 0;
+    abv = 0;
+  } else if (gpaRemaining > 0) {
+    abv = (gpaRemaining / volume_gal) * 100;
+  }
 
   return {
     volume_gal,
