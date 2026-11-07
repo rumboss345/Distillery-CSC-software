@@ -1,4 +1,5 @@
 import {
+  convertIngredientAmount,
   formatCorrectionWithAlternate,
   formatSpiritCorrectionWithAlternate,
   ingredientPureAlcoholGal,
@@ -8,6 +9,7 @@ import {
   spiritDensityGPerMl,
   toLbs,
 } from './blending';
+import { roundScaledAmount } from './blend-recipe-scale';
 import { decimalStringFromNumber } from './calc-engine/number-bridge';
 import {
   postedSpiritPounds,
@@ -490,6 +492,73 @@ export function solveWaterForTargetAbv(
       abv: verified.ok ? round2(verified.abv) : round2(targetAbv),
     },
   };
+}
+
+/**
+ * Replace the recipe water line with gallons that hit the target ABV for the current
+ * spirit pull and non-water additives. Sweetened blends need this after every scale
+ * change; linearly scaling stored recipe water does not preserve finished volume.
+ */
+export function blendIngredientsWithSolvedProofingWater(
+  ingredients: BlendIngredientInput[],
+  spirits: SpiritSourceInput[],
+  targetAbv: number | null | undefined,
+): BlendIngredientInput[] {
+  if (targetAbv == null || !(targetAbv > 0) || spirits.length === 0) return ingredients;
+  const solved = solveWaterForTargetAbv(
+    spirits,
+    additiveInputsFromBlendIngredients(ingredients),
+    targetAbv,
+  );
+  if (!solved) return ingredients;
+  const index = ingredients.findIndex((ingredient) => ingredient.ingredient_type === 'water');
+  const existing = index >= 0 ? ingredients[index] : undefined;
+  const unit = existing?.unit && existing.unit !== 'each' ? existing.unit : 'gal';
+  const rawAmount = unit === 'gal'
+    ? solved.waterGal
+    : convertIngredientAmount(
+      { amount: solved.waterGal, unit: 'gal', ingredient_type: 'water' },
+      unit,
+    );
+  const amount = roundScaledAmount(rawAmount);
+  if (!(amount > 0)) {
+    return ingredients.filter((ingredient) => ingredient.ingredient_type !== 'water');
+  }
+  const line: BlendIngredientInput = {
+    ingredient_type: 'water',
+    name: existing?.name?.trim() || 'Proofing water',
+    amount,
+    unit,
+    abv: null,
+    cost_per_unit: existing?.cost_per_unit ?? null,
+    lot_number: existing?.lot_number ?? '',
+    inventory_item_id: existing?.inventory_item_id ?? null,
+    notes: existing?.notes ?? '',
+  };
+  if (index < 0) return [...ingredients, line];
+  return ingredients.map((ingredient, i) => (i === index ? line : ingredient));
+}
+
+/**
+ * After a tank pull differs from the scaled recipe spirit, adjust proofing water.
+ * Straight spirits keep poured gallons fixed; sugar, syrup, and flavor use formulation.
+ */
+export function proofingWaterAfterSpiritAdjustment(
+  recipeSpiritGal: number,
+  actualSpiritGal: number,
+  scaledRecipeWaterGal: number,
+  actualSpirits: SpiritSourceInput[],
+  nonWaterAdditives: AdditiveInput[],
+  targetAbv: number,
+): { waterGal: number; shortfallGal: number } {
+  if (hasDissolvedSolids(nonWaterAdditives)) {
+    const solved = solveWaterForTargetAbv(actualSpirits, nonWaterAdditives, targetAbv);
+    if (!solved) {
+      return { waterGal: round3(Math.max(0, scaledRecipeWaterGal)), shortfallGal: 0 };
+    }
+    return { waterGal: solved.waterGal, shortfallGal: 0 };
+  }
+  return proofingWaterForSameBatchSize(recipeSpiritGal, actualSpiritGal, scaledRecipeWaterGal);
 }
 
 export interface SpiritAbvDelta {
