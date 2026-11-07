@@ -37,6 +37,7 @@ import { ChangePassword } from './pages/ChangePassword';
 import { ApproveUser } from './pages/ApproveUser';
 import { AdminUsers } from './pages/AdminUsers';
 import { SpiritWeightCalculator } from './pages/SpiritWeightCalculator';
+import { HomeBatchCostPage } from './pages/tools/HomeBatchCostPage';
 import { useDatabaseReady } from './db/client-actions';
 import { AppErrorBoundary } from './components/AppErrorBoundary';
 
@@ -81,6 +82,7 @@ function AppContent() {
             <Route path="/tank-transfer" element={<TankTransfer />} />
             <Route path="/blending" element={<Blending />} />
             <Route path="/tools/spirit-calculator" element={<SpiritWeightCalculator />} />
+            <Route path="/tools/batch-cost" element={<HomeBatchCostPage />} />
             <Route path="/barrels" element={<Barrels />} />
             <Route path="/bottling" element={<Bottling />} />
             <Route path="/inventory" element={<Inventory />} />
