@@ -1,5 +1,10 @@
 import { convertIngredientAmount, ingredientVolumeGal, spiritVolumeGalFromAmount } from './blending';
-import { additiveInputsFromBlendIngredients, solveWaterForTargetAbv, type SpiritSourceInput } from './blend-formulation';
+import {
+  additiveInputsFromBlendIngredients,
+  blendIngredientsWithSolvedProofingWater,
+  solveWaterForTargetAbv,
+  type SpiritSourceInput,
+} from './blend-formulation';
 import { analyzeFormulation, type FormulationComponent } from './formulation-engine';
 import type { BlendIngredientInput, BlendIngredientType, BlendRecipeSpiritSourceInput } from '../types';
 
@@ -110,6 +115,34 @@ function analyzeRecipe(
   const result = analyzeFormulation(components);
   if (!result.ok || result.volumeGal <= 0 || result.abv <= 0) return null;
   return { abv: result.abv, volumeGal: result.volumeGal };
+}
+
+export function proofingWaterGallons(ingredients: BlendIngredientInput[]): number {
+  return ingredients
+    .filter((row) => row.ingredient_type === 'water' && row.amount > 0)
+    .reduce((sum, row) => sum + ingredientVolumeGal(row), 0);
+}
+
+/**
+ * Replace the recipe water line so finished volume and ABV match the formulation model
+ * for the current spirit pulls and non-water additives.
+ */
+export function reconcileRecipeProofingWater(
+  spirits: BlendRecipeSpiritSourceInput[],
+  ingredients: BlendIngredientInput[],
+  targetAbv: number | null | undefined,
+): BlendIngredientInput[] {
+  const spiritInputs = spiritInputsForProofing(spirits);
+  if (spiritInputs.length === 0 || targetAbv == null || !(targetAbv > 0)) return ingredients;
+  return blendIngredientsWithSolvedProofingWater(ingredients, spiritInputs, targetAbv);
+}
+
+export function proofingWaterReconcileChanged(
+  before: BlendIngredientInput[],
+  after: BlendIngredientInput[],
+  toleranceGal = 0.02,
+): boolean {
+  return Math.abs(proofingWaterGallons(before) - proofingWaterGallons(after)) > toleranceGal;
 }
 
 export function computeRecipeTheoreticalAbv(

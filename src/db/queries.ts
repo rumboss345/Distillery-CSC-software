@@ -163,9 +163,11 @@ import type {
   ProductionCostMonthlyOverhead,
 } from '../types';
 import { mlToGallons } from '../types';
+import { reconcileRecipeProofingWater } from '../lib/blend-abv-confirm';
 import {
   computeTheoreticalBlend,
   proofingRecordForBlend,
+  reconcileBatchProofingWater,
   reconcileMeasurements,
   type AdditiveInput,
   type SpiritSourceInput,
@@ -5742,6 +5744,9 @@ export function saveBlendRecipe(
   for (const ingredient of ingredients) assertEnteredAbv(ingredient.abv, 'Flavoring ABV');
 
   const sourceType = recipe.source_type ?? 'tank';
+  const storedIngredients = recipe.target_abv != null && recipe.target_abv > 0
+    ? reconcileRecipeProofingWater(spiritSources, ingredients, recipe.target_abv)
+    : ingredients;
 
   if (id) {
     runQuery(
@@ -5786,7 +5791,7 @@ export function saveBlendRecipe(
   }
 
   persistBlendRecipeSpiritSources(id, spiritSources);
-  persistBlendRecipeIngredients(id, ingredients);
+  persistBlendRecipeIngredients(id, storedIngredients);
   recordBlendRecipeVersion(id, buildBlendRecipeSnapshot({
     product_name: recipe.product_name,
     target_abv: recipe.target_abv,
@@ -5797,7 +5802,7 @@ export function saveBlendRecipe(
     source_type: sourceType,
     notes: recipe.notes,
     spirit_sources: spiritSources,
-    ingredients,
+    ingredients: storedIngredients,
   }));
   return id;
 }
@@ -6042,7 +6047,14 @@ export function saveBlendFormula(
   const primaryVolume = primary?.volume_gal ?? product.base_spirit_volume_gal;
   const primaryAbv = primary?.abv ?? product.base_spirit_abv;
 
-  const formulation = computeBlendFormulation(sources, ingredients, {
+  const spiritInputs: SpiritSourceInput[] = sources
+    .filter((source) => source.volume_gal > 0 && source.abv > 0)
+    .map((source) => ({ volumeGal: source.volume_gal, abv: source.abv }));
+  const storedIngredients = product.target_abv != null && product.target_abv > 0 && spiritInputs.length > 0
+    ? reconcileBatchProofingWater(spiritInputs, ingredients, product.target_abv)
+    : ingredients;
+
+  const formulation = computeBlendFormulation(sources, storedIngredients, {
     volume_gal: product.actual_volume_gal,
     abv: product.actual_abv,
     density: product.actual_density,
@@ -6136,8 +6148,8 @@ export function saveBlendFormula(
   }
 
   persistSpiritSources(id, sources);
-  persistIngredients(id, ingredients);
-  snapshotFormula(id, row.formula_version, product, sources, ingredients, formulation);
+  persistIngredients(id, storedIngredients);
+  snapshotFormula(id, row.formula_version, product, sources, storedIngredients, formulation);
   return id;
 }
 

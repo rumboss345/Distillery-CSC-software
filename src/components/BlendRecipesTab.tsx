@@ -3,7 +3,13 @@ import { BlendAbvConfirmation } from './BlendAbvConfirmation';
 import { limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
 import { roundScaledAmount } from '../lib/blend-recipe-scale';
 import { parseBlendRecipeSnapshot } from '../lib/blend-recipe-version';
-import { computeRecipeTheoreticalAbv, previewProofingWaterAdjustment, type ProofingWaterPreview } from '../lib/blend-abv-confirm';
+import {
+  computeRecipeTheoreticalAbv,
+  previewProofingWaterAdjustment,
+  proofingWaterReconcileChanged,
+  reconcileRecipeProofingWater,
+  type ProofingWaterPreview,
+} from '../lib/blend-abv-confirm';
 import { buildRecipeAlcoholAccount } from '../lib/blend-alcohol-account';
 import {
   deleteBlendRecipe,
@@ -219,6 +225,51 @@ export function BlendRecipesTab({
   useEffect(() => {
     setAbvConfirmed(false);
   }, [calculatedRecipe.abv, calculatedRecipe.volumeGal, form.target_abv]);
+
+  const formulationInputsKey = useMemo(
+    () => JSON.stringify({
+      target: form.target_abv,
+      spirits: syncedSpiritSources.map((source) => ({
+        volume_gal: source.volume_gal,
+        abv: source.abv,
+        amount: source.amount,
+        unit: source.unit,
+      })),
+      additives: ingredients
+        .filter((row) => row.ingredient_type !== 'water')
+        .map((row) => ({
+          ingredient_type: row.ingredient_type,
+          name: row.name,
+          amount: row.amount,
+          unit: row.unit,
+          density_g_per_ml: row.density_g_per_ml,
+          density_assumption: row.density_assumption,
+          sugar_mass_fraction: row.sugar_mass_fraction,
+        })),
+    }),
+    [form.target_abv, syncedSpiritSources, ingredients],
+  );
+
+  useEffect(() => {
+    if (form.target_abv == null || !(form.target_abv > 0)) return;
+    setIngredients((prev) => {
+      const reconciled = reconcileRecipeProofingWater(
+        syncedSpiritSources.map(toSpiritRecipeInput),
+        prev.map(toBlendIngredientInput),
+        form.target_abv,
+      );
+      if (!proofingWaterReconcileChanged(prev.map(toBlendIngredientInput), reconciled)) return prev;
+      return reconciled.map((row) => {
+        const prior = prev.find(
+          (item) => item.ingredient_type === row.ingredient_type
+            && (row.ingredient_type === 'water' || item.name.trim() === row.name.trim()),
+        );
+        return prior
+          ? { ...toRecipeAdditiveRow(row, inventoryItems), inventory_category: prior.inventory_category }
+          : toRecipeAdditiveRow(row, inventoryItems);
+      });
+    });
+  }, [formulationInputsKey]);
 
   const selected = recipes.find((recipe) => recipe.id === selectedId);
 

@@ -543,6 +543,15 @@ export function blendIngredientsWithSolvedProofingWater(
  * After a tank pull differs from the scaled recipe spirit, adjust proofing water.
  * Straight spirits keep poured gallons fixed; sugar, syrup, and flavor use formulation.
  */
+/** Reconcile proofing water on open batches (wizard saves) when target ABV is set. */
+export function reconcileBatchProofingWater(
+  spirits: SpiritSourceInput[],
+  ingredients: BlendIngredientInput[],
+  targetAbv: number | null | undefined,
+): BlendIngredientInput[] {
+  return blendIngredientsWithSolvedProofingWater(ingredients, spirits, targetAbv);
+}
+
 export function proofingWaterAfterSpiritAdjustment(
   recipeSpiritGal: number,
   actualSpiritGal: number,

@@ -545,12 +545,27 @@ export function Blending() {
     );
     if (deltas.length === 0) {
       setWaterAdjustmentNote(null);
+      const spirits = syncedSpiritSources
+        .filter((source) => source.volume_gal > 0 && source.abv > 0)
+        .map((source) => ({ volumeGal: source.volume_gal, abv: source.abv }));
+      const hasSolids = ingredients.some(
+        (row) => row.amount > 0 && ['sugar', 'syrup', 'flavoring', 'color', 'other'].includes(row.ingredient_type),
+      );
       setIngredients((prev) => {
         const waterIdx = prev.findIndex((ing) => ing.ingredient_type === 'water');
-        if (waterIdx < 0 || !prev[waterIdx].notes?.startsWith('ABV compensation')) return prev;
+        const reconcile = () => (
+          spirits.length > 0 && hasSolids
+            ? blendIngredientsWithSolvedProofingWater(prev, spirits, form.target_abv)
+            : prev
+        );
+        if (waterIdx < 0 || !prev[waterIdx].notes?.startsWith('ABV compensation')) return reconcile();
+        const cleared = prev.map((ing, i) => (i === waterIdx ? { ...ing, notes: '' } : ing));
+        if (hasSolids && spirits.length > 0) {
+          return blendIngredientsWithSolvedProofingWater(cleared, spirits, form.target_abv);
+        }
         const restored = waterAmountInRecipeUnit(scaledRecipeWater);
-        return prev.map((ing, i) => (
-          i === waterIdx ? { ...ing, amount: restored, unit: waterUnit, notes: '' } : ing
+        return cleared.map((ing, i) => (
+          i === waterIdx ? { ...ing, amount: restored, unit: waterUnit } : ing
         ));
       });
       return;
@@ -609,7 +624,54 @@ export function Blending() {
     form.scale_factor,
     recipeTemplate,
     wizardStep,
+    ingredients,
   ]);
+
+  const batchFormulationInputsKey = useMemo(
+    () => JSON.stringify({
+      target: form.target_abv,
+      scale: form.scale_factor,
+      spirits: syncedSpiritSources
+        .filter((source) => source.volume_gal > 0 && source.abv > 0)
+        .map((source) => ({ volume_gal: source.volume_gal, abv: source.abv })),
+      additives: ingredients
+        .filter((row) => row.ingredient_type !== 'water' && row.amount > 0)
+        .map((row) => ({
+          ingredient_type: row.ingredient_type,
+          name: row.name,
+          amount: row.amount,
+          unit: row.unit,
+        })),
+    }),
+    [form.target_abv, form.scale_factor, syncedSpiritSources, ingredients],
+  );
+
+  useEffect(() => {
+    if (form.target_abv == null || !(form.target_abv > 0)) return;
+    if (wizardStep < 2 || wizardStep > 6) return;
+    if (blendIsComplete(form.status)) return;
+    if (spiritAbvMismatch.length > 0) return;
+    const spirits = syncedSpiritSources
+      .filter((source) => source.volume_gal > 0 && source.abv > 0)
+      .map((source) => ({ volumeGal: source.volume_gal, abv: source.abv }));
+    if (spirits.length === 0) return;
+    const hasSolids = ingredients.some(
+      (row) => row.amount > 0 && ['sugar', 'syrup', 'flavoring', 'color', 'other'].includes(row.ingredient_type),
+    );
+    if (!hasSolids) return;
+
+    setIngredients((prev) => {
+      const next = blendIngredientsWithSolvedProofingWater(prev, spirits, form.target_abv);
+      const waterBefore = prev
+        .filter((row) => row.ingredient_type === 'water')
+        .reduce((sum, row) => sum + ingredientVolumeGal(row), 0);
+      const waterAfter = next
+        .filter((row) => row.ingredient_type === 'water')
+        .reduce((sum, row) => sum + ingredientVolumeGal(row), 0);
+      if (Math.abs(waterBefore - waterAfter) < 0.01) return prev;
+      return next;
+    });
+  }, [batchFormulationInputsKey, wizardStep, form.status, spiritAbvMismatch.length, form.target_abv]);
 
   const baseFormulation = useMemo(() => {
     if (!recipeTemplate || recipeTemplate.spirit_sources.every((source) => source.volume_gal <= 0)) {
