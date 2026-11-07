@@ -113,9 +113,10 @@ function table6WaterPounds(volumeGal: number): number {
   return posted == null ? 0 : Number(posted);
 }
 import {
+  blendIngredientsWithSolvedProofingWater,
   computeBatchCorrection,
   computeTheoreticalBlend,
-  proofingWaterForSameBatchSize,
+  proofingWaterAfterSpiritAdjustment,
   solveSugarForTargetBrix,
   solveWaterForTargetAbv,
   spiritAbvDeltas,
@@ -339,48 +340,12 @@ function toAdditiveInputs(ingredients: BlendIngredientInput[]): AdditiveInput[] 
     abv: i.abv,
     densityGPerMl: i.density_g_per_ml,
     densityAssumption: i.density_assumption,
+    sucroseMassFraction: i.sugar_mass_fraction ?? null,
+    specStatus: i.spec_status ?? null,
     costPerUnit: i.cost_per_unit ?? undefined,
     lotNumber: i.lot_number,
     inventoryItemId: i.inventory_item_id ?? undefined,
   }));
-}
-
-function ingredientsWithProofingWater(
-  ingredients: BlendIngredientInput[],
-  spirits: SpiritSourceInput[],
-  targetAbv: number | null | undefined,
-): BlendIngredientInput[] {
-  if (targetAbv == null || !(targetAbv > 0) || spirits.length === 0) return ingredients;
-  const solved = solveWaterForTargetAbv(
-    spirits,
-    toAdditiveInputs(ingredients.filter((ingredient) => ingredient.ingredient_type !== 'water')),
-    targetAbv,
-  );
-  if (!solved) return ingredients;
-  const index = ingredients.findIndex((ingredient) => ingredient.ingredient_type === 'water');
-  const existing = index >= 0 ? ingredients[index] : undefined;
-  const unit = existing?.unit && existing.unit !== 'each' ? existing.unit : 'gal';
-  const rawAmount = unit === 'gal'
-    ? solved.waterGal
-    : convertIngredientAmount(
-      { amount: solved.waterGal, unit: 'gal', ingredient_type: 'water' },
-      unit,
-    );
-  const amount = roundScaledAmount(rawAmount);
-  if (!(amount > 0)) return ingredients.filter((ingredient) => ingredient.ingredient_type !== 'water');
-  const line: BlendIngredientInput = {
-    ingredient_type: 'water',
-    name: existing?.name?.trim() || 'Proofing water',
-    amount,
-    unit,
-    abv: null,
-    cost_per_unit: existing?.cost_per_unit ?? null,
-    lot_number: existing?.lot_number ?? '',
-    inventory_item_id: existing?.inventory_item_id ?? null,
-    notes: existing?.notes ?? '',
-  };
-  if (index < 0) return [...ingredients, line];
-  return ingredients.map((ingredient, i) => (i === index ? line : ingredient));
 }
 
 function resumeStep(blend: BlendProduct): number {
@@ -592,7 +557,17 @@ export function Blending() {
       return;
     }
 
-    const water = proofingWaterForSameBatchSize(recipeSpiritGal, actualSpiritGal, scaledRecipeWater);
+    const water = proofingWaterAfterSpiritAdjustment(
+      recipeSpiritGal,
+      actualSpiritGal,
+      scaledRecipeWater,
+      syncedSpiritSources
+        .map(syncSpiritVolume)
+        .filter((source) => source.volume_gal > 0 && source.abv > 0)
+        .map((source) => ({ volumeGal: source.volume_gal, abv: source.abv })),
+      toAdditiveInputs(ingredients.filter((ingredient) => ingredient.ingredient_type !== 'water')),
+      form.target_abv,
+    );
     const deltaNotes = deltas
       .map((d) => `${d.label}: ${d.actualAbv.toFixed(1)}% tank vs ${d.recipeAbv.toFixed(1)}% recipe`)
       .join('; ');
@@ -706,9 +681,15 @@ export function Blending() {
 
   const baseYieldGal = baseFormulation?.theoretical.volumeGal ?? 0;
   const baseSugarLbs = recipeTemplate ? totalSugarLbs(recipeTemplate.ingredients) : 0;
-  const scaledYieldGal = baseYieldGal > 0
+  const linearScaledYieldGal = baseYieldGal > 0
     ? baseYieldGal * (form.scale_factor || 1)
     : formulation.theoretical.volumeGal;
+  const scaledYieldGal = activeSources.length > 0
+    ? formulation.theoretical.volumeGal
+    : linearScaledYieldGal;
+  const batchSizeVolumeMismatch = activeSources.length > 0
+    && linearScaledYieldGal > 0
+    && Math.abs(formulation.theoretical.volumeGal - linearScaledYieldGal) > 0.75;
   const batchSugarLbs = baseSugarLbs > 0 ? baseSugarLbs * (form.scale_factor || 1) : 0;
   const sugarBagSteps = adjacentSugarBagLbs(batchSugarLbs);
   const onWholeSugarBags = sugarLbsAreWholeBags(batchSugarLbs);
@@ -790,10 +771,15 @@ export function Blending() {
     });
     setSpiritSources(nextSpirits);
     const scaledIngredients = scaleIngredients(template.ingredients, factor);
-    setIngredients(scaledIngredients);
+    const spiritInputs = nextSpirits
+      .filter((source) => source.volume_gal > 0 && source.abv > 0)
+      .map((source) => ({ volumeGal: source.volume_gal, abv: source.abv }));
+    const withProofingWater = targetAbv != null && targetAbv > 0 && spiritInputs.length > 0
+      ? blendIngredientsWithSolvedProofingWater(scaledIngredients, spiritInputs, targetAbv)
+      : scaledIngredients;
+    setIngredients(withProofingWater);
     setWizardOriginalWater(scaledIngredients.filter((ingredient) => ingredient.ingredient_type === 'water'));
     setWizardProofingPreview(null);
-    void targetAbv;
   };
 
   const setBatchScale = (factor: number) => {
@@ -1427,7 +1413,7 @@ export function Blending() {
       .filter((source) => source.volume_gal > 0 && source.abv > 0)
       .map((source) => ({ volumeGal: source.volume_gal, abv: source.abv }));
     if (spirits.length === 0) return;
-    setIngredients((current) => ingredientsWithProofingWater(current, spirits, form.target_abv));
+    setIngredients((current) => blendIngredientsWithSolvedProofingWater(current, spirits, form.target_abv));
   };
 
   const confirmWizardProofingWater = () => {
@@ -2057,6 +2043,16 @@ export function Blending() {
                     {' → '}
                     this batch: {formatBlendVolume(scaledYieldGal)}
                     {form.target_abv != null ? ` at ${form.target_abv}%` : ''}
+                    {batchSizeVolumeMismatch && (
+                      <>
+                        {' '}
+                        <strong>
+                          Predicted finished volume differs from the linear batch-size target (
+                          {formatBlendVolume(linearScaledYieldGal)}
+                          ). Proofing water may still follow an older recipe charge — adjust or confirm water.
+                        </strong>
+                      </>
+                    )}
                     {baseSugarLbs > 0
                       ? ` · ${onWholeSugarBags
                         ? `${batchSugarLbs.toFixed(0)} lb sugar (${wholeSugarBagCount} × ${SUGAR_BAG_LBS} lb)`
