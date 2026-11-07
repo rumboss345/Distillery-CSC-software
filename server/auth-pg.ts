@@ -9,7 +9,8 @@ import {
   type PermissionKey,
   type ProcessStageKey,
 } from './permissions.js';
-import type { ProcessAssignmentEntry, PublicUser, User, UserRole } from './auth-sqlite.js';
+import type { ProcessAssignmentEntry, PublicUser, User, UserRole, UserStatus } from './auth-sqlite.js';
+import type { StaffMessageRow } from './staff-messages.js';
 import { getPool } from './pg.js';
 import {
   LAST_OWNER_ERROR,
@@ -429,4 +430,128 @@ export async function changePassword(
     client.release();
   }
   return { ok: true };
+}
+
+const STAFF_MESSAGE_SELECT = `
+  SELECT m.id, m.sender_id, m.recipient_id, m.body, m.created_at, m.read_at,
+    s.email AS sender_email, s.name AS sender_name,
+    r.email AS recipient_email, r.name AS recipient_name
+  FROM staff_messages m
+  JOIN users s ON s.id = m.sender_id
+  JOIN users r ON r.id = m.recipient_id
+`;
+
+function mapStaffMessageRow(row: Record<string, unknown>): StaffMessageRow {
+  return {
+    id: Number(row.id),
+    sender_id: Number(row.sender_id),
+    recipient_id: Number(row.recipient_id),
+    body: String(row.body),
+    created_at: String(row.created_at),
+    read_at: row.read_at == null ? null : String(row.read_at),
+    sender_email: String(row.sender_email),
+    sender_name: row.sender_name == null ? null : String(row.sender_name),
+    recipient_email: String(row.recipient_email),
+    recipient_name: row.recipient_name == null ? null : String(row.recipient_name),
+  };
+}
+
+export async function createStaffMessage(
+  senderId: number,
+  recipientId: number,
+  body: string,
+): Promise<StaffMessageRow | null> {
+  const inserted = await getPool().query(
+    `INSERT INTO staff_messages (sender_id, recipient_id, body)
+     VALUES ($1, $2, $3)
+     RETURNING id`,
+    [senderId, recipientId, body],
+  );
+  const id = Number(inserted.rows[0]?.id);
+  return getStaffMessageById(id, senderId);
+}
+
+export async function getStaffMessageById(
+  messageId: number,
+  viewerId: number,
+): Promise<StaffMessageRow | null> {
+  const result = await getPool().query(
+    `${STAFF_MESSAGE_SELECT}
+     WHERE m.id = $1 AND (m.sender_id = $2 OR m.recipient_id = $2)`,
+    [messageId, viewerId],
+  );
+  const row = result.rows[0] as Record<string, unknown> | undefined;
+  return row ? mapStaffMessageRow(row) : null;
+}
+
+export async function listStaffMessagesInbox(userId: number, limit: number): Promise<StaffMessageRow[]> {
+  const result = await getPool().query(
+    `${STAFF_MESSAGE_SELECT}
+     WHERE m.recipient_id = $1
+     ORDER BY m.created_at DESC
+     LIMIT $2`,
+    [userId, limit],
+  );
+  return result.rows.map((row) => mapStaffMessageRow(row as Record<string, unknown>));
+}
+
+export async function listStaffMessagesSent(userId: number, limit: number): Promise<StaffMessageRow[]> {
+  const result = await getPool().query(
+    `${STAFF_MESSAGE_SELECT}
+     WHERE m.sender_id = $1
+     ORDER BY m.created_at DESC
+     LIMIT $2`,
+    [userId, limit],
+  );
+  return result.rows.map((row) => mapStaffMessageRow(row as Record<string, unknown>));
+}
+
+export async function countStaffMessagesUnread(userId: number): Promise<number> {
+  const result = await getPool().query(
+    `SELECT COUNT(*)::int AS n FROM staff_messages WHERE recipient_id = $1 AND read_at IS NULL`,
+    [userId],
+  );
+  return Number(result.rows[0]?.n ?? 0);
+}
+
+export async function listStaffMessagesIncomingAfter(
+  userId: number,
+  afterId: number,
+  limit: number,
+): Promise<StaffMessageRow[]> {
+  const result = await getPool().query(
+    `${STAFF_MESSAGE_SELECT}
+     WHERE m.recipient_id = $1 AND m.id > $2 AND m.read_at IS NULL
+     ORDER BY m.id ASC
+     LIMIT $3`,
+    [userId, afterId, limit],
+  );
+  return result.rows.map((row) => mapStaffMessageRow(row as Record<string, unknown>));
+}
+
+export async function markStaffMessageRead(messageId: number, recipientId: number): Promise<boolean> {
+  const result = await getPool().query(
+    `UPDATE staff_messages
+     SET read_at = to_char(CURRENT_TIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')
+     WHERE id = $1 AND recipient_id = $2 AND read_at IS NULL`,
+    [messageId, recipientId],
+  );
+  return (result.rowCount ?? 0) > 0;
+}
+
+export async function markAllStaffMessagesRead(recipientId: number): Promise<number> {
+  const result = await getPool().query(
+    `UPDATE staff_messages
+     SET read_at = to_char(CURRENT_TIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')
+     WHERE recipient_id = $1 AND read_at IS NULL`,
+    [recipientId],
+  );
+  return result.rowCount ?? 0;
+}
+
+export async function isApprovedStaffUser(userId: number): Promise<boolean> {
+  const result = await getPool().query('SELECT status, role FROM users WHERE id = $1', [userId]);
+  const row = result.rows[0] as { status: UserStatus; role: UserRole } | undefined;
+  if (!row) return false;
+  return row.status === 'approved' || isAdminRole(row.role);
 }

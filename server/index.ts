@@ -49,6 +49,15 @@ import {
   resetPasswordWithToken,
   syncAdminFromEnv,
   updateUserByAdmin,
+  countStaffMessagesUnread,
+  createStaffMessage,
+  listStaffMessagesIncomingAfter,
+  listStaffMessagesInbox,
+  listStaffMessagesSent,
+  markAllStaffMessagesRead,
+  markStaffMessageRead,
+  normalizeStaffMessageBody,
+  isApprovedStaffUser,
   type User,
 } from './db.js';
 import { sanitizePermissions, sanitizeProcessStages } from './permissions.js';
@@ -442,6 +451,80 @@ app.get('/api/process/assignments', authMiddleware, async (_req, res) => {
 
 app.get('/api/users/assignable', authMiddleware, async (_req, res) => {
   res.json({ users: await listAssignableUsers() });
+});
+
+const MESSAGE_LIST_LIMIT = 100;
+const MESSAGE_POLL_LIMIT = 20;
+
+app.get('/api/messages/summary', authMiddleware, async (req, res) => {
+  const userId = req.user!.id;
+  res.json({ unreadCount: await countStaffMessagesUnread(userId) });
+});
+
+app.get('/api/messages', authMiddleware, async (req, res) => {
+  const userId = req.user!.id;
+  const folder = String(req.query.folder ?? 'inbox');
+  const limit = Math.min(MESSAGE_LIST_LIMIT, Math.max(1, Number(req.query.limit) || 50));
+  const messages =
+    folder === 'sent'
+      ? await listStaffMessagesSent(userId, limit)
+      : await listStaffMessagesInbox(userId, limit);
+  res.json({ messages });
+});
+
+app.get('/api/messages/incoming', authMiddleware, async (req, res) => {
+  const userId = req.user!.id;
+  const afterId = Math.max(0, Number(req.query.afterId) || 0);
+  const messages = await listStaffMessagesIncomingAfter(userId, afterId, MESSAGE_POLL_LIMIT);
+  res.json({ messages });
+});
+
+app.post('/api/messages', authMiddleware, async (req, res) => {
+  const senderId = req.user!.id;
+  const recipientId = Number(req.body.recipientId);
+  const body = normalizeStaffMessageBody(String(req.body.body ?? ''));
+  if (!Number.isInteger(recipientId) || recipientId <= 0) {
+    res.status(400).json({ error: 'Choose who should receive this message.' });
+    return;
+  }
+  if (recipientId === senderId) {
+    res.status(400).json({ error: 'You cannot message yourself.' });
+    return;
+  }
+  if (!body) {
+    res.status(400).json({ error: 'Enter a message (up to 2000 characters).' });
+    return;
+  }
+  const recipientOk = await isApprovedStaffUser(recipientId);
+  if (!recipientOk) {
+    res.status(400).json({ error: 'That staff member cannot receive messages.' });
+    return;
+  }
+  const message = await createStaffMessage(senderId, recipientId, body);
+  if (!message) {
+    res.status(500).json({ error: 'Could not send the message.' });
+    return;
+  }
+  res.status(201).json({ message });
+});
+
+app.patch('/api/messages/:id/read', authMiddleware, async (req, res) => {
+  const messageId = Number(req.params.id);
+  if (!Number.isInteger(messageId) || messageId <= 0) {
+    res.status(400).json({ error: 'Invalid message.' });
+    return;
+  }
+  const ok = await markStaffMessageRead(messageId, req.user!.id);
+  if (!ok) {
+    res.status(404).json({ error: 'Message not found or already read.' });
+    return;
+  }
+  res.json({ ok: true, unreadCount: await countStaffMessagesUnread(req.user!.id) });
+});
+
+app.post('/api/messages/read-all', authMiddleware, async (req, res) => {
+  const updated = await markAllStaffMessagesRead(req.user!.id);
+  res.json({ updated, unreadCount: await countStaffMessagesUnread(req.user!.id) });
 });
 
 app.get('/api/admin/users', authMiddleware, adminMiddleware, async (_req, res) => {

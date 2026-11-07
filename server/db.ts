@@ -144,3 +144,56 @@ export function changePassword(userId: number, currentPassword: string, nextPass
     ? pgAuth.changePassword(userId, currentPassword, nextPassword)
     : Promise.resolve(sqliteAuth.changePassword(userId, currentPassword, nextPassword));
 }
+
+export type { StaffMessageRow } from './staff-messages.js';
+export { STAFF_MESSAGE_BODY_MAX, normalizeStaffMessageBody } from './staff-messages.js';
+
+export function createStaffMessage(...args: Parameters<typeof sqliteAuth.createStaffMessage>) {
+  return postgres() ? pgAuth.createStaffMessage(...args) : Promise.resolve(sqliteAuth.createStaffMessage(...args));
+}
+
+export function getStaffMessageById(...args: Parameters<typeof sqliteAuth.getStaffMessageById>) {
+  return postgres() ? pgAuth.getStaffMessageById(...args) : Promise.resolve(sqliteAuth.getStaffMessageById(...args));
+}
+
+export function listStaffMessagesInbox(...args: Parameters<typeof sqliteAuth.listStaffMessagesInbox>) {
+  return postgres()
+    ? pgAuth.listStaffMessagesInbox(...args)
+    : Promise.resolve(sqliteAuth.listStaffMessagesInbox(...args));
+}
+
+export function listStaffMessagesSent(...args: Parameters<typeof sqliteAuth.listStaffMessagesSent>) {
+  return postgres()
+    ? pgAuth.listStaffMessagesSent(...args)
+    : Promise.resolve(sqliteAuth.listStaffMessagesSent(...args));
+}
+
+export function countStaffMessagesUnread(userId: number) {
+  return postgres()
+    ? pgAuth.countStaffMessagesUnread(userId)
+    : Promise.resolve(sqliteAuth.countStaffMessagesUnread(userId));
+}
+
+export function listStaffMessagesIncomingAfter(...args: Parameters<typeof sqliteAuth.listStaffMessagesIncomingAfter>) {
+  return postgres()
+    ? pgAuth.listStaffMessagesIncomingAfter(...args)
+    : Promise.resolve(sqliteAuth.listStaffMessagesIncomingAfter(...args));
+}
+
+export function markStaffMessageRead(...args: Parameters<typeof sqliteAuth.markStaffMessageRead>) {
+  return postgres()
+    ? pgAuth.markStaffMessageRead(...args)
+    : Promise.resolve(sqliteAuth.markStaffMessageRead(...args));
+}
+
+export function markAllStaffMessagesRead(recipientId: number) {
+  return postgres()
+    ? pgAuth.markAllStaffMessagesRead(recipientId)
+    : Promise.resolve(sqliteAuth.markAllStaffMessagesRead(recipientId));
+}
+
+export function isApprovedStaffUser(userId: number) {
+  return postgres()
+    ? pgAuth.isApprovedStaffUser(userId)
+    : Promise.resolve(sqliteAuth.isApprovedStaffUser(userId));
+}
