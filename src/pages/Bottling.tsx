@@ -632,7 +632,7 @@ export function Bottling() {
     ) {
       const left = unbottledInTankGal ?? 0;
       if (!confirm(
-        `Saving draws ${plannedDrawGal.toFixed(2)} gal for the bottles entered so far. ${left.toFixed(2)} gal stays in the tank so you can continue. Set Finished when leftover should leave the tank or be recorded as variance.`,
+        `Saving draws ${plannedDrawGal.toFixed(2)} gal for the bottles entered so far. ${left.toFixed(2)} gal stays in the tank so you can continue. Set Finished when the leftover should leave the tank or be recorded as variance.`,
       )) {
         return;
       }
@@ -659,7 +659,7 @@ export function Bottling() {
       }
       if (volumeNeedsReason && bottlingVarianceGal != null) {
         const varianceNote = bottlingVarianceGal > 0
-          ? `${bottlingVarianceGal.toFixed(2)} gal over the tank`
+          ? `${bottlingVarianceGal.toFixed(2)} gal more bottled than drawn from the tank`
           : `${Math.abs(bottlingVarianceGal).toFixed(2)} gal still unaccounted (recorded as variance)`;
         notes.push(varianceNote);
       }
@@ -743,7 +743,7 @@ export function Bottling() {
     <div>
       <div className="page-header">
         <h2>Bottling</h2>
-        <p>Plan a bottling, enter bottles filled so far, then finish the run when leftover should leave the tank.</p>
+        <p>Plan a bottling, enter bottles filled so far, then finish the run when the leftover should leave the tank.</p>
         <div className="page-actions">
           <button type="button" className="btn btn-primary" onClick={() => openNew()}>+ New Bottling Run</button>
         </div>
@@ -962,7 +962,7 @@ export function Bottling() {
                 onChange={(bottling_date) => setForm({ ...form, bottling_date })}
               />
               {!isPlanned && plannedScheduleDate && (
-                <p className="field-hint">Date set to today because this left planned.</p>
+                <p className="field-hint">Set to today because this run is no longer planned.</p>
               )}
             </div>
             <div className="form-group">

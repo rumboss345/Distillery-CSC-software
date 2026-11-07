@@ -1617,7 +1617,7 @@ export function Distillation() {
                 onChange={(run_date) => setRunForm({ ...runForm, run_date })}
               />
               {runForm.status !== 'planned' && plannedScheduleDate && (
-                <p className="field-hint">Date set to today because this left planned.</p>
+                <p className="field-hint">Set to today because this run is no longer planned.</p>
               )}
             </div>
             <div className="form-group">

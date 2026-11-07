@@ -27,7 +27,7 @@ export function tankReadingChanged(
 }
 
 export function volumeChangeReasonError(reason: string): string | null {
-  if (!reason.trim()) return 'Say why this was changed.';
+  if (!reason.trim()) return 'Enter why this volume was changed.';
   return null;
 }
 

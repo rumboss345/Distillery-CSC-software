@@ -49,7 +49,7 @@ export function BlendAbvConfirmation({
       </p>
       {targetAbv != null && (
         <p>
-          Target proof: <strong>{targetAbv.toFixed(1)}%</strong>
+          Target ABV: <strong>{targetAbv.toFixed(1)}%</strong>
           <span className={onTarget ? 'wizard-abv-match' : 'wizard-abv-delta'}>
             {' '}— {proofGapDescription(calculatedAbv, targetAbv)}
           </span>

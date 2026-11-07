@@ -58,9 +58,9 @@ describe('blend-abv-confirm', () => {
   });
 
   it('describes the calculated proof against the target, not the other way around', () => {
-    expect(proofGapDescription(36.9, 35)).toBe('calculated is 1.9% above the target');
-    expect(proofGapDescription(33.1, 35)).toBe('calculated is 1.9% below the target');
-    expect(proofGapDescription(35.1, 35)).toBe('matches within 0.3%');
+    expect(proofGapDescription(36.9, 35)).toBe('calculated ABV is 1.9% above the target');
+    expect(proofGapDescription(33.1, 35)).toBe('calculated ABV is 1.9% below the target');
+    expect(proofGapDescription(35.1, 35)).toBe('within 0.3% of the target');
   });
 
   it('sets proofing water so a 0.2 gal 36.9% pull reaches a 35% target', () => {

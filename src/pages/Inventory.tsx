@@ -356,7 +356,7 @@ export function Inventory() {
                 step={0.01}
                 value={costInput}
                 onChange={(e) => setCostInput(e.target.value)}
-                placeholder="Optional — used on owner Production costing"
+                placeholder="Optional — used in the owner's Production costing report"
               />
             </div>
             <div className="form-group">

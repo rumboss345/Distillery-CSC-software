@@ -22,10 +22,10 @@ export function abvMatchesTarget(
 export function proofGapDescription(calculatedAbv: number, targetAbv: number): string {
   const delta = calculatedAbv - targetAbv;
   if (Math.abs(delta) <= ABV_CONFIRM_TOLERANCE) {
-    return `matches within ${ABV_CONFIRM_TOLERANCE}%`;
+    return `within ${ABV_CONFIRM_TOLERANCE}% of the target`;
   }
   const direction = delta > 0 ? 'above' : 'below';
-  return `calculated is ${Math.abs(delta).toFixed(1)}% ${direction} the target`;
+  return `calculated ABV is ${Math.abs(delta).toFixed(1)}% ${direction} the target`;
 }
 
 /** Spirit volume for proofing math — matches analyze (entered qty) and Table 6 solve paths. */

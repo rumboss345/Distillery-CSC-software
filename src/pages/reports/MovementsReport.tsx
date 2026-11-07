@@ -20,7 +20,7 @@ export function MovementsReport() {
   return (
     <ReportTableShell
       title="Liquid movements"
-      description={`Union of cuts, still charges, transfers, water added in a tank, blend draws/outputs, bottling tank draws, and barrel fills. The Tank Transfer page keeps the latest 10 transfers.${employee ? ' Tank transfers and barrel fills are listed under All employees.' : ''}`}
+      description={`Includes cuts, still charges, transfers, water added in a tank, blend draws and outputs, bottling tank draws, and barrel fills. The Tank Transfer page keeps the latest 10 transfers.${employee ? ' Tank transfers and barrel fills are listed under All employees.' : ''}`}
       periodLabel={periodLabel}
       csvFilename={`movements-${range.from ?? 'all'}`}
       csvHeaders={csvHeaders}

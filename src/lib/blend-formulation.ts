@@ -908,7 +908,7 @@ export function suggestCorrections(
     suggestions.push({
       field: 'water',
       direction: 'add',
-      message: `Lab ABV ${labAbv.toFixed(1)}% is above target ${targetAbv}% — add proofing water and re-trial.`,
+      message: `Lab ABV ${labAbv.toFixed(1)}% is above target ${targetAbv}% — add proofing water and retest.`,
     });
   }
   if (targetAbv != null && labAbv != null && labAbv < targetAbv - 0.2) {

@@ -30,7 +30,7 @@ describe('tank volume variance', () => {
   });
 
   it('requires a reason when a volume or ABV reading is changed', () => {
-    expect(volumeChangeReasonError('  ')).toBe('Say why this was changed.');
+    expect(volumeChangeReasonError('  ')).toBe('Enter why this volume was changed.');
     expect(volumeChangeReasonError('Gauge was short')).toBeNull();
   });
 
