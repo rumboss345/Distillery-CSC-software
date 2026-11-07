@@ -39,6 +39,7 @@ import { AdminUsers } from './pages/AdminUsers';
 import { SpiritWeightCalculator } from './pages/SpiritWeightCalculator';
 import { useDatabaseReady } from './db/client-actions';
 import { AppErrorBoundary } from './components/AppErrorBoundary';
+import { MessagingCenter } from './pages/MessagingCenter';
 
 function AppContent() {
   const { ready, error } = useDatabaseReady();
@@ -85,6 +86,7 @@ function AppContent() {
             <Route path="/bottling" element={<Bottling />} />
             <Route path="/inventory" element={<Inventory />} />
             <Route path="/floor-plan" element={<FloorPlanPage />} />
+            <Route path="/messages" element={<MessagingCenter />} />
             <Route path="/reports" element={<ReportsLayout />}>
               <Route index element={<SummaryReport />} />
               <Route path="costing" element={<CostingReport />} />

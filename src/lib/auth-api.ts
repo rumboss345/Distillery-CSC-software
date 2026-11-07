@@ -175,3 +175,47 @@ export async function rejectUser(id: number) {
     method: 'POST',
   });
 }
+
+export interface StaffMessage {
+  id: number;
+  sender_id: number;
+  recipient_id: number;
+  body: string;
+  created_at: string;
+  read_at: string | null;
+  sender_email: string;
+  sender_name: string | null;
+  recipient_email: string;
+  recipient_name: string | null;
+}
+
+export async function fetchStaffMessageSummary() {
+  return apiFetch<{ unreadCount: number }>('/api/messages/summary');
+}
+
+export async function fetchStaffMessages(folder: 'inbox' | 'sent' = 'inbox') {
+  return apiFetch<{ messages: StaffMessage[] }>(`/api/messages?folder=${folder}`);
+}
+
+export async function fetchIncomingStaffMessages(afterId: number) {
+  return apiFetch<{ messages: StaffMessage[] }>(`/api/messages/incoming?afterId=${afterId}`);
+}
+
+export async function sendStaffMessage(recipientId: number, body: string) {
+  return apiFetch<{ message: StaffMessage }>('/api/messages', {
+    method: 'POST',
+    body: JSON.stringify({ recipientId, body }),
+  });
+}
+
+export async function markStaffMessageRead(messageId: number) {
+  return apiFetch<{ ok: true; unreadCount: number }>(`/api/messages/${messageId}/read`, {
+    method: 'PATCH',
+  });
+}
+
+export async function markAllStaffMessagesRead() {
+  return apiFetch<{ updated: number; unreadCount: number }>('/api/messages/read-all', {
+    method: 'POST',
+  });
+}

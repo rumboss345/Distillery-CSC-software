@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { StaffMessageProvider, useStaffMessageContext } from '../context/StaffMessageContext';
 import { dismissSharedNotice, getSharedNotice, subscribeSharedNotice } from '../db/database';
 import type { PermissionKey } from '../lib/permissions';
 import { isAdminRole, roleLabel } from '../lib/roles';
@@ -57,6 +58,7 @@ function navItemVisible(item: NavItem, hasPermission: (key: PermissionKey) => bo
 }
 
 function currentPageLabel(pathname: string, groups: { items: NavItem[] }[], isAdmin: boolean): string {
+  if (pathname.startsWith('/messages')) return 'Messaging Center';
   if (isAdmin && pathname.startsWith('/admin')) return 'Administration';
   const items = groups.flatMap((group) => group.items);
   const match = items
@@ -70,7 +72,16 @@ function currentPageLabel(pathname: string, groups: { items: NavItem[] }[], isAd
 }
 
 export function Layout() {
+  return (
+    <StaffMessageProvider>
+      <LayoutShell />
+    </StaffMessageProvider>
+  );
+}
+
+function LayoutShell() {
   const { user, logout, hasPermission } = useAuth();
+  const { unreadCount } = useStaffMessageContext();
   const location = useLocation();
   const [navOpen, setNavOpen] = useState(false);
   const sharedNotice = useSyncExternalStore(subscribeSharedNotice, getSharedNotice, () => null);
@@ -136,6 +147,23 @@ export function Layout() {
           </button>
         </div>
         <nav className="sidebar-nav" aria-label="Main">
+          <div className="nav-group" role="group" aria-labelledby="nav-group-team">
+            <div id="nav-group-team" className="nav-group-label">Team</div>
+            <NavLink
+              to="/messages"
+              className={({ isActive }) =>
+                `nav-link${isActive ? ' active' : ''}`
+              }
+            >
+              <span className="nav-icon">✉</span>
+              Messaging Center
+              {unreadCount > 0 && (
+                <span className="nav-unread-badge" aria-label={`${unreadCount} unread`}>
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
+            </NavLink>
+          </div>
           {visibleGroups.map((group) => (
             <div key={group.id} className="nav-group" role="group" aria-labelledby={`nav-group-${group.id}`}>
               <div id={`nav-group-${group.id}`} className="nav-group-label">{group.label}</div>

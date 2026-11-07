@@ -24,6 +24,7 @@ import {
   siteOwnerEmail,
   type AuthRole,
 } from '../src/lib/roles.ts';
+import type { StaffMessageRow } from './staff-messages.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = process.env.DATA_DIR ?? join(__dirname, 'data');
@@ -100,6 +101,17 @@ function ensureDb() {
       expires_at TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS staff_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      sender_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      recipient_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      body TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      read_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_staff_messages_recipient ON staff_messages(recipient_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_staff_messages_sender ON staff_messages(sender_id, created_at DESC);
   `);
   migrateUserRoles();
   migrateExistingUserPermissions();
@@ -558,4 +570,136 @@ export function changePassword(
   });
   apply();
   return { ok: true };
+}
+
+const STAFF_MESSAGE_SELECT = `
+  SELECT m.id, m.sender_id, m.recipient_id, m.body, m.created_at, m.read_at,
+    s.email AS sender_email, s.name AS sender_name,
+    r.email AS recipient_email, r.name AS recipient_name
+  FROM staff_messages m
+  JOIN users s ON s.id = m.sender_id
+  JOIN users r ON r.id = m.recipient_id
+`;
+
+function mapStaffMessageRow(row: Record<string, unknown>): StaffMessageRow {
+  return {
+    id: Number(row.id),
+    sender_id: Number(row.sender_id),
+    recipient_id: Number(row.recipient_id),
+    body: String(row.body),
+    created_at: String(row.created_at),
+    read_at: row.read_at == null ? null : String(row.read_at),
+    sender_email: String(row.sender_email),
+    sender_name: row.sender_name == null ? null : String(row.sender_name),
+    recipient_email: String(row.recipient_email),
+    recipient_name: row.recipient_name == null ? null : String(row.recipient_name),
+  };
+}
+
+export function createStaffMessage(
+  senderId: number,
+  recipientId: number,
+  body: string,
+): StaffMessageRow | null {
+  const database = ensureDb();
+  const info = database
+    .prepare(
+      `INSERT INTO staff_messages (sender_id, recipient_id, body)
+       VALUES (?, ?, ?)`,
+    )
+    .run(senderId, recipientId, body);
+  const id = Number(info.lastInsertRowid);
+  return getStaffMessageById(id, senderId);
+}
+
+export function getStaffMessageById(
+  messageId: number,
+  viewerId: number,
+): StaffMessageRow | null {
+  const row = ensureDb()
+    .prepare(
+      `${STAFF_MESSAGE_SELECT}
+       WHERE m.id = ? AND (m.sender_id = ? OR m.recipient_id = ?)`,
+    )
+    .get(messageId, viewerId, viewerId) as Record<string, unknown> | undefined;
+  return row ? mapStaffMessageRow(row) : null;
+}
+
+export function listStaffMessagesInbox(userId: number, limit: number): StaffMessageRow[] {
+  const rows = ensureDb()
+    .prepare(
+      `${STAFF_MESSAGE_SELECT}
+       WHERE m.recipient_id = ?
+       ORDER BY m.created_at DESC
+       LIMIT ?`,
+    )
+    .all(userId, limit) as Record<string, unknown>[];
+  return rows.map(mapStaffMessageRow);
+}
+
+export function listStaffMessagesSent(userId: number, limit: number): StaffMessageRow[] {
+  const rows = ensureDb()
+    .prepare(
+      `${STAFF_MESSAGE_SELECT}
+       WHERE m.sender_id = ?
+       ORDER BY m.created_at DESC
+       LIMIT ?`,
+    )
+    .all(userId, limit) as Record<string, unknown>[];
+  return rows.map(mapStaffMessageRow);
+}
+
+export function countStaffMessagesUnread(userId: number): number {
+  const row = ensureDb()
+    .prepare(
+      `SELECT COUNT(*) AS n FROM staff_messages WHERE recipient_id = ? AND read_at IS NULL`,
+    )
+    .get(userId) as { n: number };
+  return Number(row.n);
+}
+
+export function listStaffMessagesIncomingAfter(
+  userId: number,
+  afterId: number,
+  limit: number,
+): StaffMessageRow[] {
+  const rows = ensureDb()
+    .prepare(
+      `${STAFF_MESSAGE_SELECT}
+       WHERE m.recipient_id = ? AND m.id > ? AND m.read_at IS NULL
+       ORDER BY m.id ASC
+       LIMIT ?`,
+    )
+    .all(userId, afterId, limit) as Record<string, unknown>[];
+  return rows.map(mapStaffMessageRow);
+}
+
+export function markStaffMessageRead(messageId: number, recipientId: number): boolean {
+  const info = ensureDb()
+    .prepare(
+      `UPDATE staff_messages
+       SET read_at = datetime('now')
+       WHERE id = ? AND recipient_id = ? AND read_at IS NULL`,
+    )
+    .run(messageId, recipientId);
+  return info.changes > 0;
+}
+
+export function markAllStaffMessagesRead(recipientId: number): number {
+  const info = ensureDb()
+    .prepare(
+      `UPDATE staff_messages
+       SET read_at = datetime('now')
+       WHERE recipient_id = ? AND read_at IS NULL`,
+    )
+    .run(recipientId);
+  return info.changes;
+}
+
+export function isApprovedStaffUser(userId: number): boolean {
+  const row = ensureDb()
+    .prepare(`SELECT status, role FROM users WHERE id = ?`)
+    .get(userId) as { status: UserStatus; role: UserRole } | undefined;
+  if (!row) return false;
+  return row.status === 'approved' || isAdminRole(row.role);
 }
