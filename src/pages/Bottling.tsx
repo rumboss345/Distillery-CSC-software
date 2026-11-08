@@ -88,6 +88,41 @@ const emptyReturnLine = (): BottlingRunReturnInput => ({
   volume_gal: null,
 });
 
+function returnLineLeaveInSource(
+  sourceTankId: number,
+  unbottledGal: number,
+): BottlingRunReturnInput {
+  const gallons = Math.max(0, unbottledGal);
+  return {
+    holding_tank_equipment_id: sourceTankId,
+    volume_gal: gallons > 0.001 ? Math.round(gallons * 100) / 100 : null,
+  };
+}
+
+function mergeLeaveInSourceDefault(
+  prev: BottlingRunReturnInput[],
+  sourceTankId: number,
+  unbottledGal: number,
+): BottlingRunReturnInput[] {
+  const left = unbottledGal;
+  if (left <= 0.01) return [];
+  const hasOtherDestinations = prev.some(
+    (line) => line.holding_tank_equipment_id != null
+      && line.holding_tank_equipment_id !== sourceTankId
+      && (line.volume_gal ?? 0) > 0.001,
+  );
+  if (hasOtherDestinations) return prev;
+  const defaultLine = returnLineLeaveInSource(sourceTankId, left);
+  if (prev.length === 0) return [defaultLine];
+  if (
+    prev.length === 1
+    && prev[0].holding_tank_equipment_id === sourceTankId
+  ) {
+    return [defaultLine];
+  }
+  return prev;
+}
+
 function returnsFromRun(run: BottlingRunView): BottlingRunReturnInput[] {
   if (run.returns && run.returns.length > 0) {
     return run.returns.map((line) => ({
@@ -177,6 +212,8 @@ export function Bottling() {
   const [sourceType, setSourceType] = useState<BottlingSourceType>('none');
   const [varianceReason, setVarianceReason] = useState('');
   const [returnLines, setReturnLines] = useState<BottlingRunReturnInput[]>([]);
+  /** When true, leftover spirit defaults to the Spirit Source tank instead of variance. */
+  const [returnLeaveInSource, setReturnLeaveInSource] = useState(true);
   const [plannedScheduleDate, setPlannedScheduleDate] = useState<string | null>(null);
   const [equipmentIds, setEquipmentIds] = useState<number[]>([]);
   const [savedEquipmentIds, setSavedEquipmentIds] = useState<number[]>([]);
@@ -326,6 +363,24 @@ export function Bottling() {
       .filter((entry) => entry.maxCount > 0);
   }, [unbottledInTankGal, form.product_name, bottleOptions]);
 
+  useEffect(() => {
+    if (!isFinished || sourceType !== 'tank' || !form.source_holding_tank_equipment_id || !returnLeaveInSource) {
+      return;
+    }
+    const left = unbottledInTankGal;
+    if (left == null || left <= 0.01) {
+      setReturnLines([]);
+      return;
+    }
+    setReturnLines((prev) => mergeLeaveInSourceDefault(prev, form.source_holding_tank_equipment_id!, left));
+  }, [
+    isFinished,
+    sourceType,
+    form.source_holding_tank_equipment_id,
+    unbottledInTankGal,
+    returnLeaveInSource,
+  ]);
+
   const remainingByLineSize = useMemo(() => {
     if (unbottledInTankGal == null || unbottledInTankGal <= 0 || !isRumBottling) return [];
     const sizes = [...new Set(
@@ -370,6 +425,7 @@ export function Bottling() {
     });
     setLines([emptyLine()]);
     setReturnLines([]);
+    setReturnLeaveInSource(true);
     setSourceType('none');
     setVarianceReason('');
     setPlannedScheduleDate(null);
@@ -398,6 +454,7 @@ export function Bottling() {
       });
       setLines([emptyLine()]);
       setReturnLines([]);
+      setReturnLeaveInSource(true);
       setSourceType('tank');
       setVarianceReason('');
       setEquipmentIds([]);
@@ -447,6 +504,9 @@ export function Bottling() {
     });
     setLines(linesFromRun(run));
     setReturnLines(returnsFromRun(run));
+    setReturnLeaveInSource(
+      normalizeBottlingStatus(run.status) !== 'complete',
+    );
     setSourceType(sourceTypeFromRun(run));
     setVarianceReason(run.variance_reason ?? '');
     setPlannedScheduleDate(null);
@@ -465,7 +525,12 @@ export function Bottling() {
       setPlannedScheduleDate(null);
     }
     setForm({ ...form, status, bottling_date });
-    if (status !== 'complete') setReturnLines([]);
+    if (status !== 'complete') {
+      setReturnLines([]);
+      setReturnLeaveInSource(true);
+    } else if (sourceType === 'tank' && form.source_holding_tank_equipment_id) {
+      setReturnLeaveInSource(true);
+    }
   };
 
   const handleSourceTypeChange = (next: BottlingSourceType) => {
@@ -476,7 +541,10 @@ export function Bottling() {
       source_holding_tank_equipment_id: next === 'tank' ? form.source_holding_tank_equipment_id : null,
       source_volume_gal: next === 'tank' ? form.source_volume_gal : null,
     });
-    if (next !== 'tank') setReturnLines([]);
+    if (next !== 'tank') {
+      setReturnLines([]);
+      setReturnLeaveInSource(true);
+    }
   };
 
   const updateReturnLine = (index: number, patch: Partial<BottlingRunReturnInput>) => {
@@ -491,8 +559,12 @@ export function Bottling() {
       const base = prev.length > 0 ? [...prev] : [emptyReturnLine()];
       while (base.length <= index) base.push(emptyReturnLine());
       if (!tankId) {
+        setReturnLeaveInSource(false);
         base[index] = emptyReturnLine();
         return base;
+      }
+      if (tankId !== form.source_holding_tank_equipment_id) {
+        setReturnLeaveInSource(false);
       }
       const others = base.reduce((sum, line, i) => {
         if (i === index) return sum;
@@ -534,6 +606,7 @@ export function Bottling() {
       final_abv: roundAbv(contents?.abv ?? tank?.available_abv ?? form.final_abv),
     });
     setReturnLines([]);
+    setReturnLeaveInSource(true);
   };
 
   const updateLine = (index: number, patch: Partial<BottlingRunLineInput>) => {
@@ -571,8 +644,19 @@ export function Bottling() {
           || `${line.bottle_size_ml} ml bottle`;
         return { ...line, packaging_bottle };
       });
+    const sourceTankId = form.source_holding_tank_equipment_id;
+    let effectiveReturns = returnLines;
+    if (
+      isFinished
+      && sourceType === 'tank'
+      && sourceTankId
+      && returnLeaveInSource
+      && (unbottledInTankGal ?? 0) > 0.01
+    ) {
+      effectiveReturns = mergeLeaveInSourceDefault(returnLines, sourceTankId, unbottledInTankGal ?? 0);
+    }
     const finishReturnGal = sourceType === 'tank'
-      ? returnLines.reduce((sum, line) => {
+      ? effectiveReturns.reduce((sum, line) => {
         const gallons = line.volume_gal ?? 0;
         return sum + (gallons > 0.001 ? gallons : 0);
       }, 0)
@@ -596,7 +680,7 @@ export function Bottling() {
     const varianceNeedsReason = isFinished && sourceType === 'tank' && (volumeNeedsReason || alcoholNeedsReason);
     if (isFinished && sourceType === 'tank' && form.source_holding_tank_equipment_id && selectedTankAvailable) {
       const returnError = bottlingReturnsError({
-        returns: returnLines.map((line) => {
+        returns: effectiveReturns.map((line) => {
           const dest = returnDestinations.find((tank) => tank.id === line.holding_tank_equipment_id);
           return {
             tankId: line.holding_tank_equipment_id,
@@ -621,7 +705,7 @@ export function Bottling() {
         return;
       }
     }
-    const sentReturns = returnLines.filter(
+    const sentReturns = effectiveReturns.filter(
       (line) => line.holding_tank_equipment_id != null && (line.volume_gal ?? 0) > 0.001,
     );
     if (
@@ -676,7 +760,7 @@ export function Bottling() {
         status: bottlingStatus,
         source_barrel_id: sourceType === 'barrel' ? form.source_barrel_id : null,
         source_holding_tank_equipment_id: sourceType === 'tank' ? form.source_holding_tank_equipment_id : null,
-        returns: isFinished && sourceType === 'tank' ? returnLines : [],
+        returns: isFinished && sourceType === 'tank' ? effectiveReturns : [],
         equipment_ids: equipmentIds,
         return_holding_tank_equipment_id: null,
         return_volume_gal: null,
@@ -1202,7 +1286,7 @@ export function Bottling() {
                   </button>
                 </div>
                 <p className="field-hint">
-                  Holding tanks and collection vessels. Choose the Spirit Source to leave product there. Split leftover across more than one tank. Any leftover you do not assign is recorded as variance.
+                  Defaults to leaving leftover in the Spirit Source. Choose another tank to transfer some or all, or pick Record as variance for anything you do not assign here.
                 </p>
                 {shownReturnLines.map((line, index) => {
                   const taken = new Set(
@@ -1223,7 +1307,7 @@ export function Bottling() {
                           value={line.holding_tank_equipment_id ?? ''}
                           onChange={(e) => handleReturnTankChange(index, e.target.value ? parseInt(e.target.value, 10) : null)}
                         >
-                          <option value="">{shownReturnLines.length > 1 ? '— Select tank —' : '— Leave as variance —'}</option>
+                          <option value="">{shownReturnLines.length > 1 ? '— Select tank —' : '— Record as variance —'}</option>
                           {options.map((tank) => (
                             <option key={tank.id} value={tank.id}>
                               {tank.leaveInSource
