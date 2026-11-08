@@ -96,7 +96,7 @@ export function BarrelRackVisual(props: EquipmentVisualProps) {
       <svg viewBox="0 0 150 140" width="100%" height="100%" aria-hidden>
         <defs>
           <linearGradient id={`${uid}-oak`} x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="#c8956c" />
+            <stop offset="0%" stopColor="#ec7eb3" />
             <stop offset="100%" stopColor="#6b3d1f" />
           </linearGradient>
         </defs>

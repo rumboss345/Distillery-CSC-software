@@ -90,8 +90,8 @@
 }
 
 .warehouse-view .warehouse-barrel--selected {
-  border-color: #c8956c;
-  box-shadow: 0 0 0 2px rgba(200, 149, 108, 0.55);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
 .warehouse-view .warehouse-barrel:hover {

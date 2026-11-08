@@ -1,16 +1,16 @@
 :root {
-  --bg: #0f0e0c;
-  --bg-elevated: #1a1816;
-  --bg-card: #262320;
-  --bg-hover: #322e29;
-  --border: #5c534b;
-  --border-subtle: #3f3934;
-  --text: #f5f0e8;
-  --text-muted: #c4bbb3;
-  --text-dim: #b7aea6;
-  --accent: #c8956c;
-  --accent-hover: #d4a67a;
-  --accent-muted: rgba(200, 149, 108, 0.18);
+  --bg: #120d11;
+  --bg-elevated: #1c1418;
+  --bg-card: #271c22;
+  --bg-hover: #34262e;
+  --border: #5c4a56;
+  --border-subtle: #42353c;
+  --text: #faf2f6;
+  --text-muted: #d9c8d0;
+  --text-dim: #bda8b3;
+  --accent: #ec7eb3;
+  --accent-hover: #f39ac5;
+  --accent-muted: rgba(236, 126, 179, 0.2);
   --success: #8fbf9a;
   --success-bg: rgba(143, 191, 154, 0.18);
   --warning: #e0b15a;
@@ -281,7 +281,7 @@ body.nav-open {
   padding: 0.75rem 1rem;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius);
-  background: rgba(100, 140, 200, 0.15);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
   color: var(--text);
 }
 
@@ -587,7 +587,7 @@ body.nav-open {
 }
 
 .trace-hit.selected td {
-  background: rgba(200, 149, 108, 0.16);
+  background: var(--accent-muted);
 }
 
 .trace-path {
@@ -631,7 +631,7 @@ body.nav-open {
 }
 
 .exception-info {
-  background: rgba(100, 140, 200, 0.15);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
   color: var(--text-muted);
 }
 
@@ -1228,7 +1228,7 @@ tr.volume-change-kind:hover td {
 
 .badge-planned, .badge-upcoming { background: var(--info-bg); color: var(--info); }
 .badge-mashing, .badge-washing, .badge-running { background: var(--warning-bg); color: var(--warning); }
-.badge-fermenting { background: rgba(200, 149, 108, 0.2); color: var(--accent); }
+.badge-fermenting { background: var(--accent-muted); color: var(--accent); }
 .badge-complete, .badge-done { background: var(--success-bg); color: var(--success); }
 .badge-discarded, .badge-dumped { background: var(--danger-bg); color: var(--danger); }
 .badge-aging { background: var(--accent-muted); color: var(--accent); }
@@ -3545,12 +3545,12 @@ tr.volume-change-kind:hover td {
 
 .tank-intake-history-item:hover {
   border-color: var(--accent);
-  background: rgba(200, 149, 108, 0.06);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .tank-intake-history-item.selected {
   border-color: var(--accent);
-  background: rgba(200, 149, 108, 0.12);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
 .tank-intake-history-summary {
@@ -3607,7 +3607,7 @@ tr.volume-change-kind:hover td {
   align-items: center;
   justify-content: center;
   padding: 2rem;
-  background: radial-gradient(circle at top, rgba(200, 149, 108, 0.08), transparent 45%), var(--bg);
+  background: radial-gradient(circle at top, color-mix(in srgb, var(--accent) 12%, transparent), transparent 45%), var(--bg);
 }
 
 .auth-card {

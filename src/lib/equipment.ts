@@ -56,7 +56,7 @@ export const TYPE_COLORS: Record<EquipmentType, string> = {
   holding_tank: '#6a9ec9',
   stillage_tank: '#6b6258',
   collection_vessel: '#7c8fd4',
-  pot_still: '#c8956c',
+  pot_still: '#ec7eb3',
   column_still: '#d4a04a',
   boiler: '#c96a6a',
   pump: '#3d8f8a',

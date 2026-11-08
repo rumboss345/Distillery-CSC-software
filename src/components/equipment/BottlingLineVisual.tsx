@@ -23,7 +23,7 @@ export function BottlingLineVisual(props: EquipmentVisualProps) {
             <stop offset="100%" stopColor="#4aa0c4" />
           </linearGradient>
           <linearGradient id={`${uid}-spirit`} x1="0%" y1="100%" x2="0%" y2="0%">
-            <stop offset="0%" stopColor="#c8956c" />
+            <stop offset="0%" stopColor="#ec7eb3" />
             <stop offset="100%" stopColor="#e8c49a" />
           </linearGradient>
           <clipPath id={`${uid}-belt`}>

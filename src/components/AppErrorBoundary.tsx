@@ -35,7 +35,7 @@ export class AppErrorBoundary extends Component<Props, State> {
               maxWidth: '42rem',
               overflow: 'auto',
               padding: '0.75rem',
-              background: 'var(--surface-2, #1a1816)',
+              background: 'var(--bg-elevated, #1c1418)',
               borderRadius: '6px',
               fontSize: '0.85rem',
             }}
