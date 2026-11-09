@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { equipmentReturnState } from '../../lib/equipment-return';
 import { HoldingTankIntakeHistory } from '../HoldingTankIntakeHistory';
-import { Modal } from '../Modal';
+import { HoldingTankIntakeDetailModal } from '../HoldingTankIntakeDetailModal';
 import { StatusBadge } from '../StatusBadge';
 import { AssigneeSelect } from '../AssigneeSelect';
 import {
@@ -37,19 +36,6 @@ import { formatDateDisplay, formatRecordedAt } from '../../lib/date-input';
 import { FERMENTATION_READY_MAX_BRIX, fermentationDaysOverdue, formatDaysOverdue, isBrixReadyForDistillation } from '../../lib/fermentation';
 import { localIsoDate } from '../../lib/planned-event-date';
 import type { AssignedEmployee } from '../../lib/assignee';
-
-const INTAKE_KIND_LABELS: Record<HoldingTankIntakeEntry['kind'], string> = {
-  cut: 'Cut',
-  transfer: 'Transfer',
-  blend: 'Blend',
-  stillage: 'Stillage',
-  opening: 'On hand',
-};
-
-function intakeAbvLabel(entry: HoldingTankIntakeEntry): string {
-  if (entry.kind === 'stillage') return '—';
-  return `${entry.abv.toFixed(1)}%`;
-}
 
 interface ProcessEquipmentDetailPanelProps {
   equipment: FloorEquipmentView | null;
@@ -380,9 +366,10 @@ export function ProcessEquipmentDetailPanel({
       {(equipment.equipment_type === 'holding_tank' || equipment.equipment_type === 'stillage_tank' || equipment.equipment_type === 'collection_vessel') && (
         <HoldingTankIntakeHistory
           tankId={equipment.id}
+          limit={12}
           selectedKey={selectedIntakeKey}
           title="Intake history"
-          hint="Click an entry to view it."
+          hint="Click an entry for batch, cut, proof gallons, and links."
           emptyMessage="No cuts or transfers into this tank yet."
           onSelect={(entry) => {
             setSelectedIntakeKey(holdingTankIntakeKey(entry));
@@ -391,46 +378,13 @@ export function ProcessEquipmentDetailPanel({
         />
       )}
 
-      {viewedIntake && createPortal(
-        <Modal
-          title={`${INTAKE_KIND_LABELS[viewedIntake.kind]} intake`}
+      {viewedIntake && (
+        <HoldingTankIntakeDetailModal
+          entry={viewedIntake}
+          tankName={equipment.name}
+          returnEquipmentId={equipment.id}
           onClose={() => setViewedIntake(null)}
-        >
-          <p className="intake-view-summary">{viewedIntake.summary}</p>
-          <dl className="intake-view-list">
-            <dt>When</dt>
-            <dd>{formatRecordedAt(viewedIntake.occurred_at)}</dd>
-            <dt>Volume</dt>
-            <dd>{viewedIntake.volume_gal.toFixed(1)} gal</dd>
-            <dt>ABV</dt>
-            <dd>{intakeAbvLabel(viewedIntake)}</dd>
-            {viewedIntake.detail && (
-              <>
-                <dt>Source</dt>
-                <dd>{viewedIntake.detail}</dd>
-              </>
-            )}
-            {viewedIntake.notes && (
-              <>
-                <dt>Notes</dt>
-                <dd>{viewedIntake.notes}</dd>
-              </>
-            )}
-          </dl>
-          {viewedIntake.distillationRunId != null && (
-            <p className="intake-view-actions">
-              <Link
-                className="btn btn-sm btn-primary"
-                to={`/distillation?cutsRun=${viewedIntake.distillationRunId}`}
-                state={equipmentReturnState(equipment.id)}
-                onClick={() => setViewedIntake(null)}
-              >
-                {viewedIntake.kind === 'stillage' ? 'View run' : 'View cuts'}
-              </Link>
-            </p>
-          )}
-        </Modal>,
-        document.body,
+        />
       )}
 
       {(onEdit || onRemove) && (

@@ -3596,6 +3596,12 @@ tr.volume-change-kind:hover td {
   margin: 1.25rem 0 0;
 }
 
+.intake-view-actions--row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
 .form-hint {
   margin-bottom: 0;
 }
