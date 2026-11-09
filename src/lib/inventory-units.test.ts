@@ -10,6 +10,7 @@ import {
   inventoryUnitsForKind,
   convertInventoryAdjustment,
   defaultAdjustmentUnit,
+  formatInventoryOnHand,
   inventoryAdjustmentUnits,
 } from './inventory-units';
 
@@ -101,5 +102,13 @@ describe('inventoryCategoryLabel', () => {
     expect(inventoryCategoryLabel('botanicals')).toBe('Botanicals');
     expect(inventoryCategoryLabel('raw sugar')).toBe('Raw Sugar');
     expect(inventoryCategoryLabel('  yeast ')).toBe('Yeast');
+  });
+});
+
+describe('formatInventoryOnHand', () => {
+  it('shows at most two decimal places', () => {
+    expect(formatInventoryOnHand(45.578542579)).toBe('45.58');
+    expect(formatInventoryOnHand(100)).toBe('100');
+    expect(formatInventoryOnHand(-12.3)).toBe('-12.3');
   });
 });

@@ -63,7 +63,7 @@ import {
   VOLUME_LABEL_TARGET,
 } from '../lib/formulation-quantity';
 import { formulationSpiritWeightLb } from '../lib/formulation-spirit';
-import { inventoryCategoryLabel } from '../lib/inventory-units';
+import { formatInventoryOnHand, inventoryCategoryLabel } from '../lib/inventory-units';
 import { LITERS_PER_US_GALLON } from '../lib/material-densities';
 import type {
   BlendIngredientInput,
@@ -1036,7 +1036,7 @@ export function BlendRecipesTab({
                                   unit={ingredient.unit}
                                   options={inventoryOptions.map((item) => ({
                                     value: String(item.id),
-                                    label: `${item.name} (${item.quantity} ${item.unit})`,
+                                    label: `${item.name} (${formatInventoryOnHand(item.quantity)} ${item.unit})`,
                                   }))}
                                   orphanLabel={
                                     ingredient.inventory_item_id != null

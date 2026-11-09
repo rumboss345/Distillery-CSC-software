@@ -83,7 +83,7 @@ import {
   unitsForMeasureMode,
   type MeasureMode,
 } from '../lib/blending';
-import { inventoryCategoryLabel } from '../lib/inventory-units';
+import { formatInventoryOnHand, inventoryCategoryLabel } from '../lib/inventory-units';
 import { previewProofingWaterAdjustment, type ProofingWaterPreview } from '../lib/blend-abv-confirm';
 import { parseBlendRecipeSnapshot } from '../lib/blend-recipe-version';
 import { decimalStringFromNumber } from '../lib/calc-engine/number-bridge';
@@ -2465,7 +2465,7 @@ export function Blending() {
                         unit={ing.unit}
                         options={itemOptions.map((item) => ({
                           value: String(item.id),
-                          label: `${item.name} (${item.quantity} ${item.unit})`,
+                          label: `${item.name} (${formatInventoryOnHand(item.quantity)} ${item.unit})`,
                         }))}
                         orphanLabel={
                           ing.inventory_item_id != null

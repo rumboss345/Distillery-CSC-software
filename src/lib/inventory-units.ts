@@ -203,3 +203,12 @@ export function inventoryCategoryLabel(category: string): string {
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ');
 }
+
+/** On-hand quantity in lists and dropdowns — at most two decimal places. */
+export function formatInventoryOnHand(quantity: number): string {
+  if (!Number.isFinite(quantity)) return '—';
+  return quantity.toLocaleString(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
+}
