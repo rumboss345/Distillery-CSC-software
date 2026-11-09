@@ -2,6 +2,7 @@ import { useState } from 'react';
 import {
   getInventoryItems,
   getInventoryCategories,
+  getInventoryUsageLog,
   saveInventoryItem,
   deleteInventoryItem,
   adjustInventory,
@@ -10,6 +11,7 @@ import {
   useRefreshKey,
 } from '../db/queries';
 import { Modal } from '../components/Modal';
+import { useAuth } from '../context/AuthContext';
 import {
   convertInventoryAdjustment,
   defaultAdjustmentUnit,
@@ -24,6 +26,11 @@ import {
   type InventoryUnitKind,
 } from '../lib/inventory-units';
 import { packagingItemSizeMl } from '../lib/packaging-bottles';
+import {
+  formatInventoryUsageDelta,
+  formatInventoryUsageWhen,
+  inventoryUsageDescription,
+} from '../lib/inventory-usage';
 import type { InventoryCategory, InventoryItem } from '../types';
 
 const emptyItem = (): Omit<InventoryItem, 'id' | 'created_at' | 'updated_at'> => ({
@@ -49,12 +56,15 @@ function formatAdjustQty(value: number): string {
 }
 
 export function Inventory() {
+  const { user } = useAuth();
+  const changedBy = user?.name?.trim() || user?.email || 'Unknown';
   const { key, refresh } = useRefreshKey();
   const items = getInventoryItems();
   const categories = getInventoryCategories();
   const [showForm, setShowForm] = useState(false);
   const [showCategoryForm, setShowCategoryForm] = useState(false);
   const [showAdjust, setShowAdjust] = useState<number | null>(null);
+  const [showHistory, setShowHistory] = useState<number | null>(null);
   const [editId, setEditId] = useState<number | undefined>();
   const [form, setForm] = useState(emptyItem());
   const [categoryName, setCategoryName] = useState('');
@@ -185,6 +195,8 @@ export function Inventory() {
   };
 
   const adjustItem = items.find((i) => i.id === showAdjust) ?? null;
+  const historyItem = items.find((i) => i.id === showHistory) ?? null;
+  const historyRows = historyItem ? getInventoryUsageLog(historyItem.id) : [];
   const adjustTyped = parseFloat(adjustAmount);
   const adjustDelta = adjustItem && !isNaN(adjustTyped)
     ? convertInventoryAdjustment(adjustTyped, adjustUnit || adjustItem.unit, adjustItem.unit)
@@ -198,9 +210,17 @@ export function Inventory() {
     setAdjustUnit(defaultAdjustmentUnit(item.unit));
   };
 
+  const openHistory = (item: InventoryItem) => {
+    setShowHistory(item.id);
+  };
+
   const handleAdjust = () => {
     if (!showAdjust || adjustDelta == null) return;
-    adjustInventory(showAdjust, adjustDelta);
+    adjustInventory(showAdjust, adjustDelta, {
+      kind: 'manual',
+      summary: 'Manual adjustment',
+      changedBy,
+    });
     setShowAdjust(null);
     setAdjustAmount('');
     refresh();
@@ -297,6 +317,14 @@ export function Inventory() {
                     </td>
                     <td>{i.notes}</td>
                     <td className="td-actions">
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-ghost"
+                        data-testid={`inventory-history-${i.id}`}
+                        onClick={() => openHistory(i)}
+                      >
+                        History
+                      </button>
                       <button className="btn btn-sm btn-secondary" onClick={() => openAdjust(i)}>Adjust</button>
                       <button className="btn btn-sm btn-ghost" onClick={() => openEdit(i)}>Edit</button>
                       <button className="btn btn-sm btn-ghost" onClick={() => handleDelete(i.id)}>Delete</button>
@@ -514,6 +542,52 @@ export function Inventory() {
           <div className="form-actions">
             <button className="btn btn-secondary" onClick={() => setShowCategoryForm(false)}>Cancel</button>
             <button className="btn btn-primary" data-testid="save-inventory-category" onClick={handleSaveCategory}>Add Category</button>
+          </div>
+        </Modal>
+      )}
+
+      {showHistory !== null && historyItem && (
+        <Modal title={`Usage history — ${historyItem.name}`} onClose={() => setShowHistory(null)}>
+          <p className="field-hint" style={{ marginBottom: '1rem' }}>
+            Stock changes from manual adjustments, bottling, blending, wash batches, and direct count edits.
+            Only changes made after this feature was added are listed.
+          </p>
+          {historyRows.length === 0 ? (
+            <div className="empty-state">
+              <p>No usage recorded yet for this item.</p>
+            </div>
+          ) : (
+            <div className="table-wrap">
+              <table data-testid="inventory-usage-table">
+                <thead>
+                  <tr>
+                    <th>When</th>
+                    <th className="num">Change</th>
+                    <th className="num">Balance after</th>
+                    <th>Source</th>
+                    <th>By</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {historyRows.map((row) => (
+                    <tr key={row.id}>
+                      <td>{formatInventoryUsageWhen(row.created_at)}</td>
+                      <td className="num">{formatInventoryUsageDelta(row.delta, historyItem.unit)}</td>
+                      <td className="num">
+                        {row.balance_after != null
+                          ? `${formatInventoryOnHand(row.balance_after)} ${historyItem.unit}`
+                          : '—'}
+                      </td>
+                      <td>{inventoryUsageDescription(row)}</td>
+                      <td>{row.changed_by.trim() || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div className="form-actions">
+            <button type="button" className="btn btn-secondary" onClick={() => setShowHistory(null)}>Close</button>
           </div>
         </Modal>
       )}

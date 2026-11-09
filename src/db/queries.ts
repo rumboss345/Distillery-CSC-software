@@ -27,6 +27,7 @@ import { isFermenterSourcedRun, isSpiritStyleRun, isTankSourcedRun, runTypeLabel
 import { DISTILLATION_SOURCE_TANK_REQUIRED } from '../lib/distillation-source-tanks';
 import { activeGinBotanicals, botanicalInventoryAdjustments, ginBotanicalPlaceError, normalizeBotanicalWeightUnit } from '../lib/gin-botanicals';
 import { preparedIngredientName } from '../lib/quick-ingredient';
+import type { InventoryAdjustSource } from '../lib/inventory-usage';
 import {
   chargeExceedsStillCapacity,
   plannedRecordSkipsEquipmentStatus,
@@ -148,6 +149,7 @@ import type {
   FloorEquipmentView,
   FloorPlan,
   InventoryItem,
+  InventoryUsageLog,
   MashBatch,
   MashStatus,
   Recipe,
@@ -409,40 +411,67 @@ function findInventoryItem(category: InventoryItem['category'], name: string): I
   ) ?? undefined;
 }
 
-function applyInventoryDelta(category: InventoryItem['category'], name: string, delta: number): void {
+function applyInventoryDelta(
+  category: InventoryItem['category'],
+  name: string,
+  delta: number,
+  source?: InventoryAdjustSource,
+): void {
   if (!name.trim() || delta === 0) return;
   const item = findInventoryItem(category, name);
   if (!item) return;
-  adjustInventory(item.id, delta);
+  const summary = source?.summary ?? (source?.kind === 'bottling'
+    ? 'Packaging or labels'
+    : source?.kind === 'wash'
+      ? 'Wash batch'
+      : source?.kind === 'distillation'
+        ? 'Gin botanicals'
+        : 'Production use');
+  adjustInventory(item.id, delta, {
+    kind: source?.kind ?? 'system',
+    reference: source?.reference,
+    summary,
+    changedBy: source?.changedBy,
+  });
 }
 
-function deductOneBarrelFromInventory(): void {
+function deductOneBarrelFromInventory(barrelNumber?: string): void {
   const item = findInventoryItem(BARREL_STOCK_CATEGORY, BARREL_STOCK_ITEM_NAME);
   if (!item) {
     throw new Error(
       `Inventory item "${BARREL_STOCK_ITEM_NAME}" was not found. Add it under the barrels category on Inventory.`,
     );
   }
-  adjustInventory(item.id, -1);
+  adjustInventory(item.id, -1, {
+    kind: 'barrel',
+    reference: barrelNumber?.trim() ?? '',
+    summary: 'Barrel filled from stock',
+  });
 }
 
 function syncBottlingPackagingInventory(
   previousLines: BottlingRunLineInput[],
   nextLines: BottlingRunLineInput[],
+  batchNumber?: string,
 ): void {
+  const source: InventoryAdjustSource = {
+    kind: 'bottling',
+    reference: batchNumber?.trim() ?? '',
+    summary: 'Bottling run',
+  };
   const bottleAdj = packagingInventoryAdjustments(
     packagingBottleCountsBySku(previousLines),
     packagingBottleCountsBySku(nextLines),
   );
   for (const [sku, delta] of Object.entries(bottleAdj)) {
-    applyInventoryDelta('packaging', sku, delta);
+    applyInventoryDelta('packaging', sku, delta, { ...source, summary: 'Bottles used' });
   }
   const labelAdj = packagingInventoryAdjustments(
     packagingLabelCountsBySku(previousLines),
     packagingLabelCountsBySku(nextLines),
   );
   for (const [sku, delta] of Object.entries(labelAdj)) {
-    applyInventoryDelta('labels', sku, delta);
+    applyInventoryDelta('labels', sku, delta, { ...source, summary: 'Labels used' });
   }
 }
 
@@ -507,10 +536,20 @@ export function saveInventoryItem(item: Omit<InventoryItem, 'id' | 'created_at' 
   const densityTemp = item.density_temp_c != null && Number.isFinite(item.density_temp_c) ? item.density_temp_c : null;
   const specStatus = item.spec_status === 'verified' || item.spec_status === 'estimated' ? item.spec_status : null;
   if (id) {
+    const previous = queryOne<{ quantity: number }>(
+      'SELECT quantity FROM inventory_items WHERE id = ?',
+      [id],
+    );
     runQuery(
       `UPDATE inventory_items SET name=?, category=?, unit=?, quantity=?, reorder_level=?, cost_per_unit=?, notes=?, package_size_ml=?, density_g_per_ml=?, density_reference=?, abv=?, sugar_mass_fraction=?, solids_mass_fraction=?, density_temp_c=?, spec_status=?, updated_at=datetime('now') WHERE id=?`,
       [item.name, item.category, item.unit, item.quantity, item.reorder_level, costPerUnit, item.notes, packageSizeMl, density, densityReference, abv, sugarFraction, solidsFraction, densityTemp, specStatus, id],
     );
+    if (previous && Math.abs(previous.quantity - item.quantity) > 1e-9) {
+      recordInventoryUsage(id, item.quantity - previous.quantity, item.quantity, {
+        kind: 'count_edit',
+        summary: 'On-hand count edited',
+      });
+    }
   } else {
     insertRow(
       `INSERT INTO inventory_items (name, category, unit, quantity, reorder_level, cost_per_unit, notes, package_size_ml, density_g_per_ml, density_reference, abv, sugar_mass_fraction, solids_mass_fraction, density_temp_c, spec_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -602,13 +641,55 @@ export function saveProductionCostMonthlyOverhead(entries: ProductionCostMonthly
   }
 }
 
-export function adjustInventory(id: number, delta: number): void {
-  const __remote = forwardProductionMutation('adjustInventory', [id, delta]);
+function recordInventoryUsage(
+  itemId: number,
+  delta: number,
+  balanceAfter: number | null,
+  source?: InventoryAdjustSource,
+): void {
+  if (delta === 0) return;
+  const kind = source?.kind ?? 'system';
+  const summary = source?.summary?.trim()
+    ?? (kind === 'manual' ? 'Manual adjustment' : 'Stock change');
+  insertRow(
+    `INSERT INTO inventory_usage_log (
+      inventory_item_id, delta, balance_after, source_kind, source_ref, summary, changed_by
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [
+      itemId,
+      delta,
+      balanceAfter,
+      kind,
+      source?.reference?.trim() ?? '',
+      summary,
+      source?.changedBy?.trim() ?? '',
+    ],
+  );
+}
+
+export function adjustInventory(id: number, delta: number, source?: InventoryAdjustSource): void {
+  const __remote = forwardProductionMutation('adjustInventory', [id, delta, source]);
   if (__remote.forwarded) return __remote.value as never;
 
+  if (delta === 0) return;
   runQuery(
     `UPDATE inventory_items SET quantity = quantity + ?, updated_at = datetime('now') WHERE id = ?`,
     [delta, id],
+  );
+  const row = queryOne<{ quantity: number }>(
+    'SELECT quantity FROM inventory_items WHERE id = ?',
+    [id],
+  );
+  recordInventoryUsage(id, delta, row?.quantity ?? null, source);
+}
+
+export function getInventoryUsageLog(itemId: number, limit = 100): InventoryUsageLog[] {
+  return queryAll<InventoryUsageLog>(
+    `SELECT * FROM inventory_usage_log
+     WHERE inventory_item_id = ?
+     ORDER BY datetime(created_at) DESC, id DESC
+     LIMIT ?`,
+    [itemId, limit],
   );
 }
 
@@ -763,14 +844,20 @@ function nutrientUsageByName(rows: MashBatchNutrientInput[]): Map<string, number
 function applyMashNutrientInventory(
   previous: MashBatchNutrientInput[],
   next: MashBatchNutrientInput[],
+  batchNumber?: string,
 ): void {
+  const source: InventoryAdjustSource = {
+    kind: 'wash',
+    reference: batchNumber?.trim() ?? '',
+    summary: 'Wash nutrients',
+  };
   const prevMap = nutrientUsageByName(previous);
   const nextMap = nutrientUsageByName(next);
   const names = new Set([...prevMap.keys(), ...nextMap.keys()]);
   for (const name of names) {
     const prevLbs = prevMap.get(name) ?? 0;
     const nextLbs = nextMap.get(name) ?? 0;
-    applyInventoryDelta('nutrients', name, prevLbs - nextLbs);
+    applyInventoryDelta('nutrients', name, prevLbs - nextLbs, source);
   }
 }
 
@@ -879,16 +966,21 @@ function applyMashInventoryUsage(
   previousNutrients: MashBatchNutrientInput[] = [],
   nextNutrients: MashBatchNutrientInput[] = [],
 ): void {
+  const source: InventoryAdjustSource = {
+    kind: 'wash',
+    reference: next.batch_number?.trim() ?? previous?.batch_number?.trim() ?? '',
+    summary: 'Wash batch',
+  };
   const prevSugar = previous?.grain_type ?? '';
   const nextSugar = next.grain_type ?? '';
   const prevSugarLbs = previous?.grain_lbs ?? 0;
   const nextSugarLbs = next.grain_lbs ?? 0;
 
   if (prevSugar.trim().toLowerCase() === nextSugar.trim().toLowerCase()) {
-    applyInventoryDelta('sugar', nextSugar, prevSugarLbs - nextSugarLbs);
+    applyInventoryDelta('sugar', nextSugar, prevSugarLbs - nextSugarLbs, { ...source, summary: 'Wash sugar' });
   } else {
-    applyInventoryDelta('sugar', prevSugar, prevSugarLbs);
-    applyInventoryDelta('sugar', nextSugar, -nextSugarLbs);
+    applyInventoryDelta('sugar', prevSugar, prevSugarLbs, { ...source, summary: 'Wash sugar restored' });
+    applyInventoryDelta('sugar', nextSugar, -nextSugarLbs, { ...source, summary: 'Wash sugar' });
   }
 
   const prevYeast = previous?.yeast_strain ?? '';
@@ -897,13 +989,13 @@ function applyMashInventoryUsage(
   const nextYeastLbs = next.yeast_lbs ?? 0;
 
   if (prevYeast.trim().toLowerCase() === nextYeast.trim().toLowerCase()) {
-    applyInventoryDelta('yeast', nextYeast, prevYeastLbs - nextYeastLbs);
+    applyInventoryDelta('yeast', nextYeast, prevYeastLbs - nextYeastLbs, { ...source, summary: 'Wash yeast' });
   } else {
-    applyInventoryDelta('yeast', prevYeast, prevYeastLbs);
-    applyInventoryDelta('yeast', nextYeast, -nextYeastLbs);
+    applyInventoryDelta('yeast', prevYeast, prevYeastLbs, { ...source, summary: 'Wash yeast restored' });
+    applyInventoryDelta('yeast', nextYeast, -nextYeastLbs, { ...source, summary: 'Wash yeast' });
   }
 
-  applyMashNutrientInventory(previousNutrients, nextNutrients);
+  applyMashNutrientInventory(previousNutrients, nextNutrients, source.reference);
 }
 
 export interface FermenterAssignmentInput {
@@ -4625,7 +4717,7 @@ export function saveDistillationRun(
   releaseStillAfterRunningRun(previousRun, run.still_name, run.status);
 
   if (runType === 'gin') {
-    if (botanicals) persistRunBotanicals(runId, botanicals);
+    if (botanicals) persistRunBotanicals(runId, botanicals, run.batch_number);
   } else {
     releaseRunBotanicalInventory(runId);
   }
@@ -4643,29 +4735,42 @@ export function saveDistillationRun(
   return runId;
 }
 
-function applyGinBotanicalInventory(previous: GinBotanicalInput[], next: GinBotanicalInput[]): void {
+function applyGinBotanicalInventory(
+  previous: GinBotanicalInput[],
+  next: GinBotanicalInput[],
+  batchNumber?: string,
+): void {
+  const source: InventoryAdjustSource = {
+    kind: 'distillation',
+    reference: batchNumber?.trim() ?? '',
+    summary: 'Gin botanicals',
+  };
   const adjustments = botanicalInventoryAdjustments(
     previous,
     next,
     (name) => findInventoryItem('botanicals', name)?.unit ?? 'g',
   );
   for (const adjustment of adjustments) {
-    applyInventoryDelta('botanicals', adjustment.name, adjustment.delta);
+    applyInventoryDelta('botanicals', adjustment.name, adjustment.delta, source);
   }
 }
 
 function releaseRunBotanicalInventory(runId: number): void {
   const existing = getRunBotanicals(runId);
   if (existing.length === 0) return;
-  applyGinBotanicalInventory(existing, []);
+  const run = queryOne<{ batch_number: string }>(
+    'SELECT batch_number FROM distillation_runs WHERE id = ?',
+    [runId],
+  );
+  applyGinBotanicalInventory(existing, [], run?.batch_number);
   runQuery('DELETE FROM distillation_run_botanicals WHERE distillation_run_id = ?', [runId]);
 }
 
-function persistRunBotanicals(runId: number, botanicals: GinBotanicalInput[]): void {
+function persistRunBotanicals(runId: number, botanicals: GinBotanicalInput[], batchNumber?: string): void {
   const lines = activeGinBotanicals(botanicals);
   const placeError = ginBotanicalPlaceError(lines);
   if (placeError) throw new Error(placeError);
-  applyGinBotanicalInventory(getRunBotanicals(runId), lines);
+  applyGinBotanicalInventory(getRunBotanicals(runId), lines, batchNumber);
   runQuery('DELETE FROM distillation_run_botanicals WHERE distillation_run_id = ?', [runId]);
   lines.forEach((line, index) => {
     insertRow(
@@ -5007,7 +5112,7 @@ export function saveBarrel(barrel: Omit<Barrel, 'id' | 'created_at'>, id?: numbe
     );
     savedId = id;
   } else {
-    deductOneBarrelFromInventory();
+    deductOneBarrelFromInventory(barrel.barrel_number);
     savedId = insertRow(
       `INSERT INTO barrels (barrel_number, wood_type, capacity_gal, fill_date, spirit_type, source_run_id, source_holding_tank_equipment_id, initial_abv, current_volume_gal, warehouse_location, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
@@ -5543,7 +5648,7 @@ export function saveBottlingRun(
   for (const eqId of equipmentToMarkDirty) {
     markEquipmentDirtyAfterBottling(eqId, header.batch_number);
   }
-  syncBottlingPackagingInventory(previousLines, nextInventory);
+  syncBottlingPackagingInventory(previousLines, nextInventory, header.batch_number);
   syncHoldingTankStatuses();
   syncBottlingEquipmentStatuses();
   recordStatusDateLog({
@@ -5563,7 +5668,7 @@ export function deleteBottlingRun(id: number): void {
   const previousLines = previous && normalizeBottlingStatus(previous.status) !== 'planned'
     ? bottlingLinesToInventoryInput(getBottlingRunLines(id))
     : [];
-  syncBottlingPackagingInventory(previousLines, []);
+  syncBottlingPackagingInventory(previousLines, [], previous?.batch_number);
   deleteStatusDateLog('bottling', id);
   if (previous && normalizeBottlingStatus(previous.status) !== 'planned') {
     for (const eqId of getBottlingRunEquipmentIds(id)) {
@@ -6352,7 +6457,11 @@ export function executeBlendProduct(id: number, outputTankId: number): void {
   }
 
   for (const deduction of inventoryDeductionsForBlend(ingredients)) {
-    adjustInventory(deduction.id, -deduction.quantity);
+    adjustInventory(deduction.id, -deduction.quantity, {
+      kind: 'blend',
+      reference: product.batch_number,
+      summary: 'Blend batch',
+    });
   }
 
   const formulation = computeBlendFormulation(sources, ingredients.map((i) => ({
@@ -6480,7 +6589,11 @@ export function undoBlendProduction(id: number): void {
 
   const ingredients = getBlendIngredients(id);
   for (const deduction of inventoryDeductionsForBlend(ingredients)) {
-    adjustInventory(deduction.id, deduction.quantity);
+    adjustInventory(deduction.id, deduction.quantity, {
+      kind: 'blend',
+      reference: product.batch_number,
+      summary: 'Blend production undone',
+    });
   }
 
   runQuery(

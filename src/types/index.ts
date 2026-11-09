@@ -121,6 +121,18 @@ export interface FloorEquipmentView extends FloorEquipment {
   active_expected_completion_date?: string | null;
 }
 
+export interface InventoryUsageLog {
+  id: number;
+  inventory_item_id: number;
+  delta: number;
+  balance_after: number | null;
+  source_kind: string;
+  source_ref: string;
+  summary: string;
+  changed_by: string;
+  created_at: string;
+}
+
 export interface InventoryItem {
   id: number;
   name: string;
