@@ -2272,6 +2272,7 @@ export function getHoldingTankIntakeHistory(
     run_type: string;
     still_name: string;
     mash_batch: string | null;
+    assigned_user_name: string;
   }>(`
     SELECT
       c.id,
@@ -2284,6 +2285,7 @@ export function getHoldingTankIntakeHistory(
       r.batch_number,
       r.run_type,
       r.still_name,
+      r.assigned_user_name,
       m.batch_number as mash_batch
     FROM distillation_cuts c
     JOIN distillation_runs r ON r.id = c.distillation_run_id
@@ -2300,6 +2302,8 @@ export function getHoldingTankIntakeHistory(
     notes: string;
     source_tank_name: string;
     source_tank_equipment_id: number;
+    spirit_type: string;
+    transfer_date: string;
   }>(`
     SELECT
       t.id,
@@ -2307,6 +2311,8 @@ export function getHoldingTankIntakeHistory(
       t.volume_gal,
       t.abv,
       t.notes,
+      t.spirit_type,
+      t.transfer_date,
       src.name as source_tank_name,
       t.source_tank_equipment_id
     FROM holding_tank_transfers t
@@ -2322,6 +2328,8 @@ export function getHoldingTankIntakeHistory(
     batch_number: string;
     product_name: string;
     notes: string;
+    blend_date: string;
+    assigned_user_name: string;
   }>(`
     SELECT
       id,
@@ -2330,6 +2338,8 @@ export function getHoldingTankIntakeHistory(
       final_abv as abv,
       batch_number,
       product_name,
+      blend_date,
+      assigned_user_name,
       notes
     FROM blend_products
     WHERE output_holding_tank_equipment_id = ?
@@ -2352,6 +2362,12 @@ export function getHoldingTankIntakeHistory(
         summary: `${runLabel} · ${cutLabel} from ${c.batch_number}`,
         detail: detailParts.length > 0 ? detailParts.join(' · ') : undefined,
         notes: c.notes?.trim() || undefined,
+        batchNumber: c.batch_number,
+        runType: c.run_type,
+        cutType: c.cut_type,
+        stillName: c.still_name || undefined,
+        mashBatch: c.mash_batch?.trim() || undefined,
+        recordedBy: c.assigned_user_name?.trim() || undefined,
       };
     }),
     ...transfers.map((t) => {
@@ -2362,6 +2378,7 @@ export function getHoldingTankIntakeHistory(
         new Set(),
       );
       const liquid = transferredLiquidPhrase(moved.productName, moved.distillationLabel);
+      const spiritType = t.spirit_type === 'high_wines' ? 'high_wines' as const : 'low_wines' as const;
       return {
         kind: 'transfer' as const,
         id: t.id,
@@ -2369,9 +2386,12 @@ export function getHoldingTankIntakeHistory(
         volume_gal: t.volume_gal,
         abv: t.abv,
         summary: transferIntakeSummary(t.source_tank_name, liquid),
-        detail: undefined,
+        detail: spiritType === 'high_wines' ? 'High wines transfer' : 'Low wines transfer',
         notes: t.notes?.trim() || undefined,
         sourceTankId: t.source_tank_equipment_id,
+        sourceTankName: t.source_tank_name,
+        spiritType,
+        transferDate: t.transfer_date,
       };
     }),
     ...blends.map((b) => ({
@@ -2384,6 +2404,9 @@ export function getHoldingTankIntakeHistory(
       detail: 'Finished batch',
       notes: b.notes?.trim() || undefined,
       productName: b.product_name,
+      batchNumber: b.batch_number,
+      blendDate: b.blend_date,
+      recordedBy: b.assigned_user_name?.trim() || undefined,
     })),
     ...queryAll<{
       id: number;
@@ -2393,9 +2416,10 @@ export function getHoldingTankIntakeHistory(
       run_type: string;
       still_name: string;
       notes: string;
+      assigned_user_name: string;
     }>(`
       SELECT id, run_date as occurred_at, stillage_volume_gal as volume_gal,
-             batch_number, run_type, still_name, notes
+             batch_number, run_type, still_name, assigned_user_name, notes
       FROM distillation_runs
       WHERE stillage_holding_tank_equipment_id = ?
         AND status = 'complete'
@@ -2411,16 +2435,21 @@ export function getHoldingTankIntakeHistory(
       summary: `${runTypeLabel(row.run_type)} · Stillage from ${row.batch_number}`,
       detail: row.still_name || undefined,
       notes: row.notes?.trim() || undefined,
+      batchNumber: row.batch_number,
+      runType: row.run_type,
+      stillName: row.still_name || undefined,
+      recordedBy: row.assigned_user_name?.trim() || undefined,
     })),
     ...queryAll<{
       id: number;
       occurred_at: string;
       volume_gal: number;
       abv: number;
+      alcohol_gal: number;
       notes: string;
     }>(`
       SELECT id, recorded_at as occurred_at, measured_volume_gal as volume_gal,
-             measured_abv as abv, notes
+             measured_abv as abv, alcohol_gal, notes
       FROM holding_tank_opening_balances
       WHERE tank_equipment_id = ?
     `, [tankId]).map((row) => ({
@@ -2432,6 +2461,7 @@ export function getHoldingTankIntakeHistory(
       summary: row.volume_gal > 0 ? 'On hand' : 'On hand cleared',
       detail: row.notes?.trim() || 'Recorded when tracking started',
       notes: row.notes?.trim() || undefined,
+      alcoholGal: row.alcohol_gal,
     })),
   ];
 

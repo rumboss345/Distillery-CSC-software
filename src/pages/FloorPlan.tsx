@@ -19,6 +19,7 @@ import {
 import { FloorCanvas, FloorLegend } from '../components/FloorCanvas';
 import { ProcessEquipmentCanvas } from '../components/equipment/ProcessEquipmentCanvas';
 import { HoldingTankIntakeHistory } from '../components/HoldingTankIntakeHistory';
+import { HoldingTankIntakeDetailModal } from '../components/HoldingTankIntakeDetailModal';
 import { Modal } from '../components/Modal';
 import { StatusBadge } from '../components/StatusBadge';
 import { StatusDateLog } from '../components/StatusDateLog';
@@ -36,7 +37,7 @@ import {
   type EquipmentIcon,
 } from '../lib/equipment';
 import { equipmentTypeDeleteError } from '../lib/equipment-type';
-import type { EquipmentStatus, FloorEquipment } from '../types';
+import type { EquipmentStatus, FloorEquipment, HoldingTankIntakeEntry } from '../types';
 
 const emptyEquipment = (planId: number, type = 'fermenter'): Omit<FloorEquipment, 'id' | 'created_at'> => {
   const defaults = equipmentTypeDefaults(type);
@@ -86,6 +87,7 @@ export function FloorPlanPage() {
   const [draggingEquipmentId, setDraggingEquipmentId] = useState<number | null>(null);
   const [dropTargetPlanId, setDropTargetPlanId] = useState<number | null>(null);
   const [selectedIntakeKey, setSelectedIntakeKey] = useState<string | null>(null);
+  const [viewedIntake, setViewedIntake] = useState<HoldingTankIntakeEntry | null>(null);
   const [viewMode, setViewMode] = useState<'process' | 'classic'>('process');
   const [showTypeForm, setShowTypeForm] = useState(false);
   const [typeName, setTypeName] = useState('');
@@ -101,6 +103,7 @@ export function FloorPlanPage() {
   const selectEquipment = (id: number | null) => {
     setSelectedId(id);
     setSelectedIntakeKey(null);
+    setViewedIntake(null);
   };
 
   useEffect(() => {
@@ -432,15 +435,14 @@ export function FloorPlanPage() {
               {isLiquidVesselEquipmentType(selected.equipment_type) && (
                 <HoldingTankIntakeHistory
                   tankId={selected.id}
+                  limit={12}
                   selectedKey={selectedIntakeKey}
                   title="Where it came from"
+                  hint="Click an entry for full details."
                   emptyMessage="No cuts or transfers into this tank yet."
                   onSelect={(entry) => {
-                    setSelectedIntakeKey(
-                      selectedIntakeKey === holdingTankIntakeKey(entry)
-                        ? null
-                        : holdingTankIntakeKey(entry),
-                    );
+                    setSelectedIntakeKey(holdingTankIntakeKey(entry));
+                    setViewedIntake(entry);
                   }}
                 />
               )}
@@ -650,6 +652,15 @@ export function FloorPlanPage() {
             </button>
           </div>
         </Modal>
+      )}
+
+      {viewedIntake && selected && (
+        <HoldingTankIntakeDetailModal
+          entry={viewedIntake}
+          tankName={selected.name}
+          returnEquipmentId={selected.id}
+          onClose={() => setViewedIntake(null)}
+        />
       )}
 
       {showPageForm && (

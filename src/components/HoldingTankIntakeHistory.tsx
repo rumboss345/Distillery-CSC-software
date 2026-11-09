@@ -36,7 +36,7 @@ export function HoldingTankIntakeHistory({
 
   const hintText = hint === false
     ? null
-    : hint ?? (onSelect ? 'Select an entry to use its volume and ABV.' : 'Click an entry to highlight its source.');
+    : hint ?? (onSelect ? 'Click an entry for full details.' : 'Click an entry to highlight its source.');
 
   return (
     <div className="tank-intake-history">

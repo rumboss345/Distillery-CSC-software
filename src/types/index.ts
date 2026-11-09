@@ -368,6 +368,18 @@ export interface HoldingTankIntakeEntry {
   productName?: string;
   /** Tank the spirit came from when this intake is a transfer. */
   sourceTankId?: number;
+  batchNumber?: string;
+  runType?: string;
+  cutType?: string;
+  stillName?: string;
+  mashBatch?: string;
+  recordedBy?: string;
+  spiritType?: SpiritTransferType;
+  sourceTankName?: string;
+  transferDate?: string;
+  blendDate?: string;
+  /** Absolute alcohol (wine gallons × ABV) for opening-balance rows. */
+  alcoholGal?: number;
 }
 
 export interface HoldingTankTransfer {
