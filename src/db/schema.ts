@@ -26,6 +26,20 @@ CREATE TABLE IF NOT EXISTS inventory_items (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS inventory_usage_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  inventory_item_id INTEGER NOT NULL REFERENCES inventory_items(id) ON DELETE CASCADE,
+  delta REAL NOT NULL,
+  balance_after REAL,
+  source_kind TEXT NOT NULL DEFAULT 'system',
+  source_ref TEXT NOT NULL DEFAULT '',
+  summary TEXT NOT NULL DEFAULT '',
+  changed_by TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_inventory_usage_item ON inventory_usage_log(inventory_item_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS recipes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL UNIQUE COLLATE NOCASE,
