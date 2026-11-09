@@ -37,7 +37,7 @@ import {
 } from '../db/queries';
 import { useAuth } from '../context/AuthContext';
 import { defaultAssignee } from '../lib/assignee';
-import { inventoryCategoryLabel } from '../lib/inventory-units';
+import { formatInventoryOnHand, inventoryCategoryLabel } from '../lib/inventory-units';
 import { LITERS_PER_US_GALLON } from '../services/spirit-gauging';
 import { IngredientSelect } from './IngredientSelect';
 import type { FormulationKind } from '../lib/formulation-engine';
@@ -634,7 +634,7 @@ export function BlendDesigner({ onUseForBatch }: { onUseForBatch: (recipeId: num
                     unit={row.unit}
                     options={itemOptions.map((item) => ({
                       value: String(item.id),
-                      label: `${item.name} (${item.quantity} ${item.unit})`,
+                      label: `${item.name} (${formatInventoryOnHand(item.quantity)} ${item.unit})`,
                     }))}
                     orphanLabel={
                       row.inventory_item_id != null

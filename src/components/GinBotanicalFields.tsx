@@ -6,6 +6,7 @@ import {
   normalizeBotanicalWeightUnit,
 } from '../lib/gin-botanicals';
 import type { BotanicalPlace } from '../types';
+import { formatInventoryOnHand } from '../lib/inventory-units';
 import { NUTRIENT_UNITS } from '../lib/wash-recipe-nutrients';
 import type { GinBotanicalInput } from '../types';
 
@@ -20,7 +21,7 @@ export function GinBotanicalFields({
 }) {
   const inventoryOptions = getInventoryByCategory('botanicals').map((item) => ({
     value: item.name,
-    label: `${item.name} (${item.quantity} ${item.unit} on hand)`,
+    label: `${item.name} (${formatInventoryOnHand(item.quantity)} ${item.unit} on hand)`,
   }));
   const update = (index: number, patch: Partial<GinBotanicalInput>) => {
     onChange(lines.map((line, i) => (i === index ? { ...line, ...patch } : line)));

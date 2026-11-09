@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { getProductionSummary, getMashBatches, getDistillationRuns, getBarrels, getInventoryItems, barrelBlendProductName, getAllMashFermenterAssignments, useRefreshKey } from '../db/queries';
 import { StatusBadge } from '../components/StatusBadge';
 import { useAuth } from '../context/AuthContext';
-import { inventoryCategoryLabel } from '../lib/inventory-units';
+import { formatInventoryOnHand, inventoryCategoryLabel } from '../lib/inventory-units';
 import { formatDateDisplay } from '../lib/date-input';
 import { fermentationDaysOverdue, formatDaysOverdue, listOverdueFermentations } from '../lib/fermentation';
 import { localIsoDate } from '../lib/planned-event-date';
@@ -249,7 +249,7 @@ export function Dashboard() {
                   <tr key={i.id}>
                     <td><strong>{i.name}</strong></td>
                     <td>{inventoryCategoryLabel(i.category)}</td>
-                    <td className="low-stock num">{i.quantity} {i.unit}</td>
+                    <td className="low-stock num">{formatInventoryOnHand(i.quantity)} {i.unit}</td>
                     <td className="num">{i.reorder_level} {i.unit}</td>
                   </tr>
                 ))}

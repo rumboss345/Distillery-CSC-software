@@ -24,6 +24,7 @@ import {
 } from '../db/queries';
 import { DatePicker } from '../components/DatePicker';
 import { limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
+import { formatInventoryOnHand } from '../lib/inventory-units';
 import { roundAbv } from '../lib/reporting/alcohol-units';
 import { formatDateDisplay } from '../lib/date-input';
 import { latestCompleted } from '../lib/recent-completed';
@@ -1192,7 +1193,7 @@ export function Bottling() {
                         {labelsForLine.map((item) => (
                           <option key={item.name} value={item.name}>
                             {item.id > 0
-                              ? `${item.name} (${item.quantity.toLocaleString()} ${item.unit})`
+                              ? `${item.name} (${formatInventoryOnHand(item.quantity)} ${item.unit})`
                               : item.name}
                           </option>
                         ))}

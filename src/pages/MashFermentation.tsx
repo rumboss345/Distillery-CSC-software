@@ -28,6 +28,7 @@ import { WashBatchDetailsModal } from '../components/WashBatchDetailsModal';
 import { estimateSugarWash } from '../lib/fermentation';
 import { SugarScaleField } from '../components/SugarScaleField';
 import type { MashBatchNutrientInput } from '../types';
+import { formatInventoryOnHand } from '../lib/inventory-units';
 import {
   emptyMashBatchNutrient,
   formatMashBatchNutrientsSummary,
@@ -450,7 +451,7 @@ export function MashFermentation() {
                 unit="lbs"
                 options={sugarItems.map((item) => ({
                   value: item.name,
-                  label: `${item.name} (${item.quantity} ${item.unit} on hand)`,
+                  label: `${item.name} (${formatInventoryOnHand(item.quantity)} ${item.unit} on hand)`,
                 }))}
                 orphanLabel={form.grain_type ? `${form.grain_type} (not in inventory)` : undefined}
                 onSelect={(grain_type) => setForm({ ...form, grain_type })}
@@ -476,7 +477,7 @@ export function MashFermentation() {
                 unit="lbs"
                 options={yeastItems.map((item) => ({
                   value: item.name,
-                  label: `${item.name} (${item.quantity} ${item.unit} on hand)`,
+                  label: `${item.name} (${formatInventoryOnHand(item.quantity)} ${item.unit} on hand)`,
                 }))}
                 orphanLabel={form.yeast_strain ? `${form.yeast_strain} (not in inventory)` : undefined}
                 onSelect={(yeast_strain) => setForm({ ...form, yeast_strain })}
@@ -502,7 +503,7 @@ export function MashFermentation() {
                       unit={normalizeNutrientUnit(row.unit)}
                       options={nutrientItems.map((item) => ({
                         value: item.name,
-                        label: `${item.name} (${item.quantity} ${item.unit} on hand)`,
+                        label: `${item.name} (${formatInventoryOnHand(item.quantity)} ${item.unit} on hand)`,
                       }))}
                       orphanLabel={row.name ? `${row.name} (not in inventory)` : undefined}
                       onSelect={(name) => {

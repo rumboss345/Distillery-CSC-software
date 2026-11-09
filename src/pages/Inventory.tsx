@@ -17,6 +17,7 @@ import {
   inventoryAdjustmentUnits,
   INVENTORY_UNIT_KINDS,
   inventoryCategoryLabel,
+  formatInventoryOnHand,
   inventoryUnitForKind,
   inventoryUnitKind,
   inventoryUnitsForKind,
@@ -44,7 +45,7 @@ const emptyItem = (): Omit<InventoryItem, 'id' | 'created_at' | 'updated_at'> =>
 });
 
 function formatAdjustQty(value: number): string {
-  return value.toLocaleString(undefined, { maximumFractionDigits: 3 });
+  return formatInventoryOnHand(value);
 }
 
 export function Inventory() {
@@ -284,7 +285,7 @@ export function Inventory() {
                       )}
                     </td>
                     <td>{inventoryCategoryLabel(i.category)}</td>
-                    <td className={low ? 'num low-stock' : 'num'}>{i.quantity} {i.unit}</td>
+                    <td className={low ? 'num low-stock' : 'num'}>{formatInventoryOnHand(i.quantity)} {i.unit}</td>
                     <td className="num">{i.reorder_level} {i.unit}</td>
                     <td className="num">{i.cost_per_unit != null ? `$${i.cost_per_unit.toFixed(2)}` : '—'}</td>
                     <td>
@@ -554,7 +555,7 @@ export function Inventory() {
             </div>
           </div>
           <p className="field-hint" data-testid="inventory-adjust-preview">
-            On hand now: {adjustItem.quantity.toLocaleString(undefined, { maximumFractionDigits: 2 })} {adjustItem.unit}.
+            On hand now: {formatInventoryOnHand(adjustItem.quantity)} {adjustItem.unit}.
             {adjustDelta != null && adjustDelta !== 0 && (
               <>
                 {' '}
