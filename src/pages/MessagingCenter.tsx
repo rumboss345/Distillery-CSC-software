@@ -7,12 +7,15 @@ import {
   fetchStaffMessages,
   markAllStaffMessagesRead,
   markStaffMessageRead,
+  sendStaffBroadcast,
   sendStaffMessage,
   type StaffMessage,
 } from '../lib/auth-api';
 import { useStaffMessageContext } from '../context/StaffMessageContext';
 
 type Folder = 'inbox' | 'sent';
+
+const BROADCAST_RECIPIENT = '__all__';
 
 function formatWhen(iso: string): string {
   const date = new Date(iso.includes('T') ? iso : `${iso.replace(' ', 'T')}Z`);
@@ -37,6 +40,7 @@ export function MessagingCenter() {
   const [recipientId, setRecipientId] = useState('');
   const [body, setBody] = useState('');
   const [sendError, setSendError] = useState<string | null>(null);
+  const [sendSuccess, setSendSuccess] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
 
   const composeTo = searchParams.get('to');
@@ -80,18 +84,39 @@ export function MessagingCenter() {
 
   const handleSend = async () => {
     setSendError(null);
-    const id = Number(recipientId);
-    if (!Number.isInteger(id) || id <= 0) {
+    setSendSuccess(null);
+    if (!recipientId) {
       setSendError('Choose who should receive this message.');
+      return;
+    }
+    if (!body.trim()) {
+      setSendError('Enter a message (up to 2000 characters).');
       return;
     }
     setSending(true);
     try {
-      await sendStaffMessage(id, body);
-      setBody('');
-      setSearchParams({});
-      await loadMessages('sent');
-      setFolder('sent');
+      if (recipientId === BROADCAST_RECIPIENT) {
+        const result = await sendStaffBroadcast(body);
+        setBody('');
+        setRecipientId('');
+        setSearchParams({});
+        await loadMessages('sent');
+        setFolder('sent');
+        setSendSuccess(
+          `Sent to everyone on staff (${result.recipientCount} ${result.recipientCount === 1 ? 'person' : 'people'}).`,
+        );
+      } else {
+        const id = Number(recipientId);
+        if (!Number.isInteger(id) || id <= 0) {
+          setSendError('Choose who should receive this message.');
+          return;
+        }
+        await sendStaffMessage(id, body);
+        setBody('');
+        setSearchParams({});
+        await loadMessages('sent');
+        setFolder('sent');
+      }
     } catch (err) {
       setSendError(err instanceof Error ? err.message : 'Could not send the message.');
     } finally {
@@ -142,6 +167,7 @@ export function MessagingCenter() {
               onChange={(e) => setRecipientId(e.target.value)}
             >
               <option value="">Select staff member…</option>
+              <option value={BROADCAST_RECIPIENT}>Everyone on staff</option>
               {recipients.map((row) => (
                 <option key={row.id} value={row.id}>
                   {staffDisplayName(row.name, row.email)}
@@ -161,6 +187,7 @@ export function MessagingCenter() {
             />
           </div>
           {sendError && <p className="field-hint" style={{ color: 'var(--danger, #dc2626)' }}>{sendError}</p>}
+          {sendSuccess && <p className="field-hint">{sendSuccess}</p>}
           <button type="button" className="btn btn-primary" disabled={sending} onClick={() => void handleSend()}>
             {sending ? 'Sending…' : 'Send message'}
           </button>

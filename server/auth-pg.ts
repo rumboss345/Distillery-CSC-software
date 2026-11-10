@@ -456,6 +456,52 @@ function mapStaffMessageRow(row: Record<string, unknown>): StaffMessageRow {
   };
 }
 
+export async function listStaffMessageRecipientIds(excludeUserId: number): Promise<number[]> {
+  const result = await getPool().query(
+    `SELECT id FROM users
+     WHERE id != $1
+       AND (status = 'approved' OR role IN ('admin', 'owner'))`,
+    [excludeUserId],
+  );
+  return result.rows.map((row) => Number((row as { id: number }).id));
+}
+
+export async function createStaffMessageBroadcast(
+  senderId: number,
+  body: string,
+): Promise<{ recipientCount: number; messages: StaffMessageRow[] }> {
+  const recipientIds = await listStaffMessageRecipientIds(senderId);
+  if (recipientIds.length === 0) {
+    return { recipientCount: 0, messages: [] };
+  }
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+    const ids: number[] = [];
+    for (const recipientId of recipientIds) {
+      const inserted = await client.query(
+        `INSERT INTO staff_messages (sender_id, recipient_id, body)
+         VALUES ($1, $2, $3)
+         RETURNING id`,
+        [senderId, recipientId, body],
+      );
+      ids.push(Number(inserted.rows[0]?.id));
+    }
+    await client.query('COMMIT');
+    const messages: StaffMessageRow[] = [];
+    for (const id of ids) {
+      const row = await getStaffMessageById(id, senderId);
+      if (row) messages.push(row);
+    }
+    return { recipientCount: recipientIds.length, messages };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 export async function createStaffMessage(
   senderId: number,
   recipientId: number,

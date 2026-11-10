@@ -52,4 +52,23 @@ describe('staff messages (sqlite auth)', () => {
     const sent = auth.listStaffMessagesSent(sender.id, 10);
     expect(sent).toHaveLength(1);
   });
+
+  it('broadcasts one message to every other approved staff member', () => {
+    const sender = auth.createUserByAdmin(
+      'broadcaster@csc.test',
+      'BroadcastPass1',
+      'Broadcaster',
+      [],
+      [],
+    );
+    const a = auth.createUserByAdmin('staff-a@csc.test', 'StaffPass1', 'Staff A', [], []);
+    const b = auth.createUserByAdmin('staff-b@csc.test', 'StaffPass2', 'Staff B', [], []);
+
+    const expectedCount = auth.listStaffMessageRecipientIds(sender.id).length;
+    const result = auth.createStaffMessageBroadcast(sender.id, 'Line 3 is down for cleaning.');
+    expect(result.recipientCount).toBe(expectedCount);
+    expect(auth.countStaffMessagesUnread(a.id)).toBe(1);
+    expect(auth.countStaffMessagesUnread(b.id)).toBe(1);
+    expect(auth.listStaffMessagesSent(sender.id, 10)).toHaveLength(expectedCount);
+  });
 });

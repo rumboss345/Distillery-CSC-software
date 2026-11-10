@@ -152,6 +152,12 @@ export function createStaffMessage(...args: Parameters<typeof sqliteAuth.createS
   return postgres() ? pgAuth.createStaffMessage(...args) : Promise.resolve(sqliteAuth.createStaffMessage(...args));
 }
 
+export function createStaffMessageBroadcast(...args: Parameters<typeof sqliteAuth.createStaffMessageBroadcast>) {
+  return postgres()
+    ? pgAuth.createStaffMessageBroadcast(...args)
+    : Promise.resolve(sqliteAuth.createStaffMessageBroadcast(...args));
+}
+
 export function getStaffMessageById(...args: Parameters<typeof sqliteAuth.getStaffMessageById>) {
   return postgres() ? pgAuth.getStaffMessageById(...args) : Promise.resolve(sqliteAuth.getStaffMessageById(...args));
 }
