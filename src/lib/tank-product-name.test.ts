@@ -6,6 +6,7 @@ import {
   intakeAtOrBefore,
   productNameFromIntakes,
   productNamesFromRemainingLots,
+  primaryTankLiquidLabel,
   transferIntakeSummary,
   transferredLiquidPhrase,
   type TankLot,
@@ -163,6 +164,33 @@ describe('distillationLabelsFromLots', () => {
       distilled('tails', 'wash', '2026-01-01 10:00:00'),
       distilled('hearts', 'low_wines', '2026-04-01 10:00:00'),
     ])).toBe('Rum Run · Hearts, Low Wine Run · Tails');
+  });
+});
+
+describe('primaryTankLiquidLabel', () => {
+  it('prefers a finished blend name over older distillation labels', () => {
+    expect(primaryTankLiquidLabel([
+      lot('GR Dark', '2026-03-01 10:00:00', 20),
+      {
+        at: '2026-01-01 10:00:00',
+        volumeGal: 10,
+        kind: 'cut',
+        cutType: 'hearts',
+        runType: 'low_wines',
+      },
+    ])).toBe('GR Dark · Rum Run · Hearts');
+  });
+
+  it('uses a saved transfer label when gallons came in by transfer', () => {
+    expect(primaryTankLiquidLabel([
+      {
+        at: '2026-04-02 11:00:00',
+        volumeGal: 7.5,
+        kind: 'transfer',
+        sourceTankId: 3,
+        transferLiquidLabel: 'Dark Rum',
+      },
+    ])).toBe('Dark Rum');
   });
 });
 

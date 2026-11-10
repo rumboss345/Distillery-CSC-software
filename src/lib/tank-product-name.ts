@@ -29,6 +29,8 @@ export interface TankLot {
   runType?: string | null;
   /** Cut and distillation already resolved for liquid that arrived by transfer. */
   distillationLabel?: string | null;
+  /** Contents phrase captured when a transfer was saved (product and cut names). */
+  transferLiquidLabel?: string | null;
 }
 
 export interface TankWithdrawal {
@@ -172,6 +174,42 @@ export function productNamesFromRemainingLots(lots: TankLot[]): string | null {
  * A transfer asks the caller for the source tank's name at that time.
  * A cut, stillage, or opening balance does not use an older blend.
  */
+/** Single line for gallons still in a tank. Blend names come first; multiple layers join with · */
+export function primaryTankLiquidLabel(lots: TankLot[]): string | null {
+  const remaining = lots.filter((lot) => lot.volumeGal > 0.05);
+  if (remaining.length === 0) return null;
+
+  const blendNames = productNamesFromRemainingLots(remaining);
+  const spiritNames = distillationLabelsFromLots(remaining);
+
+  if (blendNames && spiritNames) {
+    return `${blendNames} · ${spiritNames}`;
+  }
+  if (blendNames) return blendNames;
+  if (spiritNames) return spiritNames;
+
+  const ordered = [...remaining].sort((a, b) => storedTime(b.at) - storedTime(a.at));
+  const fallback: string[] = [];
+  for (const lot of ordered) {
+    const label = lot.transferLiquidLabel?.trim()
+      || lot.distillationLabel?.trim()
+      || distillationLotLabel(lot);
+    if (label && !fallback.includes(label)) fallback.push(label);
+  }
+  return fallback.length > 0 ? fallback.join(' · ') : null;
+}
+
+/** What was physically withdrawn from a source tank for a transfer (FIFO). */
+export function liquidLabelForGallonsTaken(lots: TankLot[], volumeGal: number): string | null {
+  if (!(volumeGal > 0.05)) return null;
+  const ordered = lots
+    .filter((lot) => lot.volumeGal > 0.001)
+    .map((lot) => ({ ...lot }))
+    .sort((a, b) => storedTime(a.at) - storedTime(b.at));
+  const taken = consumeOldestLots(ordered, volumeGal);
+  return primaryTankLiquidLabel(taken);
+}
+
 export function productNameFromIntakes(
   entriesNewestFirst: TankProductIntake[],
   resolveTransfer: (sourceTankId: number, occurredAt: string) => string | null,

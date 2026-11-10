@@ -97,7 +97,7 @@ export function buildEquipmentVisualData(
     ? Math.min(100, (currentVolumeGal / capacityGal) * 100)
     : (currentVolumeGal > 0 ? 100 : 0);
 
-  let liquidName = report?.detail || undefined;
+  let liquidName = report?.detail || item.active_liquid_name || undefined;
   if (!liquidName && item.active_batch_number) {
     liquidName = `Wash ${item.active_batch_number}`;
   }

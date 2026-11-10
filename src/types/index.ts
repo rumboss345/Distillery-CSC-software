@@ -391,6 +391,8 @@ export interface HoldingTankTransfer {
   abv: number;
   transfer_date: string;
   notes: string;
+  /** Product / cut phrase withdrawn from the source when this transfer was saved. */
+  liquid_label?: string;
   created_at: string;
 }
 

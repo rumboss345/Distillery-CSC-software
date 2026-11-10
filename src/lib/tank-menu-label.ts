@@ -2,6 +2,7 @@ import {
   getCollectionVesselStoredCutType,
   getHoldingTankContents,
   getHoldingTankIntakeHistory,
+  holdingTankContentsLabel,
   holdingTankDistillationContents,
   holdingTankProductName,
 } from '../db/queries';
@@ -58,6 +59,8 @@ function originIntakeAbv(tankId: number): number | null {
 export function tankContentsPhrase(tankId: number): string | null {
   const ledger = getHoldingTankContents(tankId);
   if (!(ledger.volume_gal > 0.001)) return null;
+  const label = holdingTankContentsLabel(tankId, ledger.volume_gal);
+  if (label) return label;
   const product = holdingTankProductName(tankId, ledger.volume_gal);
   if (product) return product;
   const distilled = holdingTankDistillationContents(tankId, ledger.volume_gal);

@@ -323,6 +323,13 @@ export async function migrateDatabase(): Promise<void> {
       );
       await client.query(`INSERT INTO schema_migrations (version) VALUES ('016')`);
     }
+    const transferLiquidLabelMigration = await client.query('SELECT version FROM schema_migrations WHERE version = $1', ['017']);
+    if (transferLiquidLabelMigration.rowCount === 0) {
+      await client.query(
+        `ALTER TABLE holding_tank_transfers ADD COLUMN IF NOT EXISTS liquid_label TEXT NOT NULL DEFAULT ''`,
+      );
+      await client.query(`INSERT INTO schema_migrations (version) VALUES ('017')`);
+    }
     await client.query(`
       INSERT INTO inventory_categories (name)
       SELECT 'botanicals'
