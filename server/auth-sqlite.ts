@@ -596,6 +596,43 @@ function mapStaffMessageRow(row: Record<string, unknown>): StaffMessageRow {
   };
 }
 
+export function listStaffMessageRecipientIds(excludeUserId: number): number[] {
+  const rows = ensureDb()
+    .prepare(
+      `SELECT id FROM users
+       WHERE id != ?
+         AND (status = 'approved' OR role IN ('admin', 'owner'))`,
+    )
+    .all(excludeUserId) as { id: number }[];
+  return rows.map((row) => row.id);
+}
+
+export function createStaffMessageBroadcast(
+  senderId: number,
+  body: string,
+): { recipientCount: number; messages: StaffMessageRow[] } {
+  const recipientIds = listStaffMessageRecipientIds(senderId);
+  if (recipientIds.length === 0) {
+    return { recipientCount: 0, messages: [] };
+  }
+  const database = ensureDb();
+  const insert = database.prepare(
+    `INSERT INTO staff_messages (sender_id, recipient_id, body) VALUES (?, ?, ?)`,
+  );
+  const createdIds = database.transaction(() => {
+    const ids: number[] = [];
+    for (const recipientId of recipientIds) {
+      const info = insert.run(senderId, recipientId, body);
+      ids.push(Number(info.lastInsertRowid));
+    }
+    return ids;
+  })();
+  const messages = createdIds
+    .map((id) => getStaffMessageById(id, senderId))
+    .filter((row): row is StaffMessageRow => row != null);
+  return { recipientCount: recipientIds.length, messages };
+}
+
 export function createStaffMessage(
   senderId: number,
   recipientId: number,

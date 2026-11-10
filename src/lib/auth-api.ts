@@ -208,6 +208,13 @@ export async function sendStaffMessage(recipientId: number, body: string) {
   });
 }
 
+export async function sendStaffBroadcast(body: string) {
+  return apiFetch<{ broadcast: true; recipientCount: number }>('/api/messages', {
+    method: 'POST',
+    body: JSON.stringify({ broadcast: true, body }),
+  });
+}
+
 export async function markStaffMessageRead(messageId: number) {
   return apiFetch<{ ok: true; unreadCount: number }>(`/api/messages/${messageId}/read`, {
     method: 'PATCH',

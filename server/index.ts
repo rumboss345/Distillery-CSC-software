@@ -51,6 +51,7 @@ import {
   updateUserByAdmin,
   countStaffMessagesUnread,
   createStaffMessage,
+  createStaffMessageBroadcast,
   listStaffMessagesIncomingAfter,
   listStaffMessagesInbox,
   listStaffMessagesSent,
@@ -481,18 +482,29 @@ app.get('/api/messages/incoming', authMiddleware, async (req, res) => {
 
 app.post('/api/messages', authMiddleware, async (req, res) => {
   const senderId = req.user!.id;
-  const recipientId = Number(req.body.recipientId);
   const body = normalizeStaffMessageBody(String(req.body.body ?? ''));
+  if (!body) {
+    res.status(400).json({ error: 'Enter a message (up to 2000 characters).' });
+    return;
+  }
+
+  if (req.body.broadcast === true) {
+    const result = await createStaffMessageBroadcast(senderId, body);
+    if (result.recipientCount === 0) {
+      res.status(400).json({ error: 'No other staff members are available to message.' });
+      return;
+    }
+    res.status(201).json({ broadcast: true, recipientCount: result.recipientCount });
+    return;
+  }
+
+  const recipientId = Number(req.body.recipientId);
   if (!Number.isInteger(recipientId) || recipientId <= 0) {
     res.status(400).json({ error: 'Choose who should receive this message.' });
     return;
   }
   if (recipientId === senderId) {
     res.status(400).json({ error: 'You cannot message yourself.' });
-    return;
-  }
-  if (!body) {
-    res.status(400).json({ error: 'Enter a message (up to 2000 characters).' });
     return;
   }
   const recipientOk = await isApprovedStaffUser(recipientId);
