@@ -27,6 +27,7 @@ import {
 import { EquipmentVisual } from './EquipmentVisual';
 import { ProcessEquipmentDetailPanel } from './ProcessEquipmentDetailPanel';
 import { fermentationDaysOverdue, formatDaysOverdue } from '../../lib/fermentation';
+import { stillageTankNeedsDump } from '../../lib/stillage';
 import { localIsoDate } from '../../lib/planned-event-date';
 import {
   isEquipmentContextMenuPointer,
@@ -554,11 +555,17 @@ export function ProcessEquipmentCanvas({
               const daysOverdue = item.equipment_type === 'fermenter'
                 ? fermentationDaysOverdue(item.active_mash_status, item.active_expected_completion_date, today)
                 : 0;
+              const stillageNeedsDump = stillageTankNeedsDump({
+                equipmentType: item.equipment_type,
+                volumeGal: visual.currentVolumeGal,
+                capacityGal: visual.capacityGal,
+                fillPercent: visual.fillPercent,
+              });
 
               return (
                 <div
                   key={item.id}
-                  className={`process-equipment-node${isDragging ? ' process-equipment-node--dragging' : ''}${selectedId === item.id ? ' process-equipment-node--selected' : ''}${visual.isFermenting ? ' process-equipment-node--fermenting' : ''}${outOfService ? ' process-equipment-node--out-of-service' : ''}${needsCleaning ? ' process-equipment-node--needs-cleaning' : ''}${cleaningOverdue ? ' process-equipment-node--cleaning-overdue' : ''}${repairNote ? ' process-equipment-node--repair-note' : ''}${hasMaintenanceTag ? ' process-equipment-node--has-maintenance' : ''}${daysOverdue > 0 ? ' process-equipment-node--overdue' : ''}`}
+                  className={`process-equipment-node${isDragging ? ' process-equipment-node--dragging' : ''}${selectedId === item.id ? ' process-equipment-node--selected' : ''}${visual.isFermenting ? ' process-equipment-node--fermenting' : ''}${outOfService ? ' process-equipment-node--out-of-service' : ''}${needsCleaning ? ' process-equipment-node--needs-cleaning' : ''}${cleaningOverdue ? ' process-equipment-node--cleaning-overdue' : ''}${stillageNeedsDump ? ' process-equipment-node--stillage-dump' : ''}${repairNote ? ' process-equipment-node--repair-note' : ''}${hasMaintenanceTag ? ' process-equipment-node--has-maintenance' : ''}${daysOverdue > 0 ? ' process-equipment-node--overdue' : ''}`}
                   style={{ left: pos.x, top: pos.y }}
                   onPointerDown={(e) => onEquipmentPointerDown(e, item)}
                   onContextMenu={(e) => onEquipmentContextMenu(e, item)}
@@ -575,6 +582,9 @@ export function ProcessEquipmentCanvas({
                       visual.fermenterLatestBrix != null ? `${visual.fermenterLatestBrix.toFixed(1)}° Brix` : null,
                       daysOverdue > 0 ? formatDaysOverdue(daysOverdue) : null,
                       cleaningOverdue ? `Dirty ${cleaningDaysDirty} days — clean now` : null,
+                      stillageNeedsDump
+                        ? `Stillage over 75% full — dump or transfer out`
+                        : null,
                     ],
                   })}
                 >
@@ -609,6 +619,15 @@ export function ProcessEquipmentCanvas({
                   {daysOverdue > 0 && (
                     <div className="process-equipment-overdue-badge" data-testid="process-overdue-badge">
                       Overdue {daysOverdue}d
+                    </div>
+                  )}
+                  {stillageNeedsDump && (
+                    <div
+                      className="process-equipment-stillage-dump-badge"
+                      data-testid="process-stillage-dump-badge"
+                      aria-label="Stillage tank over 75% full — dump or transfer out"
+                    >
+                      Dump
                     </div>
                   )}
                   {repairNote && (

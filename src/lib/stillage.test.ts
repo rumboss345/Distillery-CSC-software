@@ -6,9 +6,30 @@ import {
   runAsksForStillage,
   stillageSaveError,
   stillageSummary,
+  stillageTankNeedsDump,
   stillageTransferError,
   suggestedStillageVolumeGal,
 } from './stillage';
+
+describe('stillage tank dump alert', () => {
+  it('flags stillage tanks above 75% full', () => {
+    expect(stillageTankNeedsDump({
+      equipmentType: 'stillage_tank',
+      volumeGal: 4000,
+      capacityGal: 5000,
+    })).toBe(true);
+    expect(stillageTankNeedsDump({
+      equipmentType: 'stillage_tank',
+      volumeGal: 3750,
+      capacityGal: 5000,
+    })).toBe(false);
+    expect(stillageTankNeedsDump({
+      equipmentType: 'holding_tank',
+      volumeGal: 4000,
+      capacityGal: 5000,
+    })).toBe(false);
+  });
+});
 
 describe('suggested stillage volume', () => {
   it('starts from the charge minus the gallons collected', () => {
