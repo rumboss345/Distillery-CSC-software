@@ -34,6 +34,7 @@ import {
 } from '../../lib/equipment-maintenance';
 import { formatDateDisplay, formatRecordedAt } from '../../lib/date-input';
 import { FERMENTATION_READY_MAX_BRIX, fermentationDaysOverdue, formatDaysOverdue, isBrixReadyForDistillation } from '../../lib/fermentation';
+import { stillageTankNeedsDump } from '../../lib/stillage';
 import { localIsoDate } from '../../lib/planned-event-date';
 import type { AssignedEmployee } from '../../lib/assignee';
 
@@ -84,6 +85,12 @@ export function ProcessEquipmentDetailPanel({
     ? equipmentCleaningDaysDirty(getCleaningFlaggedAtByEquipmentId().get(equipment.id), localIsoDate())
     : 0;
   const cleaningOverdue = equipmentCleaningOverdueFlash(cleaningDaysDirty);
+  const stillageNeedsDump = stillageTankNeedsDump({
+    equipmentType: equipment.equipment_type,
+    volumeGal: visual.currentVolumeGal,
+    capacityGal: visual.capacityGal,
+    fillPercent: visual.fillPercent,
+  });
   const hasLiquid = visual.currentVolumeGal > 0;
   const isVolumeTank = equipment.equipment_type === 'holding_tank'
     || equipment.equipment_type === 'stillage_tank'
@@ -179,6 +186,21 @@ export function ProcessEquipmentDetailPanel({
           </p>
           <p className="field-hint" style={{ marginTop: '0.5rem' }}>
             Names follow blend batches and intakes in this tank. After blending, execute the batch into the tank that should carry the product name.
+          </p>
+        </div>
+      )}
+
+      {stillageNeedsDump && (
+        <div
+          className="process-equipment-cleaning-banner process-equipment-cleaning-banner--overdue process-equipment-stillage-dump-banner"
+          role="status"
+          data-testid="stillage-dump-banner"
+        >
+          <strong>Stillage over 75% full — dump or transfer out</strong>
+          <p className="field-hint" style={{ margin: '0.35rem 0 0' }}>
+            Use{' '}
+            <Link to="/tank-transfer" state={equipmentReturnState(equipment.id)}>Tank transfer</Link>
+            {' '}to move stillage or discard it before the next run fills this tank.
           </p>
         </div>
       )}

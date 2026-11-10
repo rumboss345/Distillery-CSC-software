@@ -8,6 +8,7 @@ import {
 } from '../lib/equipment-cleaning';
 import { getCleaningFlaggedAtByEquipmentId } from '../db/queries';
 import { localIsoDate } from '../lib/planned-event-date';
+import { stillageTankNeedsDump } from '../lib/stillage';
 
 const PX_PER_FT = 10;
 
@@ -135,6 +136,11 @@ export function FloorCanvas({
           const cleaningOverdue = needsCleaning && equipmentCleaningOverdueFlash(
             equipmentCleaningDaysDirty(cleaningFlaggedAt.get(item.id), today),
           );
+          const stillageNeedsDump = stillageTankNeedsDump({
+            equipmentType: item.equipment_type,
+            volumeGal: item.active_volume_gal ?? 0,
+            capacityGal: item.capacity_gal,
+          });
           const icon = resolveEquipmentIcon(item.icon, item.equipment_type);
           const posX = isDragging && livePos ? livePos.x : item.pos_x_ft;
           const posY = isDragging && livePos ? livePos.y : item.pos_y_ft;
@@ -144,7 +150,7 @@ export function FloorCanvas({
           return (
             <div
               key={item.id}
-              className={`floor-equipment floor-equipment--${item.equipment_type}${isSelected ? ' selected' : ''}${item.status === 'in_use' ? ' in-use' : ''}${isFermenting ? ' fermenting' : ''}${item.status === 'cleaning' ? ' cleaning' : ''}${cleaningOverdue ? ' cleaning-overdue' : ''}${item.status === 'offline' ? ' offline' : ''}${isDragging ? ' dragging' : ''}`}
+              className={`floor-equipment floor-equipment--${item.equipment_type}${isSelected ? ' selected' : ''}${item.status === 'in_use' ? ' in-use' : ''}${isFermenting ? ' fermenting' : ''}${item.status === 'cleaning' ? ' cleaning' : ''}${cleaningOverdue ? ' cleaning-overdue' : ''}${stillageNeedsDump ? ' stillage-dump-overdue' : ''}${item.status === 'offline' ? ' offline' : ''}${isDragging ? ' dragging' : ''}`}
               style={{
                 left: posX * PX_PER_FT,
                 top: posY * PX_PER_FT,
@@ -220,6 +226,11 @@ export function FloorCanvas({
                     : ''}
               </div>
               {item.status === 'in_use' && <div className="floor-equipment-badge">Active</div>}
+              {stillageNeedsDump && (
+                <div className="floor-equipment-badge floor-equipment-badge--dump" data-testid="floor-stillage-dump-badge">
+                  Dump
+                </div>
+              )}
             </div>
           );
         })}

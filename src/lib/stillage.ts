@@ -24,6 +24,30 @@ export function isStillageTankType(type: string | null | undefined): boolean {
   return type === 'stillage_tank';
 }
 
+/** Flash stillage tanks on the floor plan when over this fill level (dump / transfer out). */
+export const STILLAGE_DUMP_MIN_FILL_PERCENT = 75;
+
+export function stillageTankFillPercent(volumeGal: number, capacityGal: number): number {
+  if (!(capacityGal > 0)) return volumeGal > 0 ? 100 : 0;
+  return (Math.max(0, volumeGal) / capacityGal) * 100;
+}
+
+export function stillageTankNeedsDump(input: {
+  equipmentType: string | null | undefined;
+  volumeGal?: number | null;
+  capacityGal?: number | null;
+  fillPercent?: number | null;
+}): boolean {
+  if (!isStillageTankType(input.equipmentType)) return false;
+  const volume = input.volumeGal ?? 0;
+  if (!(volume > 0.05)) return false;
+  const capacity = input.capacityGal ?? 0;
+  const percent = input.fillPercent != null && Number.isFinite(input.fillPercent)
+    ? input.fillPercent
+    : stillageTankFillPercent(volume, capacity);
+  return percent > STILLAGE_DUMP_MIN_FILL_PERCENT;
+}
+
 export function distillationStillageTankError(tankName: string): string {
   return `${tankName} is not a stillage tank. Stillage from a distillation can only go into a stillage tank, or be discarded.`;
 }
