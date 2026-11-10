@@ -1572,6 +1572,17 @@ function migrateAdvancedBlending(): void {
   migrateBottlingStatusColumn();
   migrateBottlingRunEquipment();
   migrateInventoryUsageLog();
+  migrateHoldingTankTransferLiquidLabel();
+}
+
+function migrateHoldingTankTransferLiquidLabel(): void {
+  if (!db) return;
+  const hasColumn = queryOne<{ name: string }>(
+    "SELECT name FROM pragma_table_info('holding_tank_transfers') WHERE name = 'liquid_label'",
+  );
+  if (!hasColumn) {
+    db.run(`ALTER TABLE holding_tank_transfers ADD COLUMN liquid_label TEXT NOT NULL DEFAULT ''`);
+  }
 }
 
 function migrateInventoryUsageLog(): void {

@@ -177,6 +177,9 @@ export function ProcessEquipmentDetailPanel({
             {visual.estimatedAbv == null && visual.abv != null && visual.abv > 0 ? ` · ${visual.abv.toFixed(1)}% ABV` : ''}
             {visual.capacityGal > 0 ? ` · ${Math.round(visual.fillPercent)}% full` : ''}
           </p>
+          <p className="field-hint" style={{ marginTop: '0.5rem' }}>
+            Names follow blend batches and intakes in this tank. After blending, execute the batch into the tank that should carry the product name.
+          </p>
         </div>
       )}
 

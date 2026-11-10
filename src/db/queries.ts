@@ -66,6 +66,7 @@ import {
   transferIntakeSummary,
   transferredLiquidPhrase,
   intakeAtOrBefore,
+  primaryTankLiquidLabel,
   productNamesFromRemainingLots,
   TANK_PRODUCT_WALK_LIMIT,
   type TankLot,
@@ -2304,6 +2305,7 @@ export function getHoldingTankIntakeHistory(
     source_tank_equipment_id: number;
     spirit_type: string;
     transfer_date: string;
+    liquid_label: string;
   }>(`
     SELECT
       t.id,
@@ -2313,6 +2315,7 @@ export function getHoldingTankIntakeHistory(
       t.notes,
       t.spirit_type,
       t.transfer_date,
+      COALESCE(t.liquid_label, '') as liquid_label,
       src.name as source_tank_name,
       t.source_tank_equipment_id
     FROM holding_tank_transfers t
@@ -2377,7 +2380,8 @@ export function getHoldingTankIntakeHistory(
         t.volume_gal,
         new Set(),
       );
-      const liquid = transferredLiquidPhrase(moved.productName, moved.distillationLabel);
+      const stored = t.liquid_label?.trim() || '';
+      const liquid = stored || transferredLiquidPhrase(moved.productName, moved.distillationLabel);
       const spiritType = t.spirit_type === 'high_wines' ? 'high_wines' as const : 'low_wines' as const;
       return {
         kind: 'transfer' as const,
@@ -2492,8 +2496,14 @@ function tankLotsOnHand(tankId: number, asOf: string | null): { ins: TankLot[]; 
     });
   }
 
-  for (const row of queryAll<{ at: string; volume_gal: number; source_tank_equipment_id: number }>(`
-    SELECT COALESCE(created_at, transfer_date) as at, volume_gal, source_tank_equipment_id
+  for (const row of queryAll<{
+    at: string;
+    volume_gal: number;
+    source_tank_equipment_id: number;
+    liquid_label: string;
+  }>(`
+    SELECT COALESCE(created_at, transfer_date) as at, volume_gal, source_tank_equipment_id,
+           COALESCE(liquid_label, '') as liquid_label
     FROM holding_tank_transfers
     WHERE dest_tank_equipment_id = ? AND volume_gal > 0
   `, [tankId])) {
@@ -2503,6 +2513,7 @@ function tankLotsOnHand(tankId: number, asOf: string | null): { ins: TankLot[]; 
       volumeGal: row.volume_gal,
       kind: 'transfer',
       sourceTankId: row.source_tank_equipment_id,
+      transferLiquidLabel: row.liquid_label?.trim() || null,
     });
   }
 
@@ -2651,6 +2662,7 @@ function tankLotsOnHand(tankId: number, asOf: string | null): { ins: TankLot[]; 
 function annotateTransferLots(lots: TankLot[], seen: Set<number>): void {
   for (const lot of lots) {
     if (lot.kind !== 'transfer' || !lot.sourceTankId) continue;
+    if (lot.transferLiquidLabel?.trim()) continue;
     if (lot.productName?.trim() && lot.distillationLabel?.trim()) continue;
     const details = withdrawnDetails(lot.sourceTankId, lot.at, lot.volumeGal, seen);
     if (!lot.productName?.trim()) lot.productName = details.productName;
@@ -2728,6 +2740,34 @@ export function holdingTankProductName(tankId: number, volumeGal?: number): stri
   const volume = volumeGal ?? getHoldingTankContents(tankId).volume_gal;
   if (!(volume > 0.05)) return null;
   return blendProductNameAt(tankId, null, new Set());
+}
+
+function tankRemainingLots(tankId: number, asOf: string | null): TankLot[] {
+  const { ins, outs } = tankLotsOnHand(tankId, asOf);
+  const remaining = applyTankWithdrawals(ins, outs);
+  annotateTransferLots(remaining, new Set());
+  return remaining;
+}
+
+/**
+ * Best single label for what is in a tank now: finished blend names first,
+ * then saved transfer phrases, then distillation cuts still on hand.
+ */
+export function holdingTankContentsLabel(tankId: number, volumeGal?: number): string | null {
+  const volume = volumeGal ?? getHoldingTankContents(tankId).volume_gal;
+  if (!(volume > 0.05)) return null;
+  return primaryTankLiquidLabel(tankRemainingLots(tankId, null));
+}
+
+function withdrawnLiquidLabelForTransfer(
+  sourceTankId: number,
+  at: string,
+  volumeGal: number,
+): string {
+  const details = withdrawnDetails(sourceTankId, at, volumeGal, new Set());
+  const phrase = transferredLiquidPhrase(details.productName, details.distillationLabel);
+  if (phrase?.trim()) return phrase.trim();
+  return holdingTankContentsLabel(sourceTankId) ?? '';
 }
 
 /** Product name of a tank at a fill or transfer, even if that tank is empty now. */
@@ -2832,10 +2872,16 @@ export function saveHoldingTankTransfer(
   if (transfer.volume_gal > available.volume_gal + 0.01) {
     throw new Error(`Only ${available.volume_gal.toFixed(1)} gal available in the source tank.`);
   }
+  const occurredAt = transfer.transfer_date?.trim() || localIsoDate(new Date());
+  const liquidLabel = withdrawnLiquidLabelForTransfer(
+    transfer.source_tank_equipment_id,
+    occurredAt,
+    transfer.volume_gal,
+  );
   insertRow(
     `INSERT INTO holding_tank_transfers
-      (spirit_type, source_tank_equipment_id, dest_tank_equipment_id, volume_gal, abv, transfer_date, notes)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      (spirit_type, source_tank_equipment_id, dest_tank_equipment_id, volume_gal, abv, transfer_date, notes, liquid_label)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       transfer.spirit_type ?? 'low_wines',
       transfer.source_tank_equipment_id,
@@ -2844,6 +2890,7 @@ export function saveHoldingTankTransfer(
       transfer.abv,
       transfer.transfer_date,
       transfer.notes,
+      liquidLabel,
     ],
   );
   syncHoldingTankStatuses();
@@ -6937,16 +6984,12 @@ export function getEquipmentVolumeReport(): EquipmentVolumeReport[] {
     if (isSpiritLedgerEquipmentType(eq.equipment_type)) {
       const contents = getHoldingTankContents(eq.id);
       const hasLiquid = contents.volume_gal > 0.05;
-      const blendName = hasLiquid
-        ? (holdingTankProductName(eq.id, contents.volume_gal)?.trim() || '')
-        : '';
-      const distilled = hasLiquid && !blendName
-        ? (holdingTankDistillationContents(eq.id, contents.volume_gal)?.trim() || '')
+      const contentsLabel = hasLiquid
+        ? (holdingTankContentsLabel(eq.id, contents.volume_gal)?.trim() || '')
         : '';
       const detail = !hasLiquid
         ? ''
-        : blendName
-          || distilled
+        : contentsLabel
           || (eq.equipment_type === 'collection_vessel'
             ? collectionVesselContentsDetail(eq.id, contents.volume_gal)
             : contents.run_count > 0
@@ -7106,16 +7149,12 @@ export function getFloorEquipmentWithContext(planId = 1): FloorEquipmentView[] {
     if (isSpiritLedgerEquipmentType(eq.equipment_type)) {
       const contents = getHoldingTankContents(eq.id);
       if (contents.volume_gal <= 0) return eq;
-      const productName = holdingTankProductName(eq.id, contents.volume_gal);
-      const distilled = productName
-        ? null
-        : holdingTankDistillationContents(eq.id, contents.volume_gal);
       return {
         ...eq,
         active_volume_gal: contents.volume_gal,
         active_abv: contents.abv,
         active_run_count: contents.run_count,
-        active_liquid_name: productName ?? distilled ?? undefined,
+        active_liquid_name: holdingTankContentsLabel(eq.id, contents.volume_gal) ?? undefined,
       };
     }
     if (eq.equipment_type === 'mash_tun') {

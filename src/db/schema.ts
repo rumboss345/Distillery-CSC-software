@@ -458,6 +458,7 @@ CREATE TABLE IF NOT EXISTS holding_tank_transfers (
   abv REAL NOT NULL DEFAULT 0,
   transfer_date TEXT NOT NULL,
   notes TEXT NOT NULL DEFAULT '',
+  liquid_label TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
