@@ -4,7 +4,8 @@ import { equipmentBlocksProduction } from '../../lib/equipment-maintenance';
 import { equipmentTypeLabel, resolveEquipmentIcon } from '../../lib/equipment';
 import type { EquipmentVolumeReport } from '../../types';
 import type { FloorEquipmentView } from '../../types';
-import { estimateAbvFromBrix, fermenterLiquidBrixPhase } from '../../lib/fermentation';
+import { estimateAbvFromBrix, fermenterLiquidBrixPhase, fermenterLiquidGreenBelowBrix } from '../../lib/fermentation';
+import { getFermentationReadyMaxBrix } from '../../db/queries';
 import type { EquipmentVisualData, EquipmentVisualStatus } from './equipment-visual.types';
 
 export function formatGal(value: number): string {
@@ -78,7 +79,8 @@ export function liquidColorsForFermenter(
   latestBrix: number | null | undefined,
 ): { base: string; highlight: string; edge: string } {
   if (visualStatus !== 'active') return LIQUID_COLORS[visualStatus];
-  const phase = fermenterLiquidBrixPhase(latestBrix);
+  const greenBelow = fermenterLiquidGreenBelowBrix(getFermentationReadyMaxBrix());
+  const phase = fermenterLiquidBrixPhase(latestBrix, greenBelow);
   if (phase === 'ready') return FERMENTER_LIQUID_READY;
   return FERMENTER_LIQUID_HIGH_BRIX;
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  FERMENTATION_READY_MAX_BRIX,
+  FERMENTATION_READY_MAX_BRIX_DEFAULT,
+  parseFermentationReadyMaxBrix,
   FERMENTER_LIQUID_GREEN_BELOW_BRIX,
   actualStartBrixError,
   fermentersForStartBrixLog,
@@ -81,8 +82,14 @@ describe('fermentation readiness', () => {
     expect(isBrixReadyForDistillation(null)).toBe(false);
   });
 
-  it('uses 5 as the ready threshold', () => {
-    expect(FERMENTATION_READY_MAX_BRIX).toBe(5);
+  it('uses 5 as the default ready threshold', () => {
+    expect(FERMENTATION_READY_MAX_BRIX_DEFAULT).toBe(5);
+  });
+
+  it('parses admin Brix settings with bounds', () => {
+    expect(parseFermentationReadyMaxBrix('4.25')).toBe(4.3);
+    expect(parseFermentationReadyMaxBrix(99)).toBe(5);
+    expect(parseFermentationReadyMaxBrix(-1)).toBe(5);
   });
 });
 

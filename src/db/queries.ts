@@ -72,7 +72,13 @@ import {
   type TankLot,
   type TankWithdrawal,
 } from '../lib/tank-product-name';
-import { ACTUAL_START_BRIX_LOG_NOTE, defaultExpectedCompletionDate, expectedCompletionDateError, fermentersForStartBrixLog } from '../lib/fermentation';
+import {
+  ACTUAL_START_BRIX_LOG_NOTE,
+  defaultExpectedCompletionDate,
+  expectedCompletionDateError,
+  fermentersForStartBrixLog,
+  parseFermentationReadyMaxBrix,
+} from '../lib/fermentation';
 import { eventDateWhenLeavingPlanned, localIsoDate } from '../lib/planned-event-date';
 import { choosePlannedFermenterRun } from '../lib/planned-fermenter-distillation';
 import { deleteStatusDateLog, recordStatusDateLog } from './status-logs';
@@ -101,7 +107,7 @@ import type {
   EquipmentMaintenanceLogView,
   EquipmentMaintenanceStatus,
 } from '../types';
-import { subscribeSharedRefresh } from './refresh';
+import { notifySharedRefresh, subscribeSharedRefresh } from './refresh';
 import { forwardProductionMutation, queryAll, queryOne, runQuery, insertRow } from './sql-session';
 import type {
   Barrel,
@@ -587,6 +593,29 @@ export function getProductionCostSettings(): ProductionCostSettings {
     ...row,
     water_cost_per_gal: row.water_cost_per_gal ?? DEFAULT_WATER_COST_PER_GAL,
   };
+}
+
+const FERMENTATION_READY_MAX_BRIX_SETTING_KEY = 'fermentation_ready_max_brix';
+
+export function getFermentationReadyMaxBrix(): number {
+  const row = queryOne<{ value: string }>(
+    'SELECT value FROM distillery_settings WHERE key = ?',
+    [FERMENTATION_READY_MAX_BRIX_SETTING_KEY],
+  );
+  return parseFermentationReadyMaxBrix(row?.value);
+}
+
+export function saveFermentationReadyMaxBrix(brix: number): void {
+  const __remote = forwardProductionMutation('saveFermentationReadyMaxBrix', [brix]);
+  if (__remote.forwarded) return __remote.value as never;
+
+  const value = parseFermentationReadyMaxBrix(brix);
+  runQuery(
+    `INSERT INTO distillery_settings (key, value, updated_at) VALUES (?, ?, datetime('now'))
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+    [FERMENTATION_READY_MAX_BRIX_SETTING_KEY, String(value)],
+  );
+  notifySharedRefresh();
 }
 
 export function saveProductionCostSettings(settings: ProductionCostSettings): void {

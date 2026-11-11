@@ -12,8 +12,10 @@ import {
   getDistillationRuns,
   getHoldingTankVolumeVariances,
   holdingTankIntakeKey,
+  getFermentationReadyMaxBrix,
   markEquipmentCleaned,
   saveDistillationRun,
+  useRefreshKey,
 } from '../../db/queries';
 import { isBottlingLineEquipment } from '../../lib/bottling-equipment';
 import { buildProcessEquipmentContextMenu } from './process-equipment-menu';
@@ -33,7 +35,7 @@ import {
   maintenanceStatusLabel,
 } from '../../lib/equipment-maintenance';
 import { formatDateDisplay, formatRecordedAt } from '../../lib/date-input';
-import { FERMENTATION_READY_MAX_BRIX, fermentationDaysOverdue, formatDaysOverdue, isBrixReadyForDistillation } from '../../lib/fermentation';
+import { fermentationDaysOverdue, formatDaysOverdue, isBrixReadyForDistillation } from '../../lib/fermentation';
 import { stillageTankNeedsDump } from '../../lib/stillage';
 import { localIsoDate } from '../../lib/planned-event-date';
 import type { AssignedEmployee } from '../../lib/assignee';
@@ -55,6 +57,9 @@ export function ProcessEquipmentDetailPanel({
   onRemove,
   onEquipmentUpdated,
 }: ProcessEquipmentDetailPanelProps) {
+  const { key: productionRefreshKey } = useRefreshKey();
+  void productionRefreshKey;
+  const readyMaxBrix = getFermentationReadyMaxBrix();
   const [selectedIntakeKey, setSelectedIntakeKey] = useState<string | null>(null);
   const [viewedIntake, setViewedIntake] = useState<HoldingTankIntakeEntry | null>(null);
   const [cleanedBy, setCleanedBy] = useState<AssignedEmployee>({
@@ -103,7 +108,7 @@ export function ProcessEquipmentDetailPanel({
     && hasLiquid;
   const brixNotReady = canChargeFermenter
     && equipment.active_latest_brix != null
-    && !isBrixReadyForDistillation(equipment.active_latest_brix);
+    && !isBrixReadyForDistillation(equipment.active_latest_brix, readyMaxBrix);
 
   const isStill = equipment.equipment_type === 'pot_still' || equipment.equipment_type === 'column_still';
   const stillRun = isStill ? getDistillationRunForCuts(equipment.name) ?? null : null;
@@ -132,6 +137,7 @@ export function ProcessEquipmentDetailPanel({
     icon: equipment.icon,
     bottlingRunId: bottlingRun?.id ?? null,
     bottlingRunStatus: bottlingRun?.status ?? null,
+    readyMaxBrix,
   });
   const showNextStep = nextMenu.next.length > 0 || fermenting || distilling || bottling;
 
@@ -350,7 +356,7 @@ export function ProcessEquipmentDetailPanel({
           <div className="process-next-actions-label">Next step</div>
           {brixNotReady && (
             <p className="process-next-hint">
-              Brix is {equipment.active_latest_brix?.toFixed(1)}°. Below {FERMENTATION_READY_MAX_BRIX}° is recommended before charging.
+              Brix is {equipment.active_latest_brix?.toFixed(1)}°. Below {readyMaxBrix}° is recommended before charging.
             </p>
           )}
           <div className="process-next-actions-row">

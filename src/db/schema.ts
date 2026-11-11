@@ -621,6 +621,12 @@ CREATE TABLE IF NOT EXISTS discarded_fermentations (
 
 CREATE INDEX IF NOT EXISTS idx_discarded_fermentations_date ON discarded_fermentations(discarded_date);
 
+CREATE TABLE IF NOT EXISTS distillery_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS production_cost_settings (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   sugar_cost_per_lb REAL NOT NULL DEFAULT 0,

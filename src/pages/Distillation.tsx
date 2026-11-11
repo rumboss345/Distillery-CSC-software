@@ -45,6 +45,7 @@ import {
   getGinRecipes,
   getRunBotanicals,
   saveGinRecipe,
+  getFermentationReadyMaxBrix,
   useRefreshKey,
 } from '../db/queries';
 import { AbvVolumeTemperatureFields } from '../components/AbvVolumeTemperatureFields';
@@ -84,7 +85,7 @@ import {
   formatGinBotanicalsSummary,
   ginBotanicalPlaceError,
 } from '../lib/gin-botanicals';
-import { FERMENTATION_READY_MAX_BRIX, isBrixReadyForDistillation } from '../lib/fermentation';
+import { isBrixReadyForDistillation } from '../lib/fermentation';
 import { eventDateWhenLeavingPlanned, localIsoDate, localIsoDateTime } from '../lib/planned-event-date';
 import { plannedFermenterDistillationMessage } from '../lib/planned-fermenter-distillation';
 import {
@@ -157,6 +158,7 @@ export function Distillation() {
   const { returnToEquipment } = useEquipmentReturn();
   const calendarPlanHandled = useRef(false);
   const { key, refresh } = useRefreshKey();
+  const readyMaxBrix = useMemo(() => getFermentationReadyMaxBrix(), [key]);
   const runs = getDistillationRuns();
   const mashes = getMashBatches();
   const collectionVessels = getCollectionVessels();
@@ -303,9 +305,9 @@ export function Distillation() {
     const estAbv = estimatedWashChargeAbv(row.mash_batch_id, row.floor_equipment_id);
     const brixNote = latestBrix != null ? `${latestBrix}° Brix` : 'no Brix logged';
     const abvNote = estAbv != null ? `${estAbv.toFixed(1)}% ABV est.` : null;
-    const readyNote = isBrixReadyForDistillation(latestBrix)
+    const readyNote = isBrixReadyForDistillation(latestBrix, readyMaxBrix)
       ? 'ready'
-      : `below ${FERMENTATION_READY_MAX_BRIX}° recommended`;
+      : `below ${readyMaxBrix}° recommended`;
     return `${row.equipment_name} — ${row.batch_number} (${[`${row.volume_gal.toFixed(1)} gal`, abvNote, `${brixNote}, ${readyNote}`].filter(Boolean).join(' · ')})`;
   };
 
@@ -1178,7 +1180,7 @@ export function Distillation() {
     <div>
       <div className="page-header">
         <h2>Distillation</h2>
-        <p>Low wine and heavy rum runs charge fermenters · Rum runs, vodka runs, and gin runs can charge more than one tank · Brix below {FERMENTATION_READY_MAX_BRIX}° recommended before charging</p>
+        <p>Low wine and heavy rum runs charge fermenters · Rum runs, vodka runs, and gin runs can charge more than one tank · Brix below {readyMaxBrix}° recommended before charging</p>
         <div className="page-actions">
           <button type="button" className="btn btn-primary" onClick={() => openNewRun('wash')}>
             {RUN_TYPE_BUTTON_LABELS.wash}
@@ -1437,7 +1439,7 @@ export function Distillation() {
                   </select>
                   <p className="field-hint">
                     Fermenters in use with an active fermenting wash. Wash batch is set automatically.
-                    Log Brix below {FERMENTATION_READY_MAX_BRIX}° before charging (recommended).
+                    Log Brix below {readyMaxBrix}° before charging (recommended).
                   </p>
                   {runForm.source_mash_batch_id && (
                     <p className="field-hint">
@@ -1945,7 +1947,7 @@ export function Distillation() {
           <p className="form-hint">
             {isFermenterSourcedRun(runForm.run_type) ? (
               <>
-                Charge fermenters when logs show Brix below {FERMENTATION_READY_MAX_BRIX}° (recommended).
+                Charge fermenters when logs show Brix below {readyMaxBrix}° (recommended).
                 {runForm.run_type === 'heavy_rum' ? (
                   <>
                     {' '}Heavy rum deducts the recorded <strong>charge volume</strong> when the run is <strong>running</strong> or <strong>complete</strong>; remaining wash stays in the fermenter.

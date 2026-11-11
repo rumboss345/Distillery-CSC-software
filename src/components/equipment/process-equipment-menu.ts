@@ -1,5 +1,5 @@
 import { classifyProcessLiquid } from './process-floor-label';
-import { FERMENTATION_READY_MAX_BRIX, isBrixReadyForDistillation } from '../../lib/fermentation';
+import { FERMENTATION_READY_MAX_BRIX_DEFAULT, isBrixReadyForDistillation } from '../../lib/fermentation';
 import { isBottlingLineEquipment } from '../../lib/bottling-equipment';
 
 export interface ProcessEquipmentMenuLink {
@@ -35,11 +35,14 @@ export interface ProcessEquipmentMenuSource {
   bottlingRunId?: number | null;
   bottlingRunStatus?: string | null;
   icon?: string | null;
+  /** Recommended ending Brix before still charge (from distillery settings). */
+  readyMaxBrix?: number;
 }
 
 export function buildProcessEquipmentContextMenu(
   source: ProcessEquipmentMenuSource,
 ): ProcessEquipmentContextMenuModel {
+  const readyMaxBrix = source.readyMaxBrix ?? FERMENTATION_READY_MAX_BRIX_DEFAULT;
   const hasLiquid = source.volumeGal > 0;
   const isTransferVessel = source.equipment_type === 'holding_tank'
     || source.equipment_type === 'stillage_tank'
@@ -167,8 +170,8 @@ export function buildProcessEquipmentContextMenu(
 
   const hint = canChargeFermenter
     && source.active_latest_brix != null
-    && !isBrixReadyForDistillation(source.active_latest_brix)
-    ? `Brix is ${source.active_latest_brix.toFixed(1)}°. Below ${FERMENTATION_READY_MAX_BRIX}° is recommended before charging.`
+    && !isBrixReadyForDistillation(source.active_latest_brix, readyMaxBrix)
+    ? `Brix is ${source.active_latest_brix.toFixed(1)}°. Below ${readyMaxBrix}° is recommended before charging.`
     : null;
 
   return {
