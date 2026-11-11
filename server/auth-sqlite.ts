@@ -686,6 +686,24 @@ export function listStaffMessagesSent(userId: number, limit: number): StaffMessa
   return rows.map(mapStaffMessageRow);
 }
 
+/** Direct messages between two staff members (newest first). For owner/admin oversight. */
+export function listStaffMessagesBetween(
+  staffA: number,
+  staffB: number,
+  limit: number,
+): StaffMessageRow[] {
+  const rows = ensureDb()
+    .prepare(
+      `${STAFF_MESSAGE_SELECT}
+       WHERE (m.sender_id = ? AND m.recipient_id = ?)
+          OR (m.sender_id = ? AND m.recipient_id = ?)
+       ORDER BY m.created_at DESC
+       LIMIT ?`,
+    )
+    .all(staffA, staffB, staffB, staffA, limit) as Record<string, unknown>[];
+  return rows.map(mapStaffMessageRow);
+}
+
 export function countStaffMessagesUnread(userId: number): number {
   const row = ensureDb()
     .prepare(

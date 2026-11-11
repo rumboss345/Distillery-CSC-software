@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useAssignableUsers } from '../hooks/useAssignableUsers';
 import { staffDisplayName } from '../hooks/useStaffMessageNotifications';
 import {
+  fetchStaffMessageThread,
   fetchStaffMessages,
   markAllStaffMessagesRead,
   markStaffMessageRead,
@@ -11,9 +12,10 @@ import {
   sendStaffMessage,
   type StaffMessage,
 } from '../lib/auth-api';
+import { isAdminRole } from '../lib/roles';
 import { useStaffMessageContext } from '../context/StaffMessageContext';
 
-type Folder = 'inbox' | 'sent';
+type Folder = 'inbox' | 'sent' | 'staff-threads';
 
 const BROADCAST_RECIPIENT = '__all__';
 
@@ -42,6 +44,10 @@ export function MessagingCenter() {
   const [sendError, setSendError] = useState<string | null>(null);
   const [sendSuccess, setSendSuccess] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const canViewStaffThreads = isAdminRole(user?.role);
+  const [threadStaffA, setThreadStaffA] = useState('');
+  const [threadStaffB, setThreadStaffB] = useState('');
+  const [threadError, setThreadError] = useState<string | null>(null);
 
   const composeTo = searchParams.get('to');
   useEffect(() => {
@@ -55,7 +61,27 @@ export function MessagingCenter() {
 
   const loadMessages = useCallback(async (nextFolder: Folder) => {
     setLoading(true);
+    setThreadError(null);
     try {
+      if (nextFolder === 'staff-threads') {
+        const idA = Number(threadStaffA);
+        const idB = Number(threadStaffB);
+        if (!Number.isInteger(idA) || !Number.isInteger(idB) || idA <= 0 || idB <= 0) {
+          setMessages([]);
+          setSelectedId(null);
+          return;
+        }
+        if (idA === idB) {
+          setThreadError('Choose two different staff members.');
+          setMessages([]);
+          setSelectedId(null);
+          return;
+        }
+        const { messages: rows } = await fetchStaffMessageThread(idA, idB);
+        setMessages(rows);
+        setSelectedId((current) => current ?? rows[0]?.id ?? null);
+        return;
+      }
       const { messages: rows } = await fetchStaffMessages(nextFolder);
       setMessages(rows);
       if (nextFolder === 'inbox') {
@@ -64,14 +90,26 @@ export function MessagingCenter() {
       } else {
         setSelectedId((current) => current ?? rows[0]?.id ?? null);
       }
+    } catch (err) {
+      if (nextFolder === 'staff-threads') {
+        setThreadError(err instanceof Error ? err.message : 'Could not load that conversation.');
+        setMessages([]);
+        setSelectedId(null);
+      }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [threadStaffA, threadStaffB]);
 
   useEffect(() => {
     void loadMessages(folder);
   }, [folder, loadMessages]);
+
+  useEffect(() => {
+    if (folder !== 'staff-threads') return;
+    if (!threadStaffA || !threadStaffB) return;
+    void loadMessages('staff-threads');
+  }, [folder, threadStaffA, threadStaffB, loadMessages]);
 
   const selected = messages.find((m) => m.id === selectedId) ?? null;
 
@@ -126,6 +164,7 @@ export function MessagingCenter() {
 
   const handleSelect = async (msg: StaffMessage) => {
     setSelectedId(msg.id);
+    if (folder === 'staff-threads') return;
     if (folder === 'inbox' && !msg.read_at) {
       try {
         const result = await markStaffMessageRead(msg.id);
@@ -213,6 +252,18 @@ export function MessagingCenter() {
             >
               Sent
             </button>
+            {canViewStaffThreads && (
+              <button
+                type="button"
+                role="tab"
+                className={`btn btn-sm${folder === 'staff-threads' ? ' btn-primary' : ' btn-secondary'}`}
+                aria-selected={folder === 'staff-threads'}
+                onClick={() => setFolder('staff-threads')}
+                data-testid="staff-threads-tab"
+              >
+                Staff threads
+              </button>
+            )}
             {folder === 'inbox' && (
               <button type="button" className="btn btn-sm btn-ghost" onClick={() => void handleMarkAllRead()}>
                 Mark all read
@@ -220,17 +271,66 @@ export function MessagingCenter() {
             )}
           </div>
 
+          {folder === 'staff-threads' && (
+            <div className="messaging-staff-thread-pickers" data-testid="staff-thread-pickers">
+              <label className="messaging-staff-thread-picker">
+                <span className="field-hint">Staff member</span>
+                <select
+                  value={threadStaffA}
+                  onChange={(e) => setThreadStaffA(e.target.value)}
+                  data-testid="staff-thread-a"
+                >
+                  <option value="">Select…</option>
+                  {staff.map((row) => (
+                    <option key={row.id} value={row.id}>
+                      {staffDisplayName(row.name, row.email)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="messaging-staff-thread-picker">
+                <span className="field-hint">Staff member</span>
+                <select
+                  value={threadStaffB}
+                  onChange={(e) => setThreadStaffB(e.target.value)}
+                  data-testid="staff-thread-b"
+                >
+                  <option value="">Select…</option>
+                  {staff.map((row) => (
+                    <option key={row.id} value={row.id}>
+                      {staffDisplayName(row.name, row.email)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="field-hint">
+                Owners and administrators can read direct messages between two staff members. Broadcasts still appear as separate one-to-one copies.
+              </p>
+              {threadError && (
+                <p className="field-hint" style={{ color: 'var(--danger, #dc2626)' }}>{threadError}</p>
+              )}
+            </div>
+          )}
+
           {loading ? (
             <p className="field-hint">Loading…</p>
           ) : messages.length === 0 ? (
-            <p className="field-hint">No messages in this folder yet.</p>
+            <p className="field-hint">
+              {folder === 'staff-threads'
+                ? threadStaffA && threadStaffB
+                  ? 'No direct messages between these staff members yet.'
+                  : 'Choose two staff members to view their conversation.'
+                : 'No messages in this folder yet.'}
+            </p>
           ) : (
             <ul className="messaging-thread-list">
               {messages.map((msg) => {
                 const peer =
-                  folder === 'inbox'
-                    ? staffDisplayName(msg.sender_name, msg.sender_email)
-                    : staffDisplayName(msg.recipient_name, msg.recipient_email);
+                  folder === 'staff-threads'
+                    ? `${staffDisplayName(msg.sender_name, msg.sender_email)} → ${staffDisplayName(msg.recipient_name, msg.recipient_email)}`
+                    : folder === 'inbox'
+                      ? staffDisplayName(msg.sender_name, msg.sender_email)
+                      : staffDisplayName(msg.recipient_name, msg.recipient_email);
                 const unread = folder === 'inbox' && !msg.read_at;
                 return (
                   <li key={msg.id}>
@@ -256,9 +356,11 @@ export function MessagingCenter() {
           {selected ? (
             <>
               <h2 className="card-title">
-                {folder === 'inbox'
-                  ? `From ${staffDisplayName(selected.sender_name, selected.sender_email)}`
-                  : `To ${staffDisplayName(selected.recipient_name, selected.recipient_email)}`}
+                {folder === 'staff-threads'
+                  ? `${staffDisplayName(selected.sender_name, selected.sender_email)} → ${staffDisplayName(selected.recipient_name, selected.recipient_email)}`
+                  : folder === 'inbox'
+                    ? `From ${staffDisplayName(selected.sender_name, selected.sender_email)}`
+                    : `To ${staffDisplayName(selected.recipient_name, selected.recipient_email)}`}
               </h2>
               <p className="field-hint">{formatWhen(selected.created_at)}</p>
               <div className="staff-message-detail-body">{selected.body}</div>

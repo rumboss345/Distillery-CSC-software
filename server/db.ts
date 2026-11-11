@@ -174,6 +174,12 @@ export function listStaffMessagesSent(...args: Parameters<typeof sqliteAuth.list
     : Promise.resolve(sqliteAuth.listStaffMessagesSent(...args));
 }
 
+export function listStaffMessagesBetween(...args: Parameters<typeof sqliteAuth.listStaffMessagesBetween>) {
+  return postgres()
+    ? pgAuth.listStaffMessagesBetween(...args)
+    : Promise.resolve(sqliteAuth.listStaffMessagesBetween(...args));
+}
+
 export function countStaffMessagesUnread(userId: number) {
   return postgres()
     ? pgAuth.countStaffMessagesUnread(userId)

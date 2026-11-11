@@ -53,6 +53,7 @@ import {
   createStaffMessage,
   createStaffMessageBroadcast,
   listStaffMessagesIncomingAfter,
+  listStaffMessagesBetween,
   listStaffMessagesInbox,
   listStaffMessagesSent,
   markAllStaffMessagesRead,
@@ -470,6 +471,28 @@ app.get('/api/messages', authMiddleware, async (req, res) => {
     folder === 'sent'
       ? await listStaffMessagesSent(userId, limit)
       : await listStaffMessagesInbox(userId, limit);
+  res.json({ messages });
+});
+
+app.get('/api/messages/thread', authMiddleware, adminMiddleware, async (req, res) => {
+  const staffA = Number(req.query.staffA);
+  const staffB = Number(req.query.staffB);
+  if (!Number.isInteger(staffA) || !Number.isInteger(staffB) || staffA <= 0 || staffB <= 0) {
+    res.status(400).json({ error: 'Choose two staff members.' });
+    return;
+  }
+  if (staffA === staffB) {
+    res.status(400).json({ error: 'Choose two different staff members.' });
+    return;
+  }
+  const okA = await isApprovedStaffUser(staffA);
+  const okB = await isApprovedStaffUser(staffB);
+  if (!okA || !okB) {
+    res.status(400).json({ error: 'Those staff accounts are not available.' });
+    return;
+  }
+  const limit = Math.min(MESSAGE_LIST_LIMIT, Math.max(1, Number(req.query.limit) || MESSAGE_LIST_LIMIT));
+  const messages = await listStaffMessagesBetween(staffA, staffB, limit);
   res.json({ messages });
 });
 

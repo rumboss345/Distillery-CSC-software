@@ -197,6 +197,14 @@ export async function fetchStaffMessages(folder: 'inbox' | 'sent' = 'inbox') {
   return apiFetch<{ messages: StaffMessage[] }>(`/api/messages?folder=${folder}`);
 }
 
+export async function fetchStaffMessageThread(staffA: number, staffB: number) {
+  const params = new URLSearchParams({
+    staffA: String(staffA),
+    staffB: String(staffB),
+  });
+  return apiFetch<{ messages: StaffMessage[] }>(`/api/messages/thread?${params}`);
+}
+
 export async function fetchIncomingStaffMessages(afterId: number) {
   return apiFetch<{ messages: StaffMessage[] }>(`/api/messages/incoming?afterId=${afterId}`);
 }
