@@ -552,6 +552,22 @@ export async function listStaffMessagesSent(userId: number, limit: number): Prom
   return result.rows.map((row) => mapStaffMessageRow(row as Record<string, unknown>));
 }
 
+export async function listStaffMessagesBetween(
+  staffA: number,
+  staffB: number,
+  limit: number,
+): Promise<StaffMessageRow[]> {
+  const result = await getPool().query(
+    `${STAFF_MESSAGE_SELECT}
+     WHERE (m.sender_id = $1 AND m.recipient_id = $2)
+        OR (m.sender_id = $2 AND m.recipient_id = $1)
+     ORDER BY m.created_at DESC
+     LIMIT $3`,
+    [staffA, staffB, limit],
+  );
+  return result.rows.map((row) => mapStaffMessageRow(row as Record<string, unknown>));
+}
+
 export async function countStaffMessagesUnread(userId: number): Promise<number> {
   const result = await getPool().query(
     `SELECT COUNT(*)::int AS n FROM staff_messages WHERE recipient_id = $1 AND read_at IS NULL`,

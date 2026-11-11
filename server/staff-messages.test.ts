@@ -71,4 +71,24 @@ describe('staff messages (sqlite auth)', () => {
     expect(auth.countStaffMessagesUnread(b.id)).toBe(1);
     expect(auth.listStaffMessagesSent(sender.id, 10)).toHaveLength(expectedCount);
   });
+
+  it('lists direct messages between two staff for oversight', () => {
+    const alice = auth.createUserByAdmin('alice@csc.test', 'AlicePass1', 'Alice', [], []);
+    const bob = auth.createUserByAdmin('bob@csc.test', 'BobPass1', 'Bob', [], []);
+    const carol = auth.createUserByAdmin('carol@csc.test', 'CarolPass1', 'Carol', [], []);
+
+    auth.createStaffMessage(alice.id, bob.id, 'Can you pull a sample?');
+    auth.createStaffMessage(bob.id, alice.id, 'Done — Brix is 8.2.');
+    auth.createStaffMessage(alice.id, carol.id, 'Unrelated note');
+
+    const thread = auth.listStaffMessagesBetween(alice.id, bob.id, 20);
+    expect(thread).toHaveLength(2);
+    expect(thread.map((m) => m.body).sort()).toEqual([
+      'Can you pull a sample?',
+      'Done — Brix is 8.2.',
+    ]);
+
+    expect(auth.listStaffMessagesBetween(alice.id, carol.id, 20)).toHaveLength(1);
+    expect(auth.listStaffMessagesBetween(bob.id, carol.id, 20)).toHaveLength(0);
+  });
 });
