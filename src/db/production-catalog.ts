@@ -87,6 +87,7 @@ export const PRODUCTION_MUTATIONS: Record<string, ProductionMutation> = {
   updateEquipmentProcessPosition: { access: 'equipment', table: 'floor_equipment', idIndex: 0 },
   moveEquipmentToPlan: { access: 'equipment', table: 'floor_equipment', idIndex: 0 },
   deleteFloorEquipment: { access: 'admin', table: 'floor_equipment', idIndex: 0 },
+  saveFermentationReadyMaxBrix: { access: 'admin' },
   emptyAllHoldingTanks: { access: 'owner' },
   saveProductionCostSettings: { access: 'owner' },
   saveProductionCostMonthlyOverhead: { access: 'owner' },

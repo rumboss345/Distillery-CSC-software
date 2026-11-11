@@ -1,6 +1,6 @@
 import { format } from 'date-fns';
 import { formatRecordedAt, parseStoredDate } from './date-input';
-import { estimateAbvFromBrix, FERMENTATION_READY_MAX_BRIX } from './fermentation';
+import { estimateAbvFromBrix, FERMENTATION_READY_MAX_BRIX_DEFAULT } from './fermentation';
 
 export type FermentationGraphMeasure = 'brix' | 'temperature' | 'abv' | 'ph';
 
@@ -96,9 +96,10 @@ export function formatFermentationGraphValue(measure: FermentationGraphMeasure, 
 export function fermentationMeasureAxis(
   measure: FermentationGraphMeasure,
   values: number[],
+  readyMaxBrix: number = FERMENTATION_READY_MAX_BRIX_DEFAULT,
 ): GraphAxis {
   if (measure === 'brix') {
-    return graphAxis(values, { include: [0, FERMENTATION_READY_MAX_BRIX], floor: 0 });
+    return graphAxis(values, { include: [0, readyMaxBrix], floor: 0 });
   }
   if (measure === 'abv') return graphAxis(values, { include: [0], floor: 0 });
   return graphAxis(values);

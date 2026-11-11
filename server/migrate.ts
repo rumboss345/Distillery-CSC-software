@@ -330,6 +330,21 @@ export async function migrateDatabase(): Promise<void> {
       );
       await client.query(`INSERT INTO schema_migrations (version) VALUES ('017')`);
     }
+    const distillerySettingsMigration = await client.query('SELECT version FROM schema_migrations WHERE version = $1', ['018']);
+    if (distillerySettingsMigration.rowCount === 0) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS distillery_settings (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL,
+          updated_at TEXT NOT NULL DEFAULT to_char(CURRENT_TIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')
+        )
+      `);
+      await client.query(
+        `INSERT INTO distillery_settings (key, value) VALUES ('fermentation_ready_max_brix', '5')
+         ON CONFLICT (key) DO NOTHING`,
+      );
+      await client.query(`INSERT INTO schema_migrations (version) VALUES ('018')`);
+    }
     await client.query(`
       INSERT INTO inventory_categories (name)
       SELECT 'botanicals'

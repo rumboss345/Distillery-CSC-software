@@ -8,6 +8,7 @@ import {
   getEquipmentVolumeReport,
   getFloorPlans,
   getCleaningFlaggedAtByEquipmentId,
+  getFermentationReadyMaxBrix,
   getProductionSummary,
   updateEquipmentProcessPosition,
 } from '../../db/queries';
@@ -70,6 +71,8 @@ export function ProcessEquipmentCanvas({
   onEditEquipment,
   onRemoveEquipment,
 }: ProcessEquipmentCanvasProps) {
+  void refreshKey;
+  const readyMaxBrix = getFermentationReadyMaxBrix();
   const today = localIsoDate();
   const viewportRef = useRef<HTMLDivElement>(null);
   const [viewportSize, setViewportSize] = useState({ width: 800, height: 520 });
@@ -237,6 +240,7 @@ export function ProcessEquipmentCanvas({
       bottlingRunStatus: isBottlingLineEquipment(contextMenuEquipment)
         ? getActiveBottlingRunOnEquipment(contextMenuEquipment.id)?.status ?? null
         : null,
+      readyMaxBrix,
     })
     : null;
 

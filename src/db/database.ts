@@ -1573,6 +1573,21 @@ function migrateAdvancedBlending(): void {
   migrateBottlingRunEquipment();
   migrateInventoryUsageLog();
   migrateHoldingTankTransferLiquidLabel();
+  migrateDistillerySettings();
+}
+
+function migrateDistillerySettings(): void {
+  if (!db) return;
+  db.run(`
+    CREATE TABLE IF NOT EXISTS distillery_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  db.run(
+    `INSERT OR IGNORE INTO distillery_settings (key, value) VALUES ('fermentation_ready_max_brix', '5')`,
+  );
 }
 
 function migrateHoldingTankTransferLiquidLabel(): void {

@@ -21,8 +21,11 @@ import {
 import { isPostgresMode } from '../db/database';
 import {
   emptyAllHoldingTanks,
+  getFermentationReadyMaxBrix,
   getHoldingTanksWithContents,
+  saveFermentationReadyMaxBrix,
 } from '../db/queries';
+import { parseFermentationReadyMaxBrix } from '../lib/fermentation';
 import { useAuth } from '../context/AuthContext';
 import { formatRecordedAt } from '../lib/date-input';
 import {
@@ -65,6 +68,8 @@ export function AdminUsers() {
   const [editProcessAssignments, setEditProcessAssignments] = useState<ProcessStageKey[]>([]);
   const [editName, setEditName] = useState('');
   const [editPassword, setEditPassword] = useState('');
+  const [fermentationReadyBrixInput, setFermentationReadyBrixInput] = useState('');
+  const [productionSettingsNote, setProductionSettingsNote] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -73,6 +78,7 @@ export function AdminUsers() {
       const [usersRes, pendingRes] = await Promise.all([fetchAllUsers(), fetchPendingUsers()]);
       setAllUsers(usersRes.users);
       setPending(pendingRes.users);
+      setFermentationReadyBrixInput(String(getFermentationReadyMaxBrix()));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load users');
     } finally {
@@ -332,6 +338,24 @@ export function AdminUsers() {
     return `${u.permissions.length} area${u.permissions.length === 1 ? '' : 's'}`;
   }
 
+  function handleSaveFermentationReadyBrix() {
+    setProductionSettingsNote('');
+    const trimmed = fermentationReadyBrixInput.trim();
+    const parsed = Number(trimmed);
+    if (!trimmed || !Number.isFinite(parsed) || parsed <= 0 || parsed > 30) {
+      window.alert('Enter a Brix value between 0.1 and 30.');
+      return;
+    }
+    const saved = parseFermentationReadyMaxBrix(parsed);
+    try {
+      saveFermentationReadyMaxBrix(saved);
+      setFermentationReadyBrixInput(String(saved));
+      setProductionSettingsNote(`Recommended ending fermentation Brix set to ${saved}° for everyone signed in.`);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Could not save the fermentation Brix setting.');
+    }
+  }
+
   return (
     <div className="page admin-page">
       <header className="page-header">
@@ -492,6 +516,48 @@ export function AdminUsers() {
             </tbody>
           </table>
         )}
+      </div>
+
+      <div className="card admin-section" data-testid="admin-production-settings">
+        <h2 className="admin-section-title">Production settings</h2>
+        <h3 className="admin-subtitle">Recommended ending fermentation Brix</h3>
+        <p className="admin-hint">
+          Distillation and the process view treat fermentations as ready to charge when the latest log is below this Brix. The fermentation graph uses the same line.
+        </p>
+        <form
+          className="admin-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleSaveFermentationReadyBrix();
+          }}
+        >
+          <div className="form-row">
+            <label htmlFor="fermentation-ready-max-brix">
+              Brix before still charge
+              <input
+                id="fermentation-ready-max-brix"
+                type="number"
+                min={0.1}
+                max={30}
+                step={0.1}
+                required
+                value={fermentationReadyBrixInput}
+                onChange={(e) => setFermentationReadyBrixInput(e.target.value)}
+                data-testid="fermentation-ready-max-brix"
+              />
+            </label>
+          </div>
+          <button
+            type="submit"
+            className="btn btn-primary"
+            data-testid="save-fermentation-ready-brix"
+          >
+            Save
+          </button>
+        </form>
+        {productionSettingsNote ? (
+          <p className="admin-hint" data-testid="fermentation-ready-brix-note">{productionSettingsNote}</p>
+        ) : null}
       </div>
 
       <div className="card admin-section" data-testid="admin-data-management">

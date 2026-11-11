@@ -76,22 +76,43 @@ export function fermentersForStartBrixLog(
   return ids;
 }
 
-/** Fermentations must reach this Brix before charging a fermenter to the still. */
-export const FERMENTATION_READY_MAX_BRIX = 5;
+/** Default recommended ending Brix before charging a fermenter to the still (admin can override). */
+export const FERMENTATION_READY_MAX_BRIX_DEFAULT = 5;
 
-/** Floor / process view: green liquid below this Brix (logs or starting gravity). */
-export const FERMENTER_LIQUID_GREEN_BELOW_BRIX = 6;
+/** @deprecated Use {@link FERMENTATION_READY_MAX_BRIX_DEFAULT} or getFermentationReadyMaxBrix(). */
+export const FERMENTATION_READY_MAX_BRIX = FERMENTATION_READY_MAX_BRIX_DEFAULT;
 
-export function isBrixReadyForDistillation(brix: number | null | undefined): boolean {
-  return brix != null && brix < FERMENTATION_READY_MAX_BRIX;
+/** Floor / process view default green-liquid threshold (one degree above ready Brix). */
+export const FERMENTER_LIQUID_GREEN_BELOW_BRIX = FERMENTATION_READY_MAX_BRIX_DEFAULT + 1;
+
+export function parseFermentationReadyMaxBrix(value: unknown): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n) || n <= 0 || n > 30) return FERMENTATION_READY_MAX_BRIX_DEFAULT;
+  return Math.round(n * 10) / 10;
+}
+
+export function fermenterLiquidGreenBelowBrix(
+  readyMax: number = FERMENTATION_READY_MAX_BRIX_DEFAULT,
+): number {
+  return readyMax + 1;
+}
+
+export function isBrixReadyForDistillation(
+  brix: number | null | undefined,
+  readyMax: number = FERMENTATION_READY_MAX_BRIX_DEFAULT,
+): boolean {
+  return brix != null && brix < readyMax;
 }
 
 export type FermenterLiquidBrixPhase = 'high' | 'ready' | 'unknown';
 
 /** High-sugar (red) vs ready-to-distill (green) fermenter fill from latest Brix reading. */
-export function fermenterLiquidBrixPhase(brix: number | null | undefined): FermenterLiquidBrixPhase {
+export function fermenterLiquidBrixPhase(
+  brix: number | null | undefined,
+  greenBelow: number = FERMENTER_LIQUID_GREEN_BELOW_BRIX,
+): FermenterLiquidBrixPhase {
   if (brix == null || Number.isNaN(brix)) return 'unknown';
-  if (brix < FERMENTER_LIQUID_GREEN_BELOW_BRIX) return 'ready';
+  if (brix < greenBelow) return 'ready';
   return 'high';
 }
 

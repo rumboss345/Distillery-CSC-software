@@ -1,5 +1,6 @@
 import type { EquipmentType, EquipmentStatus } from '../types';
-import { fermenterLiquidBrixPhase } from './fermentation';
+import { fermenterLiquidBrixPhase, fermenterLiquidGreenBelowBrix } from './fermentation';
+import { getFermentationReadyMaxBrix } from '../db/queries';
 
 export const EQUIPMENT_TYPES: { value: EquipmentType; label: string }[] = [
   { value: 'fermenter', label: 'Fermenter' },
@@ -74,7 +75,8 @@ export const IN_USE_COLORS = {
 } as const;
 
 export function getFermenterInUseDisplayColor(latestBrix: number | null | undefined): string {
-  const phase = fermenterLiquidBrixPhase(latestBrix);
+  const greenBelow = fermenterLiquidGreenBelowBrix(getFermentationReadyMaxBrix());
+  const phase = fermenterLiquidBrixPhase(latestBrix, greenBelow);
   if (phase === 'ready') return IN_USE_COLORS.fermenter;
   return IN_USE_COLORS.fermenterHighBrix;
 }

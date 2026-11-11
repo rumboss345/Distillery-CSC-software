@@ -12,7 +12,7 @@ import {
   type FermentationLogReading,
 } from '../lib/fermentation-log-graph';
 import { formatRecordedAt } from '../lib/date-input';
-import { FERMENTATION_READY_MAX_BRIX } from '../lib/fermentation';
+import { getFermentationReadyMaxBrix, useRefreshKey } from '../db/queries';
 
 const CHART_WIDTH = 720;
 const CHART_HEIGHT = 260;
@@ -28,6 +28,9 @@ export function FermentationLogGraph({
   logs: FermentationLogReading[];
   startBrix: number | null;
 }) {
+  const { key: productionRefreshKey } = useRefreshKey();
+  void productionRefreshKey;
+  const readyMaxBrix = getFermentationReadyMaxBrix();
   const points = fermentationGraphPoints(logs, startBrix);
   const measures = availableFermentationMeasures(points);
   const [measure, setMeasure] = useState<FermentationGraphMeasure>('brix');
@@ -37,7 +40,7 @@ export function FermentationLogGraph({
 
   const summary = fermentationGraphSummary(points, selected);
   const values = points.flatMap((point) => (point[selected] != null ? [point[selected] as number] : []));
-  const axis = fermentationMeasureAxis(selected, values);
+  const axis = fermentationMeasureAxis(selected, values, readyMaxBrix);
   const span = values.length > 0
     ? Math.max(...points.map((point) => point.timeMs)) - Math.min(...points.map((point) => point.timeMs))
     : 0;
@@ -80,9 +83,9 @@ export function FermentationLogGraph({
   if (segment.length > 0) segments.push(segment.join(' '));
 
   const showReady = selected === 'brix'
-    && FERMENTATION_READY_MAX_BRIX >= axis.min
-    && FERMENTATION_READY_MAX_BRIX <= axis.max;
-  const readyY = showReady ? yFor(FERMENTATION_READY_MAX_BRIX) : 0;
+    && readyMaxBrix >= axis.min
+    && readyMaxBrix <= axis.max;
+  const readyY = showReady ? yFor(readyMaxBrix) : 0;
 
   return (
     <div className="fermentation-log-graph" data-testid="fermentation-log-graph">
@@ -144,7 +147,7 @@ export function FermentationLogGraph({
               textAnchor="start"
               className="fermentation-graph-ready-label"
             >
-              {`Below ${FERMENTATION_READY_MAX_BRIX}°`}
+              {`Below ${readyMaxBrix}°`}
             </text>
           </g>
         )}
