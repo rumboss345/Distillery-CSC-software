@@ -12,6 +12,37 @@ export function sortBarrelsForBlendPicker(barrels: readonly Barrel[]): Barrel[] 
   return [...barrels].sort(compareBarrelsOldestFirst);
 }
 
+/** Solera top targets: inventory barrels plus any barrels used on this blend pull list. */
+export function barrelsForSoleraTopPicker(
+  allBarrels: readonly Barrel[],
+  pullBarrelIds: readonly number[],
+): Barrel[] {
+  const byId = new Map<number, Barrel>();
+  for (const barrel of allBarrels) {
+    if (barrel.status === 'dumped') continue;
+    byId.set(barrel.id, barrel);
+  }
+  for (const id of pullBarrelIds) {
+    if (!(id > 0)) continue;
+    const barrel = allBarrels.find((b) => b.id === id);
+    if (barrel && barrel.status !== 'dumped') byId.set(barrel.id, barrel);
+  }
+  return sortBarrelsForBlendPicker([...byId.values()]);
+}
+
+export function barrelsForSoleraRow(
+  inventory: readonly Barrel[],
+  selectedBarrelIds: readonly number[],
+  rowIndex: number,
+): Barrel[] {
+  const currentId = selectedBarrelIds[rowIndex] ?? 0;
+  const usedElsewhere = new Set<number>();
+  selectedBarrelIds.forEach((id, i) => {
+    if (i !== rowIndex && id > 0) usedElsewhere.add(id);
+  });
+  return inventory.filter((b) => b.id === currentId || !usedElsewhere.has(b.id));
+}
+
 /** Barrels available for one spirit row — each barrel may only appear on one row. */
 export function barrelsForBlendRow(
   inventory: Barrel[],
