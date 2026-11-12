@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { gallonsRestoredToEmptiedBarrel } from '../lib/barrel-blending';
+import { gallonsRestoredToEmptiedBarrel, sortBarrelsForBlendPicker } from '../lib/barrel-blending';
 import { BARREL_STOCK_CATEGORY, BARREL_STOCK_ITEM_NAME } from '../lib/barrel-inventory';
 import {
   bottlingAlcoholVarianceGal,
@@ -5368,7 +5368,9 @@ export function getBarrels(): Barrel[] {
 
 /** Aging barrels with spirit available for barrel blend recipes and production pulls. */
 export function getBarrelsForBlend(): Barrel[] {
-  return getBarrels().filter((b) => b.status === 'aging' && b.current_volume_gal > 0);
+  return sortBarrelsForBlendPicker(
+    getBarrels().filter((b) => b.status === 'aging' && b.current_volume_gal > 0),
+  );
 }
 
 export function saveBarrel(barrel: Omit<Barrel, 'id' | 'created_at'>, id?: number): number | void {

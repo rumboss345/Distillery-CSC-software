@@ -1,4 +1,16 @@
 import type { Barrel } from '../types';
+import { formatDateDisplay } from './date-input';
+
+/** Sort aging barrels oldest fill first, then by barrel number. */
+export function compareBarrelsOldestFirst(a: Barrel, b: Barrel): number {
+  const byDate = a.fill_date.localeCompare(b.fill_date);
+  if (byDate !== 0) return byDate;
+  return a.barrel_number.localeCompare(b.barrel_number, undefined, { numeric: true, sensitivity: 'base' });
+}
+
+export function sortBarrelsForBlendPicker(barrels: readonly Barrel[]): Barrel[] {
+  return [...barrels].sort(compareBarrelsOldestFirst);
+}
 
 /** Barrels available for one spirit row — each barrel may only appear on one row. */
 export function barrelsForBlendRow(
@@ -33,7 +45,8 @@ export function barrelShownContents(barrel: Barrel, blendProductName?: string | 
 export function formatBarrelInventoryOption(barrel: Barrel, blendProductName?: string | null): string {
   const abv = barrel.initial_abv;
   const contents = barrelShownContents(barrel, blendProductName);
-  return `${barrel.barrel_number} — ${contents} (${barrel.current_volume_gal.toFixed(1)} gal @ ${abv.toFixed(1)}%)`;
+  const filled = formatDateDisplay(barrel.fill_date);
+  return `${barrel.barrel_number} — ${contents} — filled ${filled} (${barrel.current_volume_gal.toFixed(1)} gal @ ${abv.toFixed(1)}%)`;
 }
 
 export function spiritLabelForBarrel(barrel: Barrel, blendProductName?: string | null): string {
