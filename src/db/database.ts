@@ -677,6 +677,7 @@ function runMigrations(): void {
   migrateFermentationSchedule();
   migrateProductionStatusLogs();
   migrateRecipeNutrients();
+  migrateInventoryUsageItemIds();
   migrateMashBatchNutrients();
   migrateBlendRecipeVersions();
   clearAllBlendRecipesOnce();
@@ -929,6 +930,19 @@ function migrateMashBatchNutrients(): void {
   if (!hasUnit) {
     db.run("ALTER TABLE mash_batch_nutrients ADD COLUMN unit TEXT NOT NULL DEFAULT 'lbs'");
   }
+}
+
+function migrateInventoryUsageItemIds(): void {
+  if (!db) return;
+  const added = [
+    addColumnIfMissing('mash_batches', 'grain_inventory_item_id', 'INTEGER REFERENCES inventory_items(id)'),
+    addColumnIfMissing('mash_batches', 'yeast_inventory_item_id', 'INTEGER REFERENCES inventory_items(id)'),
+    addColumnIfMissing('mash_batch_nutrients', 'inventory_item_id', 'INTEGER REFERENCES inventory_items(id)'),
+    addColumnIfMissing('distillation_run_botanicals', 'inventory_item_id', 'INTEGER REFERENCES inventory_items(id)'),
+    addColumnIfMissing('bottling_run_lines', 'packaging_bottle_item_id', 'INTEGER REFERENCES inventory_items(id)'),
+    addColumnIfMissing('bottling_run_lines', 'packaging_label_item_id', 'INTEGER REFERENCES inventory_items(id)'),
+  ];
+  if (added.some(Boolean)) persistDb();
 }
 
 function migrateRecipeNutrients(): void {

@@ -204,9 +204,12 @@ export interface MashBatchNutrient {
   name: string;
   amount: number;
   unit: string;
+  inventory_item_id: number | null;
 }
 
-export type MashBatchNutrientInput = Pick<MashBatchNutrient, 'name' | 'amount' | 'unit'>;
+export type MashBatchNutrientInput = Pick<MashBatchNutrient, 'name' | 'amount' | 'unit'> & {
+  inventory_item_id?: number | null;
+};
 
 export interface MashBatch {
   id: number;
@@ -214,9 +217,11 @@ export interface MashBatch {
   recipe_name: string;
   grain_type: string;
   grain_lbs: number;
+  grain_inventory_item_id: number | null;
   water_gal: number;
   yeast_strain: string;
   yeast_lbs: number;
+  yeast_inventory_item_id: number | null;
   start_date: string;
   /** Day the wash was moved into a fermenter. Empty until fermentation starts. */
   fermentation_start_date: string | null;
@@ -297,6 +302,7 @@ export type BotanicalPlace = 'pot' | 'basket';
 
 export interface GinBotanicalInput {
   name: string;
+  inventory_item_id?: number | null;
   /** Count or measure of this botanical, separate from the scale weight. */
   amount: number;
   /** Scale weight. */
@@ -507,6 +513,8 @@ export interface BottlingRunLine {
   bottling_run_id: number;
   packaging_bottle: string;
   packaging_label: string;
+  packaging_bottle_item_id: number | null;
+  packaging_label_item_id: number | null;
   bottle_size_ml: number;
   bottle_count: number;
   sort_order: number;
@@ -515,6 +523,8 @@ export interface BottlingRunLine {
 export interface BottlingRunLineInput {
   packaging_bottle: string;
   packaging_label?: string;
+  packaging_bottle_item_id?: number | null;
+  packaging_label_item_id?: number | null;
   bottle_size_ml: number;
   bottle_count: number;
 }

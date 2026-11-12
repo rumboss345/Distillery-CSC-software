@@ -72,9 +72,11 @@ const emptyBatch = (): Omit<MashBatch, 'id' | 'created_at'> => ({
   recipe_name: '',
   grain_type: '',
   grain_lbs: 0,
+  grain_inventory_item_id: null,
   water_gal: 0,
   yeast_strain: '',
   yeast_lbs: 0,
+  yeast_inventory_item_id: null,
   start_date: localIsoDate(),
   fermentation_start_date: null,
   expected_completion_date: null,
@@ -151,7 +153,12 @@ export function MashFermentation() {
   const openView = (batch: MashBatch) => {
     setViewBatch(batch);
     setViewNutrients(
-      getMashBatchNutrients(batch.id).map((n) => ({ name: n.name, amount: n.amount, unit: n.unit })),
+      getMashBatchNutrients(batch.id).map((n) => ({
+        name: n.name,
+        amount: n.amount,
+        unit: n.unit,
+        inventory_item_id: n.inventory_item_id,
+      })),
     );
   };
 
@@ -161,7 +168,12 @@ export function MashFermentation() {
     setForm({ ...batch, yeast_lbs: batch.yeast_lbs ?? 0 });
     sugarErrors.current = { target: null, actual: null, final: null };
     setBatchNutrients(
-      getMashBatchNutrients(batch.id).map((n) => ({ name: n.name, amount: n.amount, unit: n.unit })),
+      getMashBatchNutrients(batch.id).map((n) => ({
+        name: n.name,
+        amount: n.amount,
+        unit: n.unit,
+        inventory_item_id: n.inventory_item_id,
+      })),
     );
     setShowForm(true);
   };
