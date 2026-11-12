@@ -3,6 +3,7 @@ import {
   barrelBlendAngelShareGal,
   barrelBlendReviewRows,
   blendCheckAbv,
+  barrelBlendSpiritChargeForExecution,
   barrelProofingSpiritSources,
   expectedRemainderAfterSolera,
   syncSoleraReturnsToBlendCheck,
@@ -101,6 +102,32 @@ describe('solera and remainder carry-forward', () => {
     expect(book.abv).toBe(52);
     expect(book.tempF).toBe(60);
     expect(book.weightLbs).toBeGreaterThan(0);
+  });
+});
+
+describe('barrelBlendSpiritChargeForExecution', () => {
+  it('uses leftover when barrel solera is complete', () => {
+    const notes = mergeBarrelSoleraIntoNotes('', {
+      ...emptyBarrelBlendSoleraState(),
+      remainder: { measureMode: 'volume', volumeGal: 120, abv: 52, tempF: 68 },
+      preProofComplete: true,
+    });
+    const charge = barrelBlendSpiritChargeForExecution(notes, [
+      { volume_gal: 53, abv: 55 },
+      { volume_gal: 53, abv: 55 },
+    ]);
+    expect(charge).toHaveLength(1);
+    expect(charge[0].volumeGal).toBe(120);
+    expect(charge[0].abv).toBeCloseTo(50.4, 1);
+  });
+
+  it('falls back to barrel pulls when pre-proof is incomplete', () => {
+    const charge = barrelBlendSpiritChargeForExecution('', [
+      { volume_gal: 40, abv: 60 },
+      { volume_gal: 10, abv: 50 },
+    ]);
+    expect(charge).toHaveLength(2);
+    expect(charge[0].volumeGal).toBe(40);
   });
 });
 

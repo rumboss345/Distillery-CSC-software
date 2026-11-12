@@ -141,6 +141,21 @@ export interface BarrelBlendReviewRow {
   abv: number | null;
 }
 
+/** Spirit charge for proofing, execution, and server save when barrel vat check is complete. */
+export function barrelBlendSpiritChargeForExecution(
+  notes: string,
+  pullSources: readonly { volume_gal: number; abv: number }[],
+): { volumeGal: number; abv: number }[] {
+  const solera = parseBarrelSoleraFromNotes(notes);
+  const fromRemainder = barrelProofingSpiritSources(
+    solera ?? { ...emptyBarrelBlendSoleraState() },
+  );
+  if (fromRemainder.length > 0) return fromRemainder;
+  return pullSources
+    .filter((source) => source.volume_gal > 0 && source.abv > 0)
+    .map((source) => ({ volumeGal: source.volume_gal, abv: source.abv }));
+}
+
 /** Spirit charge used for target-ABV proofing after solera / vat check. */
 export function barrelProofingSpiritSources(
   state: BarrelBlendSoleraState,

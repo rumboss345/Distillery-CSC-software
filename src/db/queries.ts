@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { gallonsRestoredToEmptiedBarrel, sortBarrelsForBlendPicker } from '../lib/barrel-blending';
-import { parseBarrelSoleraFromNotes, type BarrelSoleraReturn } from '../lib/barrel-blend-solera';
+import {
+  barrelBlendSpiritChargeForExecution,
+  parseBarrelSoleraFromNotes,
+  type BarrelSoleraReturn,
+} from '../lib/barrel-blend-solera';
 import { BARREL_STOCK_CATEGORY, BARREL_STOCK_ITEM_NAME } from '../lib/barrel-inventory';
 import {
   bottlingAlcoholVarianceGal,
@@ -6637,9 +6641,10 @@ export function saveBlendFormula(
   const primaryVolume = primary?.volume_gal ?? product.base_spirit_volume_gal;
   const primaryAbv = primary?.abv ?? product.base_spirit_abv;
 
-  const spiritInputs: SpiritSourceInput[] = sources
-    .filter((source) => source.volume_gal > 0 && source.abv > 0)
-    .map((source) => ({ volumeGal: source.volume_gal, abv: source.abv }));
+  const spiritInputs: SpiritSourceInput[] = barrelBlendSpiritChargeForExecution(
+    product.notes ?? '',
+    sources,
+  );
   const storedIngredients = product.target_abv != null && product.target_abv > 0 && spiritInputs.length > 0
     ? reconcileBatchProofingWater(spiritInputs, ingredients, product.target_abv)
     : ingredients;
@@ -6881,8 +6886,16 @@ export function executeBlendProduct(id: number, outputTankId: number): void {
   }
 
   const ingredients = getBlendIngredients(id);
+  const solera = parseBarrelSoleraFromNotes(product.notes ?? '');
+  const executionSpiritCharge = barrelBlendSpiritChargeForExecution(product.notes ?? '', sources);
+  const formulationSources = executionSpiritCharge.map((source) => ({
+    holding_tank_equipment_id: 0,
+    volume_gal: source.volumeGal,
+    abv: source.abv,
+  }));
+
   const proofing = proofingRecordForBlend(
-    sources.map((source) => ({ volumeGal: source.volume_gal, abv: source.abv })),
+    executionSpiritCharge,
     ingredients.map((ingredient) => ({
       ingredientType: ingredient.ingredient_type,
       name: ingredient.name,
@@ -6912,11 +6925,6 @@ export function executeBlendProduct(id: number, outputTankId: number): void {
     throw new Error('Finished batch cannot go into a tank you are pulling spirit from.');
   }
 
-  const solera = parseBarrelSoleraFromNotes(product.notes ?? '');
-  if (solera?.returns?.length) {
-    applyBarrelSoleraReturns(solera.returns, product.batch_number);
-  }
-
   const emptiedBarrels = new Set<number>();
   for (const source of sources) {
     if (!source.barrel_id || source.volume_gal <= 0 || emptiedBarrels.has(source.barrel_id)) continue;
@@ -6926,6 +6934,7 @@ export function executeBlendProduct(id: number, outputTankId: number): void {
     );
     if (!barrel) continue;
     emptiedBarrels.add(source.barrel_id);
+    const volumeBeforeEmpty = barrel.current_volume_gal;
     runQuery(
       'UPDATE barrels SET current_volume_gal = 0, status = ? WHERE id = ?',
       ['empty', source.barrel_id],
@@ -6934,8 +6943,12 @@ export function executeBlendProduct(id: number, outputTankId: number): void {
       `UPDATE blend_spirit_sources
        SET emptied_volume_gal = ?
        WHERE blend_product_id = ? AND barrel_id = ?`,
-      [barrel.current_volume_gal, id, source.barrel_id],
+      [volumeBeforeEmpty, id, source.barrel_id],
     );
+  }
+
+  if (solera?.returns?.length) {
+    applyBarrelSoleraReturns(solera.returns, product.batch_number);
   }
 
   for (const deduction of inventoryDeductionsForBlend(ingredients)) {
@@ -6946,7 +6959,7 @@ export function executeBlendProduct(id: number, outputTankId: number): void {
     });
   }
 
-  const formulation = computeBlendFormulation(sources, ingredients.map((i) => ({
+  const formulation = computeBlendFormulation(formulationSources, ingredients.map((i) => ({
     ingredient_type: i.ingredient_type,
     name: i.name,
     amount: i.amount,
@@ -6963,8 +6976,12 @@ export function executeBlendProduct(id: number, outputTankId: number): void {
     brix: product.actual_brix,
   });
 
-  const finalVolume = formulation.reconciliation.effective.volumeGal ?? formulation.theoretical.volumeGal ?? 0;
-  const finalAbv = formulation.reconciliation.effective.abv ?? formulation.theoretical.abv ?? 0;
+  let finalVolume = formulation.reconciliation.effective.volumeGal ?? formulation.theoretical.volumeGal ?? 0;
+  let finalAbv = formulation.reconciliation.effective.abv ?? formulation.theoretical.abv ?? 0;
+  if (solera?.preProofComplete && finalVolume <= 0 && (product.final_volume_gal ?? 0) > 0) {
+    finalVolume = product.final_volume_gal;
+    finalAbv = product.final_abv ?? finalAbv;
+  }
 
   if (finalVolume <= 0) {
     throw new Error('Expected batch volume must be greater than zero.');

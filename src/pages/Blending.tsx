@@ -2068,7 +2068,8 @@ export function Blending() {
       }
     }
     const barrelNote = isBarrelBlendWizard
-      ? 'The barrels you chose will be emptied. The batch uses the gallons in the formula, and ingredients are deducted from inventory.'
+      ? 'Pull barrels will be emptied, then any solera tops go back into their barrels. '
+        + 'Finished spirit goes into the holding tank you chose. Ingredients are deducted from inventory.'
       : 'Spirit will be pulled from source tanks and ingredients deducted from inventory.';
     if (!confirm(
       `Produce "${form.product_name}" into ${outputTank.name}?\n\n`
@@ -3617,6 +3618,17 @@ export function Blending() {
                 }
                 return <li key={i}>Pull {entered} ({s.volume_gal.toFixed(2)} gal) from {tank?.name}</li>;
               })}
+              {isBarrelBlendWizard && barrelSolera.returns
+                .filter((row) => row.barrel_id > 0 && row.volume_gal > 0)
+                .map((row) => {
+                  const barrel = barrelInventory.find((b) => b.id === row.barrel_id);
+                  return (
+                    <li key={`solera-${row.barrel_id}`}>
+                      Return {row.volume_gal.toFixed(1)} gal @ {row.abv.toFixed(1)}% ABV into{' '}
+                      {barrel?.barrel_number ?? `barrel #${row.barrel_id}`} (after pull barrels are emptied).
+                    </li>
+                  );
+                })}
             </ul>
             {renderProductionWorksheet(outputTankName)}
             <div className="blend-worksheet-actions no-print">
