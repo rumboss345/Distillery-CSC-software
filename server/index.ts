@@ -78,7 +78,7 @@ import {
   readDistilleryRecord,
   writeDistilleryRecord,
 } from './distillery-store.js';
-import { userMayMutate, PRODUCTION_MUTATIONS } from '../src/db/production-catalog.ts';
+import { mutationAccess, userMayMutate, PRODUCTION_MUTATIONS } from '../src/db/production-catalog.ts';
 import { usingPostgres, redactDatabaseUrl } from './pg.js';
 import { blockSqliteWrite } from './sqlite-guard.js';
 import { migrateDatabase } from './migrate.js';
@@ -91,6 +91,8 @@ import {
   listAuditEvents,
   productionRevision,
   productionSnapshot,
+  AdminApprovalRequired,
+  type AdminApproval,
   ProductionConflict,
   restoreProductionBackup,
   runProductionMutation,
@@ -122,6 +124,38 @@ interface AuthPayload {
   role: 'owner' | 'admin' | 'user';
 }
 
+const ADMIN_APPROVAL_PURPOSE = 'admin-approval';
+const ADMIN_APPROVAL_TTL_SECONDS = 10 * 60;
+
+interface AdminApprovalPayload {
+  purpose: typeof ADMIN_APPROVAL_PURPOSE;
+  forUserId: number;
+  adminId: number;
+  actions: string[];
+}
+
+function signAdminApproval(forUserId: number, adminId: number, actions: string[]) {
+  const payload: AdminApprovalPayload = { purpose: ADMIN_APPROVAL_PURPOSE, forUserId, adminId, actions };
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: ADMIN_APPROVAL_TTL_SECONDS });
+}
+
+/** A valid approval is bound to the signed-in user and the action names the administrator approved. */
+async function readAdminApproval(req: express.Request, action: string): Promise<AdminApproval | null> {
+  const token = req.headers['x-admin-approval'];
+  if (typeof token !== 'string' || !token) return null;
+  try {
+    const payload = jwt.verify(token, JWT_SECRET) as Partial<AdminApprovalPayload>;
+    if (payload.purpose !== ADMIN_APPROVAL_PURPOSE) return null;
+    if (payload.forUserId !== req.user!.id) return null;
+    if (!Array.isArray(payload.actions) || !payload.actions.includes(action)) return null;
+    const admin = await getUserById(Number(payload.adminId));
+    if (!admin || !isAdminRole(admin.role)) return null;
+    return { id: admin.id, email: admin.email };
+  } catch {
+    return null;
+  }
+}
+
 function signToken(user: User) {
   const payload: AuthPayload = {
     userId: user.id,
@@ -144,6 +178,10 @@ async function authMiddleware(
   }
   try {
     const payload = jwt.verify(token, JWT_SECRET) as AuthPayload;
+    if (!Number.isInteger(payload.userId)) {
+      res.status(401).json({ error: 'Invalid session' });
+      return;
+    }
     const user = await getUserById(payload.userId);
     if (!user || (!isAdminRole(user.role) && user.status !== 'approved')) {
       res.status(401).json({ error: 'Invalid session' });
@@ -324,10 +362,18 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
   res.json({ user: await publicUser(req.user!) });
 });
 
-/** Re-verify an administrator before sensitive actions (e.g. editing or deleting completed fermentations). */
+/**
+ * Re-verify an administrator before sensitive actions (e.g. editing or deleting completed fermentations).
+ * Returns a short-lived approval the signed-in user sends with those production actions.
+ */
 app.post('/api/auth/verify-admin', authMiddleware, async (req, res) => {
   const email = String(req.body.email ?? '').trim().toLowerCase();
   const password = String(req.body.password ?? '');
+  const actions = Array.isArray(req.body.actions)
+    ? [...new Set((req.body.actions as unknown[]).filter((name): name is string => (
+      typeof name === 'string' && Boolean(PRODUCTION_MUTATIONS[name]?.adminApproval)
+    )))]
+    : [];
 
   if (!email || !password) {
     res.status(400).json({ error: 'Administrator email and password are required' });
@@ -340,7 +386,12 @@ app.post('/api/auth/verify-admin', authMiddleware, async (req, res) => {
     return;
   }
 
-  res.json({ ok: true, email: user.email });
+  res.json({
+    ok: true,
+    email: user.email,
+    approvalToken: actions.length > 0 ? signAdminApproval(req.user!.id, user.id, actions) : undefined,
+    expiresInSeconds: ADMIN_APPROVAL_TTL_SECONDS,
+  });
 });
 
 app.post('/api/auth/forgot-password', async (req, res) => {
@@ -703,22 +754,29 @@ app.post('/api/production/mutate', authMiddleware, async (req, res) => {
     return;
   }
   const permissions = isAdminRole(req.user!.role) ? [] : await getUserPermissions(req.user!.id);
-  if (!userMayMutate(req.user!.role, permissions, mutation.access)) {
+  const access = mutationAccess(mutation, args);
+  if (!userMayMutate(req.user!.role, permissions, access)) {
     res.status(403).json({
-      error: mutation.access === 'owner' ? OWNER_RESET_DATA_ERROR : 'You do not have permission for that action.',
+      error: access === 'owner' ? OWNER_RESET_DATA_ERROR : 'You do not have permission for that action.',
     });
     return;
   }
+  const adminApproval = mutation.adminApproval ? await readAdminApproval(req, name) : null;
   try {
     const saved = await runProductionMutation(
       name,
       args,
       { id: req.user!.id, email: req.user!.email, role: req.user!.role },
       baseRevision,
+      adminApproval,
     );
     res.json({ ...saved, database: saved.snapshot });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'The change could not be saved.';
+    if (error instanceof AdminApprovalRequired) {
+      res.status(403).json({ error: message, code: 'admin_approval_required' });
+      return;
+    }
     const status = error instanceof ProductionConflict ? 409 : 400;
     res.status(status).json({
       error: redactDatabaseUrl(message),

@@ -1,5 +1,6 @@
 import type { PermissionKey, ProcessStageKey } from './permissions';
 import type { AuthRole } from './roles';
+import { clearAdminApproval, setAdminApproval } from './admin-approval';
 
 const TOKEN_KEY = 'distillery-tracker-auth-token';
 
@@ -21,6 +22,7 @@ export function getStoredToken(): string | null {
 }
 
 export function setStoredToken(token: string | null) {
+  clearAdminApproval();
   if (token) localStorage.setItem(TOKEN_KEY, token);
   else localStorage.removeItem(TOKEN_KEY);
 }
@@ -64,11 +66,19 @@ export async function fetchMe() {
   return apiFetch<{ user: AuthUser }>('/api/auth/me');
 }
 
-export async function verifyAdminCredentials(email: string, password: string) {
-  return apiFetch<{ ok: true; email: string }>('/api/auth/verify-admin', {
-    method: 'POST',
-    body: JSON.stringify({ email, password }),
-  });
+/** `actions` are the production changes the administrator approves for the next few minutes. */
+export async function verifyAdminCredentials(email: string, password: string, actions: string[] = []) {
+  const result = await apiFetch<{ ok: true; email: string; approvalToken?: string; expiresInSeconds?: number }>(
+    '/api/auth/verify-admin',
+    {
+      method: 'POST',
+      body: JSON.stringify({ email, password, actions }),
+    },
+  );
+  if (result.approvalToken && result.expiresInSeconds) {
+    setAdminApproval(result.approvalToken, actions, result.expiresInSeconds);
+  }
+  return result;
 }
 
 export async function requestPasswordReset(email: string) {

@@ -3080,6 +3080,7 @@ export function Blending() {
           title="Undo blend production"
           message={`Undo production for "${undoTarget.label}"? Spirit returns to the source tanks and barrels, ingredients go back to inventory, and the finished batch is removed from the output tank. Enter an administrator email and password.`}
           confirmLabel="Undo production"
+          actions={['undoBlendProduction']}
           onClose={() => setUndoTarget(null)}
           onConfirmed={() => {
             const id = undoTarget.id;

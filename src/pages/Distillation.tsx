@@ -1388,6 +1388,7 @@ export function Distillation() {
           title="Delete completed distillation run"
           message={`Run ${adminDeleteRun.batch_number} is complete. Enter an administrator email and password to permanently delete it and all recorded cuts.`}
           confirmLabel="Delete run"
+          actions={['deleteDistillationRun']}
           onClose={() => setAdminDeleteRunId(null)}
           onConfirmed={() => {
             const id = adminDeleteRun.id;
