@@ -443,7 +443,7 @@ export interface DiscardedFermentation {
 export interface BarrelFill {
   id: number;
   barrel_id: number;
-  source_holding_tank_equipment_id: number;
+  source_holding_tank_equipment_id: number | null;
   volume_gal: number;
   abv: number;
   fill_date: string;

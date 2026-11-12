@@ -382,6 +382,16 @@ export async function migrateDatabase(): Promise<void> {
       );
       await client.query(`INSERT INTO schema_migrations (version) VALUES ('020')`);
     }
+    const barrelFillsNullableSourceMigration = await client.query(
+      'SELECT version FROM schema_migrations WHERE version = $1',
+      ['021'],
+    );
+    if (barrelFillsNullableSourceMigration.rowCount === 0) {
+      await client.query(
+        `ALTER TABLE barrel_fills ALTER COLUMN source_holding_tank_equipment_id DROP NOT NULL`,
+      );
+      await client.query(`INSERT INTO schema_migrations (version) VALUES ('021')`);
+    }
     await client.query(`
       INSERT INTO inventory_categories (name)
       SELECT 'botanicals'

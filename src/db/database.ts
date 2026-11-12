@@ -669,6 +669,7 @@ function runMigrations(): void {
   migrateBlendRecipes();
   migrateBarrelBlendRecipes();
   migrateBarrelFills();
+  migrateBarrelFillsNullableSourceTank();
   migrateBarrelSourceHoldingTank();
   migrateFloorPlanPages();
   migrateAdvancedBlending();
@@ -1406,7 +1407,7 @@ function migrateBarrelFills(): void {
     CREATE TABLE IF NOT EXISTS barrel_fills (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       barrel_id INTEGER NOT NULL REFERENCES barrels(id) ON DELETE CASCADE,
-      source_holding_tank_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
+      source_holding_tank_equipment_id INTEGER REFERENCES floor_equipment(id),
       volume_gal REAL NOT NULL,
       abv REAL NOT NULL,
       fill_date TEXT NOT NULL,
@@ -1417,6 +1418,41 @@ function migrateBarrelFills(): void {
   db.run(`CREATE INDEX IF NOT EXISTS idx_barrel_fills_barrel ON barrel_fills(barrel_id)`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_barrel_fills_tank ON barrel_fills(source_holding_tank_equipment_id)`);
   addColumnIfMissing('barrel_fills', 'created_at', "TEXT NOT NULL DEFAULT ''");
+}
+
+function migrateBarrelFillsNullableSourceTank(): void {
+  if (!db) return;
+  const fills = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='barrel_fills'",
+  );
+  if (!fills) return;
+  const sourceTank = queryOne<{ is_required: number }>(
+    `SELECT "notnull" AS is_required FROM pragma_table_info('barrel_fills') WHERE name = 'source_holding_tank_equipment_id'`,
+  );
+  if (sourceTank?.is_required !== 1) return;
+
+  db.run('ALTER TABLE barrel_fills RENAME TO barrel_fills_old');
+  db.run(`
+    CREATE TABLE barrel_fills (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      barrel_id INTEGER NOT NULL REFERENCES barrels(id) ON DELETE CASCADE,
+      source_holding_tank_equipment_id INTEGER REFERENCES floor_equipment(id),
+      volume_gal REAL NOT NULL,
+      abv REAL NOT NULL,
+      fill_date TEXT NOT NULL,
+      notes TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  const cols = queryAll<{ name: string }>(
+    "SELECT name FROM pragma_table_info('barrel_fills_old') ORDER BY cid",
+  );
+  const colList = cols.map((c) => c.name).join(', ');
+  db.run(`INSERT INTO barrel_fills (${colList}) SELECT ${colList} FROM barrel_fills_old`);
+  db.run('DROP TABLE barrel_fills_old');
+  db.run('CREATE INDEX IF NOT EXISTS idx_barrel_fills_barrel ON barrel_fills(barrel_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_barrel_fills_tank ON barrel_fills(source_holding_tank_equipment_id)');
+  persistDb();
 }
 
 function migrateBarrelSourceHoldingTank(): void {
