@@ -19,6 +19,7 @@ import {
 } from '../db/queries';
 import { MashTunVisual } from '../components/equipment/MashTunVisual';
 import type { EquipmentVisualData } from '../components/equipment/equipment-visual.types';
+import { AdminCredentialConfirmModal } from '../components/AdminCredentialConfirmModal';
 import { Modal } from '../components/Modal';
 import { IngredientSelect } from '../components/IngredientSelect';
 import { RecentCompletedNote } from '../components/RecentCompletedNote';
@@ -97,6 +98,7 @@ export function MashFermentation() {
   const allLogSources = getAllFermentationLogSources();
   const [showForm, setShowForm] = useState(false);
   const [viewBatch, setViewBatch] = useState<MashBatch | null>(null);
+  const [adminDelete, setAdminDelete] = useState<MashBatch | null>(null);
   const [viewNutrients, setViewNutrients] = useState<MashBatchNutrientInput[]>([]);
   const [editId, setEditId] = useState<number | undefined>();
   const [form, setForm] = useState(emptyBatch());
@@ -214,11 +216,19 @@ export function MashFermentation() {
   };
 
   const performDelete = (id: number) => {
-    deleteMashBatch(id);
-    refresh();
+    try {
+      deleteMashBatch(id);
+      refresh();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Could not delete wash batch.');
+    }
   };
 
   const handleDelete = (batch: MashBatch) => {
+    if (batch.status === 'complete') {
+      setAdminDelete(batch);
+      return;
+    }
     if (confirm(`Delete wash batch ${batch.batch_number}? Sugar, yeast, and nutrients used for this wash go back to inventory.`)) {
       performDelete(batch.id);
     }
@@ -675,6 +685,21 @@ export function MashFermentation() {
             <button className="btn btn-primary" onClick={performSave}>Save Batch</button>
           </div>
         </Modal>
+      )}
+
+      {adminDelete && (
+        <AdminCredentialConfirmModal
+          title="Delete completed wash batch"
+          message={`Wash batch ${adminDelete.batch_number} is complete. Enter an administrator email and password to delete it. Sugar, yeast, and nutrients used for this wash go back to inventory.`}
+          confirmLabel="Delete wash batch"
+          actions={['deleteMashBatch']}
+          onClose={() => setAdminDelete(null)}
+          onConfirmed={() => {
+            const id = adminDelete.id;
+            setAdminDelete(null);
+            performDelete(id);
+          }}
+        />
       )}
     </div>
   );

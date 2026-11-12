@@ -6,6 +6,8 @@ interface AdminCredentialConfirmModalProps {
   title: string;
   message: string;
   confirmLabel?: string;
+  /** Production actions the server lets staff run for a few minutes after this approval. */
+  actions?: string[];
   onClose: () => void;
   onConfirmed: () => void;
 }
@@ -14,6 +16,7 @@ export function AdminCredentialConfirmModal({
   title,
   message,
   confirmLabel = 'Confirm',
+  actions = [],
   onClose,
   onConfirmed,
 }: AdminCredentialConfirmModalProps) {
@@ -27,7 +30,7 @@ export function AdminCredentialConfirmModal({
     setError(null);
     setSubmitting(true);
     try {
-      await verifyAdminCredentials(email.trim(), password);
+      await verifyAdminCredentials(email.trim(), password, actions);
       onConfirmed();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not verify administrator.');

@@ -3,7 +3,13 @@ import { readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import initSqlJs, { type Database as SqlDatabase } from 'sql.js';
-import { mutationTargetId, PRODUCTION_MUTATIONS } from '../src/db/production-catalog.ts';
+import {
+  ADMIN_APPROVAL_REQUIRED_ERROR,
+  mutationNeedsAdminApproval,
+  mutationTargetId,
+  PRODUCTION_MUTATIONS,
+} from '../src/db/production-catalog.ts';
+import { isAdminRole } from '../src/lib/roles.ts';
 import { PG_BACKUP_FORMAT, PG_BACKUP_VERSION, pgBackupError, type PgBackupFile } from '../src/lib/pg-backup.ts';
 import { SCHEMA } from '../src/db/schema.ts';
 import { setMutationActorRole } from '../src/db/mutation-actor.ts';
@@ -31,6 +37,19 @@ export class ProductionConflict extends Error {
     super(message);
     this.name = 'ProductionConflict';
   }
+}
+
+export class AdminApprovalRequired extends Error {
+  constructor() {
+    super(ADMIN_APPROVAL_REQUIRED_ERROR);
+    this.name = 'AdminApprovalRequired';
+  }
+}
+
+/** The administrator who re-entered their credentials for this staff change. */
+export interface AdminApproval {
+  id: number;
+  email: string;
 }
 
 interface Actor {
@@ -279,6 +298,7 @@ export async function runProductionMutation(
   args: unknown[],
   actor: Actor,
   baseRevision: number,
+  adminApproval: AdminApproval | null = null,
 ): Promise<{ result: unknown; revision: number; snapshot: string }> {
   const mutation = PRODUCTION_MUTATIONS[name];
   if (!mutation) throw new Error('That action is not available.');
@@ -297,6 +317,8 @@ export async function runProductionMutation(
         throw new ProductionConflict('Someone else saved this record. The screen now shows their version.');
       }
     }
+    const needsApproval = !isAdminRole(actor.role) && mutationNeedsAdminApproval(name, args);
+    if (needsApproval && !adminApproval) throw new AdminApprovalRequired();
     snapshotBefore = memory!.export();
     setMutationActorRole(actor.role ?? null);
     let result: unknown;
@@ -307,7 +329,9 @@ export async function runProductionMutation(
     }
     const nextRevision = memoryRevision + 1;
     await persistToPostgres(client, nextRevision, hashesBefore);
-    const summary = auditSummary(name, targetId);
+    const summary = needsApproval && adminApproval
+      ? `${auditSummary(name, targetId)} (approved by ${adminApproval.email})`
+      : auditSummary(name, targetId);
     await client.query(
       `INSERT INTO audit_events (user_id, email, action, summary) VALUES ($1, $2, $3, $4)`,
       [actor.id, actor.email, name, summary.slice(0, 500)],
@@ -321,7 +345,7 @@ export async function runProductionMutation(
       attach(new SQL.Database(snapshotBefore));
     }
     const message = error instanceof Error ? error.message : 'The change could not be saved.';
-    if (error instanceof ProductionConflict) throw error;
+    if (error instanceof ProductionConflict || error instanceof AdminApprovalRequired) throw error;
     throw new Error(redactDatabaseUrl(message));
   } finally {
     client.release();

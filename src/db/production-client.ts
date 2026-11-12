@@ -1,4 +1,5 @@
 import { getStoredToken } from '../lib/auth-api';
+import { adminApprovalFor, clearAdminApproval } from '../lib/admin-approval';
 
 interface ProductionBridge {
   revision: () => number;
@@ -20,6 +21,8 @@ export function invokeProductionMutation(name: string, args: unknown[]): unknown
   xhr.open('POST', '/api/production/mutate', false);
   xhr.setRequestHeader('Content-Type', 'application/json');
   if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+  const approval = adminApprovalFor(name);
+  if (approval) xhr.setRequestHeader('X-Admin-Approval', approval);
   xhr.send(JSON.stringify({ name, args, baseRevision: bridge.revision() }));
   const body = xhr.responseText ? JSON.parse(xhr.responseText) as {
     error?: string;
@@ -37,6 +40,7 @@ export function invokeProductionMutation(name: string, args: unknown[]): unknown
   if (xhr.status < 200 || xhr.status >= 300) {
     throw new Error(body.error ?? 'The change could not be saved.');
   }
+  if (approval) clearAdminApproval();
   // A successful lab/approve/produce save must adopt this revision. Otherwise the
   // next step still sends the old revision and looks like someone else edited it.
   if (snapshot && body.revision != null) bridge.apply(snapshot, body.revision);

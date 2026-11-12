@@ -22,6 +22,7 @@ import {
   saveFermentationSet,
   useRefreshKey,
 } from '../db/queries';
+import { adminApprovalFor } from '../lib/admin-approval';
 import { formatDateDisplay } from '../lib/date-input';
 import { useEquipmentReturn } from '../lib/equipment-return';
 import { latestCompleted } from '../lib/recent-completed';
@@ -470,7 +471,11 @@ export function Fermentation() {
   const handleSave = () => {
     if (!editBatch) return;
     const unlockKey = unlockKeyFor(editBatch.id, formMode === 'edit' ? editEquipmentId : null);
-    if (formMode === 'edit' && originalStatus === 'complete' && completeEditUnlockedRef.current !== unlockKey) {
+    if (
+      formMode === 'edit'
+      && originalStatus === 'complete'
+      && (completeEditUnlockedRef.current !== unlockKey || !adminApprovalFor('saveFermentationSet'))
+    ) {
       setAdminSave(true);
       return;
     }
@@ -711,6 +716,7 @@ export function Fermentation() {
           title="Delete completed fermentation"
           message={deleteMessage(adminDelete)}
           confirmLabel="Delete fermentation"
+          actions={['deleteOneFermentation']}
           onClose={() => setAdminDelete(null)}
           onConfirmed={() => {
             const row = adminDelete;
@@ -725,6 +731,7 @@ export function Fermentation() {
           title="Edit completed fermentation"
           message={`The fermentation${adminEdit.fermenterName ? ` in ${adminEdit.fermenterName}` : ''} for wash ${adminEdit.batch.batch_number} is complete. Enter an administrator email and password to edit it. Other fermenters stay as they are.`}
           confirmLabel="Continue to edit"
+          actions={['saveFermentationSet']}
           onClose={() => setAdminEdit(null)}
           onConfirmed={() => {
             const row = adminEdit;
@@ -740,6 +747,7 @@ export function Fermentation() {
           title="Save completed fermentation"
           message={`This fermentation for wash ${editBatch.batch_number} is complete. Enter an administrator email and password to save your changes.`}
           confirmLabel="Save changes"
+          actions={['saveFermentationSet']}
           onClose={() => setAdminSave(false)}
           onConfirmed={() => {
             completeEditUnlockedRef.current = unlockKeyFor(editBatch.id, editEquipmentId);
