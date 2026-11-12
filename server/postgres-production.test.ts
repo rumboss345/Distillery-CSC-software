@@ -518,6 +518,113 @@ describe('PostgreSQL production modules', () => {
     expect(stock('Front Labels')).toBe(80);
   });
 
+  it('deducts, edits, and restores barrel volume when bottling from a barrel', async () => {
+    await save('saveInventoryItem', [{
+      name: 'New American Oak Barrels',
+      category: 'barrels',
+      unit: 'each',
+      quantity: 4,
+      reorder_level: 1,
+      notes: '',
+      package_size_ml: null,
+      density_g_per_ml: null,
+      density_reference: '',
+      abv: null,
+    }]);
+    const barrelId = Number((await save('saveBarrel', [{
+      barrel_number: 'B-BOTTLE-1',
+      wood_type: 'American oak',
+      capacity_gal: 53,
+      fill_date: '2026-11-01',
+      spirit_type: 'rum',
+      source_run_id: null,
+      source_holding_tank_equipment_id: null,
+      initial_abv: 55,
+      current_volume_gal: 10,
+      warehouse_location: 'Rack B',
+      status: 'aging',
+      notes: '',
+    }])).result);
+    const smallLines = [{
+      packaging_bottle: '375 ml bottle',
+      packaging_label: '',
+      bottle_size_ml: 375,
+      bottle_count: 6,
+    }];
+    const smallGal = (375 * 6) / ML_PER_GALLON;
+    await save('saveBottlingRun', [{
+      batch_number: 'BT-BARREL-1',
+      source_barrel_id: barrelId,
+      source_holding_tank_equipment_id: null,
+      source_volume_gal: null,
+      source_abv: null,
+      bottled_volume_gal: null,
+      volume_variance_gal: null,
+      alcohol_variance_gal: null,
+      variance_reason: null,
+      variance_changed_by: null,
+      return_holding_tank_equipment_id: null,
+      return_volume_gal: null,
+      source_run_id: null,
+      bottling_date: '2026-11-02',
+      packaging_bottle: '',
+      bottle_size_ml: 375,
+      bottle_count: 6,
+      final_abv: 55,
+      product_name: 'Barrel rum',
+      lot_number: 'LOT-B1',
+      notes: '',
+      status: 'complete',
+      returns: [],
+    }, smallLines]);
+    const runId = engine.readProduction((api) => (
+      api.getBottlingRuns().find((run) => run.batch_number === 'BT-BARREL-1')!.id
+    ));
+    const afterFirst = engine.readProduction((api) => api.getBarrels().find((b) => b.id === barrelId));
+    expect(afterFirst?.current_volume_gal).toBeCloseTo(10 - smallGal, 2);
+    expect(afterFirst?.status).toBe('aging');
+
+    const largerLines = [{
+      packaging_bottle: '375 ml bottle',
+      packaging_label: '',
+      bottle_size_ml: 375,
+      bottle_count: 12,
+    }];
+    const largeGal = (375 * 12) / ML_PER_GALLON;
+    await save('saveBottlingRun', [{
+      batch_number: 'BT-BARREL-1',
+      source_barrel_id: barrelId,
+      source_holding_tank_equipment_id: null,
+      source_volume_gal: null,
+      source_abv: null,
+      bottled_volume_gal: null,
+      volume_variance_gal: null,
+      alcohol_variance_gal: null,
+      variance_reason: null,
+      variance_changed_by: null,
+      return_holding_tank_equipment_id: null,
+      return_volume_gal: null,
+      source_run_id: null,
+      bottling_date: '2026-11-02',
+      packaging_bottle: '',
+      bottle_size_ml: 375,
+      bottle_count: 12,
+      final_abv: 55,
+      product_name: 'Barrel rum',
+      lot_number: 'LOT-B1',
+      notes: '',
+      status: 'complete',
+      returns: [],
+    }, largerLines, runId]);
+    const afterEdit = engine.readProduction((api) => api.getBarrels().find((b) => b.id === barrelId));
+    expect(afterEdit?.current_volume_gal).toBeCloseTo(10 - largeGal, 2);
+
+    await save('deleteBottlingRun', [runId]);
+    const restored = engine.readProduction((api) => api.getBarrels().find((b) => b.id === barrelId));
+    expect(restored?.current_volume_gal).toBeCloseTo(10, 2);
+    expect(restored?.status).toBe('aging');
+  });
+
   it('leaves unbottled product in the spirit source and can still send some to another tank', async () => {
     await saveEquipment('Leave Source Tank', 'holding_tank', 25);
     await saveEquipment('Leave Other Tank', 'holding_tank', 50);
