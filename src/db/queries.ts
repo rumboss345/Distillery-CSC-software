@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { gallonsRestoredToEmptiedBarrel, sortBarrelsForBlendPicker } from '../lib/barrel-blending';
+import { parseBarrelSoleraFromNotes, type BarrelSoleraReturn } from '../lib/barrel-blend-solera';
 import { BARREL_STOCK_CATEGORY, BARREL_STOCK_ITEM_NAME } from '../lib/barrel-inventory';
 import {
   bottlingAlcoholVarianceGal,
@@ -5373,6 +5374,72 @@ export function getBarrelsForBlend(): Barrel[] {
   );
 }
 
+/** Barrels that can receive solera tops (empty or aging with headspace). */
+export function getBarrelsForSoleraRefill(): Barrel[] {
+  return sortBarrelsForBlendPicker(
+    getBarrels().filter((b) => (
+      (b.status === 'empty' || b.status === 'aging')
+      && b.capacity_gal > b.current_volume_gal + 0.01
+    )),
+  );
+}
+
+function applyBarrelSoleraReturns(returns: readonly BarrelSoleraReturn[], batchNumber: string): void {
+  for (const row of returns) {
+    if (!(row.barrel_id > 0) || !(row.volume_gal > 0)) continue;
+    const barrel = queryOne<{
+      barrel_number: string;
+      capacity_gal: number;
+      current_volume_gal: number;
+      initial_abv: number;
+      status: string;
+    }>(
+      'SELECT barrel_number, capacity_gal, current_volume_gal, initial_abv, status FROM barrels WHERE id = ?',
+      [row.barrel_id],
+    );
+    if (!barrel) {
+      throw new Error(`Solera barrel #${row.barrel_id} was not found.`);
+    }
+    const headspace = barrel.capacity_gal - barrel.current_volume_gal;
+    if (row.volume_gal > headspace + 0.02) {
+      throw new Error(
+        `Only ${headspace.toFixed(1)} gal headspace in ${barrel.barrel_number}, but ${row.volume_gal.toFixed(1)} gal was set aside for solera.`,
+      );
+    }
+    const nextVol = barrel.current_volume_gal + row.volume_gal;
+    const nextAbv = barrel.current_volume_gal <= 0.01
+      ? row.abv
+      : (
+        (barrel.current_volume_gal * barrel.initial_abv + row.volume_gal * row.abv) / nextVol
+      );
+    runQuery(
+      'UPDATE barrels SET current_volume_gal = ?, initial_abv = ?, status = ? WHERE id = ?',
+      [nextVol, nextAbv, 'aging', row.barrel_id],
+    );
+    insertRow(
+      `INSERT INTO barrel_fills (barrel_id, source_holding_tank_equipment_id, volume_gal, abv, fill_date, notes, created_at)
+       VALUES (?, NULL, ?, ?, date('now'), ?, datetime('now'))`,
+      [row.barrel_id, row.volume_gal, row.abv, `Solera top from blend ${batchNumber}`],
+    );
+  }
+}
+
+function reverseBarrelSoleraReturns(returns: readonly BarrelSoleraReturn[]): void {
+  for (const row of returns) {
+    if (!(row.barrel_id > 0) || !(row.volume_gal > 0)) continue;
+    const barrel = queryOne<{ current_volume_gal: number }>(
+      'SELECT current_volume_gal FROM barrels WHERE id = ?',
+      [row.barrel_id],
+    );
+    if (!barrel) continue;
+    const nextVol = Math.max(0, barrel.current_volume_gal - row.volume_gal);
+    runQuery(
+      'UPDATE barrels SET current_volume_gal = ?, status = ? WHERE id = ?',
+      [nextVol, nextVol > 0.01 ? 'aging' : 'empty', row.barrel_id],
+    );
+  }
+}
+
 export function saveBarrel(barrel: Omit<Barrel, 'id' | 'created_at'>, id?: number): number | void {
   const __remote = forwardProductionMutation('saveBarrel', [barrel, id]);
   if (__remote.forwarded) return __remote.value as never;
@@ -6840,6 +6907,11 @@ export function executeBlendProduct(id: number, outputTankId: number): void {
     throw new Error('Finished batch cannot go into a tank you are pulling spirit from.');
   }
 
+  const solera = parseBarrelSoleraFromNotes(product.notes ?? '');
+  if (solera?.returns?.length) {
+    applyBarrelSoleraReturns(solera.returns, product.batch_number);
+  }
+
   const emptiedBarrels = new Set<number>();
   for (const source of sources) {
     if (!source.barrel_id || source.volume_gal <= 0 || emptiedBarrels.has(source.barrel_id)) continue;
@@ -6967,6 +7039,11 @@ export function undoBlendProduction(id: number): void {
   }
 
   const spiritSources = getBlendSpiritSources(id);
+  const soleraUndo = parseBarrelSoleraFromNotes(product.notes ?? '');
+  if (soleraUndo?.returns?.length) {
+    reverseBarrelSoleraReturns(soleraUndo.returns);
+  }
+
   const restoredBarrels = new Set<number>();
   for (const source of spiritSources) {
     if (!source.barrel_id || restoredBarrels.has(source.barrel_id)) continue;
