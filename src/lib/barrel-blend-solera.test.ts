@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   barrelBlendAngelShareGal,
+  barrelBlendReviewRows,
   emptyBarrelBlendSoleraState,
   mergeBarrelSoleraIntoNotes,
   parseBarrelSoleraFromNotes,
@@ -54,6 +55,30 @@ describe('barrelBlendAngelShareGal', () => {
       returns: [{ barrel_id: 1, volume_gal: 8, abv: 58 }],
     });
     expect(loss).toBe(0);
+  });
+});
+
+describe('barrelBlendReviewRows', () => {
+  it('lists pulls, vat, solera, angel share, and proofing charge', () => {
+    const rows = barrelBlendReviewRows(
+      [{ label: 'Pull B-1', volumeGal: 40, abv: 60 }],
+      [{ label: 'Top B-2', volumeGal: 8, abv: 58 }],
+      {
+        ...emptyBarrelBlendSoleraState(),
+        initial: { measureMode: 'volume', volumeGal: 39.5, abv: 59 },
+        remainder: { measureMode: 'volume', volumeGal: 30, abv: 57.5 },
+        returns: [{ barrel_id: 2, volume_gal: 8, abv: 58 }],
+        angel_share_gal: 1.5,
+        preProofComplete: true,
+      },
+    );
+    expect(rows.map((r) => r.kind)).toEqual([
+      'pull',
+      'vat',
+      'solera',
+      'angel_share',
+      'proof_charge',
+    ]);
   });
 });
 

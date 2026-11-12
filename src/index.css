@@ -2744,6 +2744,19 @@ tr.volume-change-kind:hover td {
   max-width: 36rem;
 }
 
+.barrel-review-account {
+  margin-bottom: 1.25rem;
+}
+
+.barrel-review-title {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+
+.barrel-review-table tr.formulation-total td {
+  font-weight: 700;
+}
+
 .wizard-solera-row {
   display: grid;
   grid-template-columns: minmax(10rem, 2fr) minmax(6rem, 1fr) minmax(5rem, 0.85fr) auto;

@@ -89,6 +89,57 @@ export function formatAngelShareNote(gal: number): string {
   return `Angel's share (barrel vat check): ${gal.toFixed(2)} gal — initial volume minus solera tops minus leftover for proofing.`;
 }
 
+export type BarrelBlendReviewRowKind = 'pull' | 'vat' | 'solera' | 'angel_share' | 'proof_charge';
+
+export interface BarrelBlendReviewRow {
+  kind: BarrelBlendReviewRowKind;
+  label: string;
+  volumeGal: number;
+  abv: number | null;
+}
+
+export function barrelBlendReviewRows(
+  pulls: readonly { label: string; volumeGal: number; abv: number }[],
+  soleraLines: readonly { label: string; volumeGal: number; abv: number }[],
+  state: BarrelBlendSoleraState,
+): BarrelBlendReviewRow[] {
+  const rows: BarrelBlendReviewRow[] = [];
+  for (const pull of pulls) {
+    if (!(pull.volumeGal > 0)) continue;
+    rows.push({ kind: 'pull', label: pull.label, volumeGal: pull.volumeGal, abv: pull.abv });
+  }
+  if (state.initial) {
+    rows.push({
+      kind: 'vat',
+      label: 'Combined vat (measured)',
+      volumeGal: volumeGalFromCheckpoint(state.initial),
+      abv: abvFromCheckpoint(state.initial),
+    });
+  }
+  for (const line of soleraLines) {
+    if (!(line.volumeGal > 0)) continue;
+    rows.push({ kind: 'solera', label: line.label, volumeGal: line.volumeGal, abv: line.abv });
+  }
+  const angel = state.angel_share_gal ?? barrelBlendAngelShareGal(state);
+  if (angel > 0) {
+    rows.push({
+      kind: 'angel_share',
+      label: "Angel's share (verification loss)",
+      volumeGal: angel,
+      abv: null,
+    });
+  }
+  if (state.remainder) {
+    rows.push({
+      kind: 'proof_charge',
+      label: 'Leftover for proofing',
+      volumeGal: volumeGalFromCheckpoint(state.remainder),
+      abv: abvFromCheckpoint(state.remainder),
+    });
+  }
+  return rows;
+}
+
 export function mergeAngelShareIntoUserNotes(notes: string, angelGal: number): string {
   const withoutAngel = notes
     .split('\n')

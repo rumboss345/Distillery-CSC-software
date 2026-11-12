@@ -39,6 +39,7 @@ import {
 import {
   abvFromCheckpoint,
   barrelBlendAngelShareGal,
+  barrelBlendReviewRows,
   checkpointFromDraft,
   emptyBarrelBlendSoleraState,
   mergeAngelShareIntoUserNotes,
@@ -3071,8 +3072,46 @@ export function Blending() {
         const straightSpirit = ingredients.every(
           (ingredient) => ingredient.amount <= 0 || ingredient.ingredient_type === 'water',
         );
-        const reviewLines = [
-          ...activeSources.map((source) => {
+        const barrelReview = isBarrelBlendWizard && barrelSolera.preProofComplete
+          ? barrelBlendReviewRows(
+            activeSources
+              .filter((source) => source.barrel_id)
+              .map((source) => {
+                const barrel = barrelInventory.find((b) => b.id === source.barrel_id);
+                const name = barrel
+                  ? spiritLabelForBarrel(barrel, barrelBlendProductName(barrel.id))
+                  : 'Barrel pull';
+                return {
+                  label: `Pull — ${name}`,
+                  volumeGal: source.volume_gal,
+                  abv: source.abv,
+                };
+              }),
+            barrelSolera.returns
+              .filter((row) => row.barrel_id > 0 && row.volume_gal > 0)
+              .map((row) => {
+                const barrel = getBarrels().find((b) => b.id === row.barrel_id);
+                const name = barrel
+                  ? spiritLabelForBarrel(barrel, barrelBlendProductName(barrel.id))
+                  : `Barrel #${row.barrel_id}`;
+                return {
+                  label: `Solera top — ${name}`,
+                  volumeGal: row.volume_gal,
+                  abv: row.abv,
+                };
+              }),
+            barrelSolera,
+          )
+          : [];
+        const spiritReviewEntries = isBarrelBlendWizard && barrelSolera.preProofComplete && barrelSolera.remainder
+          ? [{
+            label: `Leftover for proofing @ ${abvFromCheckpoint(barrelSolera.remainder).toFixed(1)}%`,
+            volume_gal: volumeGalFromCheckpoint(barrelSolera.remainder),
+            abv: abvFromCheckpoint(barrelSolera.remainder),
+            unit: 'gal' as const,
+            amount: volumeGalFromCheckpoint(barrelSolera.remainder),
+          }]
+          : activeSources.map((source) => {
             const tank = getSpiritTransferVessels().find((t) => t.id === source.holding_tank_equipment_id);
             const barrel = source.barrel_id
               ? barrelInventory.find((b) => b.id === source.barrel_id)
@@ -3080,13 +3119,23 @@ export function Blending() {
             const sourceName = barrel
               ? spiritLabelForBarrel(barrel, barrelBlendProductName(barrel.id))
               : (tank?.name ?? 'Spirit');
+            return {
+              label: `${sourceName} @ ${source.abv.toFixed(1)}%`,
+              volume_gal: source.volume_gal,
+              abv: source.abv,
+              unit: source.unit,
+              amount: source.amount,
+            };
+          });
+        const reviewLines = [
+          ...spiritReviewEntries.map((source) => {
             const weightLb = straightSpirit
               ? table6SpiritPounds(source.volume_gal, source.abv)
               : isWeightUnit(source.unit) && source.amount > 0
                 ? toLbs(source.amount, source.unit)
                 : formulationSpiritWeightLb(source.volume_gal, source.abv);
             return {
-              label: `${sourceName} @ ${source.abv.toFixed(1)}%`,
+              label: source.label,
               volumeGal: source.volume_gal,
               weightLb,
             };
@@ -3114,6 +3163,48 @@ export function Blending() {
         return (
           <div className="wizard-review-card">
             <h4>{form.product_name || 'Your product'}</h4>
+            {isBarrelBlendWizard && !barrelSolera.preProofComplete && (
+              <p className="wizard-result-banner">
+                Finish barrel pulls, vat check, solera tops, and leftover on the Spirits step before this review is final.
+              </p>
+            )}
+            {barrelReview.length > 0 && (
+              <section
+                className="barrel-review-account"
+                data-testid="barrel-blend-review-account"
+              >
+                <h5 className="barrel-review-title">Barrel vat account</h5>
+                <p className="field-hint">
+                  Pulls and solera tops are inventory moves. Proofing and finished volume use only the leftover charge (plus additives and water below).
+                </p>
+                <div className="table-wrap">
+                  <table className="formulation-results-table barrel-review-table">
+                    <thead>
+                      <tr>
+                        <th>Step</th>
+                        <th className="num">Volume</th>
+                        <th className="num">ABV</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {barrelReview.map((row, index) => (
+                        <tr
+                          key={`${row.kind}-${index}`}
+                          className={row.kind === 'proof_charge' ? 'formulation-total' : undefined}
+                        >
+                          <td>{row.label}</td>
+                          <td className="num">{formatReviewVolume(row.volumeGal)}</td>
+                          <td className="num">{row.abv != null ? `${row.abv.toFixed(1)}%` : '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
+            {barrelReview.length > 0 && (
+              <h5 className="barrel-review-title">Proofing formula</h5>
+            )}
             <p className="wizard-yield-line">
               {VOLUME_LABEL_PREDICTED}:{' '}
               <strong>{formatReviewVolume(formulation.theoretical.volumeGal)}</strong>
@@ -3155,7 +3246,7 @@ export function Blending() {
             )}
             {(() => {
               const account = buildBlendAlcoholAccount(
-                activeSources.map((source) => ({ volumeGal: source.volume_gal, abv: source.abv })),
+                formulationSpiritInputs.map((source) => ({ volumeGal: source.volume_gal, abv: source.abv })),
                 ingredients.filter((row) => row.amount > 0).map((row) => ({
                   ingredientType: row.ingredient_type,
                   name: row.name,
