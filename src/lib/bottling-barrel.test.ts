@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   barrelBottlingDrawGal,
   barrelBottlingHeadroomGal,
+  barrelFillDateAfterSoleraTop,
   barrelStatusAfterVolume,
   barrelVolumeAfterDraw,
   barrelVolumeAfterRestore,
@@ -31,5 +32,10 @@ describe('barrel bottling volume', () => {
     expect(barrelVolumeAfterDraw(5, 5)).toBe(0);
     expect(barrelStatusAfterVolume(0)).toBe('empty');
     expect(barrelStatusAfterVolume(0.5)).toBe('aging');
+  });
+
+  it('resets fill date after solera only when the barrel was empty', () => {
+    expect(barrelFillDateAfterSoleraTop(0, '2020-01-01')).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(barrelFillDateAfterSoleraTop(10, '2020-01-01')).toBe('2020-01-01');
   });
 });
