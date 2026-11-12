@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import cors from 'cors';
 import express from 'express';
+import 'express-async-errors';
 import { existsSync, readFileSync } from 'fs';
 import jwt from 'jsonwebtoken';
 import { dirname, join } from 'path';
@@ -81,6 +82,7 @@ import {
   writeDistilleryRecord,
 } from './distillery-store.js';
 import { mutationAccess, userMayMutate, PRODUCTION_MUTATIONS } from '../src/db/production-catalog.ts';
+import { installProcessErrorHandlers, requestErrorHandler } from './express-async.js';
 import { usingPostgres, redactDatabaseUrl } from './pg.js';
 import { blockSqliteWrite } from './sqlite-guard.js';
 import { migrateDatabase } from './migrate.js';
@@ -101,6 +103,7 @@ import {
 } from './production-engine.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+installProcessErrorHandlers();
 const isProduction = process.env.NODE_ENV === 'production';
 
 // Render sets PORT; local dev uses AUTH_PORT or 3001
@@ -170,7 +173,7 @@ function signToken(user: User) {
 async function authMiddleware(
   req: express.Request,
   res: express.Response,
-  next: express.NextFunction
+  next: express.NextFunction,
 ) {
   const header = req.headers.authorization;
   const token = header?.startsWith('Bearer ') ? header.slice(7) : null;
@@ -191,8 +194,12 @@ async function authMiddleware(
     }
     req.user = user;
     next();
-  } catch {
-    res.status(401).json({ error: 'Invalid or expired session' });
+  } catch (error) {
+    if (error instanceof jwt.JsonWebTokenError || error instanceof jwt.TokenExpiredError) {
+      res.status(401).json({ error: 'Invalid or expired session' });
+      return;
+    }
+    next(error);
   }
 }
 
@@ -872,6 +879,15 @@ async function start() {
       });
     });
   }
+
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/api/')) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
+    next();
+  });
+  app.use(requestErrorHandler);
 
   app.listen(PORT, HOST, () => {
     const mode = isProduction ? 'production' : 'development';
