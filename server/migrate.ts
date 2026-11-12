@@ -363,6 +363,25 @@ export async function migrateDatabase(): Promise<void> {
       );
       await client.query(`INSERT INTO schema_migrations (version) VALUES ('018')`);
     }
+    const barrelBlendNullableTankMigration = await client.query(
+      'SELECT version FROM schema_migrations WHERE version = $1',
+      ['020'],
+    );
+    if (barrelBlendNullableTankMigration.rowCount === 0) {
+      await client.query(
+        `ALTER TABLE blend_products ALTER COLUMN source_holding_tank_equipment_id DROP NOT NULL`,
+      );
+      await client.query(
+        `ALTER TABLE blend_spirit_sources ALTER COLUMN holding_tank_equipment_id DROP NOT NULL`,
+      );
+      await client.query(
+        `ALTER TABLE blend_spirit_sources ALTER COLUMN holding_tank_equipment_id DROP DEFAULT`,
+      );
+      await client.query(
+        `UPDATE blend_spirit_sources SET holding_tank_equipment_id = NULL WHERE holding_tank_equipment_id = 0 AND barrel_id IS NOT NULL`,
+      );
+      await client.query(`INSERT INTO schema_migrations (version) VALUES ('020')`);
+    }
     await client.query(`
       INSERT INTO inventory_categories (name)
       SELECT 'botanicals'
