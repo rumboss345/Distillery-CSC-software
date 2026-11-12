@@ -16,6 +16,7 @@ import {
   sucroseQuickEstimateGallons,
   sweetenedBatchAdjustment,
   table3ColumnProofGallons,
+  poundsPerWineGallonTable6,
   table6At,
 } from './index';
 import { TABLE6 } from './table6-data';
@@ -57,6 +58,7 @@ describe('TTB Table 6 dilution', () => {
     expect(table6At('188').water.toFixed(2)).toBe('7.36');
     expect(table6At('112').water.toFixed(2)).toBe('47.75');
     expect(table6At('141').sgAir.toFixed(5)).toBe('0.88862');
+    expect(poundsPerWineGallonTable6('80').toFixed(5)).toBe('7.92614');
   });
 
   it('reduces 100 gallons from 191 proof to 188 proof by exact table arithmetic', () => {

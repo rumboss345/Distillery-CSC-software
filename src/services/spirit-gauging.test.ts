@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import table3Data from './table3-data.generated.json';
 import {
   abvFromProof,
   decomposeWeightLb,
@@ -13,6 +14,22 @@ import {
   weightFromWineGallons,
   wineGallonsFromProofGallons,
 } from './spirit-gauging';
+
+describe('Table 3 pgAt100Lb monotonicity', () => {
+  const pg = table3Data.pgAt100Lb as Record<string, number>;
+
+  it('does not decrease from proof 1 through 200', () => {
+    for (let proof = 1; proof < 200; proof += 1) {
+      expect(pg[String(proof + 1)]).toBeGreaterThanOrEqual(pg[String(proof)]);
+    }
+  });
+
+  it('matches page-17 anchors at 159–161 proof', () => {
+    expect(pg['159']).toBe(22.1);
+    expect(pg['160']).toBe(22.2);
+    expect(pg['161']).toBe(22.4);
+  });
+});
 
 describe('spirit-gauging proof/ABV conversion', () => {
   it('converts proof and ABV both ways', () => {

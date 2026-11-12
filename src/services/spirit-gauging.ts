@@ -1,4 +1,6 @@
 import table3Data from './table3-data.generated.json';
+import { TTB_WATER_POUNDS_PER_GALLON_TABLE6 } from '../lib/calc-engine/constants';
+import { table6At } from '../lib/calc-engine/table6';
 
 /** US wine gallons per liter at 60 °F (TTB gauging basis). */
 export const LITERS_PER_US_GALLON = 3.785411784;
@@ -137,13 +139,19 @@ export function wineGallonsFromWeight(weightLb: number, proof: number): number {
   return wineGallonsFromProofGallons(pg, proof);
 }
 
+function table6PoundsPerWineGallon(proof: number): number {
+  const row = table6At(normalizeProof(proof).toFixed(8));
+  return Number(TTB_WATER_POUNDS_PER_GALLON_TABLE6) * Number(row.sgAir);
+}
+
 /** Expected net weight (lb) for a wine-gallon volume at the given proof (inverse search). */
 export function weightFromWineGallons(wineGallons: number, proof: number): number {
   if (wineGallons <= 0 || proof <= 0) return 0;
 
   const targetPg = roundTtbProofGallons(wineGallons * proof / 100);
   let low = 0;
-  let high = Math.max(100, wineGallons * 12);
+  // Table 6 gives a stable upper bracket so inverse search is not trapped by Table 3 transcription gaps.
+  let high = Math.max(100, wineGallons * table6PoundsPerWineGallon(proof) * 1.02);
   while (proofGallonsFromWeight(high, proof) < targetPg) {
     high *= 2;
     if (high > 1_000_000) break;
