@@ -6,6 +6,8 @@ import {
   barrelProofingSpiritSources,
   expectedRemainderAfterSolera,
   syncSoleraReturnsToBlendCheck,
+  convertBarrelCheckDraftMeasure,
+  syncBarrelCheckDraftAlternate,
   emptyBarrelBlendSoleraState,
   mergeBarrelSoleraIntoNotes,
   parseBarrelSoleraFromNotes,
@@ -59,6 +61,24 @@ describe('barrelBlendAngelShareGal', () => {
       returns: [{ barrel_id: 1, volume_gal: 8, abv: 58 }],
     });
     expect(loss).toBe(0);
+  });
+});
+
+describe('barrel check measure toggle', () => {
+  const draft = { volume: '200', weight: '', abv: '52', tempF: '60' };
+
+  it('syncs weight when volume is primary', () => {
+    const synced = syncBarrelCheckDraftAlternate(draft, 'volume');
+    expect(parseFloat(synced.weight)).toBeGreaterThan(900);
+    expect(synced.volume).toBe('200');
+  });
+
+  it('converts volume to weight when switching to weight mode', () => {
+    const converted = convertBarrelCheckDraftMeasure(draft, 'volume', 'weight');
+    expect(converted.volume).toBe('200');
+    expect(parseFloat(converted.weight)).toBeGreaterThan(900);
+    const back = convertBarrelCheckDraftMeasure({ ...draft, ...converted }, 'weight', 'volume');
+    expect(parseFloat(back.volume)).toBeCloseTo(200, 1);
   });
 });
 
