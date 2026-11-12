@@ -6509,12 +6509,17 @@ export function getBlendFormulaVersions(blendProductId: number): BlendFormulaVer
   );
 }
 
+/** Zero is not a valid floor_equipment FK — use null for barrel-only blends. */
+export function blendFloorEquipmentFk(id: number | null | undefined): number | null {
+  return id != null && id > 0 ? id : null;
+}
+
 function normalizeSpiritSources(
   product: Pick<BlendFormulaSaveInput, 'source_holding_tank_equipment_id' | 'base_spirit_volume_gal' | 'base_spirit_abv'>,
   spiritSources: BlendSpiritSourceInput[],
 ): BlendSpiritSourceInput[] {
   if (spiritSources.length > 0) return spiritSources;
-  if (product.source_holding_tank_equipment_id > 0 && product.base_spirit_volume_gal > 0) {
+  if (product.source_holding_tank_equipment_id != null && product.source_holding_tank_equipment_id > 0 && product.base_spirit_volume_gal > 0) {
     return [{
       holding_tank_equipment_id: product.source_holding_tank_equipment_id,
       volume_gal: product.base_spirit_volume_gal,
@@ -6533,7 +6538,7 @@ function persistSpiritSources(blendProductId: number, sources: BlendSpiritSource
        VALUES (?, ?, ?, ?, ?, ?)`,
       [
         blendProductId,
-        source.holding_tank_equipment_id ?? 0,
+        blendFloorEquipmentFk(source.holding_tank_equipment_id),
         source.barrel_id ?? null,
         source.volume_gal,
         source.abv,
@@ -6626,7 +6631,9 @@ export function saveBlendFormula(
 
   const sources = normalizeSpiritSources(product, spiritSources);
   const primary = sources[0];
-  const primaryTankId = primary?.holding_tank_equipment_id ?? product.source_holding_tank_equipment_id;
+  const primaryTankId = blendFloorEquipmentFk(
+    primary?.holding_tank_equipment_id ?? product.source_holding_tank_equipment_id,
+  );
   const primaryVolume = primary?.volume_gal ?? product.base_spirit_volume_gal;
   const primaryAbv = primary?.abv ?? product.base_spirit_abv;
 
@@ -6680,7 +6687,7 @@ export function saveBlendFormula(
     actual_density: product.actual_density,
     actual_brix: product.actual_brix,
     status: product.status,
-    output_holding_tank_equipment_id: product.output_holding_tank_equipment_id ?? null,
+    output_holding_tank_equipment_id: blendFloorEquipmentFk(product.output_holding_tank_equipment_id),
     blend_recipe_id: product.blend_recipe_id ?? null,
     blend_recipe_version_id: product.blend_recipe_version_id ?? null,
     assigned_user_id: product.assigned_user_id,
@@ -6764,7 +6771,7 @@ export function saveBlendProduct(
       actual_brix: null,
     },
     [{
-      holding_tank_equipment_id: product.source_holding_tank_equipment_id,
+      holding_tank_equipment_id: product.source_holding_tank_equipment_id ?? 0,
       volume_gal: product.base_spirit_volume_gal,
       abv: product.base_spirit_abv,
     }],
@@ -6794,8 +6801,9 @@ function assertSpiritAvailability(
       }
       continue;
     }
-    if (source.holding_tank_equipment_id <= 0) continue;
-    const available = getHoldingTankContents(source.holding_tank_equipment_id, undefined, excludeBlendId);
+    const tankId = source.holding_tank_equipment_id;
+    if (!(tankId > 0)) continue;
+    const available = getHoldingTankContents(tankId, undefined, excludeBlendId);
     if (source.volume_gal > available.volume_gal + 0.01) {
       const tank = queryOne<{ name: string }>(
         'SELECT name FROM floor_equipment WHERE id = ?',
@@ -6855,7 +6863,7 @@ export function executeBlendProduct(id: number, outputTankId: number): void {
   assertEquipmentUsableForProduction(outputTankId, 'Output tank');
 
   const spiritSources = getBlendSpiritSources(id).map((s) => ({
-    holding_tank_equipment_id: s.holding_tank_equipment_id,
+    holding_tank_equipment_id: s.holding_tank_equipment_id ?? 0,
     barrel_id: s.barrel_id ?? null,
     volume_gal: s.volume_gal,
     abv: s.abv,
