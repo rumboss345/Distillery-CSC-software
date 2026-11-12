@@ -38,7 +38,7 @@ export function barrelStatusAfterVolume(volumeGal: number): 'aging' | 'empty' {
   return volumeGal <= 0.01 ? 'empty' : 'aging';
 }
 
-/** Aging time on the floor plan is based on fill_date; zero it when the barrel is emptied. */
+/** Aging time on the floor plan is based on fill_date; clear fill and proof when the barrel is emptied. */
 export function barrelFillDateWhenEmptied(): string {
   return localIsoDate();
 }
