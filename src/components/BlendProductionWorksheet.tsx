@@ -45,6 +45,8 @@ export interface BlendProductionWorksheetProps {
   expectedAbv: number;
   outputTankName: string | null;
   spiritLines: WorksheetSpiritLine[];
+  /** Table column for tank vs barrel pulls (default: Source tank). */
+  spiritPullSourceHeader?: string;
   ingredients: BlendIngredientInput[];
   waterAdjustmentNote: string | null;
   abvDeltas: SpiritAbvDelta[];
@@ -78,6 +80,7 @@ export function BlendProductionWorksheet({
   expectedAbv,
   outputTankName,
   spiritLines,
+  spiritPullSourceHeader = 'Source tank',
   ingredients,
   waterAdjustmentNote,
   abvDeltas,
@@ -178,7 +181,7 @@ export function BlendProductionWorksheet({
           <thead>
             <tr>
               <th className="blend-worksheet-check">Done</th>
-              <th>Source tank</th>
+              <th>{spiritPullSourceHeader}</th>
               <th className="num">Pull</th>
               <th className="num">ABV</th>
               <th>Notes</th>

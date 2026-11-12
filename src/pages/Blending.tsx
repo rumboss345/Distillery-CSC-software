@@ -2261,11 +2261,16 @@ export function Blending() {
       : worksheetTheoretical.abv) ?? 0;
     const worksheetSpiritLines = worksheetSources.map((s, index) => {
       const tank = getSpiritTransferVessels().find((t) => t.id === s.holding_tank_equipment_id);
+      const barrel = s.barrel_id
+        ? barrelInventory.find((b) => b.id === s.barrel_id) ?? getBarrels().find((b) => b.id === s.barrel_id)
+        : undefined;
       return {
         label: s.spirit_label.trim()
           || recipeTemplate?.spirit_sources[s.follows_recipe_index ?? index]?.spirit_label
           || `Spirit ${index + 1}`,
-        tankName: tank?.name ?? '—',
+        tankName: barrel
+          ? barrel.barrel_number
+          : (tank?.name ?? '—'),
         amount: s.amount,
         unit: s.unit,
         volumeGal: s.volume_gal,
@@ -2287,6 +2292,7 @@ export function Blending() {
           expectedAbv={expectedAbv}
           outputTankName={outputTankName}
           spiritLines={worksheetSpiritLines}
+          spiritPullSourceHeader={isBarrelBlendWizard ? 'Barrel' : 'Source tank'}
           ingredients={ingredients}
           waterAdjustmentNote={waterAdjustmentNote}
           abvDeltas={spiritAbvMismatch}
