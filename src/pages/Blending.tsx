@@ -40,6 +40,7 @@ import {
   abvFromCheckpoint,
   barrelBlendAngelShareGal,
   barrelBlendReviewRows,
+  barrelProofingSpiritSources,
   checkpointFromDraft,
   emptyBarrelBlendSoleraState,
   mergeAngelShareIntoUserNotes,
@@ -546,6 +547,15 @@ export function Blending() {
     [spiritSources],
   );
 
+  const proofingSpiritSources = useMemo((): SpiritSourceInput[] => {
+    if (isBarrelBlendWizard) {
+      return barrelProofingSpiritSources(barrelSolera);
+    }
+    return syncedSpiritSources
+      .filter((source) => source.volume_gal > 0 && source.abv > 0)
+      .map((source) => ({ volumeGal: source.volume_gal, abv: source.abv }));
+  }, [isBarrelBlendWizard, barrelSolera, syncedSpiritSources]);
+
   const spiritAbvMismatch = useMemo(() => {
     if (!recipeTemplate) return [];
     return spiritAbvDeltas(
@@ -555,8 +565,18 @@ export function Blending() {
   }, [recipeTemplate, syncedSpiritSources]);
 
   useEffect(() => {
-    if (!recipeTemplate || form.target_abv == null) return;
+    if (form.target_abv == null) return;
     if (wizardStep < 2 || wizardStep > 4) return;
+    if (isBarrelBlendWizard) {
+      if (!barrelSolera.preProofComplete || proofingSpiritSources.length === 0) return;
+      setIngredients((prev) => blendIngredientsWithSolvedProofingWater(
+        prev,
+        proofingSpiritSources,
+        form.target_abv,
+      ));
+      return;
+    }
+    if (!recipeTemplate) return;
 
     const factor = form.scale_factor || 1;
     const templateWater = recipeTemplate.ingredients.find(
@@ -586,9 +606,7 @@ export function Blending() {
     );
     if (deltas.length === 0) {
       setWaterAdjustmentNote(null);
-      const spirits = syncedSpiritSources
-        .filter((source) => source.volume_gal > 0 && source.abv > 0)
-        .map((source) => ({ volumeGal: source.volume_gal, abv: source.abv }));
+      const spirits = proofingSpiritSources;
       const hasSolids = ingredients.some(
         (row) => row.amount > 0 && ['sugar', 'syrup', 'flavoring', 'color', 'other'].includes(row.ingredient_type),
       );
@@ -616,10 +634,7 @@ export function Blending() {
       recipeSpiritGal,
       actualSpiritGal,
       scaledRecipeWater,
-      syncedSpiritSources
-        .map(syncSpiritVolume)
-        .filter((source) => source.volume_gal > 0 && source.abv > 0)
-        .map((source) => ({ volumeGal: source.volume_gal, abv: source.abv })),
+      proofingSpiritSources,
       toAdditiveInputs(ingredients.filter((ingredient) => ingredient.ingredient_type !== 'water')),
       form.target_abv,
     );
@@ -661,6 +676,9 @@ export function Blending() {
     });
   }, [
     syncedSpiritSources,
+    proofingSpiritSources,
+    isBarrelBlendWizard,
+    barrelSolera.preProofComplete,
     form.target_abv,
     form.scale_factor,
     recipeTemplate,
@@ -672,9 +690,10 @@ export function Blending() {
     () => JSON.stringify({
       target: form.target_abv,
       scale: form.scale_factor,
-      spirits: syncedSpiritSources
-        .filter((source) => source.volume_gal > 0 && source.abv > 0)
-        .map((source) => ({ volume_gal: source.volume_gal, abv: source.abv })),
+      spirits: proofingSpiritSources.map((source) => ({
+        volume_gal: source.volumeGal,
+        abv: source.abv,
+      })),
       additives: ingredients
         .filter((row) => row.ingredient_type !== 'water' && row.amount > 0)
         .map((row) => ({
@@ -684,17 +703,16 @@ export function Blending() {
           unit: row.unit,
         })),
     }),
-    [form.target_abv, form.scale_factor, syncedSpiritSources, ingredients],
+    [form.target_abv, form.scale_factor, proofingSpiritSources, ingredients],
   );
 
   useEffect(() => {
     if (form.target_abv == null || !(form.target_abv > 0)) return;
     if (wizardStep < 2 || wizardStep > 6) return;
     if (blendIsComplete(form.status)) return;
-    if (spiritAbvMismatch.length > 0) return;
-    const spirits = syncedSpiritSources
-      .filter((source) => source.volume_gal > 0 && source.abv > 0)
-      .map((source) => ({ volumeGal: source.volume_gal, abv: source.abv }));
+    if (isBarrelBlendWizard && !barrelSolera.preProofComplete) return;
+    if (!isBarrelBlendWizard && spiritAbvMismatch.length > 0) return;
+    const spirits = proofingSpiritSources;
     if (spirits.length === 0) return;
     const hasSolids = ingredients.some(
       (row) => row.amount > 0 && ['sugar', 'syrup', 'flavoring', 'color', 'other'].includes(row.ingredient_type),
@@ -712,7 +730,16 @@ export function Blending() {
       if (Math.abs(waterBefore - waterAfter) < 0.01) return prev;
       return next;
     });
-  }, [batchFormulationInputsKey, wizardStep, form.status, spiritAbvMismatch.length, form.target_abv]);
+  }, [
+    batchFormulationInputsKey,
+    wizardStep,
+    form.status,
+    spiritAbvMismatch.length,
+    form.target_abv,
+    isBarrelBlendWizard,
+    barrelSolera.preProofComplete,
+    proofingSpiritSources,
+  ]);
 
   const baseFormulation = useMemo(() => {
     if (!recipeTemplate || recipeTemplate.spirit_sources.every((source) => source.volume_gal <= 0)) {
@@ -1496,8 +1523,22 @@ export function Blending() {
   };
   const removeIngredient = (index: number) => setIngredients((prev) => prev.filter((_, i) => i !== index));
 
-  const wizardSpiritRecipeInputs = (): BlendRecipeSpiritSourceInput[] => (
-    spiritSources
+  const wizardSpiritRecipeInputs = (): BlendRecipeSpiritSourceInput[] => {
+    if (isBarrelBlendWizard && barrelSolera.preProofComplete && barrelSolera.remainder) {
+      const volumeGal = volumeGalFromCheckpoint(barrelSolera.remainder);
+      const abv = abvFromCheckpoint(barrelSolera.remainder);
+      if (volumeGal > 0 && abv > 0) {
+        const remainder = barrelSolera.remainder;
+        return [{
+          spirit_label: 'Leftover for proofing',
+          volume_gal: volumeGal,
+          abv,
+          entered_amount: remainder.measureMode === 'weight' ? (remainder.weightLbs ?? null) : null,
+          entered_unit: remainder.measureMode === 'weight' ? 'lbs' : null,
+        }];
+      }
+    }
+    return spiritSources
       .map(syncSpiritVolume)
       .filter((source) => source.abv > 0 && (source.volume_gal > 0 || source.amount > 0))
       .map((source) => ({
@@ -1506,8 +1547,8 @@ export function Blending() {
         abv: source.abv,
         entered_amount: source.amount > 0 ? source.amount : null,
         entered_unit: source.amount > 0 ? source.unit : null,
-      }))
-  );
+      }));
+  };
 
   const requestWizardProofingWater = () => {
     if (form.target_abv == null) return;
@@ -1536,12 +1577,12 @@ export function Blending() {
 
   const syncWizardProofingWaterToTarget = () => {
     if (form.target_abv == null || !(form.target_abv > 0)) return;
-    const spirits = spiritSources
-      .map(syncSpiritVolume)
-      .filter((source) => source.volume_gal > 0 && source.abv > 0)
-      .map((source) => ({ volumeGal: source.volume_gal, abv: source.abv }));
-    if (spirits.length === 0) return;
-    setIngredients((current) => blendIngredientsWithSolvedProofingWater(current, spirits, form.target_abv));
+    if (proofingSpiritSources.length === 0) return;
+    setIngredients((current) => blendIngredientsWithSolvedProofingWater(
+      current,
+      proofingSpiritSources,
+      form.target_abv,
+    ));
   };
 
   const confirmWizardProofingWater = () => {

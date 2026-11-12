@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   barrelBlendAngelShareGal,
   barrelBlendReviewRows,
+  barrelProofingSpiritSources,
   emptyBarrelBlendSoleraState,
   mergeBarrelSoleraIntoNotes,
   parseBarrelSoleraFromNotes,
@@ -55,6 +56,19 @@ describe('barrelBlendAngelShareGal', () => {
       returns: [{ barrel_id: 1, volume_gal: 8, abv: 58 }],
     });
     expect(loss).toBe(0);
+  });
+});
+
+describe('barrelProofingSpiritSources', () => {
+  it('uses leftover volume and corrected abv after pre-proof', () => {
+    const sources = barrelProofingSpiritSources({
+      ...emptyBarrelBlendSoleraState(),
+      remainder: { measureMode: 'volume', volumeGal: 28.5, abv: 58, tempF: 68 },
+      preProofComplete: true,
+    });
+    expect(sources).toHaveLength(1);
+    expect(sources[0].volumeGal).toBe(28.5);
+    expect(sources[0].abv).toBeCloseTo(56.45, 2);
   });
 });
 
