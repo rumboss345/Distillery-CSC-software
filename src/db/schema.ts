@@ -376,7 +376,7 @@ CREATE TABLE IF NOT EXISTS blend_products (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   batch_number TEXT NOT NULL UNIQUE,
   product_name TEXT NOT NULL,
-  source_holding_tank_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
+  source_holding_tank_equipment_id INTEGER REFERENCES floor_equipment(id),
   base_spirit_volume_gal REAL NOT NULL DEFAULT 0,
   base_spirit_abv REAL NOT NULL DEFAULT 0,
   blend_date TEXT NOT NULL,
@@ -410,7 +410,7 @@ CREATE TABLE IF NOT EXISTS blend_products (
 CREATE TABLE IF NOT EXISTS blend_spirit_sources (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   blend_product_id INTEGER NOT NULL REFERENCES blend_products(id) ON DELETE CASCADE,
-  holding_tank_equipment_id INTEGER NOT NULL DEFAULT 0 REFERENCES floor_equipment(id),
+  holding_tank_equipment_id INTEGER REFERENCES floor_equipment(id),
   barrel_id INTEGER REFERENCES barrels(id),
   volume_gal REAL NOT NULL DEFAULT 0,
   emptied_volume_gal REAL,
