@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   barrelShownContents,
   barrelsForBlendRow,
+  formatBarrelInventoryOption,
   gallonsRestoredToEmptiedBarrel,
   hasDuplicateBarrelSelections,
+  sortBarrelsForBlendPicker,
 } from './barrel-blending';
 import type { Barrel } from '../types';
 
@@ -35,6 +37,27 @@ describe('barrelsForBlendRow', () => {
   it('keeps the current row barrel in the list when another row uses a different barrel', () => {
     const options = barrelsForBlendRow(inventory, [1, 2, null], 1);
     expect(options.map((b) => b.id)).toEqual([2, 3]);
+  });
+});
+
+describe('sortBarrelsForBlendPicker', () => {
+  it('orders by fill date ascending with oldest first', () => {
+    const older = barrel(1);
+    older.fill_date = '2024-06-01';
+    const newer = barrel(2);
+    newer.fill_date = '2025-01-01';
+    const sorted = sortBarrelsForBlendPicker([newer, older]);
+    expect(sorted.map((b) => b.id)).toEqual([1, 2]);
+  });
+});
+
+describe('formatBarrelInventoryOption', () => {
+  it('includes fill date in the dropdown label', () => {
+    const b = barrel(5);
+    b.fill_date = '2026-03-15';
+    b.barrel_number = 'B-12';
+    expect(formatBarrelInventoryOption(b, 'Dark Rum')).toContain('filled Mar 15, 2026');
+    expect(formatBarrelInventoryOption(b, 'Dark Rum')).toContain('B-12 — Dark Rum');
   });
 });
 
