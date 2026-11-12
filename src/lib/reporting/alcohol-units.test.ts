@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   laaGalFromVolumeAbv,
+  volumeLitersAtTargetAbv,
   roundAbv,
   roundAlcohol,
   roundVolume,
@@ -33,5 +34,10 @@ describe('alcohol-units', () => {
   it('safePercent avoids divide by zero', () => {
     expect(safePercent(5, 100)).toBe(5);
     expect(safePercent(5, 0)).toBeNull();
+  });
+
+  it('converts LAA liters to proofed liquid volume', () => {
+    expect(volumeLitersAtTargetAbv(40, 40)).toBe(100);
+    expect(volumeLitersAtTargetAbv(0, 40)).toBe(0);
   });
 });
