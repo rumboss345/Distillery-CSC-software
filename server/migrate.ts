@@ -330,6 +330,24 @@ export async function migrateDatabase(): Promise<void> {
       );
       await client.query(`INSERT INTO schema_migrations (version) VALUES ('017')`);
     }
+    const inventoryUsageItemIdsMigration = await client.query(
+      'SELECT version FROM schema_migrations WHERE version = $1',
+      ['019'],
+    );
+    if (inventoryUsageItemIdsMigration.rowCount === 0) {
+      for (const qualified of [
+        'mash_batches.grain_inventory_item_id',
+        'mash_batches.yeast_inventory_item_id',
+        'mash_batch_nutrients.inventory_item_id',
+        'distillation_run_botanicals.inventory_item_id',
+        'bottling_run_lines.packaging_bottle_item_id',
+        'bottling_run_lines.packaging_label_item_id',
+      ]) {
+        const [table, column] = qualified.split('.');
+        await client.query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${column} INTEGER`);
+      }
+      await client.query(`INSERT INTO schema_migrations (version) VALUES ('019')`);
+    }
     const distillerySettingsMigration = await client.query('SELECT version FROM schema_migrations WHERE version = $1', ['018']);
     if (distillerySettingsMigration.rowCount === 0) {
       await client.query(`

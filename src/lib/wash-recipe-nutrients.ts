@@ -87,7 +87,7 @@ export function emptyRecipeNutrient(): RecipeNutrientInput {
 }
 
 export function emptyMashBatchNutrient(): MashBatchNutrientInput {
-  return { name: '', amount: 0, unit: 'lbs' };
+  return { name: '', amount: 0, unit: 'lbs', inventory_item_id: null };
 }
 
 export function recipeNutrientsToBatchInputs(
@@ -99,6 +99,7 @@ export function recipeNutrientsToBatchInputs(
       name: n.name.trim(),
       amount: n.amount,
       unit: normalizeNutrientUnit(n.unit),
+      inventory_item_id: n.inventory_item_id,
     }));
 }
 

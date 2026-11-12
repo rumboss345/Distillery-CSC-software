@@ -7,9 +7,6 @@ import {
   bottlingReturnsError,
   bottlingVolumeVarianceGal,
   normalizeBottlingStatus,
-  packagingBottleCountsBySku,
-  packagingInventoryAdjustments,
-  packagingLabelCountsBySku,
 } from '../lib/bottling-lines';
 import {
   barrelBottlingDrawGal,
@@ -33,7 +30,7 @@ import { distillationAlcoholBalance, distillationRecordsLoss, washChargeAbvFromB
 import type { MonthlyProduction } from '../lib/reporting/productivity';
 import { isFermenterSourcedRun, isSpiritStyleRun, isTankSourcedRun, runTypeLabel, stillChargeSourcePhrase } from '../lib/distillation-run-types';
 import { DISTILLATION_SOURCE_TANK_REQUIRED } from '../lib/distillation-source-tanks';
-import { activeGinBotanicals, botanicalInventoryAdjustments, ginBotanicalPlaceError, normalizeBotanicalWeightUnit } from '../lib/gin-botanicals';
+import { activeGinBotanicals, ginBotanicalPlaceError, normalizeBotanicalWeightUnit } from '../lib/gin-botanicals';
 import { preparedIngredientName } from '../lib/quick-ingredient';
 import type { InventoryAdjustSource } from '../lib/inventory-usage';
 import {
@@ -108,6 +105,10 @@ import {
   buildBlendRecipeSnapshot,
   parseBlendRecipeSnapshot,
 } from '../lib/blend-recipe-version';
+import {
+  packagingCountsByItemId,
+  packagingInventoryAdjustmentsById,
+} from '../lib/inventory-packaging-usage';
 import { inventoryCategoryLabel, inventoryQuantityDelta } from '../lib/inventory-units';
 import { mashStatusFromFermentations } from '../lib/wash-stage';
 import type {
@@ -426,15 +427,46 @@ function findInventoryItem(category: InventoryItem['category'], name: string): I
   ) ?? undefined;
 }
 
-function applyInventoryDelta(
+function getInventoryItemById(id: number): InventoryItem {
+  const item = queryOne<InventoryItem>('SELECT * FROM inventory_items WHERE id = ?', [id]);
+  if (!item) {
+    throw new Error(
+      `Inventory item #${id} was not found. It may have been deleted. Restore the item or update the production record.`,
+    );
+  }
+  return item;
+}
+
+function requireInventoryItem(category: InventoryItem['category'], name: string): InventoryItem {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    throw new Error(`A ${inventoryCategoryLabel(category)} item name is required for inventory.`);
+  }
+  const item = findInventoryItem(category, trimmed);
+  if (!item) {
+    throw new Error(
+      `Inventory item "${trimmed}" was not found in ${inventoryCategoryLabel(category)}. Add it on Inventory.`,
+    );
+  }
+  return item;
+}
+
+function inventoryItemIdForUsage(
   category: InventoryItem['category'],
   name: string,
+  storedId: number | null | undefined,
+): number {
+  if (storedId != null && storedId > 0) return getInventoryItemById(storedId).id;
+  return requireInventoryItem(category, name).id;
+}
+
+function applyInventoryDeltaByItemId(
+  itemId: number,
   delta: number,
   source?: InventoryAdjustSource,
 ): void {
-  if (!name.trim() || delta === 0) return;
-  const item = findInventoryItem(category, name);
-  if (!item) return;
+  if (delta === 0) return;
+  getInventoryItemById(itemId);
   const summary = source?.summary ?? (source?.kind === 'bottling'
     ? 'Packaging or labels'
     : source?.kind === 'wash'
@@ -442,7 +474,7 @@ function applyInventoryDelta(
       : source?.kind === 'distillation'
         ? 'Gin botanicals'
         : 'Production use');
-  adjustInventory(item.id, delta, {
+  adjustInventory(itemId, delta, {
     kind: source?.kind ?? 'system',
     reference: source?.reference,
     summary,
@@ -464,9 +496,33 @@ function deductOneBarrelFromInventory(barrelNumber?: string): void {
   });
 }
 
+type BottlingPackagingInventoryLine = Pick<
+  BottlingRunLine,
+  | 'packaging_bottle'
+  | 'packaging_label'
+  | 'packaging_bottle_item_id'
+  | 'packaging_label_item_id'
+  | 'bottle_count'
+>;
+
+function resolveBottlingLineItemIds(line: BottlingRunLineInput): {
+  bottleId: number | null;
+  labelId: number | null;
+} {
+  const bottleName = line.packaging_bottle.trim();
+  const labelName = line.packaging_label?.trim() ?? '';
+  const bottleId = bottleName
+    ? inventoryItemIdForUsage('packaging', bottleName, line.packaging_bottle_item_id)
+    : null;
+  const labelId = labelName
+    ? inventoryItemIdForUsage('labels', labelName, line.packaging_label_item_id)
+    : null;
+  return { bottleId, labelId };
+}
+
 function syncBottlingPackagingInventory(
-  previousLines: BottlingRunLineInput[],
-  nextLines: BottlingRunLineInput[],
+  previousLines: BottlingPackagingInventoryLine[],
+  nextLines: BottlingPackagingInventoryLine[],
   batchNumber?: string,
 ): void {
   const source: InventoryAdjustSource = {
@@ -474,29 +530,67 @@ function syncBottlingPackagingInventory(
     reference: batchNumber?.trim() ?? '',
     summary: 'Bottling run',
   };
-  const bottleAdj = packagingInventoryAdjustments(
-    packagingBottleCountsBySku(previousLines),
-    packagingBottleCountsBySku(nextLines),
+  const prevBottles = packagingCountsByItemId(
+    previousLines.map((line) => ({
+      itemId: line.packaging_bottle_item_id
+        ?? (line.packaging_bottle.trim()
+          ? inventoryItemIdForUsage('packaging', line.packaging_bottle, null)
+          : null),
+      count: line.bottle_count,
+    })),
   );
-  for (const [sku, delta] of Object.entries(bottleAdj)) {
-    applyInventoryDelta('packaging', sku, delta, { ...source, summary: 'Bottles used' });
+  const nextBottles = packagingCountsByItemId(
+    nextLines.map((line) => ({
+      itemId: line.packaging_bottle_item_id
+        ?? (line.packaging_bottle.trim()
+          ? inventoryItemIdForUsage('packaging', line.packaging_bottle, null)
+          : null),
+      count: line.bottle_count,
+    })),
+  );
+  for (const [itemId, delta] of packagingInventoryAdjustmentsById(prevBottles, nextBottles)) {
+    applyInventoryDeltaByItemId(itemId, delta, { ...source, summary: 'Bottles used' });
   }
-  const labelAdj = packagingInventoryAdjustments(
-    packagingLabelCountsBySku(previousLines),
-    packagingLabelCountsBySku(nextLines),
+
+  const prevLabels = packagingCountsByItemId(
+    previousLines.map((line) => ({
+      itemId: line.packaging_label_item_id
+        ?? (line.packaging_label?.trim()
+          ? inventoryItemIdForUsage('labels', line.packaging_label, null)
+          : null),
+      count: line.bottle_count,
+    })),
   );
-  for (const [sku, delta] of Object.entries(labelAdj)) {
-    applyInventoryDelta('labels', sku, delta, { ...source, summary: 'Labels used' });
+  const nextLabels = packagingCountsByItemId(
+    nextLines.map((line) => ({
+      itemId: line.packaging_label_item_id
+        ?? (line.packaging_label?.trim()
+          ? inventoryItemIdForUsage('labels', line.packaging_label, null)
+          : null),
+      count: line.bottle_count,
+    })),
+  );
+  for (const [itemId, delta] of packagingInventoryAdjustmentsById(prevLabels, nextLabels)) {
+    applyInventoryDeltaByItemId(itemId, delta, { ...source, summary: 'Labels used' });
   }
 }
 
-function bottlingLinesToInventoryInput(lines: BottlingRunLine[]): BottlingRunLineInput[] {
-  return lines.map((line) => ({
+function toPackagingInventoryLine(line: BottlingRunLine): BottlingPackagingInventoryLine {
+  return {
     packaging_bottle: line.packaging_bottle,
     packaging_label: line.packaging_label,
-    bottle_size_ml: line.bottle_size_ml,
+    packaging_bottle_item_id: line.packaging_bottle_item_id ?? null,
+    packaging_label_item_id: line.packaging_label_item_id ?? null,
     bottle_count: line.bottle_count,
-  }));
+  };
+}
+
+function normalizeBottlingRunLine(row: BottlingRunLine): BottlingRunLine {
+  return {
+    ...row,
+    packaging_bottle_item_id: row.packaging_bottle_item_id ?? null,
+    packaging_label_item_id: row.packaging_label_item_id ?? null,
+  };
 }
 
 /** Create an inventory ingredient, or return the same-category item that already has this name. */
@@ -827,7 +921,7 @@ function persistRecipeNutrients(recipeId: number, nutrients: RecipeNutrientInput
     .filter((n) => n.amount > 0 && n.name.trim())
     .forEach((n) => {
       const name = n.name.trim();
-      const item = findInventoryItem('nutrients', name);
+      const itemId = inventoryItemIdForUsage('nutrients', name, n.inventory_item_id);
       insertRow(
         `INSERT INTO recipe_nutrients (recipe_id, name, amount, unit, inventory_item_id, notes)
          VALUES (?, ?, ?, ?, ?, ?)`,
@@ -836,7 +930,7 @@ function persistRecipeNutrients(recipeId: number, nutrients: RecipeNutrientInput
           name,
           n.amount,
           normalizeNutrientUnit(n.unit),
-          item?.id ?? n.inventory_item_id ?? null,
+          itemId,
           n.notes ?? '',
         ],
       );
@@ -846,7 +940,8 @@ function persistRecipeNutrients(recipeId: number, nutrients: RecipeNutrientInput
 export function getMashBatchNutrients(mashBatchId: number): MashBatchNutrient[] {
   return queryAll<MashBatchNutrient>(
     `SELECT id, mash_batch_id, name, lbs AS amount,
-            COALESCE(NULLIF(unit, ''), 'lbs') AS unit
+            COALESCE(NULLIF(unit, ''), 'lbs') AS unit,
+            inventory_item_id
      FROM mash_batch_nutrients
      WHERE mash_batch_id = ?
      ORDER BY id`,
@@ -859,22 +954,26 @@ function persistMashBatchNutrients(mashBatchId: number, nutrients: MashBatchNutr
   nutrients
     .filter((n) => n.amount > 0 && n.name.trim())
     .forEach((n) => {
+      const name = n.name.trim();
+      const itemId = inventoryItemIdForUsage('nutrients', name, n.inventory_item_id);
       insertRow(
-        'INSERT INTO mash_batch_nutrients (mash_batch_id, name, lbs, unit) VALUES (?, ?, ?, ?)',
-        [mashBatchId, n.name.trim(), n.amount, normalizeNutrientUnit(n.unit)],
+        `INSERT INTO mash_batch_nutrients (mash_batch_id, name, lbs, unit, inventory_item_id)
+         VALUES (?, ?, ?, ?, ?)`,
+        [mashBatchId, name, n.amount, normalizeNutrientUnit(n.unit), itemId],
       );
     });
 }
 
-function nutrientUsageByName(rows: MashBatchNutrientInput[]): Map<string, number> {
-  const map = new Map<string, number>();
+function nutrientUsageByItemId(rows: MashBatchNutrientInput[]): Map<number, number> {
+  const map = new Map<number, number>();
   for (const row of rows) {
     const name = row.name.trim();
     if (!name || row.amount <= 0) continue;
-    const item = findInventoryItem('nutrients', name);
-    const inventoryUnit = item?.unit?.trim() || 'lbs';
+    const itemId = inventoryItemIdForUsage('nutrients', name, row.inventory_item_id);
+    const item = getInventoryItemById(itemId);
+    const inventoryUnit = item.unit?.trim() || 'lbs';
     const qty = nutrientAmountInUnit(row.amount, row.unit || 'lbs', inventoryUnit);
-    map.set(name, (map.get(name) ?? 0) + qty);
+    map.set(itemId, (map.get(itemId) ?? 0) + qty);
   }
   return map;
 }
@@ -889,13 +988,13 @@ function applyMashNutrientInventory(
     reference: batchNumber?.trim() ?? '',
     summary: 'Wash nutrients',
   };
-  const prevMap = nutrientUsageByName(previous);
-  const nextMap = nutrientUsageByName(next);
-  const names = new Set([...prevMap.keys(), ...nextMap.keys()]);
-  for (const name of names) {
-    const prevLbs = prevMap.get(name) ?? 0;
-    const nextLbs = nextMap.get(name) ?? 0;
-    applyInventoryDelta('nutrients', name, prevLbs - nextLbs, source);
+  const prevMap = nutrientUsageByItemId(previous);
+  const nextMap = nutrientUsageByItemId(next);
+  const ids = new Set([...prevMap.keys(), ...nextMap.keys()]);
+  for (const itemId of ids) {
+    const prevLbs = prevMap.get(itemId) ?? 0;
+    const nextLbs = nextMap.get(itemId) ?? 0;
+    applyInventoryDeltaByItemId(itemId, prevLbs - nextLbs, source);
   }
 }
 
@@ -987,15 +1086,56 @@ export function saveMashBatch(batch: Omit<MashBatch, 'id' | 'created_at'>, id?: 
 
   if (id) {
     runQuery(
-      `UPDATE mash_batches SET batch_number=?, recipe_name=?, grain_type=?, grain_lbs=?, water_gal=?, yeast_strain=?, yeast_lbs=?, start_date=?, fermentation_start_date=?, expected_completion_date=?, target_brix=?, actual_brix=?, target_final_brix=?, status=?, assigned_user_id=?, assigned_user_name=?, notes=? WHERE id=?`,
-      [batch.batch_number, batch.recipe_name, batch.grain_type, batch.grain_lbs, batch.water_gal, batch.yeast_strain, batch.yeast_lbs, batch.start_date, batch.fermentation_start_date || null, batch.expected_completion_date || null, batch.target_brix, batch.actual_brix, batch.target_final_brix, batch.status, batch.assigned_user_id, batch.assigned_user_name ?? '', batch.notes, id],
+      `UPDATE mash_batches SET batch_number=?, recipe_name=?, grain_type=?, grain_lbs=?, grain_inventory_item_id=?, water_gal=?, yeast_strain=?, yeast_lbs=?, yeast_inventory_item_id=?, start_date=?, fermentation_start_date=?, expected_completion_date=?, target_brix=?, actual_brix=?, target_final_brix=?, status=?, assigned_user_id=?, assigned_user_name=?, notes=? WHERE id=?`,
+      [batch.batch_number, batch.recipe_name, batch.grain_type, batch.grain_lbs, batch.grain_inventory_item_id, batch.water_gal, batch.yeast_strain, batch.yeast_lbs, batch.yeast_inventory_item_id, batch.start_date, batch.fermentation_start_date || null, batch.expected_completion_date || null, batch.target_brix, batch.actual_brix, batch.target_final_brix, batch.status, batch.assigned_user_id, batch.assigned_user_name ?? '', batch.notes, id],
     );
     return id;
   }
   return insertRow(
-    `INSERT INTO mash_batches (batch_number, recipe_name, grain_type, grain_lbs, water_gal, yeast_strain, yeast_lbs, start_date, fermentation_start_date, expected_completion_date, target_brix, actual_brix, target_final_brix, actual_final_brix, status, assigned_user_id, assigned_user_name, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [batch.batch_number, batch.recipe_name, batch.grain_type, batch.grain_lbs, batch.water_gal, batch.yeast_strain, batch.yeast_lbs, batch.start_date, batch.fermentation_start_date || null, batch.expected_completion_date || null, batch.target_brix, batch.actual_brix, batch.target_final_brix, batch.actual_final_brix, batch.status, batch.assigned_user_id, batch.assigned_user_name ?? '', batch.notes],
+    `INSERT INTO mash_batches (batch_number, recipe_name, grain_type, grain_lbs, grain_inventory_item_id, water_gal, yeast_strain, yeast_lbs, yeast_inventory_item_id, start_date, fermentation_start_date, expected_completion_date, target_brix, actual_brix, target_final_brix, actual_final_brix, status, assigned_user_id, assigned_user_name, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [batch.batch_number, batch.recipe_name, batch.grain_type, batch.grain_lbs, batch.grain_inventory_item_id, batch.water_gal, batch.yeast_strain, batch.yeast_lbs, batch.yeast_inventory_item_id, batch.start_date, batch.fermentation_start_date || null, batch.expected_completion_date || null, batch.target_brix, batch.actual_brix, batch.target_final_brix, batch.actual_final_brix, batch.status, batch.assigned_user_id, batch.assigned_user_name ?? '', batch.notes],
   );
+}
+
+function applyWashIngredientInventory(
+  previous: { itemId: number | null; lbs: number },
+  next: { itemId: number | null; lbs: number },
+  source: InventoryAdjustSource,
+  consumeSummary: string,
+  restoreSummary: string,
+): void {
+  if (
+    previous.itemId != null
+    && next.itemId != null
+    && previous.itemId === next.itemId
+  ) {
+    applyInventoryDeltaByItemId(
+      next.itemId,
+      previous.lbs - next.lbs,
+      { ...source, summary: consumeSummary },
+    );
+    return;
+  }
+  if (previous.itemId != null && previous.lbs > 0) {
+    applyInventoryDeltaByItemId(previous.itemId, previous.lbs, { ...source, summary: restoreSummary });
+  }
+  if (next.itemId != null && next.lbs > 0) {
+    applyInventoryDeltaByItemId(next.itemId, -next.lbs, { ...source, summary: consumeSummary });
+  }
+}
+
+function withMashInventoryLinks(
+  batch: Omit<MashBatch, 'id' | 'created_at'>,
+): Omit<MashBatch, 'id' | 'created_at'> {
+  return {
+    ...batch,
+    grain_inventory_item_id: batch.grain_lbs > 0 && batch.grain_type.trim()
+      ? inventoryItemIdForUsage('sugar', batch.grain_type, batch.grain_inventory_item_id)
+      : null,
+    yeast_inventory_item_id: batch.yeast_lbs > 0 && batch.yeast_strain.trim()
+      ? inventoryItemIdForUsage('yeast', batch.yeast_strain, batch.yeast_inventory_item_id)
+      : null,
+  };
 }
 
 function applyMashInventoryUsage(
@@ -1009,29 +1149,31 @@ function applyMashInventoryUsage(
     reference: next.batch_number?.trim() ?? previous?.batch_number?.trim() ?? '',
     summary: 'Wash batch',
   };
-  const prevSugar = previous?.grain_type ?? '';
-  const nextSugar = next.grain_type ?? '';
-  const prevSugarLbs = previous?.grain_lbs ?? 0;
-  const nextSugarLbs = next.grain_lbs ?? 0;
+  const prevGrainId = previous?.grain_inventory_item_id
+    ?? (previous && previous.grain_lbs > 0 && previous.grain_type.trim()
+      ? inventoryItemIdForUsage('sugar', previous.grain_type, null)
+      : null);
+  const nextGrainId = next.grain_inventory_item_id;
+  applyWashIngredientInventory(
+    { itemId: prevGrainId ?? null, lbs: previous?.grain_lbs ?? 0 },
+    { itemId: nextGrainId ?? null, lbs: next.grain_lbs ?? 0 },
+    source,
+    'Wash sugar',
+    'Wash sugar restored',
+  );
 
-  if (prevSugar.trim().toLowerCase() === nextSugar.trim().toLowerCase()) {
-    applyInventoryDelta('sugar', nextSugar, prevSugarLbs - nextSugarLbs, { ...source, summary: 'Wash sugar' });
-  } else {
-    applyInventoryDelta('sugar', prevSugar, prevSugarLbs, { ...source, summary: 'Wash sugar restored' });
-    applyInventoryDelta('sugar', nextSugar, -nextSugarLbs, { ...source, summary: 'Wash sugar' });
-  }
-
-  const prevYeast = previous?.yeast_strain ?? '';
-  const nextYeast = next.yeast_strain ?? '';
-  const prevYeastLbs = previous?.yeast_lbs ?? 0;
-  const nextYeastLbs = next.yeast_lbs ?? 0;
-
-  if (prevYeast.trim().toLowerCase() === nextYeast.trim().toLowerCase()) {
-    applyInventoryDelta('yeast', nextYeast, prevYeastLbs - nextYeastLbs, { ...source, summary: 'Wash yeast' });
-  } else {
-    applyInventoryDelta('yeast', prevYeast, prevYeastLbs, { ...source, summary: 'Wash yeast restored' });
-    applyInventoryDelta('yeast', nextYeast, -nextYeastLbs, { ...source, summary: 'Wash yeast' });
-  }
+  const prevYeastId = previous?.yeast_inventory_item_id
+    ?? (previous && previous.yeast_lbs > 0 && previous.yeast_strain.trim()
+      ? inventoryItemIdForUsage('yeast', previous.yeast_strain, null)
+      : null);
+  const nextYeastId = next.yeast_inventory_item_id;
+  applyWashIngredientInventory(
+    { itemId: prevYeastId ?? null, lbs: previous?.yeast_lbs ?? 0 },
+    { itemId: nextYeastId ?? null, lbs: next.yeast_lbs ?? 0 },
+    source,
+    'Wash yeast',
+    'Wash yeast restored',
+  );
 
   applyMashNutrientInventory(previousNutrients, nextNutrients, source.reference);
 }
@@ -3638,12 +3780,17 @@ export function saveMashBatchWithFermenters(
 
   const previous = id ? getMashBatch(id) : undefined;
   const previousNutrients = id
-    ? getMashBatchNutrients(id).map((n) => ({ name: n.name, amount: n.amount, unit: n.unit }))
+    ? getMashBatchNutrients(id).map((n) => ({
+      name: n.name,
+      amount: n.amount,
+      unit: n.unit,
+      inventory_item_id: n.inventory_item_id,
+    }))
     : [];
-  const datedBatch = {
+  const datedBatch = withMashInventoryLinks({
     ...batch,
     start_date: eventDateWhenLeavingPlanned(previous?.status, batch.status, batch.start_date),
-  };
+  });
   assertMashBatchCompleteHasLogs(datedBatch, id);
   assertMashBatchEquipmentUsable(datedBatch, assignments);
   const mashId = saveMashBatch(datedBatch, id);
@@ -3799,6 +3946,7 @@ export function saveFermentationSet(
     name: nutrient.name,
     amount: nutrient.amount,
     unit: nutrient.unit,
+    inventory_item_id: nutrient.inventory_item_id,
   }));
   const { id: _id, created_at: _created, ...batchFields } = batch;
   const actualStartBrix = options?.actualStartBrix;
@@ -4148,6 +4296,7 @@ export function deleteMashBatch(id: number): void {
       name: nutrient.name,
       amount: nutrient.amount,
       unit: nutrient.unit,
+      inventory_item_id: nutrient.inventory_item_id,
     }))
     : [];
 
@@ -4159,8 +4308,10 @@ export function deleteMashBatch(id: number): void {
         ...batch,
         grain_type: '',
         grain_lbs: 0,
+        grain_inventory_item_id: null,
         yeast_strain: '',
         yeast_lbs: 0,
+        yeast_inventory_item_id: null,
       },
       batch,
       nutrients,
@@ -4858,6 +5009,19 @@ export function saveDistillationRun(
   return runId;
 }
 
+function botanicalUsageByItemId(
+  lines: GinBotanicalInput[],
+): Map<number, number> {
+  const map = new Map<number, number>();
+  for (const line of activeGinBotanicals(lines)) {
+    const itemId = inventoryItemIdForUsage('botanicals', line.name, line.inventory_item_id);
+    const unit = getInventoryItemById(itemId).unit?.trim() || 'g';
+    const qty = nutrientAmountInUnit(line.weight, line.weight_unit, unit);
+    map.set(itemId, (map.get(itemId) ?? 0) + qty);
+  }
+  return map;
+}
+
 function applyGinBotanicalInventory(
   previous: GinBotanicalInput[],
   next: GinBotanicalInput[],
@@ -4868,13 +5032,12 @@ function applyGinBotanicalInventory(
     reference: batchNumber?.trim() ?? '',
     summary: 'Gin botanicals',
   };
-  const adjustments = botanicalInventoryAdjustments(
-    previous,
-    next,
-    (name) => findInventoryItem('botanicals', name)?.unit ?? 'g',
-  );
-  for (const adjustment of adjustments) {
-    applyInventoryDelta('botanicals', adjustment.name, adjustment.delta, source);
+  const prevMap = botanicalUsageByItemId(previous);
+  const nextMap = botanicalUsageByItemId(next);
+  const ids = new Set([...prevMap.keys(), ...nextMap.keys()]);
+  for (const itemId of ids) {
+    const delta = (prevMap.get(itemId) ?? 0) - (nextMap.get(itemId) ?? 0);
+    applyInventoryDeltaByItemId(itemId, delta, source);
   }
 }
 
@@ -4896,11 +5059,12 @@ function persistRunBotanicals(runId: number, botanicals: GinBotanicalInput[], ba
   applyGinBotanicalInventory(getRunBotanicals(runId), lines, batchNumber);
   runQuery('DELETE FROM distillation_run_botanicals WHERE distillation_run_id = ?', [runId]);
   lines.forEach((line, index) => {
+    const itemId = inventoryItemIdForUsage('botanicals', line.name, line.inventory_item_id);
     insertRow(
       `INSERT INTO distillation_run_botanicals
-        (distillation_run_id, name, amount, weight, weight_unit, place, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [runId, line.name, line.amount, line.weight, line.weight_unit, line.place ?? null, index],
+        (distillation_run_id, name, inventory_item_id, amount, weight, weight_unit, place, sort_order)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [runId, line.name, itemId, line.amount, line.weight, line.weight_unit, line.place ?? null, index],
     );
   });
 }
@@ -5409,7 +5573,7 @@ function attachBottlingRunLines(runs: BottlingRun[]): BottlingRunView[] {
   const linesByRun = new Map<number, BottlingRunLine[]>();
   for (const line of allLines) {
     const bucket = linesByRun.get(line.bottling_run_id) ?? [];
-    bucket.push(line);
+    bucket.push(normalizeBottlingRunLine(line));
     linesByRun.set(line.bottling_run_id, bucket);
   }
   const allReturns = queryAll<BottlingRunReturn>(
@@ -5458,6 +5622,8 @@ function attachBottlingRunLines(runs: BottlingRun[]): BottlingRunView[] {
           bottling_run_id: run.id,
           packaging_bottle: run.packaging_bottle,
           packaging_label: '',
+          packaging_bottle_item_id: null,
+          packaging_label_item_id: null,
           bottle_size_ml: run.bottle_size_ml,
           bottle_count: run.bottle_count,
           sort_order: 0,
@@ -5515,10 +5681,23 @@ function persistBottlingRunLines(runId: number, lines: BottlingRunLineInput[]): 
   runQuery('DELETE FROM bottling_run_lines WHERE bottling_run_id = ?', [runId]);
   lines.forEach((line, index) => {
     if (line.bottle_count <= 0 || line.bottle_size_ml <= 0) return;
+    const { bottleId, labelId } = resolveBottlingLineItemIds(line);
     insertRow(
-      `INSERT INTO bottling_run_lines (bottling_run_id, packaging_bottle, packaging_label, bottle_size_ml, bottle_count, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [runId, line.packaging_bottle, line.packaging_label?.trim() ?? '', line.bottle_size_ml, line.bottle_count, index],
+      `INSERT INTO bottling_run_lines (
+        bottling_run_id, packaging_bottle, packaging_label,
+        packaging_bottle_item_id, packaging_label_item_id,
+        bottle_size_ml, bottle_count, sort_order
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        runId,
+        line.packaging_bottle,
+        line.packaging_label?.trim() ?? '',
+        bottleId,
+        labelId,
+        line.bottle_size_ml,
+        line.bottle_count,
+        index,
+      ],
     );
   });
 }
@@ -5601,9 +5780,8 @@ export function saveBottlingRun(
   const previousStatus = previous ? normalizeBottlingStatus(previous.status) : null;
   const activeLines = lines.filter((line) => line.bottle_count > 0 && line.bottle_size_ml > 0);
   const previousLines = id && previousStatus !== 'planned'
-    ? bottlingLinesToInventoryInput(getBottlingRunLines(id))
+    ? getBottlingRunLines(id)
     : [];
-  const nextInventory = status === 'planned' ? [] : activeLines;
   const fromTank = run.source_holding_tank_equipment_id != null;
   const sourceBarrelId = fromTank ? null : run.source_barrel_id;
   const sourceTankId = fromTank ? run.source_holding_tank_equipment_id : null;
@@ -5853,7 +6031,14 @@ export function saveBottlingRun(
   for (const eqId of equipmentToMarkDirty) {
     markEquipmentDirtyAfterBottling(eqId, header.batch_number);
   }
-  syncBottlingPackagingInventory(previousLines, nextInventory, header.batch_number);
+  const nextInventory = status === 'planned'
+    ? []
+    : getBottlingRunLines(runId).map(toPackagingInventoryLine);
+  syncBottlingPackagingInventory(
+    previousLines.map(toPackagingInventoryLine),
+    nextInventory,
+    header.batch_number,
+  );
   syncBarrelBottlingVolumes({
     previousBarrelId: previous?.source_barrel_id ?? null,
     previousDrawGal,
@@ -5877,13 +6062,13 @@ export function deleteBottlingRun(id: number): void {
 
   const previous = queryOne<BottlingRun>('SELECT * FROM bottling_runs WHERE id = ?', [id]);
   const previousLines = previous && normalizeBottlingStatus(previous.status) !== 'planned'
-    ? bottlingLinesToInventoryInput(getBottlingRunLines(id))
+    ? getBottlingRunLines(id)
     : [];
   const previousBottledGal = previous
     ? (previous.bottled_volume_gal ?? bottledVolumeFromBottlingLines(previousLines) ?? 0)
     : 0;
   const previousDrawGal = barrelBottlingDrawGal(previous?.status ?? null, previousBottledGal);
-  syncBottlingPackagingInventory(previousLines, [], previous?.batch_number);
+  syncBottlingPackagingInventory(previousLines.map(toPackagingInventoryLine), [], previous?.batch_number);
   if (previous?.source_barrel_id && previousDrawGal > 0.001) {
     restoreBarrelVolumeAfterBottling(previous.source_barrel_id, previousDrawGal);
   }

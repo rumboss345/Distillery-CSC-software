@@ -75,7 +75,8 @@ CREATE TABLE IF NOT EXISTS mash_batch_nutrients (
   mash_batch_id INTEGER NOT NULL REFERENCES mash_batches(id) ON DELETE CASCADE,
   name TEXT NOT NULL DEFAULT '',
   lbs REAL NOT NULL DEFAULT 0,
-  unit TEXT NOT NULL DEFAULT 'lbs'
+  unit TEXT NOT NULL DEFAULT 'lbs',
+  inventory_item_id INTEGER REFERENCES inventory_items(id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_mash_batch_nutrients_batch ON mash_batch_nutrients(mash_batch_id);
@@ -86,9 +87,11 @@ CREATE TABLE IF NOT EXISTS mash_batches (
   recipe_name TEXT NOT NULL,
   grain_type TEXT NOT NULL,
   grain_lbs REAL NOT NULL,
+  grain_inventory_item_id INTEGER REFERENCES inventory_items(id),
   water_gal REAL NOT NULL,
   yeast_strain TEXT NOT NULL DEFAULT '',
   yeast_lbs REAL NOT NULL DEFAULT 0,
+  yeast_inventory_item_id INTEGER REFERENCES inventory_items(id),
   start_date TEXT NOT NULL,
   fermentation_start_date TEXT,
   expected_completion_date TEXT,
@@ -160,6 +163,7 @@ CREATE TABLE IF NOT EXISTS distillation_run_botanicals (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   distillation_run_id INTEGER NOT NULL REFERENCES distillation_runs(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
+  inventory_item_id INTEGER REFERENCES inventory_items(id),
   amount REAL NOT NULL DEFAULT 0,
   weight REAL NOT NULL DEFAULT 0,
   weight_unit TEXT NOT NULL DEFAULT 'g',
@@ -273,6 +277,8 @@ CREATE TABLE IF NOT EXISTS bottling_run_lines (
   bottling_run_id INTEGER NOT NULL REFERENCES bottling_runs(id) ON DELETE CASCADE,
   packaging_bottle TEXT NOT NULL DEFAULT '',
   packaging_label TEXT NOT NULL DEFAULT '',
+  packaging_bottle_item_id INTEGER REFERENCES inventory_items(id),
+  packaging_label_item_id INTEGER REFERENCES inventory_items(id),
   bottle_size_ml INTEGER NOT NULL DEFAULT 750,
   bottle_count INTEGER NOT NULL DEFAULT 0,
   sort_order INTEGER NOT NULL DEFAULT 0
