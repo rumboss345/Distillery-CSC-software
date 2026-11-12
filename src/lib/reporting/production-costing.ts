@@ -31,6 +31,10 @@ export interface ProductionCostSummary {
   totalLaaLiters: number;
   costPerLaaLiter: number | null;
   costPerLiterAt40Abv: number | null;
+  /** Wash materials plus prorated monthly labour, electric, and gas. */
+  costPerLaaLiterInclMonthlyOverhead: number | null;
+  costPerLiterAt40AbvInclMonthlyOverhead: number | null;
+  periodMonthlyOverheadTotal: number;
   avgDistillationYieldPct: number | null;
   avgFermentBrixDrop: number | null;
 }
@@ -366,6 +370,15 @@ export function buildProductionCostReport(
     ? roundMoney(totalWashCost / proofedLiters)
     : null;
 
+  const periodMonthlyOverheadTotal = roundMoney(monthlyLabour + monthlyUtilities);
+  const washCostInclOverhead = roundMoney(totalWashCost + periodMonthlyOverheadTotal);
+  const costPerLaaLiterInclMonthlyOverhead = totalLaaLiters > 0 && washCostInclOverhead > 0
+    ? roundMoney(washCostInclOverhead / totalLaaLiters)
+    : null;
+  const costPerLiterAt40AbvInclMonthlyOverhead = proofedLiters > 0 && washCostInclOverhead > 0
+    ? roundMoney(washCostInclOverhead / proofedLiters)
+    : null;
+
   const withYield = washBatches.filter((row) => row.yieldPercent > 0);
   const avgDistillationYieldPct = withYield.length > 0
     ? roundMoney(withYield.reduce((s, row) => s + row.yieldPercent, 0) / withYield.length)
@@ -396,6 +409,9 @@ export function buildProductionCostReport(
       totalLaaLiters: roundMoney(totalLaaLiters),
       costPerLaaLiter,
       costPerLiterAt40Abv,
+      costPerLaaLiterInclMonthlyOverhead,
+      costPerLiterAt40AbvInclMonthlyOverhead,
+      periodMonthlyOverheadTotal,
       avgDistillationYieldPct,
       avgFermentBrixDrop,
     },
