@@ -38,6 +38,25 @@ const emptyOverheadRow = (): ProductionCostMonthlyOverhead => ({
   gas_propane: 0,
 });
 
+function upsertOverheadMonth(
+  draft: ProductionCostMonthlyOverhead[],
+  row: ProductionCostMonthlyOverhead,
+): ProductionCostMonthlyOverhead[] | null {
+  const ym = row.year_month.trim().slice(0, 7);
+  if (!/^\d{4}-\d{2}$/.test(ym)) return null;
+  const normalized: ProductionCostMonthlyOverhead = {
+    year_month: ym,
+    master_distiller: row.master_distiller >= 0 ? row.master_distiller : 0,
+    electric: row.electric >= 0 ? row.electric : 0,
+    gas_propane: row.gas_propane >= 0 ? row.gas_propane : 0,
+  };
+  if (normalized.master_distiller === 0 && normalized.electric === 0 && normalized.gas_propane === 0) {
+    return null;
+  }
+  const without = draft.filter((item) => item.year_month !== ym);
+  return [normalized, ...without].sort((a, b) => b.year_month.localeCompare(a.year_month));
+}
+
 export function CostingReport() {
   const { user } = useAuth();
   const { range } = useReportContext();
@@ -47,6 +66,7 @@ export function CostingReport() {
   const [settingsDraft, setSettingsDraft] = useState<ProductionCostSettings>(() => getProductionCostSettings());
   const [overheadDraft, setOverheadDraft] = useState<ProductionCostMonthlyOverhead[]>(() => getProductionCostMonthlyOverhead());
   const [newOverhead, setNewOverhead] = useState<ProductionCostMonthlyOverhead>(emptyOverheadRow);
+  const [saveNotice, setSaveNotice] = useState<string | null>(null);
 
   useEffect(() => {
     setSettingsDraft(getProductionCostSettings());
@@ -63,31 +83,35 @@ export function CostingReport() {
   }
 
   const saveSettings = () => {
-    saveProductionCostSettings({
-      ...settingsDraft,
-      labour_wash_per_batch: 0,
-      labour_ferment_per_day: 0,
-      labour_distill_per_run: 0,
-      labour_bottle_per_run: 0,
-      labour_per_bottle: 0,
-    });
-    saveProductionCostMonthlyOverhead(overheadDraft);
-    refresh();
+    setSaveNotice(null);
+    try {
+      let overhead = overheadDraft;
+      const pending = upsertOverheadMonth(overheadDraft, newOverhead);
+      if (pending) {
+        overhead = pending;
+        setOverheadDraft(pending);
+        setNewOverhead(emptyOverheadRow());
+      }
+      saveProductionCostSettings({
+        ...settingsDraft,
+        labour_wash_per_batch: 0,
+        labour_ferment_per_day: 0,
+        labour_distill_per_run: 0,
+        labour_bottle_per_run: 0,
+        labour_per_bottle: 0,
+      });
+      saveProductionCostMonthlyOverhead(overhead);
+      refresh();
+      setSaveNotice('Costing assumptions saved.');
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Could not save costing assumptions.');
+    }
   };
 
   const addOverheadMonth = () => {
-    const ym = newOverhead.year_month.trim().slice(0, 7);
-    if (!/^\d{4}-\d{2}$/.test(ym)) return;
-    const row: ProductionCostMonthlyOverhead = {
-      year_month: ym,
-      master_distiller: newOverhead.master_distiller,
-      electric: newOverhead.electric,
-      gas_propane: newOverhead.gas_propane,
-    };
-    setOverheadDraft((prev) => {
-      const without = prev.filter((item) => item.year_month !== ym);
-      return [row, ...without].sort((a, b) => b.year_month.localeCompare(a.year_month));
-    });
+    const next = upsertOverheadMonth(overheadDraft, newOverhead);
+    if (!next) return;
+    setOverheadDraft(next);
     setNewOverhead(emptyOverheadRow());
   };
 
@@ -104,7 +128,11 @@ export function CostingReport() {
         <p className="field-hint" style={{ marginTop: 0 }}>
           Sugar, yeast, nutrients, bottles, and labels use unit costs from Inventory only.
           Set those on each item; this panel covers water cost and monthly overhead (total labour, electric, and gas).
+          New monthly rows can be added with <strong>Add / update rate</strong> or included when you click <strong>Save assumptions</strong>.
         </p>
+        {saveNotice && (
+          <p className="field-hint" role="status" data-testid="costing-save-notice">{saveNotice}</p>
+        )}
         <div className="form-grid">
           <div className="form-group">
             <label>Water ($ per US gallon)</label>

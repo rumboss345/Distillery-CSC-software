@@ -731,6 +731,7 @@ export function saveProductionCostSettings(settings: ProductionCostSettings): vo
   const __remote = forwardProductionMutation('saveProductionCostSettings', [settings]);
   if (__remote.forwarded) return __remote.value as never;
 
+  runQuery('INSERT OR IGNORE INTO production_cost_settings (id) VALUES (1)');
   runQuery(
     `UPDATE production_cost_settings SET
       water_cost_per_gal = ?,
@@ -750,6 +751,7 @@ export function saveProductionCostSettings(settings: ProductionCostSettings): vo
       settings.labour_per_bottle,
     ],
   );
+  notifySharedRefresh();
 }
 
 export function getProductionCostMonthlyOverhead(): ProductionCostMonthlyOverhead[] {
@@ -778,6 +780,7 @@ export function saveProductionCostMonthlyOverhead(entries: ProductionCostMonthly
       [ym, master, electric, gas],
     );
   }
+  notifySharedRefresh();
 }
 
 function recordInventoryUsage(
