@@ -16,6 +16,8 @@ import {
 import {
   barrelBottlingDrawGal,
   barrelBottlingHeadroomGal,
+  barrelFillDateAfterSoleraTop,
+  barrelFillDateWhenEmptied,
   barrelStatusAfterVolume,
   barrelVolumeAfterDraw,
   barrelVolumeAfterRestore,
@@ -5394,8 +5396,9 @@ function applyBarrelSoleraReturns(returns: readonly BarrelSoleraReturn[], batchN
       current_volume_gal: number;
       initial_abv: number;
       status: string;
+      fill_date: string;
     }>(
-      'SELECT barrel_number, capacity_gal, current_volume_gal, initial_abv, status FROM barrels WHERE id = ?',
+      'SELECT barrel_number, capacity_gal, current_volume_gal, initial_abv, status, fill_date FROM barrels WHERE id = ?',
       [row.barrel_id],
     );
     if (!barrel) {
@@ -5413,9 +5416,10 @@ function applyBarrelSoleraReturns(returns: readonly BarrelSoleraReturn[], batchN
       : (
         (barrel.current_volume_gal * barrel.initial_abv + row.volume_gal * row.abv) / nextVol
       );
+    const nextFillDate = barrelFillDateAfterSoleraTop(barrel.current_volume_gal, barrel.fill_date);
     runQuery(
-      'UPDATE barrels SET current_volume_gal = ?, initial_abv = ?, status = ? WHERE id = ?',
-      [nextVol, nextAbv, 'aging', row.barrel_id],
+      'UPDATE barrels SET current_volume_gal = ?, initial_abv = ?, status = ?, fill_date = ? WHERE id = ?',
+      [nextVol, nextAbv, 'aging', nextFillDate, row.barrel_id],
     );
     insertRow(
       `INSERT INTO barrel_fills (barrel_id, source_holding_tank_equipment_id, volume_gal, abv, fill_date, notes, created_at)
@@ -5434,9 +5438,14 @@ function reverseBarrelSoleraReturns(returns: readonly BarrelSoleraReturn[]): voi
     );
     if (!barrel) continue;
     const nextVol = Math.max(0, barrel.current_volume_gal - row.volume_gal);
+    const nextStatus = nextVol > 0.01 ? 'aging' : 'empty';
     runQuery(
-      'UPDATE barrels SET current_volume_gal = ?, status = ? WHERE id = ?',
-      [nextVol, nextVol > 0.01 ? 'aging' : 'empty', row.barrel_id],
+      nextStatus === 'empty'
+        ? 'UPDATE barrels SET current_volume_gal = ?, status = ?, fill_date = ? WHERE id = ?'
+        : 'UPDATE barrels SET current_volume_gal = ?, status = ? WHERE id = ?',
+      nextStatus === 'empty'
+        ? [nextVol, nextStatus, barrelFillDateWhenEmptied(), row.barrel_id]
+        : [nextVol, nextStatus, row.barrel_id],
     );
   }
 }
@@ -5814,9 +5823,14 @@ function deductBarrelVolumeForBottling(barrelId: number, drawGal: number): void 
     );
   }
   const nextVolume = Math.max(0, volume);
+  const nextStatus = barrelStatusAfterVolume(nextVolume);
   runQuery(
-    'UPDATE barrels SET current_volume_gal = ?, status = ? WHERE id = ?',
-    [nextVolume, barrelStatusAfterVolume(nextVolume), barrelId],
+    nextStatus === 'empty'
+      ? 'UPDATE barrels SET current_volume_gal = ?, status = ?, fill_date = ? WHERE id = ?'
+      : 'UPDATE barrels SET current_volume_gal = ?, status = ? WHERE id = ?',
+    nextStatus === 'empty'
+      ? [nextVolume, nextStatus, barrelFillDateWhenEmptied(), barrelId]
+      : [nextVolume, nextStatus, barrelId],
   );
 }
 
@@ -6936,8 +6950,8 @@ export function executeBlendProduct(id: number, outputTankId: number): void {
     emptiedBarrels.add(source.barrel_id);
     const volumeBeforeEmpty = barrel.current_volume_gal;
     runQuery(
-      'UPDATE barrels SET current_volume_gal = 0, status = ? WHERE id = ?',
-      ['empty', source.barrel_id],
+      'UPDATE barrels SET current_volume_gal = 0, status = ?, fill_date = ? WHERE id = ?',
+      ['empty', barrelFillDateWhenEmptied(), source.barrel_id],
     );
     runQuery(
       `UPDATE blend_spirit_sources

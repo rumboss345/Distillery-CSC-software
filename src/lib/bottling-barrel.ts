@@ -1,4 +1,5 @@
 import { normalizeBottlingStatus, totalVolumeGal, type BottlingLineAmount } from './bottling-lines';
+import { localIsoDate } from './planned-event-date';
 
 /** Gallons drawn from a barrel once a bottling run leaves planned. */
 export function barrelBottlingDrawGal(
@@ -35,4 +36,16 @@ export function barrelVolumeAfterDraw(currentVolumeGal: number, drawGal: number)
 
 export function barrelStatusAfterVolume(volumeGal: number): 'aging' | 'empty' {
   return volumeGal <= 0.01 ? 'empty' : 'aging';
+}
+
+/** Aging time on the floor plan is based on fill_date; zero it when the barrel is emptied. */
+export function barrelFillDateWhenEmptied(): string {
+  return localIsoDate();
+}
+
+export function barrelFillDateAfterSoleraTop(
+  volumeBeforeGal: number,
+  existingFillDate: string,
+): string {
+  return volumeBeforeGal <= 0.01 ? barrelFillDateWhenEmptied() : existingFillDate;
 }
