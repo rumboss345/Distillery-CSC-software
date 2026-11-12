@@ -866,7 +866,13 @@ async function start() {
   if (isProduction) {
     const distPath = join(__dirname, '..', 'dist');
 
-    app.use(express.static(distPath));
+    app.use((req, res, next) => {
+      if (req.path === '/' || req.path === '/index.html') {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      }
+      next();
+    });
+    app.use(express.static(distPath, { index: false, maxAge: '1y', immutable: true }));
 
     // SPA fallback: React Router routes work on direct refresh
     app.get('*', (req, res, next) => {
@@ -874,6 +880,12 @@ async function start() {
         next();
         return;
       }
+      // Missing hashed bundles must not return index.html (breaks dynamic import).
+      if (req.path.startsWith('/assets/') || /\.(?:js|mjs|css|wasm|map|ico|png|jpg|jpeg|gif|webp|svg|woff2?)$/i.test(req.path)) {
+        res.status(404).type('text/plain').send('Not found');
+        return;
+      }
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
       res.sendFile(join(distPath, 'index.html'), (err) => {
         if (err) next(err);
       });
