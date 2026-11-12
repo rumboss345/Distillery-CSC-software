@@ -33,3 +33,9 @@ export function safePercent(numerator: number, denominator: number): number | nu
   if (denominator <= 0) return null;
   return Math.round((numerator / denominator) * 10000) / 100;
 }
+
+/** Liquid volume (liters) that holds the given LAA at a target ABV. */
+export function volumeLitersAtTargetAbv(laaLiters: number, targetAbv: number): number {
+  if (!(laaLiters > 0) || !(targetAbv > 0)) return 0;
+  return laaLiters / (targetAbv / 100);
+}

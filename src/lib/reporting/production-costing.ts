@@ -8,12 +8,13 @@ import {
   getMashBatchNutrients,
   getMashBatches,
   getProductionCostMonthlyOverhead,
-  getYieldReports,
 } from '../../db/queries';
+import { nutrientAmountInUnit } from '../wash-recipe-nutrients';
 import type { ProductionCostSettings } from '../../types';
 import { bottlingCountsTowardProduction, packagingBottleCountsBySku, packagingLabelCountsBySku } from '../bottling-lines';
 import { ingredientVolumeGal } from '../blending';
-import { laaLitersFromVolumeAbv } from './alcohol-units';
+import { laaLitersFromVolumeAbv, volumeLitersAtTargetAbv } from './alcohol-units';
+import { heartsGpaForMashInRange } from './distillation-in-range';
 import { mlToGallons } from '../../types';
 import { buildFermentationPerformance } from './fermentation-performance';
 import { computeMonthlyLabourTotal, computeMonthlyUtilitiesTotal } from './monthly-overhead';
@@ -142,9 +143,15 @@ function mashMaterialCost(
   for (const nutrient of getMashBatchNutrients(mashId)) {
     const amount = nutrient.amount;
     if (!(amount > 0)) continue;
-    const unitCost = lookupInventoryCost(index, 'nutrients', nutrient.name)
+    const linked = nutrient.inventory_item_id != null
+      ? getInventoryItems().find((item) => item.id === nutrient.inventory_item_id)
+      : undefined;
+    const inventoryUnit = linked?.unit?.trim() || 'lbs';
+    const qty = nutrientAmountInUnit(amount, nutrient.unit || 'lbs', inventoryUnit);
+    const unitCost = linked?.cost_per_unit
+      ?? lookupInventoryCost(index, 'nutrients', nutrient.name)
       ?? lookupInventoryCost(index, 'other', nutrient.name);
-    if (unitCost != null) total += amount * unitCost;
+    if (unitCost != null) total += qty * unitCost;
   }
   return roundMoney(total);
 }
@@ -243,18 +250,16 @@ export function buildProductionCostReport(
     brixDropByMash.set(row.mash_id, list);
   }
 
-  const yieldsAll = getYieldReports();
-  const yieldByMashNumber = new Map(yieldsAll.map((y) => [y.mashBatchNumber, y]));
-
   const washBatches: WashBatchCostRow[] = [];
   let totalMaterial = 0;
   let totalGpa = 0;
 
   for (const mash of mashes) {
     if (!eventInReportRange(mash.start_date, range)) continue;
-    const y = yieldByMashNumber.get(mash.batch_number);
-    const heartsGpa = y?.gpa ?? 0;
-    const yieldPercent = y?.yieldPercent ?? 0;
+    const heartsGpa = heartsGpaForMashInRange(mash.id, range);
+    const yieldPercent = mash.grain_lbs > 0
+      ? Math.round((heartsGpa / mash.grain_lbs) * 1000) / 10
+      : 0;
 
     const materialCost = mashMaterialCost(
       mash.id,
@@ -285,7 +290,7 @@ export function buildProductionCostReport(
       materialCost,
       labourCost,
       totalCost,
-      washVolumeGal: y?.washVolumeGal ?? mash.water_gal,
+      washVolumeGal: mash.water_gal,
       fermentBrixDrop,
       heartsGpa,
       yieldPercent,
@@ -356,8 +361,9 @@ export function buildProductionCostReport(
   const costPerLaaLiter = totalLaaLiters > 0 && totalWashCost > 0
     ? roundMoney(totalWashCost / totalLaaLiters)
     : null;
-  const costPerLiterAt40Abv = totalLaaLiters > 0 && totalWashCost > 0
-    ? roundMoney(totalWashCost / (totalLaaLiters / (STANDARD_BOTTLE_ABV / 100)))
+  const proofedLiters = volumeLitersAtTargetAbv(totalLaaLiters, STANDARD_BOTTLE_ABV);
+  const costPerLiterAt40Abv = proofedLiters > 0 && totalWashCost > 0
+    ? roundMoney(totalWashCost / proofedLiters)
     : null;
 
   const withYield = washBatches.filter((row) => row.yieldPercent > 0);

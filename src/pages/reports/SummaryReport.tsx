@@ -1,6 +1,5 @@
 import { formatDateDisplay } from '../../lib/date-input';
 import {
-  getYieldReports,
   getProductionSummary,
   getEquipmentVolumeReport,
   getMashBatches,
@@ -12,7 +11,12 @@ import { StatusBadge } from '../../components/StatusBadge';
 import { equipmentTypeLabel } from '../../lib/equipment';
 import { bottlingSentToTankGal, formatBottleSizes, formatBottlingAlcoholVariance, reportedBottlingAlcoholVarianceGal, reportedBottlingVarianceGal, totalVolumeGal } from '../../lib/bottling-lines';
 import { queryAll } from '../../db/database';
-import { eventInReportRange } from '../../lib/reporting/period';
+import { eventInReportRange, fullCalendarMonthKey } from '../../lib/reporting/period';
+import {
+  distillationRunIdsInRange,
+  heartsGalInReportRange,
+  yieldReportsForDistillationRunIds,
+} from '../../lib/reporting/distillation-in-range';
 import { filterRowsByPerson, reportPersonMatches } from '../../lib/reporting/person';
 import {
   buildVolumeChangeRows,
@@ -38,30 +42,20 @@ import { useMemo } from 'react';
 export function SummaryReport() {
   const { range, employee } = useReportContext();
 
-  const monthParam =
-    range.from?.slice(0, 7) === range.to?.slice(0, 7) && range.from
-      ? range.from.slice(0, 7)
-      : undefined;
+  const monthParam = fullCalendarMonthKey(range);
 
-  const yieldsAll = getYieldReports(monthParam);
   const runs = getDistillationRuns();
   const mashes = getMashBatches();
-  const mashIdsInRange = new Set(
-    runs
-      .filter((r) => (
-        eventInReportRange(r.run_date, range)
-        && r.source_mash_batch_id
-        && reportPersonMatches(r.assigned_user_name, employee, r.assigned_user_id)
-      ))
-      .map((r) => r.source_mash_batch_id as number),
-  );
-  const mashBatchNumbersInRange = new Set(
-    mashes.filter((m) => mashIdsInRange.has(m.id)).map((m) => m.batch_number),
-  );
-  const yields = (monthParam ? yieldsAll : yieldsAll.filter((y) => mashBatchNumbersInRange.has(y.mashBatchNumber)))
-    .filter((y) => !employee || mashBatchNumbersInRange.has(y.mashBatchNumber));
+  const filteredRuns = runs.filter((r) => (
+    eventInReportRange(r.run_date, range)
+    && reportPersonMatches(r.assigned_user_name, employee, r.assigned_user_id)
+  ));
+  const runIdsForYields = employee
+    ? filteredRuns.map((r) => r.id)
+    : distillationRunIdsInRange(range);
+  const yields = yieldReportsForDistillationRunIds(runIdsForYields);
 
-  const summary = getProductionSummary(monthParam);
+  const summary = getProductionSummary(monthParam ?? undefined);
   const equipmentReport = getEquipmentVolumeReport();
   const equipmentWithLiquid = equipmentReport.filter((eq) => eq.volume_gal > 0).length;
   const barrels = getBarrels();
@@ -70,10 +64,6 @@ export function SummaryReport() {
   const filteredMashes = mashes.filter((m) => (
     eventInReportRange(m.start_date, range)
     && reportPersonMatches(m.assigned_user_name, employee, m.assigned_user_id)
-  ));
-  const filteredRuns = runs.filter((r) => (
-    eventInReportRange(r.run_date, range)
-    && reportPersonMatches(r.assigned_user_name, employee, r.assigned_user_id)
   ));
   const filteredBarrels = employee
     ? []
@@ -100,7 +90,9 @@ export function SummaryReport() {
 
   const totalHeartsGal = monthParam && !employee
     ? summary.totalHeartsGal
-    : queryHeartsInRange(filteredRuns.map((r) => r.id));
+    : employee
+      ? queryHeartsInRange(filteredRuns.map((r) => r.id))
+      : heartsGalInReportRange(range);
 
   const bottlesInRange = monthParam && !employee
     ? summary.bottlesThisMonth

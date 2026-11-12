@@ -133,3 +133,19 @@ function parseMonthStart(month: string): Date {
 export function endOfRangeIsoDay(to: string): string {
   return format(endOfDay(new Date(`${to}T12:00:00`)), "yyyy-MM-dd'T'HH:mm:ss");
 }
+
+/** YYYY-MM when from/to are the first and last calendar day of the same month; otherwise null. */
+export function fullCalendarMonthKey(
+  range: Pick<ReportDateRange, 'from' | 'to'>,
+): string | null {
+  if (!range.from || !range.to) return null;
+  if (range.from.slice(0, 7) !== range.to.slice(0, 7)) return null;
+  const ym = range.from.slice(0, 7);
+  const [year, month] = ym.split('-').map(Number);
+  if (!Number.isFinite(year) || !Number.isFinite(month)) return null;
+  const lastDay = new Date(year, month, 0).getDate();
+  const monthStart = `${ym}-01`;
+  const monthEnd = `${ym}-${String(lastDay).padStart(2, '0')}`;
+  if (range.from !== monthStart || range.to !== monthEnd) return null;
+  return ym;
+}

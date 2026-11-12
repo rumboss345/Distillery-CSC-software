@@ -8,10 +8,9 @@ import {
   getInventoryItems,
   getMashBatches,
   getProductionSummary,
-  getYieldReports,
 } from '../../db/queries';
-import { queryAll } from '../../db/database';
 import { laaGalFromVolumeAbv } from './alcohol-units';
+import { gpaProducedInReportRange, heartsGalInReportRange } from './distillation-in-range';
 import { buildProductionExceptions } from './exceptions';
 import { listOverdueFermentations } from '../fermentation';
 import { localIsoDate } from '../planned-event-date';
@@ -99,37 +98,11 @@ export function priorReportPeriod(range: ReportDateRange, now = new Date()): Rep
 }
 
 function heartsGalInRange(range: ReportDateRange): number {
-  const runs = getDistillationRuns().filter((r) => eventInReportRange(r.run_date, range));
-  if (runs.length === 0) return 0;
-  const placeholders = runs.map(() => '?').join(',');
-  const row = queryAll<{ total: number }>(
-    `SELECT COALESCE(SUM(volume_gal), 0) as total FROM distillation_cuts
-     WHERE cut_type = 'hearts' AND distillation_run_id IN (${placeholders})`,
-    runs.map((r) => r.id),
-  );
-  return row[0]?.total ?? 0;
+  return heartsGalInReportRange(range);
 }
 
 function gpaProducedInRange(range: ReportDateRange): number {
-  const monthParam =
-    range.from?.slice(0, 7) === range.to?.slice(0, 7) && range.from
-      ? range.from.slice(0, 7)
-      : undefined;
-  const runs = getDistillationRuns();
-  const mashes = getMashBatches();
-  const mashIdsInRange = new Set(
-    runs
-      .filter((r) => eventInReportRange(r.run_date, range) && r.source_mash_batch_id)
-      .map((r) => r.source_mash_batch_id as number),
-  );
-  const mashBatchNumbersInRange = new Set(
-    mashes.filter((m) => mashIdsInRange.has(m.id)).map((m) => m.batch_number),
-  );
-  const yieldsAll = getYieldReports(monthParam);
-  const yields = monthParam
-    ? yieldsAll
-    : yieldsAll.filter((y) => mashBatchNumbersInRange.has(y.mashBatchNumber));
-  return yields.reduce((sum, y) => sum + y.gpa, 0);
+  return gpaProducedInReportRange(range);
 }
 
 function bottlesInRange(range: ReportDateRange): number {
