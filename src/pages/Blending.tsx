@@ -43,7 +43,9 @@ import {
   barrelProofingSpiritSources,
   blendCheckAbv,
   checkpointFromDraft,
+  convertBarrelCheckDraftMeasure,
   expectedRemainderAfterSolera,
+  syncBarrelCheckDraftAlternate,
   syncSoleraReturnsToBlendCheck,
   emptyBarrelBlendSoleraState,
   mergeAngelShareIntoUserNotes,
@@ -1766,6 +1768,23 @@ export function Blending() {
     return true;
   };
 
+  const patchBarrelCheckDraft = (patch: Partial<typeof barrelCheckDraft>) => {
+    setBarrelCheckDraft((draft) => {
+      const next = { ...draft, ...patch };
+      const synced = syncBarrelCheckDraftAlternate(next, barrelCheckMeasureMode);
+      return { ...next, ...synced };
+    });
+  };
+
+  const switchBarrelCheckMeasureMode = (to: MeasureMode) => {
+    if (to === barrelCheckMeasureMode) return;
+    setBarrelCheckDraft((draft) => {
+      const converted = convertBarrelCheckDraftMeasure(draft, barrelCheckMeasureMode, to);
+      return { ...draft, ...converted };
+    });
+    setBarrelCheckMeasureMode(to);
+  };
+
   const prefillBarrelCheckDraft = (
     checkpoint?: typeof barrelSolera.initial,
     options?: { bookRemainder?: boolean },
@@ -1774,11 +1793,15 @@ export function Blending() {
     if (!checkpoint && options?.bookRemainder && barrelSolera.initial) {
       const book = expectedRemainderAfterSolera(barrelSolera.initial, barrelSolera.returns);
       setBarrelCheckMeasureMode(book.measureMode);
-      setBarrelCheckDraft({
+      const draft = {
         volume: book.volumeGal > 0 ? book.volumeGal.toFixed(2) : '',
         weight: book.weightLbs > 0 ? book.weightLbs.toFixed(2) : '',
         abv: book.abv > 0 ? book.abv.toFixed(1) : '',
         tempF: book.tempF != null ? String(book.tempF) : '60',
+      };
+      setBarrelCheckDraft({
+        ...draft,
+        ...syncBarrelCheckDraftAlternate(draft, book.measureMode),
       });
       return;
     }
@@ -1792,14 +1815,19 @@ export function Blending() {
     const scaleWeight = volume > 0 && proofAbv > 0
       ? spiritWeightLbsFromVolumeGal(volume, proofAbv)
       : 0;
-    setBarrelCheckMeasureMode(checkpoint?.measureMode ?? 'volume');
-    setBarrelCheckDraft({
+    const mode = checkpoint?.measureMode ?? 'volume';
+    const draft = {
       volume: volume > 0 ? volume.toFixed(2) : '',
       weight: checkpoint?.weightLbs != null
         ? String(checkpoint.weightLbs)
         : (scaleWeight > 0 ? scaleWeight.toFixed(2) : ''),
       abv: abv > 0 ? abv.toFixed(1) : '',
       tempF: checkpoint?.tempF != null ? String(checkpoint.tempF) : '60',
+    };
+    setBarrelCheckMeasureMode(mode);
+    setBarrelCheckDraft({
+      ...draft,
+      ...syncBarrelCheckDraftAlternate(draft, mode),
     });
   };
 
@@ -2346,14 +2374,14 @@ export function Blending() {
             <button
               type="button"
               className={`btn btn-sm ${barrelCheckMeasureMode === 'volume' ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => setBarrelCheckMeasureMode('volume')}
+              onClick={() => switchBarrelCheckMeasureMode('volume')}
             >
               Volume
             </button>
             <button
               type="button"
               className={`btn btn-sm ${barrelCheckMeasureMode === 'weight' ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => setBarrelCheckMeasureMode('weight')}
+              onClick={() => switchBarrelCheckMeasureMode('weight')}
             >
               Weight on scale
             </button>
@@ -2363,8 +2391,8 @@ export function Blending() {
           <AbvTemperatureInput
             abvValue={barrelCheckDraft.abv}
             temperatureValue={barrelCheckDraft.tempF}
-            onAbvChange={(value) => setBarrelCheckDraft((d) => ({ ...d, abv: value }))}
-            onTemperatureChange={(value) => setBarrelCheckDraft((d) => ({ ...d, tempF: value }))}
+            onAbvChange={(value) => patchBarrelCheckDraft({ abv: value })}
+            onTemperatureChange={(value) => patchBarrelCheckDraft({ tempF: value })}
           />
           {barrelCheckMeasureMode === 'weight' ? (
             <label>
@@ -2373,7 +2401,7 @@ export function Blending() {
                 type="number"
                 step="0.01"
                 value={barrelCheckDraft.weight}
-                onChange={(e) => setBarrelCheckDraft((d) => ({ ...d, weight: e.target.value }))}
+                onChange={(e) => patchBarrelCheckDraft({ weight: e.target.value })}
               />
             </label>
           ) : (
@@ -2383,7 +2411,7 @@ export function Blending() {
                 type="number"
                 step="0.01"
                 value={barrelCheckDraft.volume}
-                onChange={(e) => setBarrelCheckDraft((d) => ({ ...d, volume: e.target.value }))}
+                onChange={(e) => patchBarrelCheckDraft({ volume: e.target.value })}
               />
             </label>
           )}

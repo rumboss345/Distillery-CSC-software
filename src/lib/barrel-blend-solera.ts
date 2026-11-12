@@ -241,6 +241,76 @@ export function mergeBarrelSoleraIntoNotes(notes: string, state: BarrelBlendSole
   return base ? `${base}\n${line}` : line;
 }
 
+export function proofAbvFromBarrelDraft(draft: { abv?: string; tempF?: string }): number {
+  const abvText = draft.abv?.trim() ?? '';
+  const raw = abvText === '' ? NaN : parseFloat(abvText);
+  if (!Number.isFinite(raw) || raw <= 0) return 0;
+  const corrected = correctedAbvFromInputs(abvText, draft.tempF ?? '');
+  return corrected ?? raw;
+}
+
+/** Keep volume and weight draft fields equivalent at the current proof ABV. */
+export function syncBarrelCheckDraftAlternate(
+  draft: { volume: string; weight: string; abv: string; tempF: string },
+  measureMode: MeasureMode,
+): { volume: string; weight: string } {
+  const proofAbv = proofAbvFromBarrelDraft(draft);
+  if (!(proofAbv > 0)) return { volume: draft.volume, weight: draft.weight };
+  if (measureMode === 'volume') {
+    const volumeGal = draft.volume.trim() === '' ? NaN : parseFloat(draft.volume);
+    if (!Number.isFinite(volumeGal) || volumeGal <= 0) {
+      return { volume: draft.volume, weight: draft.weight };
+    }
+    const lbs = spiritWeightLbsFromVolumeGal(volumeGal, proofAbv);
+    return {
+      volume: draft.volume,
+      weight: lbs > 0 ? lbs.toFixed(2) : draft.weight,
+    };
+  }
+  const weightLbs = draft.weight.trim() === '' ? NaN : parseFloat(draft.weight);
+  if (!Number.isFinite(weightLbs) || weightLbs <= 0) {
+    return { volume: draft.volume, weight: draft.weight };
+  }
+  const gal = spiritVolumeGalFromAmount(weightLbs, 'lbs', proofAbv);
+  return {
+    volume: gal > 0 ? gal.toFixed(2) : draft.volume,
+    weight: draft.weight,
+  };
+}
+
+export function convertBarrelCheckDraftMeasure(
+  draft: { volume: string; weight: string; abv: string; tempF: string },
+  from: MeasureMode,
+  to: MeasureMode,
+): { volume: string; weight: string } {
+  if (from === to) {
+    return syncBarrelCheckDraftAlternate(draft, to);
+  }
+  const proofAbv = proofAbvFromBarrelDraft(draft);
+  if (!(proofAbv > 0)) return { volume: draft.volume, weight: draft.weight };
+
+  if (from === 'weight') {
+    const weightLbs = draft.weight.trim() === '' ? NaN : parseFloat(draft.weight);
+    if (!Number.isFinite(weightLbs) || weightLbs <= 0) {
+      return { volume: '', weight: draft.weight };
+    }
+    const gal = spiritVolumeGalFromAmount(weightLbs, 'lbs', proofAbv);
+    return {
+      volume: gal > 0 ? gal.toFixed(2) : '',
+      weight: draft.weight,
+    };
+  }
+  const volumeGal = draft.volume.trim() === '' ? NaN : parseFloat(draft.volume);
+  if (!Number.isFinite(volumeGal) || volumeGal <= 0) {
+    return { volume: draft.volume, weight: '' };
+  }
+  const lbs = spiritWeightLbsFromVolumeGal(volumeGal, proofAbv);
+  return {
+    volume: draft.volume,
+    weight: lbs > 0 ? lbs.toFixed(2) : '',
+  };
+}
+
 export function checkpointFromDraft(
   measureMode: MeasureMode,
   draft: { volume: string; weight: string; abv: string; tempF: string },
