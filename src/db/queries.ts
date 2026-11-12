@@ -3744,10 +3744,19 @@ export function saveFermentationSet(
     }
   }
 
-  const nextStatus = mashStatusFromFermentations(
+  let nextStatus = mashStatusFromFermentations(
     batch.status,
     assignments.map((assignment) => assignmentStatus(assignment.status)),
   );
+  // The last fermentation of a completed wash was removed with its logs: the wash is back to washing.
+  if (
+    assignments.length === 0
+    && !options?.keepStatusWhenEmpty
+    && nextStatus === 'complete'
+    && !mashBatchHasFermentationLogs(mashBatchId)
+  ) {
+    nextStatus = 'mashing';
+  }
 
   if (assignments.length === 0 && options?.keepStatusWhenEmpty) {
     const status = batch.status === 'discarded' ? 'fermenting' : batch.status;
@@ -4990,7 +4999,11 @@ export function deleteDistillationRun(id: number): void {
     releaseStillAfterRunningRun(run, '', 'complete');
   }
   releaseRunBotanicalInventory(id);
+  // SQLite memory runs with foreign_keys OFF, so ON DELETE CASCADE never fires.
+  runQuery('DELETE FROM distillation_cuts WHERE distillation_run_id = ?', [id]);
   runQuery('DELETE FROM distillation_run_tank_sources WHERE distillation_run_id = ?', [id]);
+  runQuery('UPDATE barrels SET source_run_id = NULL WHERE source_run_id = ?', [id]);
+  runQuery('UPDATE bottling_runs SET source_run_id = NULL WHERE source_run_id = ?', [id]);
   deleteStatusDateLog('distillation', id);
   runQuery('DELETE FROM distillation_runs WHERE id = ?', [id]);
   syncHoldingTankStatuses();

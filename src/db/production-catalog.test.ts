@@ -38,7 +38,7 @@ describe('admin-only tank volume and equipment edits', () => {
 
 describe('administrator approvals', () => {
   it('marks completed-work deletes and blend undo as needing approval', () => {
-    for (const name of ['deleteDistillationRun', 'deleteOneFermentation', 'saveFermentationSet', 'undoBlendProduction']) {
+    for (const name of ['deleteDistillationRun', 'deleteOneFermentation', 'saveFermentationSet', 'undoBlendProduction', 'deleteMashBatch']) {
       expect(PRODUCTION_MUTATIONS[name].adminApproval).toBeTruthy();
     }
   });

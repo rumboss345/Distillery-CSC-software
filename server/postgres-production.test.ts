@@ -1036,6 +1036,10 @@ describe('PostgreSQL production modules', () => {
   it('needs an administrator approval before staff delete or undo completed work', async () => {
     await saveEquipment('Approval Still', 'pot_still', 500);
     await saveEquipment('Approval Fermenter', 'fermenter', 300);
+    await saveEquipment('Approval Vessel', 'collection_vessel', 50);
+    const vesselId = engine.readProduction((api) => (
+      api.getFloorEquipment().find((item) => item.name === 'Approval Vessel')!.id
+    ));
     const staffUser = await auth.createUserByAdmin(
       'approval-staff@test.com',
       'Approval-Staff-1',
@@ -1072,14 +1076,26 @@ describe('PostgreSQL production modules', () => {
     expect(engine.readProduction((api) => api.getDistillationRuns().some((run) => run.id === planned))).toBe(false);
 
     const complete = Number((await save('saveDistillationRun', [
-      { ...header, batch_number: 'D-APPROVAL-2', status: 'planned' }, undefined, undefined, undefined,
+      { ...header, batch_number: 'D-APPROVAL-2', status: 'running' }, undefined, undefined, undefined,
     ])).result);
-    await poolQuery(`UPDATE distillation_runs SET status = 'complete' WHERE id = $1`, [complete]);
+    await save('saveDistillationCut', [{
+      distillation_run_id: complete,
+      cut_type: 'hearts',
+      holding_tank_equipment_id: vesselId,
+      start_time: '2026-11-03T10:00:00',
+      end_time: '2026-11-03T12:00:00',
+      volume_gal: 5,
+      abv: 60,
+      notes: '',
+    }]);
+    await save('saveDistillationRun', [{ ...header, batch_number: 'D-APPROVAL-2', status: 'complete' }, complete, undefined, undefined]);
 
     await expect(asStaff('deleteDistillationRun', [complete])).rejects.toBeInstanceOf(engine.AdminApprovalRequired);
     expect(engine.readProduction((api) => api.getDistillationRuns().some((run) => run.id === complete))).toBe(true);
     await asStaff('deleteDistillationRun', [complete], approval);
     expect(engine.readProduction((api) => api.getDistillationRuns().some((run) => run.id === complete))).toBe(false);
+    expect(engine.readProduction((api) => api.getDistillationCuts(complete))).toHaveLength(0);
+    expect(engine.readProduction((api) => api.getHoldingTankContents(vesselId).volume_gal)).toBeCloseTo(0, 3);
     const audit = await poolQuery(
       `SELECT summary FROM audit_events WHERE action = 'deleteDistillationRun' AND user_id = $1 ORDER BY id DESC LIMIT 1`,
       [staffUser.id],
@@ -1089,40 +1105,44 @@ describe('PostgreSQL production modules', () => {
     await expect(asStaff('undoBlendProduction', [999_999])).rejects.toBeInstanceOf(engine.AdminApprovalRequired);
     await expect(asStaff('undoBlendProduction', [999_999], approval)).rejects.toThrow(/not found/i);
 
-    const mashId = Number((await save('saveMashBatch', [{
-      batch_number: 'M-APPROVAL',
-      recipe_name: 'Approval Wash',
-      grain_type: 'molasses',
-      grain_lbs: 10,
-      water_gal: 20,
-      yeast_strain: 'baker',
-      yeast_lbs: 0.2,
-      start_date: '2026-11-01',
-      fermentation_start_date: '2026-11-01',
-      expected_completion_date: '2026-11-05',
-      target_brix: 20,
-      actual_brix: 19,
-      target_final_brix: 2,
-      actual_final_brix: null,
-      status: 'fermenting',
-      assigned_user_id: null,
-      assigned_user_name: '',
-      notes: '',
-    }])).result);
     const fermenterId = engine.readProduction((api) => (
       api.getFloorEquipment().find((item) => item.name === 'Approval Fermenter')!.id
     ));
-    await save('saveMashFermenterAssignments', [mashId, [{ equipmentId: fermenterId, volumeGal: 20, status: 'fermenting' }]]);
-    await save('addFermentationLog', [{
-      mash_batch_id: mashId,
-      floor_equipment_id: fermenterId,
-      logged_at: '2026-11-02T09:00:00',
-      temperature_f: 82,
-      brix: 4,
-      ph: 4.2,
-      notes: '',
-    }]);
-    await asStaff('saveFermentationSet', [mashId, [{ equipmentId: fermenterId, volumeGal: 20, status: 'complete' }]]);
+    const completedWash = async (batchNumber: string) => {
+      const id = Number((await save('saveMashBatch', [{
+        batch_number: batchNumber,
+        recipe_name: 'Approval Wash',
+        grain_type: 'molasses',
+        grain_lbs: 10,
+        water_gal: 20,
+        yeast_strain: 'baker',
+        yeast_lbs: 0.2,
+        start_date: '2026-11-01',
+        fermentation_start_date: '2026-11-01',
+        expected_completion_date: '2026-11-05',
+        target_brix: 20,
+        actual_brix: 19,
+        target_final_brix: 2,
+        actual_final_brix: null,
+        status: 'fermenting',
+        assigned_user_id: null,
+        assigned_user_name: '',
+        notes: '',
+      }])).result);
+      await save('saveMashFermenterAssignments', [id, [{ equipmentId: fermenterId, volumeGal: 20, status: 'fermenting' }]]);
+      await save('addFermentationLog', [{
+        mash_batch_id: id,
+        floor_equipment_id: fermenterId,
+        logged_at: '2026-11-02T09:00:00',
+        temperature_f: 82,
+        brix: 4,
+        ph: 4.2,
+        notes: '',
+      }]);
+      await asStaff('saveFermentationSet', [id, [{ equipmentId: fermenterId, volumeGal: 20, status: 'complete' }]]);
+      return id;
+    };
+    const mashId = await completedWash('M-APPROVAL');
 
     const changed = [mashId, [{ equipmentId: fermenterId, volumeGal: 18, status: 'complete' }]];
     await expect(asStaff('saveFermentationSet', changed)).rejects.toBeInstanceOf(engine.AdminApprovalRequired);
@@ -1130,6 +1150,17 @@ describe('PostgreSQL production modules', () => {
     await asStaff('saveFermentationSet', changed, approval);
     const volume = engine.readProduction((api) => api.getMashFermenterAssignments(mashId)[0]?.volume_gal);
     expect(volume).toBeCloseTo(18, 3);
+
+    await asStaff('deleteOneFermentation', [mashId, fermenterId], approval);
+    expect(engine.readProduction((api) => api.getMashFermenterAssignments(mashId))).toHaveLength(0);
+    expect(engine.readProduction((api) => api.getMashBatch(mashId)?.status)).toBe('mashing');
+    await save('deleteMashBatch', [mashId]);
+
+    await save('markEquipmentCleaned', [fermenterId, actor.id, 'Admin']);
+    const washId = await completedWash('M-APPROVAL-2');
+    await expect(asStaff('deleteMashBatch', [washId])).rejects.toBeInstanceOf(engine.AdminApprovalRequired);
+    await asStaff('deleteMashBatch', [washId], approval);
+    expect(engine.readProduction((api) => api.getMashBatch(washId))).toBeFalsy();
   });
 
   it('builds the fermentation report without saving anything', async () => {

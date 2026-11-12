@@ -38,6 +38,13 @@ function distillationRunIsComplete(args: unknown[]): boolean {
   return run?.status === COMPLETE;
 }
 
+function washBatchIsComplete(args: unknown[]): boolean {
+  const id = optionalId(args, 0);
+  if (id == null) return false;
+  const batch = queryOne<{ status: string }>('SELECT status FROM mash_batches WHERE id = ?', [id]);
+  return batch?.status === COMPLETE;
+}
+
 /** Mirrors the Fermentation page: a fermenter row with no assignment left is a distilled (complete) one. */
 function fermentationIsComplete(args: unknown[]): boolean {
   const batchId = optionalId(args, 0);
@@ -106,7 +113,7 @@ export const PRODUCTION_MUTATIONS: Record<string, ProductionMutation> = {
   releaseFermentersForMash: { access: 'wash', table: 'mash_batches', idIndex: 0 },
   releaseFermenterForMash: { access: 'wash', table: 'mash_batches', idIndex: 0 },
   completeFermentationsSelectedForDistillation: { access: 'wash' },
-  deleteMashBatch: { access: 'wash', table: 'mash_batches', idIndex: 0 },
+  deleteMashBatch: { access: 'wash', table: 'mash_batches', idIndex: 0, adminApproval: washBatchIsComplete },
   addFermentationLog: { access: 'wash' },
   saveFermenterWashTransfer: { access: 'wash' },
   deleteDiscardedFermentation: { access: 'wash', table: 'discarded_fermentations', idIndex: 0 },
