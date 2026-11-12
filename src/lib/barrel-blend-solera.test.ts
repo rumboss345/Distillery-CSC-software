@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  barrelBlendAngelShareGal,
   emptyBarrelBlendSoleraState,
   mergeBarrelSoleraIntoNotes,
   parseBarrelSoleraFromNotes,
@@ -33,6 +34,26 @@ describe('barrel solera notes', () => {
     expect(parsed?.preProofComplete).toBe(true);
     expect(parsed?.returns).toHaveLength(1);
     expect(notes).toContain('Tasted oak-forward.');
+  });
+});
+
+describe('barrelBlendAngelShareGal', () => {
+  it('records verification loss between initial, solera, and leftover', () => {
+    const loss = barrelBlendAngelShareGal({
+      initial: { measureMode: 'volume', volumeGal: 40, abv: 58 },
+      remainder: { measureMode: 'volume', volumeGal: 30, abv: 57 },
+      returns: [{ barrel_id: 1, volume_gal: 8, abv: 58 }],
+    });
+    expect(loss).toBe(2);
+  });
+
+  it('returns zero when volumes reconcile', () => {
+    const loss = barrelBlendAngelShareGal({
+      initial: { measureMode: 'volume', volumeGal: 40, abv: 58 },
+      remainder: { measureMode: 'volume', volumeGal: 32, abv: 57 },
+      returns: [{ barrel_id: 1, volume_gal: 8, abv: 58 }],
+    });
+    expect(loss).toBe(0);
   });
 });
 
