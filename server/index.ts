@@ -69,7 +69,9 @@ import {
   OWNER_RESET_DATA_ERROR,
   isAdminRole,
   isOwnerRole,
+  isReservedAuthEmail,
   parseCreatedRole,
+  RESERVED_AUTH_EMAIL_ERROR,
 } from '../src/lib/roles.ts';
 import { sendAdminApprovalEmail, sendPasswordResetEmail } from './email.js';
 import {
@@ -301,9 +303,23 @@ app.post('/api/auth/register', async (req, res) => {
     res.status(409).json({ error: 'An account with this email already exists' });
     return;
   }
+  if (isReservedAuthEmail(email)) {
+    res.status(403).json({ error: RESERVED_AUTH_EMAIL_ERROR });
+    return;
+  }
 
   const passwordHash = bcrypt.hashSync(password, 12);
-  const user = await createUser(email, passwordHash, name);
+  let user;
+  try {
+    user = await createUser(email, passwordHash, name);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Could not create account.';
+    if (message === RESERVED_AUTH_EMAIL_ERROR) {
+      res.status(403).json({ error: message });
+      return;
+    }
+    throw error;
+  }
 
   try {
     await sendAdminApprovalEmail({

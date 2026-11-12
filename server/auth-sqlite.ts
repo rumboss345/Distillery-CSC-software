@@ -20,7 +20,9 @@ import {
   OWNER_RESET_ADMIN_ERROR,
   isAdminRole,
   isOwnerRole,
+  isReservedAuthEmail,
   isSiteOwnerEmail,
+  RESERVED_AUTH_EMAIL_ERROR,
   siteOwnerEmail,
   type AuthRole,
 } from '../src/lib/roles.ts';
@@ -146,6 +148,7 @@ function migrateUserRoles() {
 
 export function promoteSiteOwner(): void {
   const email = siteOwnerEmail();
+  if (!email) return;
   ensureDb()
     .prepare(
       `UPDATE users
@@ -270,6 +273,7 @@ export function publicUser(user: User): PublicUser {
 }
 
 export function createUser(email: string, passwordHash: string, name: string | null): User {
+  if (isReservedAuthEmail(email)) throw new Error(RESERVED_AUTH_EMAIL_ERROR);
   const token = randomBytes(32).toString('hex');
   const result = ensureDb()
     .prepare(

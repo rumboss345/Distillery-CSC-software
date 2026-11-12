@@ -19,7 +19,9 @@ import {
   OWNER_RESET_ADMIN_ERROR,
   isAdminRole,
   isOwnerRole,
+  isReservedAuthEmail,
   isSiteOwnerEmail,
+  RESERVED_AUTH_EMAIL_ERROR,
   siteOwnerEmail,
 } from '../src/lib/roles.ts';
 
@@ -121,6 +123,7 @@ export async function publicUser(user: User): Promise<PublicUser> {
 }
 
 export async function createUser(email: string, passwordHash: string, name: string | null): Promise<User> {
+  if (isReservedAuthEmail(email)) throw new Error(RESERVED_AUTH_EMAIL_ERROR);
   const token = randomBytes(32).toString('hex');
   const result = await getPool().query(
     `INSERT INTO users (email, password_hash, name, role, status, approval_token)
@@ -299,11 +302,13 @@ export async function listProcessAssignmentsByStage(): Promise<Record<string, Pr
 }
 
 export async function promoteSiteOwner(): Promise<void> {
+  const email = siteOwnerEmail();
+  if (!email) return;
   await getPool().query(
     `UPDATE users
      SET role = 'owner', status = 'approved', approval_token = NULL
      WHERE lower(email) = lower($1)`,
-    [siteOwnerEmail()],
+    [email],
   );
 }
 

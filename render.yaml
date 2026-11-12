@@ -3,6 +3,8 @@
 #
 # Set sensitive values in the Render dashboard (never commit secrets):
 #   JWT_SECRET, ADMIN_EMAIL, ADMIN_PASSWORD, APP_URL, DATABASE_URL
+#   Optional OWNER_EMAIL — when set, that account is promoted to owner on start
+#   (defaults to ADMIN_EMAIL when OWNER_EMAIL is omitted)
 # DATABASE_URL must be the Internal Database URL on this web service only.
 
 services:
@@ -29,6 +31,8 @@ services:
       - key: ADMIN_EMAIL
         sync: false
       - key: ADMIN_PASSWORD
+        sync: false
+      - key: OWNER_EMAIL
         sync: false
       - key: APP_URL
         sync: false
