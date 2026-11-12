@@ -1,3 +1,4 @@
+import html2canvas from 'html2canvas';
 import { worksheetOnePageScale } from './worksheet-pages';
 
 const PAGE_MARGIN_MM = 10;
@@ -57,7 +58,6 @@ export async function captureWorksheetToCanvas(
   worksheetElement.classList.add('is-paper');
 
   try {
-    const { default: html2canvas } = await import('html2canvas');
     return await html2canvas(worksheetElement, {
       scale: 2,
       useCORS: true,
