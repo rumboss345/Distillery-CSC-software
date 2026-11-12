@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   barrelShownContents,
   barrelsForBlendRow,
+  barrelsForSoleraRow,
+  barrelsForSoleraTopPicker,
   formatBarrelInventoryOption,
   gallonsRestoredToEmptiedBarrel,
   hasDuplicateBarrelSelections,
@@ -24,6 +26,24 @@ const barrel = (id: number): Barrel => ({
   status: 'aging',
   notes: '',
   created_at: '2026-01-01',
+});
+
+describe('barrelsForSoleraTopPicker', () => {
+  it('includes pull barrels even when they would not appear in aging-only lists', () => {
+    const full = barrel(10);
+    full.status = 'aging';
+    full.current_volume_gal = full.capacity_gal;
+    const inventory = barrelsForSoleraTopPicker([full], [10]);
+    expect(inventory.map((b) => b.id)).toContain(10);
+  });
+});
+
+describe('barrelsForSoleraRow', () => {
+  const inventory = [barrel(1), barrel(2), barrel(3)];
+
+  it('hides barrels selected on other solera rows', () => {
+    expect(barrelsForSoleraRow(inventory, [1, 0, 2], 1).map((b) => b.id)).toEqual([3]);
+  });
 });
 
 describe('barrelsForBlendRow', () => {

@@ -8,8 +8,8 @@ import {
   executeBlendProduct,
   undoBlendProduction,
   barrelBlendProductName,
+  getBarrels,
   getBarrelsForBlend,
-  getBarrelsForSoleraRefill,
   getBlendIngredients,
   getBlendProducts,
   getBlendRecipe,
@@ -30,6 +30,8 @@ import {
 } from '../db/queries';
 import {
   barrelsForBlendRow,
+  barrelsForSoleraRow,
+  barrelsForSoleraTopPicker,
   formatBarrelInventoryOption,
   hasDuplicateBarrelSelections,
   spiritLabelForBarrel,
@@ -459,7 +461,6 @@ export function Blending() {
   const blends = getBlendProducts();
   const blendRecipes = getBlendRecipes();
   const barrelInventory = useMemo(() => getBarrelsForBlend(), [key]);
-  const soleraBarrelOptions = useMemo(() => getBarrelsForSoleraRefill(), [key]);
   const inventoryItems = getInventoryItems();
   const inventoryCategories = useMemo(
     () => blendInventoryCategories([
@@ -478,6 +479,12 @@ export function Blending() {
   const [undoTarget, setUndoTarget] = useState<{ id: number; label: string } | null>(null);
   const [form, setForm] = useState<FormulaForm>(emptyProduct());
   const [spiritSources, setSpiritSources] = useState<SpiritSourceRow[]>([emptySpiritSource()]);
+  const soleraBarrelInventory = useMemo(() => {
+    const pullIds = spiritSources
+      .map((s) => s.barrel_id)
+      .filter((id): id is number => id != null && id > 0);
+    return barrelsForSoleraTopPicker(getBarrels(), pullIds);
+  }, [key, spiritSources]);
   const [ingredients, setIngredients] = useState<BlendIngredientInput[]>([]);
   const [showInventoryDetails, setShowInventoryDetails] = useState(false);
   const [correctionProof, setCorrectionProof] = useState(80);
@@ -2205,27 +2212,45 @@ export function Blending() {
           Move spirit from the vat back into barrels before proofing. Proofing uses only what remains.
           {barrelSolera.preProofComplete && ' You can change tops here and re-check leftover before additives.'}
         </p>
-        {returns.map((row, index) => (
+        {soleraBarrelInventory.length === 0 && (
+          <p className="field-hint">Register barrels on Barrel Aging first — any non-dumped barrel can receive a solera top.</p>
+        )}
+        {returns.map((row, index) => {
+          const rowOptions = barrelsForSoleraRow(
+            soleraBarrelInventory,
+            returns.map((r) => r.barrel_id),
+            index,
+          );
+          return (
           <div key={index} className="wizard-additive-row">
-            <select
-              value={row.barrel_id || ''}
-              onChange={(e) => {
-                const barrelId = e.target.value ? parseInt(e.target.value, 10) : 0;
-                setBarrelSolera((prev) => {
-                  const list = prev.returns.length > 0 ? [...prev.returns] : [...returns];
-                  list[index] = { ...list[index], barrel_id: barrelId };
-                  return { ...prev, returns: list };
-                });
-              }}
-            >
-              <option value="">— Barrel to top —</option>
-              {soleraBarrelOptions.map((barrel) => (
-                <option key={barrel.id} value={barrel.id}>
-                  {formatBarrelInventoryOption(barrel, barrelBlendProductName(barrel.id))}
-                  {barrel.status === 'empty' ? ' (empty)' : ''}
-                </option>
-              ))}
-            </select>
+            <label>
+              Barrel to top
+              <select
+                value={row.barrel_id || ''}
+                onChange={(e) => {
+                  const barrelId = e.target.value ? parseInt(e.target.value, 10) : 0;
+                  setBarrelSolera((prev) => {
+                    const list = prev.returns.length > 0 ? [...prev.returns] : [...returns];
+                    while (list.length <= index) {
+                      list.push({ barrel_id: 0, volume_gal: 0, abv: defaultAbv });
+                    }
+                    list[index] = { ...list[index], barrel_id: barrelId };
+                    return { ...prev, returns: list };
+                  });
+                }}
+              >
+                <option value="">— Choose barrel —</option>
+                {rowOptions.map((barrel) => (
+                  <option key={barrel.id} value={barrel.id}>
+                    {formatBarrelInventoryOption(barrel, barrelBlendProductName(barrel.id))}
+                    {barrel.status === 'empty' ? ' (empty)' : ''}
+                    {barrel.capacity_gal > barrel.current_volume_gal + 0.01
+                      ? ` · ${(barrel.capacity_gal - barrel.current_volume_gal).toFixed(1)} gal headspace`
+                      : ' · full in ledger'}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label>
               Gallons to top
               <input
@@ -2277,7 +2302,8 @@ export function Blending() {
               </button>
             )}
           </div>
-        ))}
+          );
+        })}
         <button
           type="button"
           className="btn btn-sm btn-secondary"

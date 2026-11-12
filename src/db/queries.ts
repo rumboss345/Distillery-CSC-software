@@ -5374,13 +5374,10 @@ export function getBarrelsForBlend(): Barrel[] {
   );
 }
 
-/** Barrels that can receive solera tops (empty or aging with headspace). */
+/** Barrels eligible to show in the solera-top picker (capacity checked again at produce). */
 export function getBarrelsForSoleraRefill(): Barrel[] {
   return sortBarrelsForBlendPicker(
-    getBarrels().filter((b) => (
-      (b.status === 'empty' || b.status === 'aging')
-      && b.capacity_gal > b.current_volume_gal + 0.01
-    )),
+    getBarrels().filter((b) => b.status !== 'dumped'),
   );
 }
 
