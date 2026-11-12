@@ -234,7 +234,7 @@ CREATE TABLE IF NOT EXISTS warehouse_locations (
 CREATE TABLE IF NOT EXISTS barrel_fills (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   barrel_id INTEGER NOT NULL REFERENCES barrels(id) ON DELETE CASCADE,
-  source_holding_tank_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
+  source_holding_tank_equipment_id INTEGER REFERENCES floor_equipment(id),
   volume_gal REAL NOT NULL,
   abv REAL NOT NULL,
   fill_date TEXT NOT NULL,

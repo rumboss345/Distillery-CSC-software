@@ -7003,7 +7003,7 @@ export function executeBlendProduct(id: number, outputTankId: number): void {
       finalAbv,
       sources[0]?.volume_gal ?? product.base_spirit_volume_gal,
       sources[0]?.abv ?? product.base_spirit_abv,
-      sources[0]?.holding_tank_equipment_id ?? product.source_holding_tank_equipment_id,
+      blendFloorEquipmentFk(sources[0]?.holding_tank_equipment_id ?? product.source_holding_tank_equipment_id),
       outputTankId,
       id,
     ],
