@@ -1,5 +1,5 @@
 import type { MeasureMode } from './blending';
-import { spiritVolumeGalFromAmount } from './blending';
+import { spiritVolumeGalFromAmount, spiritWeightLbsFromVolumeGal } from './blending';
 import { correctedAbvFromInputs } from '../components/AbvTemperatureInput';
 
 export const BARREL_SOLERA_NOTES_TAG = '[barrel-solera]';
@@ -69,6 +69,49 @@ export function abvFromCheckpoint(checkpoint: BarrelBlendCheckpoint): number {
 
 export function totalSoleraReturnGal(returns: readonly BarrelSoleraReturn[]): number {
   return returns.reduce((sum, row) => sum + (row.volume_gal > 0 ? row.volume_gal : 0), 0);
+}
+
+/** Observed % ABV from the combined vat check — solera tops use this strength. */
+export function blendCheckAbv(initial: BarrelBlendCheckpoint | null | undefined): number {
+  if (!initial || !(initial.abv > 0)) return 0;
+  return initial.abv;
+}
+
+export function syncSoleraReturnsToBlendCheck(
+  initial: BarrelBlendCheckpoint | null | undefined,
+  returns: readonly BarrelSoleraReturn[],
+): BarrelSoleraReturn[] {
+  const abv = blendCheckAbv(initial);
+  return returns.map((row) => ({
+    ...row,
+    abv: abv > 0 ? abv : row.abv,
+  }));
+}
+
+/** Book leftover after solera tops (vat volume minus returns, same ABV / temp as blend check). */
+export function expectedRemainderAfterSolera(
+  initial: BarrelBlendCheckpoint,
+  returns: readonly BarrelSoleraReturn[],
+): {
+  volumeGal: number;
+  weightLbs: number;
+  abv: number;
+  tempF: number | undefined;
+  measureMode: MeasureMode;
+} {
+  const initialGal = volumeGalFromCheckpoint(initial);
+  const soleraGal = totalSoleraReturnGal(returns);
+  const volumeGal = Math.max(0, Math.round((initialGal - soleraGal) * 100) / 100);
+  const abv = initial.abv;
+  const proofAbv = abvFromCheckpoint(initial);
+  const weightLbs = spiritWeightLbsFromVolumeGal(volumeGal, proofAbv);
+  return {
+    volumeGal,
+    weightLbs: Math.round(weightLbs * 100) / 100,
+    abv,
+    tempF: initial.tempF,
+    measureMode: initial.measureMode,
+  };
 }
 
 /** Loss between combined vat volume, solera returns, and leftover destined for proofing. */

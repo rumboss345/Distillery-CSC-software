@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   barrelBlendAngelShareGal,
   barrelBlendReviewRows,
+  blendCheckAbv,
   barrelProofingSpiritSources,
+  expectedRemainderAfterSolera,
+  syncSoleraReturnsToBlendCheck,
   emptyBarrelBlendSoleraState,
   mergeBarrelSoleraIntoNotes,
   parseBarrelSoleraFromNotes,
@@ -56,6 +59,28 @@ describe('barrelBlendAngelShareGal', () => {
       returns: [{ barrel_id: 1, volume_gal: 8, abv: 58 }],
     });
     expect(loss).toBe(0);
+  });
+});
+
+describe('solera and remainder carry-forward', () => {
+  it('solera uses blend-check abv', () => {
+    const initial = { measureMode: 'volume' as const, volumeGal: 200, abv: 52, tempF: 68 };
+    expect(blendCheckAbv(initial)).toBe(52);
+    const synced = syncSoleraReturnsToBlendCheck(initial, [
+      { barrel_id: 1, volume_gal: 52, abv: 48 },
+    ]);
+    expect(synced[0].abv).toBe(52);
+  });
+
+  it('prefills leftover volume after solera', () => {
+    const initial = { measureMode: 'volume' as const, volumeGal: 200, abv: 52, tempF: 60 };
+    const book = expectedRemainderAfterSolera(initial, [
+      { barrel_id: 1, volume_gal: 52, abv: 52 },
+    ]);
+    expect(book.volumeGal).toBe(148);
+    expect(book.abv).toBe(52);
+    expect(book.tempF).toBe(60);
+    expect(book.weightLbs).toBeGreaterThan(0);
   });
 });
 

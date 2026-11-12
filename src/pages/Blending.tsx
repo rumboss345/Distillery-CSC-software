@@ -41,7 +41,10 @@ import {
   barrelBlendAngelShareGal,
   barrelBlendReviewRows,
   barrelProofingSpiritSources,
+  blendCheckAbv,
   checkpointFromDraft,
+  expectedRemainderAfterSolera,
+  syncSoleraReturnsToBlendCheck,
   emptyBarrelBlendSoleraState,
   mergeAngelShareIntoUserNotes,
   mergeBarrelSoleraIntoNotes,
@@ -85,6 +88,7 @@ import {
   defaultUnitForMode,
   formatReviewVolume,
   formatReviewWeight,
+  formatSpiritPullWeightLbs,
   inferMeasureMode,
   blendIngredientTypeForCategory,
   blendInventoryCategories,
@@ -99,6 +103,7 @@ import {
   spiritMeasureAlternate,
   spiritUnitsForMeasureMode,
   spiritVolumeGalFromAmount,
+  spiritWeightLbsFromVolumeGal,
   toLbs,
   unitsForMeasureMode,
   type MeasureMode,
@@ -1761,18 +1766,38 @@ export function Blending() {
     return true;
   };
 
-  const prefillBarrelCheckDraft = (checkpoint?: typeof barrelSolera.initial) => {
+  const prefillBarrelCheckDraft = (
+    checkpoint?: typeof barrelSolera.initial,
+    options?: { bookRemainder?: boolean },
+  ) => {
     const theory = theoreticalBlendFromSources(activeSources);
+    if (!checkpoint && options?.bookRemainder && barrelSolera.initial) {
+      const book = expectedRemainderAfterSolera(barrelSolera.initial, barrelSolera.returns);
+      setBarrelCheckMeasureMode(book.measureMode);
+      setBarrelCheckDraft({
+        volume: book.volumeGal > 0 ? book.volumeGal.toFixed(2) : '',
+        weight: book.weightLbs > 0 ? book.weightLbs.toFixed(2) : '',
+        abv: book.abv > 0 ? book.abv.toFixed(1) : '',
+        tempF: book.tempF != null ? String(book.tempF) : '60',
+      });
+      return;
+    }
     const volume = checkpoint
       ? volumeGalFromCheckpoint(checkpoint)
       : theory.volumeGal;
     const abv = checkpoint
       ? checkpoint.abv
       : theory.abv;
+    const proofAbv = checkpoint ? abvFromCheckpoint(checkpoint) : abv;
+    const scaleWeight = volume > 0 && proofAbv > 0
+      ? spiritWeightLbsFromVolumeGal(volume, proofAbv)
+      : 0;
     setBarrelCheckMeasureMode(checkpoint?.measureMode ?? 'volume');
     setBarrelCheckDraft({
       volume: volume > 0 ? volume.toFixed(2) : '',
-      weight: checkpoint?.weightLbs != null ? String(checkpoint.weightLbs) : '',
+      weight: checkpoint?.weightLbs != null
+        ? String(checkpoint.weightLbs)
+        : (scaleWeight > 0 ? scaleWeight.toFixed(2) : ''),
       abv: abv > 0 ? abv.toFixed(1) : '',
       tempF: checkpoint?.tempF != null ? String(checkpoint.tempF) : '60',
     });
@@ -1823,13 +1848,16 @@ export function Blending() {
         if (!validateBarrelPreProofPhase('initial')) return;
         const initial = checkpointFromDraft(barrelCheckMeasureMode, barrelCheckDraft);
         if (!initial) return;
-        const defaultAbv = abvFromCheckpoint(initial);
+        const blendAbv = initial.abv;
         setBarrelSolera((prev) => ({
           ...prev,
           initial,
-          returns: prev.returns.length > 0
-            ? prev.returns
-            : [{ barrel_id: 0, volume_gal: 0, abv: defaultAbv }],
+          returns: syncSoleraReturnsToBlendCheck(
+            initial,
+            prev.returns.length > 0
+              ? prev.returns
+              : [{ barrel_id: 0, volume_gal: 0, abv: blendAbv }],
+          ),
         }));
         setBarrelPreProofPhase('solera');
         return;
@@ -1838,10 +1866,15 @@ export function Blending() {
         if (!validateBarrelPreProofPhase('solera')) return;
         setBarrelSolera((prev) => ({
           ...prev,
-          returns: prev.returns.filter((row) => row.volume_gal > 0 && row.barrel_id > 0),
+          returns: syncSoleraReturnsToBlendCheck(
+            prev.initial,
+            prev.returns.filter((row) => row.volume_gal > 0 && row.barrel_id > 0),
+          ),
         }));
         setBarrelPreProofPhase('remainder');
-        prefillBarrelCheckDraft(barrelSolera.remainder ?? undefined);
+        prefillBarrelCheckDraft(barrelSolera.remainder ?? undefined, {
+          bookRemainder: !barrelSolera.remainder,
+        });
         return;
       }
       if (barrelPreProofPhase === 'remainder') {
@@ -1898,7 +1931,9 @@ export function Blending() {
     if (isBarrelBlendWizard && wizardStep === 3 && barrelSolera.preProofComplete) {
       setWizardStep(2);
       setBarrelPreProofPhase('remainder');
-      prefillBarrelCheckDraft(barrelSolera.remainder ?? undefined);
+      prefillBarrelCheckDraft(barrelSolera.remainder ?? undefined, {
+        bookRemainder: !barrelSolera.remainder,
+      });
       return;
     }
     if (isBarrelBlendWizard && wizardStep === 2) {
@@ -1908,7 +1943,11 @@ export function Blending() {
         const previous = order[index - 1];
         setBarrelPreProofPhase(previous);
         if (previous === 'initial') prefillBarrelCheckDraft(barrelSolera.initial ?? undefined);
-        if (previous === 'remainder') prefillBarrelCheckDraft(barrelSolera.remainder ?? undefined);
+        if (previous === 'remainder') {
+          prefillBarrelCheckDraft(barrelSolera.remainder ?? undefined, {
+            bookRemainder: !barrelSolera.remainder,
+          });
+        }
         return;
       }
     }
@@ -2246,9 +2285,23 @@ export function Blending() {
 
   const renderBarrelMeasurePanel = (phase: 'initial' | 'remainder') => {
     const theory = theoreticalBlendFromSources(activeSources);
-    const initialGal = barrelSolera.initial ? volumeGalFromCheckpoint(barrelSolera.initial) : theory.volumeGal;
-    const soleraGal = totalSoleraReturnGal(barrelSolera.returns);
-    const expectedLeft = phase === 'remainder' ? Math.max(0, initialGal - soleraGal) : null;
+    const bookRemainder = phase === 'remainder' && barrelSolera.initial
+      ? expectedRemainderAfterSolera(barrelSolera.initial, barrelSolera.returns)
+      : null;
+    const draftAbv = parseFloat(barrelCheckDraft.abv) || (barrelSolera.initial?.abv ?? 0);
+    const draftProofAbv = barrelSolera.initial ? abvFromCheckpoint(barrelSolera.initial) : draftAbv;
+    const draftVolume = barrelCheckMeasureMode === 'volume'
+      ? parseFloat(barrelCheckDraft.volume)
+      : spiritVolumeGalFromAmount(parseFloat(barrelCheckDraft.weight), 'lbs', draftProofAbv);
+    const volumeAlternate = Number.isFinite(draftVolume) && draftVolume > 0 && draftAbv > 0
+      ? (barrelCheckMeasureMode === 'volume'
+        ? formatSpiritPullWeightLbs(draftVolume, draftProofAbv)
+        : spiritMeasureAlternate(
+          parseFloat(barrelCheckDraft.weight),
+          'lbs',
+          draftProofAbv,
+        )?.label)
+      : null;
     const draftCheckpoint = phase === 'remainder'
       ? checkpointFromDraft(barrelCheckMeasureMode, barrelCheckDraft)
       : null;
@@ -2269,9 +2322,16 @@ export function Blending() {
         )}
         {phase === 'remainder' && (
           <p className="field-hint">
-            Only this leftover volume is used for additives and proofing water.
-            {expectedLeft != null && expectedLeft > 0 && (
-              <> After {soleraGal.toFixed(1)} gal solera tops, book value is about {expectedLeft.toFixed(1)} gal.</>
+            Only this leftover is used for additives and proofing water. Starting values are vat volume minus solera tops, with the same blend-check % ABV.
+            {bookRemainder != null && bookRemainder.volumeGal > 0 && (
+              <>
+                {' '}Book leftover: <strong>{formatReviewVolume(bookRemainder.volumeGal)}</strong>
+                {' · '}
+                <strong>{formatReviewWeight(bookRemainder.weightLbs)}</strong>
+                {' at '}
+                <strong>{bookRemainder.abv.toFixed(1)}% ABV</strong>
+                {bookRemainder.tempF != null ? ` (${bookRemainder.tempF}°F)` : ''}.
+              </>
             )}
           </p>
         )}
@@ -2327,21 +2387,31 @@ export function Blending() {
               />
             </label>
           )}
+          {volumeAlternate && (
+            <p className="field-hint barrel-measure-weight-hint">{volumeAlternate}</p>
+          )}
         </div>
       </div>
     );
   };
 
   const renderBarrelSoleraPanel = () => {
-    const defaultAbv = barrelSolera.initial ? abvFromCheckpoint(barrelSolera.initial) : 0;
-    const returns = barrelSolera.returns.length > 0
-      ? barrelSolera.returns
-      : [{ barrel_id: 0, volume_gal: 0, abv: defaultAbv }];
+    const blendAbv = blendCheckAbv(barrelSolera.initial);
+    const blendTemp = barrelSolera.initial?.tempF;
+    const returns = syncSoleraReturnsToBlendCheck(
+      barrelSolera.initial,
+      barrelSolera.returns.length > 0
+        ? barrelSolera.returns
+        : [{ barrel_id: 0, volume_gal: 0, abv: blendAbv }],
+    );
     return (
       <div className="wizard-additive-card" data-testid="barrel-solera-returns">
         <h4>Solera / mother barrel tops</h4>
         <p className="field-hint">
-          Move spirit from the vat back into barrels before proofing. Proofing uses only what remains.
+          Move spirit from the vat back into barrels before proofing. Tops use the same % ABV as the combined blend check
+          {blendAbv > 0 ? ` (${blendAbv.toFixed(1)}%` : ''}
+          {blendTemp != null ? ` at ${blendTemp}°F` : ''}
+          {blendAbv > 0 ? ')' : ''}.
           {barrelSolera.preProofComplete && ' You can change tops here and re-check leftover before additives.'}
         </p>
         {soleraBarrelInventory.length === 0 && (
@@ -2364,10 +2434,10 @@ export function Blending() {
                   setBarrelSolera((prev) => {
                     const list = prev.returns.length > 0 ? [...prev.returns] : [...returns];
                     while (list.length <= index) {
-                      list.push({ barrel_id: 0, volume_gal: 0, abv: defaultAbv });
+                      list.push({ barrel_id: 0, volume_gal: 0, abv: blendAbv });
                     }
                     list[index] = { ...list[index], barrel_id: barrelId };
-                    return { ...prev, returns: list };
+                    return { ...prev, returns: syncSoleraReturnsToBlendCheck(prev.initial, list) };
                   });
                 }}
               >
@@ -2397,30 +2467,28 @@ export function Blending() {
                     list[index] = {
                       ...list[index],
                       volume_gal: Number.isFinite(volume_gal) ? volume_gal : 0,
-                      abv: list[index].abv > 0 ? list[index].abv : defaultAbv,
+                      abv: blendAbv > 0 ? blendAbv : list[index].abv,
                     };
-                    return { ...prev, returns: list };
+                    return { ...prev, returns: syncSoleraReturnsToBlendCheck(prev.initial, list) };
                   });
                 }}
               />
+              {row.volume_gal > 0 && blendAbv > 0 && barrelSolera.initial && (
+                <span className="field-hint solera-weight-hint">
+                  {formatReviewWeight(
+                    spiritWeightLbsFromVolumeGal(
+                      row.volume_gal,
+                      abvFromCheckpoint(barrelSolera.initial),
+                    ),
+                  )}
+                </span>
+              )}
             </label>
-            <label className="wizard-solera-field">
-              ABV %
-              <input
-                type="number"
-                step="0.1"
-                min="0"
-                value={row.abv > 0 ? row.abv : (defaultAbv > 0 ? defaultAbv.toFixed(1) : '')}
-                onChange={(e) => {
-                  const abv = parseFloat(e.target.value);
-                  setBarrelSolera((prev) => {
-                    const list = prev.returns.length > 0 ? [...prev.returns] : [...returns];
-                    list[index] = { ...list[index], abv: Number.isFinite(abv) ? abv : 0 };
-                    return { ...prev, returns: list };
-                  });
-                }}
-              />
-            </label>
+            <div className="wizard-solera-field wizard-solera-abv-readonly">
+              <span className="measure-mode-label">Blend check ABV</span>
+              <strong>{blendAbv > 0 ? `${blendAbv.toFixed(1)}%` : '—'}</strong>
+              {blendTemp != null && <span className="field-hint"> at {blendTemp}°F</span>}
+            </div>
             {returns.length > 1 && (
               <button
                 type="button"
@@ -2441,11 +2509,10 @@ export function Blending() {
           className="btn btn-sm btn-secondary"
           onClick={() => setBarrelSolera((prev) => ({
             ...prev,
-            returns: [...(prev.returns.length > 0 ? prev.returns : returns), {
-              barrel_id: 0,
-              volume_gal: 0,
-              abv: defaultAbv,
-            }],
+            returns: syncSoleraReturnsToBlendCheck(prev.initial, [
+              ...(prev.returns.length > 0 ? prev.returns : returns),
+              { barrel_id: 0, volume_gal: 0, abv: blendAbv },
+            ]),
           }))}
         >
           + Add another solera barrel
@@ -2707,7 +2774,11 @@ export function Blending() {
                       }
                       setBarrelPreProofPhase(phase);
                       if (phase === 'initial') prefillBarrelCheckDraft(barrelSolera.initial ?? undefined);
-                      if (phase === 'remainder') prefillBarrelCheckDraft(barrelSolera.remainder ?? undefined);
+                      if (phase === 'remainder') {
+                        prefillBarrelCheckDraft(barrelSolera.remainder ?? undefined, {
+                          bookRemainder: !barrelSolera.remainder,
+                        });
+                      }
                     }}
                   >
                     {label}

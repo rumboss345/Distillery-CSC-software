@@ -2787,6 +2787,24 @@ tr.volume-change-kind:hover td {
   font-weight: 400;
 }
 
+.wizard-solera-abv-readonly {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  justify-content: flex-end;
+  min-height: 3.25rem;
+}
+
+.wizard-solera-abv-readonly strong {
+  font-size: 1.05rem;
+}
+
+.solera-weight-hint,
+.barrel-measure-weight-hint {
+  display: block;
+  margin-top: 0.35rem;
+}
+
 .wizard-solera-row > .btn-ghost {
   align-self: end;
   margin-bottom: 0.1rem;
