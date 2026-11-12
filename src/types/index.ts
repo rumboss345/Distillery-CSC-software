@@ -563,7 +563,7 @@ export interface BlendProduct {
   id: number;
   batch_number: string;
   product_name: string;
-  source_holding_tank_equipment_id: number;
+  source_holding_tank_equipment_id: number | null;
   base_spirit_volume_gal: number;
   base_spirit_abv: number;
   blend_date: string;
@@ -597,7 +597,7 @@ export interface BlendProduct {
 export interface BlendSpiritSource {
   id: number;
   blend_product_id: number;
-  holding_tank_equipment_id: number;
+  holding_tank_equipment_id: number | null;
   barrel_id?: number | null;
   volume_gal: number;
   /** Gallons that were in the barrel when production emptied it. Null on tank pulls and older batches. */

@@ -446,14 +446,19 @@ function buildSavePayload(
   formulation: ReturnType<typeof computeBlendFormulation>,
   activeSources: SpiritSourceRow[],
   statusOverride?: FormulaForm['status'],
+  barrelPrimary?: { volume_gal: number; abv: number },
 ) {
   const primary = activeSources[0];
+  const tankSource = activeSources.find((s) => s.holding_tank_equipment_id > 0);
+  const legacyTankId = tankSource?.holding_tank_equipment_id
+    ?? (primary?.holding_tank_equipment_id > 0 ? primary.holding_tank_equipment_id : null);
+  const legacySpirit = barrelPrimary ?? primary;
   return {
     ...form,
     status: statusOverride ?? form.status,
-    source_holding_tank_equipment_id: primary.holding_tank_equipment_id,
-    base_spirit_volume_gal: primary.volume_gal,
-    base_spirit_abv: primary.abv,
+    source_holding_tank_equipment_id: legacyTankId ?? 0,
+    base_spirit_volume_gal: legacySpirit?.volume_gal ?? 0,
+    base_spirit_abv: legacySpirit?.abv ?? 0,
     formulation_phase: form.status === 'trial' || form.actual_abv != null ? 'trial' as const : form.formulation_phase,
     theoretical_volume_gal: formulation.theoretical.volumeGal,
     theoretical_abv: formulation.theoretical.abv,
@@ -1264,8 +1269,8 @@ export function Blending() {
     setSpiritSources(
       sources.length > 0
         ? sources.map((s, index) => spiritRowWithObservedAbv({
-          equipment_type: spiritTankEquipmentType(s.holding_tank_equipment_id),
-          holding_tank_equipment_id: s.holding_tank_equipment_id,
+          equipment_type: spiritTankEquipmentType(s.holding_tank_equipment_id ?? 0),
+          holding_tank_equipment_id: s.holding_tank_equipment_id ?? 0,
           barrel_id: s.barrel_id ?? templateSources?.[index]?.barrel_id ?? null,
           volume_gal: s.volume_gal,
           abv: s.abv,
@@ -1276,8 +1281,8 @@ export function Blending() {
           follows_recipe_index: templateSources?.[index] ? index : null,
         }))
         : [spiritRowWithObservedAbv({
-          equipment_type: spiritTankEquipmentType(blend.source_holding_tank_equipment_id),
-          holding_tank_equipment_id: blend.source_holding_tank_equipment_id,
+          equipment_type: spiritTankEquipmentType(blend.source_holding_tank_equipment_id ?? 0),
+          holding_tank_equipment_id: blend.source_holding_tank_equipment_id ?? 0,
           volume_gal: blend.base_spirit_volume_gal,
           abv: blend.base_spirit_abv,
           recipe_abv: templateSources?.[0]?.abv ?? blend.base_spirit_abv,
@@ -1705,11 +1710,18 @@ export function Blending() {
       },
       form.target_abv,
     );
+    const barrelPrimary = isBarrelBlendWizard && barrelSolera.preProofComplete && barrelSolera.remainder
+      ? {
+        volume_gal: volumeGalFromCheckpoint(barrelSolera.remainder),
+        abv: abvFromCheckpoint(barrelSolera.remainder),
+      }
+      : undefined;
     const payload = buildSavePayload(
       { ...form, notes, ...overrides },
       saveFormulation,
       activeSources,
       statusOverride,
+      barrelPrimary,
     );
     if (saveIngredients !== ingredients) {
       setIngredients(saveIngredients);
