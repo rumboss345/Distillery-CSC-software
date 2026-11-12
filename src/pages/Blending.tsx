@@ -38,8 +38,10 @@ import {
 } from '../lib/barrel-blending';
 import {
   abvFromCheckpoint,
+  barrelBlendAngelShareGal,
   checkpointFromDraft,
   emptyBarrelBlendSoleraState,
+  mergeAngelShareIntoUserNotes,
   mergeBarrelSoleraIntoNotes,
   parseBarrelSoleraFromNotes,
   stripBarrelSoleraFromNotes,
@@ -180,7 +182,7 @@ const BARREL_PRE_PROOF_HINTS: Record<BarrelPreProofPhase, string> = {
   pulls: 'Pull spirit from aging barrels, then continue to measure the combined blend before proofing.',
   initial: 'Record volume or weight and % ABV of all barrel pulls combined (the vat reading before solera tops).',
   solera: 'Set aside volume to refill solera or mother barrels. Proofing uses only what remains.',
-  remainder: 'Re-check volume or weight and % ABV of spirit left for this batch after solera tops.',
+  remainder: 'Re-check the spirit left for proofing. Anything short of initial minus solera tops is recorded as angel\'s share.',
 };
 
 const STEP_HINTS: Record<number, string> = {
@@ -1583,10 +1585,18 @@ export function Blending() {
     statusOverride?: FormulaForm['status'],
     overrides?: Partial<FormulaForm>,
   ): number => {
-    const userNotes = stripBarrelSoleraFromNotes(form.notes);
-    const notes = isBarrelBlendWizard
+    const userNotes = stripBarrelSoleraFromNotes(
+      form.notes
+        .split('\n')
+        .filter((line) => !line.trim().startsWith("Angel's share (barrel vat check):"))
+        .join('\n'),
+    );
+    let notes = isBarrelBlendWizard
       ? mergeBarrelSoleraIntoNotes(userNotes, barrelSolera)
       : userNotes;
+    if (isBarrelBlendWizard && (barrelSolera.angel_share_gal ?? 0) > 0) {
+      notes = mergeAngelShareIntoUserNotes(notes, barrelSolera.angel_share_gal as number);
+    }
     const payload = buildSavePayload({ ...form, notes, ...overrides }, formulation, activeSources, statusOverride);
     return saveBlendFormula(
       payload,
@@ -1668,17 +1678,6 @@ export function Blending() {
           : 'Enter leftover volume or weight and % ABV before proofing.');
         return false;
       }
-      if (phase === 'remainder' && barrelSolera.initial) {
-        const initialGal = volumeGalFromCheckpoint(barrelSolera.initial);
-        const leftGal = volumeGalFromCheckpoint(checkpoint);
-        const soleraGal = totalSoleraReturnGal(barrelSolera.returns);
-        const expected = initialGal - soleraGal;
-        if (initialGal > 0 && Math.abs(leftGal - expected) > 0.75) {
-          if (!confirm(
-            `Leftover is ${leftGal.toFixed(1)} gal but initial minus solera tops is ${expected.toFixed(1)} gal. Continue anyway?`,
-          )) return false;
-        }
-      }
     }
     if (phase === 'solera') {
       const invalid = barrelSolera.returns.find((row) => (
@@ -1740,9 +1739,15 @@ export function Blending() {
         if (!validateBarrelPreProofPhase('remainder')) return;
         const remainder = checkpointFromDraft(barrelCheckMeasureMode, barrelCheckDraft);
         if (!remainder) return;
+        const angel_share_gal = barrelBlendAngelShareGal({
+          initial: barrelSolera.initial,
+          remainder,
+          returns: barrelSolera.returns,
+        });
         setBarrelSolera((prev) => ({
           ...prev,
           remainder,
+          angel_share_gal,
           preProofComplete: true,
         }));
         setBarrelPreProofPhase('pulls');
@@ -2135,17 +2140,35 @@ export function Blending() {
     const initialGal = barrelSolera.initial ? volumeGalFromCheckpoint(barrelSolera.initial) : theory.volumeGal;
     const soleraGal = totalSoleraReturnGal(barrelSolera.returns);
     const expectedLeft = phase === 'remainder' ? Math.max(0, initialGal - soleraGal) : null;
+    const draftCheckpoint = phase === 'remainder'
+      ? checkpointFromDraft(barrelCheckMeasureMode, barrelCheckDraft)
+      : null;
+    const draftAngel = draftCheckpoint && barrelSolera.initial
+      ? barrelBlendAngelShareGal({
+        initial: barrelSolera.initial,
+        remainder: draftCheckpoint,
+        returns: barrelSolera.returns,
+      })
+      : 0;
     return (
-      <div className="wizard-additive-card" data-testid={`barrel-${phase}-check`}>
+      <div className="wizard-additive-card barrel-measure-panel" data-testid={`barrel-${phase}-check`}>
         <h4>{phase === 'initial' ? 'Combined blend check' : 'Leftover for proofing'}</h4>
         {phase === 'initial' && theory.volumeGal > 0 && (
           <p className="field-hint">
             Formula pulls total {theory.volumeGal.toFixed(1)} gal at {theory.abv.toFixed(1)}% ABV — enter your vat reading.
           </p>
         )}
-        {phase === 'remainder' && expectedLeft != null && (
+        {phase === 'remainder' && (
           <p className="field-hint">
-            After {soleraGal.toFixed(1)} gal set aside for solera, expect about {expectedLeft.toFixed(1)} gal left.
+            Only this leftover volume is used for additives and proofing water.
+            {expectedLeft != null && expectedLeft > 0 && (
+              <> After {soleraGal.toFixed(1)} gal solera tops, book value is about {expectedLeft.toFixed(1)} gal.</>
+            )}
+          </p>
+        )}
+        {phase === 'remainder' && draftAngel > 0 && (
+          <p className="wizard-result-banner">
+            Angel&apos;s share: <strong>{draftAngel.toFixed(2)} gal</strong> (initial − solera − leftover).
           </p>
         )}
         <div className="measure-mode-toggle">
@@ -2222,8 +2245,8 @@ export function Blending() {
             index,
           );
           return (
-          <div key={index} className="wizard-additive-row">
-            <label>
+          <div key={index} className="wizard-solera-row">
+            <label className="wizard-solera-field">
               Barrel to top
               <select
                 value={row.barrel_id || ''}
@@ -2251,7 +2274,7 @@ export function Blending() {
                 ))}
               </select>
             </label>
-            <label>
+            <label className="wizard-solera-field">
               Gallons to top
               <input
                 type="number"
@@ -2272,7 +2295,7 @@ export function Blending() {
                 }}
               />
             </label>
-            <label>
+            <label className="wizard-solera-field">
               ABV %
               <input
                 type="number"
@@ -2553,7 +2576,7 @@ export function Blending() {
         return (
           <>
             {isBarrelBlendWizard && (
-              <nav className="measure-mode-buttons" aria-label="Barrel blend checks" style={{ marginBottom: '1rem', flexWrap: 'wrap' }}>
+              <nav className="barrel-pre-proof-tabs" aria-label="Barrel blend checks">
                 {([
                   ['pulls', 'Barrel pulls'],
                   ['initial', 'Check blend'],
@@ -2821,6 +2844,17 @@ export function Blending() {
       case 4:
         return (
           <>
+            {isBarrelBlendWizard && barrelSolera.remainder && (
+              <p className="wizard-result-banner">
+                Proofing applies to{' '}
+                <strong>{volumeGalFromCheckpoint(barrelSolera.remainder).toFixed(2)} gal</strong>
+                {' '}leftover at{' '}
+                <strong>{abvFromCheckpoint(barrelSolera.remainder).toFixed(1)}% ABV</strong>
+                {(barrelSolera.angel_share_gal ?? 0) > 0 && (
+                  <> · Angel&apos;s share {(barrelSolera.angel_share_gal ?? 0).toFixed(2)} gal recorded</>
+                )}
+              </p>
+            )}
             <p className="field-hint">Sugar, flavor, and color from the previous step are already in this batch. The water below brings the blend to the target proof.</p>
             {waterAdjustmentNote && (
               <p className="wizard-result-banner">{waterAdjustmentNote}</p>

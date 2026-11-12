@@ -24,6 +24,8 @@ export interface BarrelBlendSoleraState {
   initial: BarrelBlendCheckpoint | null;
   remainder: BarrelBlendCheckpoint | null;
   returns: BarrelSoleraReturn[];
+  /** Gallons unaccounted between vat check, solera tops, and leftover for proofing. */
+  angel_share_gal?: number | null;
   preProofComplete: boolean;
 }
 
@@ -69,6 +71,35 @@ export function totalSoleraReturnGal(returns: readonly BarrelSoleraReturn[]): nu
   return returns.reduce((sum, row) => sum + (row.volume_gal > 0 ? row.volume_gal : 0), 0);
 }
 
+/** Loss between combined vat volume, solera returns, and leftover destined for proofing. */
+export function barrelBlendAngelShareGal(
+  state: Pick<BarrelBlendSoleraState, 'initial' | 'remainder' | 'returns'>,
+): number {
+  if (!state.initial || !state.remainder) return 0;
+  const initialGal = volumeGalFromCheckpoint(state.initial);
+  const remainderGal = volumeGalFromCheckpoint(state.remainder);
+  if (!(initialGal > 0) || !(remainderGal >= 0)) return 0;
+  const soleraGal = totalSoleraReturnGal(state.returns);
+  const loss = initialGal - soleraGal - remainderGal;
+  if (!(loss > 0.005)) return 0;
+  return Math.round(loss * 100) / 100;
+}
+
+export function formatAngelShareNote(gal: number): string {
+  return `Angel's share (barrel vat check): ${gal.toFixed(2)} gal — initial volume minus solera tops minus leftover for proofing.`;
+}
+
+export function mergeAngelShareIntoUserNotes(notes: string, angelGal: number): string {
+  const withoutAngel = notes
+    .split('\n')
+    .filter((line) => !line.trim().startsWith("Angel's share (barrel vat check):"))
+    .join('\n')
+    .trim();
+  if (!(angelGal > 0)) return withoutAngel;
+  const line = formatAngelShareNote(angelGal);
+  return withoutAngel ? `${withoutAngel}\n${line}` : line;
+}
+
 export function parseBarrelSoleraFromNotes(notes: string): BarrelBlendSoleraState | null {
   const trimmed = notes.trim();
   if (!trimmed) return null;
@@ -82,6 +113,7 @@ export function parseBarrelSoleraFromNotes(notes: string): BarrelBlendSoleraStat
       initial: parsed.initial ?? null,
       remainder: parsed.remainder ?? null,
       returns: Array.isArray(parsed.returns) ? parsed.returns : [],
+      angel_share_gal: parsed.angel_share_gal ?? null,
       preProofComplete: !!parsed.preProofComplete,
     };
   } catch {
