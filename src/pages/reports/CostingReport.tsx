@@ -339,6 +339,27 @@ export function CostingReport() {
         </div>
       </div>
 
+      <p className="text-muted" style={{ margin: '-0.5rem 0 0.75rem', fontSize: '0.9rem' }}>
+        Including monthly overhead (total labour, electric, and gas in this period)
+      </p>
+      <div className="card-grid" style={{ marginBottom: '1.5rem' }}>
+        <div className="stat-card">
+          <div className="label">Cost per litre (LAA)</div>
+          <div className="value accent">{money(summary.costPerLaaLiterInclMonthlyOverhead)}</div>
+          <div className="sub">
+            Wash, distillation, and overhead · {num(summary.totalLaaLiters, 2)} L LAA
+            {summary.periodMonthlyOverheadTotal > 0
+              ? ` · Overhead ${money(summary.periodMonthlyOverheadTotal)}`
+              : ''}
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="label">Cost per litre at 40% ABV</div>
+          <div className="value">{money(summary.costPerLiterAt40AbvInclMonthlyOverhead)}</div>
+          <div className="sub">Same basis on 40% ABV bottled strength</div>
+        </div>
+      </div>
+
       <CollapsibleSection
         title="Wash & distillation batches"
         summary={`${report.washBatches.length} batch${report.washBatches.length === 1 ? '' : 'es'} in ${range.label}`}
