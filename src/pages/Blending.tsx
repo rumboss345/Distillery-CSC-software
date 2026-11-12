@@ -9,6 +9,7 @@ import {
   undoBlendProduction,
   barrelBlendProductName,
   getBarrelsForBlend,
+  getBarrelsForSoleraRefill,
   getBlendIngredients,
   getBlendProducts,
   getBlendRecipe,
@@ -33,6 +34,19 @@ import {
   hasDuplicateBarrelSelections,
   spiritLabelForBarrel,
 } from '../lib/barrel-blending';
+import {
+  abvFromCheckpoint,
+  checkpointFromDraft,
+  emptyBarrelBlendSoleraState,
+  mergeBarrelSoleraIntoNotes,
+  parseBarrelSoleraFromNotes,
+  stripBarrelSoleraFromNotes,
+  theoreticalBlendFromSources,
+  totalSoleraReturnGal,
+  volumeGalFromCheckpoint,
+  type BarrelBlendSoleraState,
+  type BarrelPreProofPhase,
+} from '../lib/barrel-blend-solera';
 import { TankContentsLookup } from '../components/TankContentsLookup';
 import { distillationChargeTypeChoices, tanksOfEquipmentType } from '../lib/distillation-source-tanks';
 import { equipmentTypeLabel } from '../lib/equipment';
@@ -159,6 +173,13 @@ const WIZARD_STEPS = [
   { id: 8, label: 'Produce', title: 'Make the batch' },
   { id: 9, label: 'Verify', title: 'Verify final measurements' },
 ] as const;
+
+const BARREL_PRE_PROOF_HINTS: Record<BarrelPreProofPhase, string> = {
+  pulls: 'Pull spirit from aging barrels, then continue to measure the combined blend before proofing.',
+  initial: 'Record volume or weight and % ABV of all barrel pulls combined (the vat reading before solera tops).',
+  solera: 'Set aside volume to refill solera or mother barrels. Proofing uses only what remains.',
+  remainder: 'Re-check volume or weight and % ABV of spirit left for this batch after solera tops.',
+};
 
 const STEP_HINTS: Record<number, string> = {
   1: 'Pick a saved blend recipe, then choose any batch size in gallons or liters. Recipes with sugar can also be sized in 50 lb bags.',
@@ -438,6 +459,7 @@ export function Blending() {
   const blends = getBlendProducts();
   const blendRecipes = getBlendRecipes();
   const barrelInventory = useMemo(() => getBarrelsForBlend(), [key]);
+  const soleraBarrelOptions = useMemo(() => getBarrelsForSoleraRefill(), [key]);
   const inventoryItems = getInventoryItems();
   const inventoryCategories = useMemo(
     () => blendInventoryCategories([
@@ -475,6 +497,15 @@ export function Blending() {
     tempF: '60',
   });
   const [verifyMeasureMode, setVerifyMeasureMode] = useState<MeasureMode>('volume');
+  const [barrelPreProofPhase, setBarrelPreProofPhase] = useState<BarrelPreProofPhase>('pulls');
+  const [barrelSolera, setBarrelSolera] = useState<BarrelBlendSoleraState>(emptyBarrelBlendSoleraState);
+  const [barrelCheckMeasureMode, setBarrelCheckMeasureMode] = useState<MeasureMode>('volume');
+  const [barrelCheckDraft, setBarrelCheckDraft] = useState({
+    volume: '',
+    weight: '',
+    abv: '',
+    tempF: '60',
+  });
   const [selectedRecipeId, setSelectedRecipeId] = useState<number | null>(null);
   const [recipeTemplate, setRecipeTemplate] = useState<RecipeTemplate | null>(null);
   const [targetYieldInput, setTargetYieldInput] = useState('');
@@ -692,6 +723,17 @@ export function Blending() {
     .map(syncSpiritVolume)
     .filter((s) => s.volume_gal > 0 && (s.holding_tank_equipment_id > 0 || (s.barrel_id != null && s.barrel_id > 0)));
 
+  const formulationSpiritInputs = useMemo(() => {
+    if (isBarrelBlendWizard && barrelSolera.preProofComplete && barrelSolera.remainder) {
+      const volumeGal = volumeGalFromCheckpoint(barrelSolera.remainder);
+      const abv = abvFromCheckpoint(barrelSolera.remainder);
+      if (volumeGal > 0 && abv > 0) {
+        return [{ holding_tank_equipment_id: 0, volume_gal: volumeGal, abv }];
+      }
+    }
+    return activeSources.map(toSpiritSourceInput);
+  }, [isBarrelBlendWizard, barrelSolera, activeSources]);
+
   const spiritMixLines = (): SpiritMixLine[] => activeSources.map((source) => {
     if (source.holding_tank_equipment_id > 0) {
       const tank = getSpiritTransferVessels().find((item) => item.id === source.holding_tank_equipment_id);
@@ -723,13 +765,13 @@ export function Blending() {
     return true;
   };
   const formulation = useMemo(
-    () => computeBlendFormulation(activeSources.map(toSpiritSourceInput), ingredients, {
+    () => computeBlendFormulation(formulationSpiritInputs, ingredients, {
       volume_gal: form.actual_volume_gal,
       abv: form.actual_abv,
       density: form.actual_density,
       brix: form.actual_brix,
     }, form.target_abv),
-    [activeSources, ingredients, form.actual_volume_gal, form.actual_abv, form.actual_density, form.actual_brix, form.target_abv],
+    [formulationSpiritInputs, ingredients, form.actual_volume_gal, form.actual_abv, form.actual_density, form.actual_brix, form.target_abv],
   );
 
   useEffect(() => {
@@ -957,6 +999,10 @@ export function Blending() {
     setVerifyMeasureMode('volume');
     setWaterAdjustmentNote(null);
     setAbvConfirmed(false);
+    setBarrelPreProofPhase('pulls');
+    setBarrelSolera(emptyBarrelBlendSoleraState());
+    setBarrelCheckMeasureMode('volume');
+    setBarrelCheckDraft({ volume: '', weight: '', abv: '', tempF: '60' });
     setShowWizard(true);
   };
 
@@ -1186,6 +1232,17 @@ export function Blending() {
     });
     setVerifyMeasureMode(blend.actual_weight_lbs != null ? 'weight' : 'volume');
     setAbvConfirmed(resumeStep(blend) > 5 && blend.theoretical_abv != null);
+    const hasBarrelSources = sources.some((s) => s.barrel_id != null && s.barrel_id > 0);
+    if (hasBarrelSources) {
+      setWizardSpiritSource('barrel');
+      const solera = parseBarrelSoleraFromNotes(blend.notes) ?? emptyBarrelBlendSoleraState();
+      setBarrelSolera(solera);
+      setBarrelPreProofPhase(solera.preProofComplete ? 'pulls' : 'pulls');
+    } else {
+      setWizardSpiritSource('tank');
+      setBarrelSolera(emptyBarrelBlendSoleraState());
+      setBarrelPreProofPhase('pulls');
+    }
     setWizardStep(resumeStep(blend));
     setShowWizard(true);
   };
@@ -1519,7 +1576,11 @@ export function Blending() {
     statusOverride?: FormulaForm['status'],
     overrides?: Partial<FormulaForm>,
   ): number => {
-    const payload = buildSavePayload({ ...form, ...overrides }, formulation, activeSources, statusOverride);
+    const userNotes = stripBarrelSoleraFromNotes(form.notes);
+    const notes = isBarrelBlendWizard
+      ? mergeBarrelSoleraIntoNotes(userNotes, barrelSolera)
+      : userNotes;
+    const payload = buildSavePayload({ ...form, notes, ...overrides }, formulation, activeSources, statusOverride);
     return saveBlendFormula(
       payload,
       activeSources.map(toSpiritSourceInput),
@@ -1574,9 +1635,118 @@ export function Blending() {
     return true;
   };
 
+  const prefillBarrelCheckDraft = (checkpoint?: typeof barrelSolera.initial) => {
+    const theory = theoreticalBlendFromSources(activeSources);
+    const volume = checkpoint
+      ? volumeGalFromCheckpoint(checkpoint)
+      : theory.volumeGal;
+    const abv = checkpoint
+      ? checkpoint.abv
+      : theory.abv;
+    setBarrelCheckMeasureMode(checkpoint?.measureMode ?? 'volume');
+    setBarrelCheckDraft({
+      volume: volume > 0 ? volume.toFixed(2) : '',
+      weight: checkpoint?.weightLbs != null ? String(checkpoint.weightLbs) : '',
+      abv: abv > 0 ? abv.toFixed(1) : '',
+      tempF: checkpoint?.tempF != null ? String(checkpoint.tempF) : '60',
+    });
+  };
+
+  const validateBarrelPreProofPhase = (phase: BarrelPreProofPhase): boolean => {
+    if (phase === 'initial' || phase === 'remainder') {
+      const checkpoint = checkpointFromDraft(barrelCheckMeasureMode, barrelCheckDraft);
+      if (!checkpoint) {
+        alert(phase === 'initial'
+          ? 'Enter combined blend volume or weight and % ABV before continuing.'
+          : 'Enter leftover volume or weight and % ABV before proofing.');
+        return false;
+      }
+      if (phase === 'remainder' && barrelSolera.initial) {
+        const initialGal = volumeGalFromCheckpoint(barrelSolera.initial);
+        const leftGal = volumeGalFromCheckpoint(checkpoint);
+        const soleraGal = totalSoleraReturnGal(barrelSolera.returns);
+        const expected = initialGal - soleraGal;
+        if (initialGal > 0 && Math.abs(leftGal - expected) > 0.75) {
+          if (!confirm(
+            `Leftover is ${leftGal.toFixed(1)} gal but initial minus solera tops is ${expected.toFixed(1)} gal. Continue anyway?`,
+          )) return false;
+        }
+      }
+    }
+    if (phase === 'solera') {
+      const invalid = barrelSolera.returns.find((row) => (
+        row.volume_gal > 0 && !(row.barrel_id > 0)
+      ));
+      if (invalid) {
+        alert('Choose a barrel for each solera top with volume greater than zero.');
+        return false;
+      }
+      if (barrelSolera.initial) {
+        const initialGal = volumeGalFromCheckpoint(barrelSolera.initial);
+        const soleraGal = totalSoleraReturnGal(barrelSolera.returns);
+        if (soleraGal > initialGal + 0.01) {
+          alert('Solera tops cannot exceed the measured combined blend volume.');
+          return false;
+        }
+      }
+    }
+    return true;
+  };
+
   const goNext = () => {
     if (!validateStep(wizardStep)) return;
-    if (wizardStep === 2 && !confirmMixedSpirits()) return;
+    if (wizardStep === 2 && isBarrelBlendWizard) {
+      if (barrelSolera.preProofComplete && barrelPreProofPhase === 'pulls') {
+        // fall through to advance wizard step
+      } else if (barrelPreProofPhase === 'pulls') {
+        if (!confirmMixedSpirits()) return;
+        setBarrelPreProofPhase('initial');
+        prefillBarrelCheckDraft(barrelSolera.initial ?? undefined);
+        return;
+      }
+      if (barrelPreProofPhase === 'initial') {
+        if (!validateBarrelPreProofPhase('initial')) return;
+        const initial = checkpointFromDraft(barrelCheckMeasureMode, barrelCheckDraft);
+        if (!initial) return;
+        const defaultAbv = abvFromCheckpoint(initial);
+        setBarrelSolera((prev) => ({
+          ...prev,
+          initial,
+          returns: prev.returns.length > 0
+            ? prev.returns
+            : [{ barrel_id: 0, volume_gal: 0, abv: defaultAbv }],
+        }));
+        setBarrelPreProofPhase('solera');
+        return;
+      }
+      if (barrelPreProofPhase === 'solera') {
+        if (!validateBarrelPreProofPhase('solera')) return;
+        setBarrelSolera((prev) => ({
+          ...prev,
+          returns: prev.returns.filter((row) => row.volume_gal > 0 && row.barrel_id > 0),
+        }));
+        setBarrelPreProofPhase('remainder');
+        prefillBarrelCheckDraft(barrelSolera.remainder ?? undefined);
+        return;
+      }
+      if (barrelPreProofPhase === 'remainder') {
+        if (!validateBarrelPreProofPhase('remainder')) return;
+        const remainder = checkpointFromDraft(barrelCheckMeasureMode, barrelCheckDraft);
+        if (!remainder) return;
+        setBarrelSolera((prev) => ({
+          ...prev,
+          remainder,
+          preProofComplete: true,
+        }));
+        setBarrelPreProofPhase('pulls');
+      }
+    } else if (wizardStep === 2 && !confirmMixedSpirits()) {
+      return;
+    }
+    if (wizardStep === 3 && isBarrelBlendWizard && !barrelSolera.preProofComplete) {
+      alert('Finish blend check, solera tops, and leftover measurement on step Spirits first.');
+      return;
+    }
     if (wizardStep === 4) {
       syncWizardProofingWaterToTarget();
     }
@@ -1603,7 +1773,26 @@ export function Blending() {
     setWizardStep((s) => Math.min(9, s + 1));
   };
 
-  const goBack = () => setWizardStep((s) => Math.max(1, s - 1));
+  const goBack = () => {
+    if (isBarrelBlendWizard && wizardStep === 3 && barrelSolera.preProofComplete) {
+      setWizardStep(2);
+      setBarrelPreProofPhase('remainder');
+      prefillBarrelCheckDraft(barrelSolera.remainder ?? undefined);
+      return;
+    }
+    if (isBarrelBlendWizard && wizardStep === 2) {
+      const order: BarrelPreProofPhase[] = ['pulls', 'initial', 'solera', 'remainder'];
+      const index = order.indexOf(barrelPreProofPhase);
+      if (index > 0) {
+        const previous = order[index - 1];
+        setBarrelPreProofPhase(previous);
+        if (previous === 'initial') prefillBarrelCheckDraft(barrelSolera.initial ?? undefined);
+        if (previous === 'remainder') prefillBarrelCheckDraft(barrelSolera.remainder ?? undefined);
+        return;
+      }
+    }
+    setWizardStep((s) => Math.max(1, s - 1));
+  };
 
   const handleApprove = () => {
     try {
@@ -1934,6 +2123,179 @@ export function Blending() {
     </>
   );
 
+  const renderBarrelMeasurePanel = (phase: 'initial' | 'remainder') => {
+    const theory = theoreticalBlendFromSources(activeSources);
+    const initialGal = barrelSolera.initial ? volumeGalFromCheckpoint(barrelSolera.initial) : theory.volumeGal;
+    const soleraGal = totalSoleraReturnGal(barrelSolera.returns);
+    const expectedLeft = phase === 'remainder' ? Math.max(0, initialGal - soleraGal) : null;
+    return (
+      <div className="wizard-additive-card" data-testid={`barrel-${phase}-check`}>
+        <h4>{phase === 'initial' ? 'Combined blend check' : 'Leftover for proofing'}</h4>
+        {phase === 'initial' && theory.volumeGal > 0 && (
+          <p className="field-hint">
+            Formula pulls total {theory.volumeGal.toFixed(1)} gal at {theory.abv.toFixed(1)}% ABV — enter your vat reading.
+          </p>
+        )}
+        {phase === 'remainder' && expectedLeft != null && (
+          <p className="field-hint">
+            After {soleraGal.toFixed(1)} gal set aside for solera, expect about {expectedLeft.toFixed(1)} gal left.
+          </p>
+        )}
+        <div className="measure-mode-toggle">
+          <span className="measure-mode-label">Measured by</span>
+          <div className="measure-mode-buttons">
+            <button
+              type="button"
+              className={`btn btn-sm ${barrelCheckMeasureMode === 'volume' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setBarrelCheckMeasureMode('volume')}
+            >
+              Volume
+            </button>
+            <button
+              type="button"
+              className={`btn btn-sm ${barrelCheckMeasureMode === 'weight' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setBarrelCheckMeasureMode('weight')}
+            >
+              Weight on scale
+            </button>
+          </div>
+        </div>
+        <div className="wizard-lab-inputs">
+          <AbvTemperatureInput
+            abvValue={barrelCheckDraft.abv}
+            temperatureValue={barrelCheckDraft.tempF}
+            onAbvChange={(value) => setBarrelCheckDraft((d) => ({ ...d, abv: value }))}
+            onTemperatureChange={(value) => setBarrelCheckDraft((d) => ({ ...d, tempF: value }))}
+          />
+          {barrelCheckMeasureMode === 'weight' ? (
+            <label>
+              Batch weight (lbs on scale)
+              <input
+                type="number"
+                step="0.01"
+                value={barrelCheckDraft.weight}
+                onChange={(e) => setBarrelCheckDraft((d) => ({ ...d, weight: e.target.value }))}
+              />
+            </label>
+          ) : (
+            <label>
+              {VOLUME_LABEL_MEASURED} (gallons)
+              <input
+                type="number"
+                step="0.01"
+                value={barrelCheckDraft.volume}
+                onChange={(e) => setBarrelCheckDraft((d) => ({ ...d, volume: e.target.value }))}
+              />
+            </label>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderBarrelSoleraPanel = () => {
+    const defaultAbv = barrelSolera.initial ? abvFromCheckpoint(barrelSolera.initial) : 0;
+    const returns = barrelSolera.returns.length > 0
+      ? barrelSolera.returns
+      : [{ barrel_id: 0, volume_gal: 0, abv: defaultAbv }];
+    return (
+      <div className="wizard-additive-card" data-testid="barrel-solera-returns">
+        <h4>Solera / mother barrel tops</h4>
+        <p className="field-hint">
+          Move spirit from the vat back into barrels before proofing. Proofing uses only what remains.
+          {barrelSolera.preProofComplete && ' You can change tops here and re-check leftover before additives.'}
+        </p>
+        {returns.map((row, index) => (
+          <div key={index} className="wizard-additive-row">
+            <select
+              value={row.barrel_id || ''}
+              onChange={(e) => {
+                const barrelId = e.target.value ? parseInt(e.target.value, 10) : 0;
+                setBarrelSolera((prev) => {
+                  const list = prev.returns.length > 0 ? [...prev.returns] : [...returns];
+                  list[index] = { ...list[index], barrel_id: barrelId };
+                  return { ...prev, returns: list };
+                });
+              }}
+            >
+              <option value="">— Barrel to top —</option>
+              {soleraBarrelOptions.map((barrel) => (
+                <option key={barrel.id} value={barrel.id}>
+                  {formatBarrelInventoryOption(barrel, barrelBlendProductName(barrel.id))}
+                  {barrel.status === 'empty' ? ' (empty)' : ''}
+                </option>
+              ))}
+            </select>
+            <label>
+              Gallons to top
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={row.volume_gal > 0 ? row.volume_gal : ''}
+                onChange={(e) => {
+                  const volume_gal = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                  setBarrelSolera((prev) => {
+                    const list = prev.returns.length > 0 ? [...prev.returns] : [...returns];
+                    list[index] = {
+                      ...list[index],
+                      volume_gal: Number.isFinite(volume_gal) ? volume_gal : 0,
+                      abv: list[index].abv > 0 ? list[index].abv : defaultAbv,
+                    };
+                    return { ...prev, returns: list };
+                  });
+                }}
+              />
+            </label>
+            <label>
+              ABV %
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                value={row.abv > 0 ? row.abv : (defaultAbv > 0 ? defaultAbv.toFixed(1) : '')}
+                onChange={(e) => {
+                  const abv = parseFloat(e.target.value);
+                  setBarrelSolera((prev) => {
+                    const list = prev.returns.length > 0 ? [...prev.returns] : [...returns];
+                    list[index] = { ...list[index], abv: Number.isFinite(abv) ? abv : 0 };
+                    return { ...prev, returns: list };
+                  });
+                }}
+              />
+            </label>
+            {returns.length > 1 && (
+              <button
+                type="button"
+                className="btn btn-sm btn-ghost"
+                onClick={() => setBarrelSolera((prev) => ({
+                  ...prev,
+                  returns: prev.returns.filter((_, i) => i !== index),
+                }))}
+              >
+                Remove
+              </button>
+            )}
+          </div>
+        ))}
+        <button
+          type="button"
+          className="btn btn-sm btn-secondary"
+          onClick={() => setBarrelSolera((prev) => ({
+            ...prev,
+            returns: [...(prev.returns.length > 0 ? prev.returns : returns), {
+              barrel_id: 0,
+              volume_gal: 0,
+              abv: defaultAbv,
+            }],
+          }))}
+        >
+          + Add another solera barrel
+        </button>
+      </div>
+    );
+  };
+
   const renderStepContent = () => {
     switch (wizardStep) {
       case 1:
@@ -2164,13 +2526,47 @@ export function Blending() {
         ]);
         return (
           <>
-            {spiritAbvMismatch.length > 0 && form.target_abv != null && (
+            {isBarrelBlendWizard && (
+              <nav className="measure-mode-buttons" aria-label="Barrel blend checks" style={{ marginBottom: '1rem', flexWrap: 'wrap' }}>
+                {([
+                  ['pulls', 'Barrel pulls'],
+                  ['initial', 'Check blend'],
+                  ['solera', 'Solera tops'],
+                  ['remainder', 'Leftover'],
+                ] as const).map(([phase, label]) => (
+                  <button
+                    key={phase}
+                    type="button"
+                    className={`btn btn-sm ${barrelPreProofPhase === phase ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={() => {
+                      const order: BarrelPreProofPhase[] = ['pulls', 'initial', 'solera', 'remainder'];
+                      const target = order.indexOf(phase);
+                      const current = order.indexOf(barrelPreProofPhase);
+                      const maxAllowed = barrelSolera.preProofComplete ? 3 : current;
+                      if (target > maxAllowed && !barrelSolera.preProofComplete) {
+                        alert('Use Next to move through blend check, solera tops, and leftover in order.');
+                        return;
+                      }
+                      setBarrelPreProofPhase(phase);
+                      if (phase === 'initial') prefillBarrelCheckDraft(barrelSolera.initial ?? undefined);
+                      if (phase === 'remainder') prefillBarrelCheckDraft(barrelSolera.remainder ?? undefined);
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </nav>
+            )}
+            {isBarrelBlendWizard && barrelPreProofPhase === 'initial' && renderBarrelMeasurePanel('initial')}
+            {isBarrelBlendWizard && barrelPreProofPhase === 'solera' && renderBarrelSoleraPanel()}
+            {isBarrelBlendWizard && barrelPreProofPhase === 'remainder' && renderBarrelMeasurePanel('remainder')}
+            {spiritAbvMismatch.length > 0 && form.target_abv != null && barrelPreProofPhase === 'pulls' && (
               <p className="wizard-result-banner" data-testid="spirit-abv-compensation-banner">
                 Source strength differs from the recipe. The pull changes so this batch stays the same size and still reaches{' '}
                 {form.target_abv}% ABV. Proofing water moves by the same gallons.
               </p>
             )}
-            {spiritSources.map((src, index) => {
+            {(!isBarrelBlendWizard || barrelPreProofPhase === 'pulls') && spiritSources.map((src, index) => {
               const synced = syncSpiritVolume(src);
               const measureMode = inferMeasureMode(src.unit);
               const alternate = src.amount > 0 && src.abv > 0
@@ -2387,9 +2783,11 @@ export function Blending() {
                 </div>
               );
             })}
-            <button type="button" className="btn btn-sm btn-secondary" onClick={addSpiritSource}>
-              {isBarrelBlendWizard ? '+ Pull from another barrel' : '+ Pull from another tank'}
-            </button>
+            {(!isBarrelBlendWizard || barrelPreProofPhase === 'pulls') && (
+              <button type="button" className="btn btn-sm btn-secondary" onClick={addSpiritSource}>
+                {isBarrelBlendWizard ? '+ Pull from another barrel' : '+ Pull from another tank'}
+              </button>
+            )}
           </>
         );
       }
@@ -3101,6 +3499,10 @@ export function Blending() {
                   className={`blend-wizard-step ${wizardStep === step.id ? 'active' : ''} ${wizardStep > step.id ? 'done' : ''}`}
                   onClick={() => {
                     if (isLocked) return;
+                    if (isBarrelBlendWizard && wizardStep === 2 && step.id > 2 && !barrelSolera.preProofComplete) {
+                      alert('Complete blend check, solera tops, and leftover measurement on Spirits before continuing.');
+                      return;
+                    }
                     if (wizardStep === 2 && step.id > 2 && !confirmMixedSpirits()) return;
                     setWizardStep(step.id);
                   }}
@@ -3115,7 +3517,9 @@ export function Blending() {
             <p className="blend-wizard-hint">
               {isLocked
                 ? 'This batch has been produced. The record is read-only.'
-                : STEP_HINTS[wizardStep]}
+                : isBarrelBlendWizard && wizardStep === 2
+                  ? BARREL_PRE_PROOF_HINTS[barrelPreProofPhase]
+                  : STEP_HINTS[wizardStep]}
             </p>
 
             <div className="blend-wizard-content">
