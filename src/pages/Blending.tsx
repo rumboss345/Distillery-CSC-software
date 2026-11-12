@@ -564,18 +564,41 @@ export function Blending() {
     );
   }, [recipeTemplate, syncedSpiritSources]);
 
+  const barrelProofingChargeKey = useMemo(
+    () => JSON.stringify({
+      preProofComplete: barrelSolera.preProofComplete,
+      initial: barrelSolera.initial,
+      remainder: barrelSolera.remainder,
+      returns: barrelSolera.returns,
+    }),
+    [barrelSolera],
+  );
+
+  useEffect(() => {
+    if (!isBarrelBlendWizard) return;
+    if (!barrelSolera.preProofComplete) return;
+    if (form.target_abv == null || !(form.target_abv > 0)) return;
+    if (blendIsComplete(form.status)) return;
+    if (wizardStep < 2 || wizardStep > 8) return;
+    const spirits = barrelProofingSpiritSources(barrelSolera);
+    if (spirits.length === 0) return;
+    setIngredients((prev) => {
+      const next = blendIngredientsWithSolvedProofingWater(prev, spirits, form.target_abv);
+      const waterBefore = prev
+        .filter((row) => row.ingredient_type === 'water')
+        .reduce((sum, row) => sum + ingredientVolumeGal(row), 0);
+      const waterAfter = next
+        .filter((row) => row.ingredient_type === 'water')
+        .reduce((sum, row) => sum + ingredientVolumeGal(row), 0);
+      if (Math.abs(waterBefore - waterAfter) < 0.01) return prev;
+      return next;
+    });
+  }, [barrelProofingChargeKey, isBarrelBlendWizard, form.target_abv, form.status, wizardStep, barrelSolera]);
+
   useEffect(() => {
     if (form.target_abv == null) return;
     if (wizardStep < 2 || wizardStep > 4) return;
-    if (isBarrelBlendWizard) {
-      if (!barrelSolera.preProofComplete || proofingSpiritSources.length === 0) return;
-      setIngredients((prev) => blendIngredientsWithSolvedProofingWater(
-        prev,
-        proofingSpiritSources,
-        form.target_abv,
-      ));
-      return;
-    }
+    if (isBarrelBlendWizard) return;
     if (!recipeTemplate) return;
 
     const factor = form.scale_factor || 1;
@@ -678,7 +701,6 @@ export function Blending() {
     syncedSpiritSources,
     proofingSpiritSources,
     isBarrelBlendWizard,
-    barrelSolera.preProofComplete,
     form.target_abv,
     form.scale_factor,
     recipeTemplate,
@@ -717,7 +739,7 @@ export function Blending() {
     const hasSolids = ingredients.some(
       (row) => row.amount > 0 && ['sugar', 'syrup', 'flavoring', 'color', 'other'].includes(row.ingredient_type),
     );
-    if (!hasSolids) return;
+    if (!hasSolids && !isBarrelBlendWizard) return;
 
     setIngredients((prev) => {
       const next = blendIngredientsWithSolvedProofingWater(prev, spirits, form.target_abv);
@@ -914,9 +936,11 @@ export function Blending() {
     const spiritInputs = nextSpirits
       .filter((source) => source.volume_gal > 0 && source.abv > 0)
       .map((source) => ({ volumeGal: source.volume_gal, abv: source.abv }));
-    const withProofingWater = targetAbv != null && targetAbv > 0 && spiritInputs.length > 0
-      ? blendIngredientsWithSolvedProofingWater(scaledIngredients, spiritInputs, targetAbv)
-      : scaledIngredients;
+    const withProofingWater = isBarrelBlendWizard
+      ? scaledIngredients
+      : targetAbv != null && targetAbv > 0 && spiritInputs.length > 0
+        ? blendIngredientsWithSolvedProofingWater(scaledIngredients, spiritInputs, targetAbv)
+        : scaledIngredients;
     setIngredients(withProofingWater);
     setWizardOriginalWater(scaledIngredients.filter((ingredient) => ingredient.ingredient_type === 'water'));
     setWizardProofingPreview(null);
@@ -1575,12 +1599,28 @@ export function Blending() {
     setWizardProofingPreview(preview);
   };
 
+  const spiritsForProofingSolve = (): SpiritSourceInput[] => (
+    proofingSpiritSources.length > 0
+      ? proofingSpiritSources
+      : barrelProofingSpiritSources(barrelSolera)
+  );
+
+  const ingredientsReconciledForTarget = (
+    base: BlendIngredientInput[] = ingredients,
+  ): BlendIngredientInput[] => {
+    if (form.target_abv == null || !(form.target_abv > 0)) return base;
+    const spirits = spiritsForProofingSolve();
+    if (spirits.length === 0) return base;
+    return blendIngredientsWithSolvedProofingWater(base, spirits, form.target_abv);
+  };
+
   const syncWizardProofingWaterToTarget = () => {
     if (form.target_abv == null || !(form.target_abv > 0)) return;
-    if (proofingSpiritSources.length === 0) return;
+    const spirits = spiritsForProofingSolve();
+    if (spirits.length === 0) return;
     setIngredients((current) => blendIngredientsWithSolvedProofingWater(
       current,
-      proofingSpiritSources,
+      spirits,
       form.target_abv,
     ));
   };
@@ -1601,7 +1641,14 @@ export function Blending() {
       ...wizardOriginalWater.map((ingredient) => ({ ...ingredient })),
     ]);
     setWizardProofingPreview(null);
-    setWaterAdjustmentNote('Recipe water charge restored.');
+    setWaterAdjustmentNote(
+      isBarrelBlendWizard && barrelSolera.preProofComplete
+        ? 'Recipe water restored — re-solving proofing water for leftover charge.'
+        : 'Recipe water charge restored.',
+    );
+    if (isBarrelBlendWizard && barrelSolera.preProofComplete) {
+      syncWizardProofingWaterToTarget();
+    }
   };
 
   const handleCalculateSugar = () => {
@@ -1639,11 +1686,31 @@ export function Blending() {
     if (isBarrelBlendWizard && (barrelSolera.angel_share_gal ?? 0) > 0) {
       notes = mergeAngelShareIntoUserNotes(notes, barrelSolera.angel_share_gal as number);
     }
-    const payload = buildSavePayload({ ...form, notes, ...overrides }, formulation, activeSources, statusOverride);
+    const saveIngredients = ingredientsReconciledForTarget();
+    const saveFormulation = computeBlendFormulation(
+      formulationSpiritInputs,
+      saveIngredients,
+      {
+        volume_gal: form.actual_volume_gal,
+        abv: form.actual_abv,
+        density: form.actual_density,
+        brix: form.actual_brix,
+      },
+      form.target_abv,
+    );
+    const payload = buildSavePayload(
+      { ...form, notes, ...overrides },
+      saveFormulation,
+      activeSources,
+      statusOverride,
+    );
+    if (saveIngredients !== ingredients) {
+      setIngredients(saveIngredients);
+    }
     return saveBlendFormula(
       payload,
       activeSources.map(toSpiritSourceInput),
-      ingredients.filter((i) => i.amount > 0 || i.name.trim()),
+      saveIngredients.filter((i) => i.amount > 0 || i.name.trim()),
       editId,
     );
   };
@@ -3217,6 +3284,9 @@ export function Blending() {
                 <h5 className="barrel-review-title">Barrel vat account</h5>
                 <p className="field-hint">
                   Pulls and solera tops are inventory moves. Proofing and finished volume use only the leftover charge (plus additives and water below).
+                  {form.target_abv != null && (
+                    <> Proofing water is recalculated for that leftover—not the total barrel pulls.</>
+                  )}
                 </p>
                 <div className="table-wrap">
                   <table className="formulation-results-table barrel-review-table">
