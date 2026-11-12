@@ -12,6 +12,14 @@ import {
   packagingLabelCountsBySku,
 } from '../lib/bottling-lines';
 import {
+  barrelBottlingDrawGal,
+  barrelBottlingHeadroomGal,
+  barrelStatusAfterVolume,
+  barrelVolumeAfterDraw,
+  barrelVolumeAfterRestore,
+  bottledVolumeFromBottlingLines,
+} from '../lib/bottling-barrel';
+import {
   collectionVesselAcceptsIncomingCut,
   collectionVesselContentsLabel,
   collectionVesselCutMixMessage,
@@ -5529,6 +5537,54 @@ export function getBottlingRunLines(bottlingRunId: number): BottlingRunLine[] {
   );
 }
 
+function restoreBarrelVolumeAfterBottling(barrelId: number, restoreGal: number): void {
+  if (restoreGal <= 0.001) return;
+  const barrel = queryOne<{ current_volume_gal: number }>(
+    'SELECT current_volume_gal FROM barrels WHERE id = ?',
+    [barrelId],
+  );
+  if (!barrel) throw new Error('Barrel not found.');
+  const volume = barrelVolumeAfterRestore(barrel.current_volume_gal, restoreGal);
+  runQuery(
+    'UPDATE barrels SET current_volume_gal = ?, status = ? WHERE id = ?',
+    [volume, barrelStatusAfterVolume(volume), barrelId],
+  );
+}
+
+function deductBarrelVolumeForBottling(barrelId: number, drawGal: number): void {
+  if (drawGal <= 0.001) return;
+  const barrel = queryOne<{ current_volume_gal: number; barrel_number: string }>(
+    'SELECT current_volume_gal, barrel_number FROM barrels WHERE id = ?',
+    [barrelId],
+  );
+  if (!barrel) throw new Error('Barrel not found.');
+  const volume = barrelVolumeAfterDraw(barrel.current_volume_gal, drawGal);
+  if (volume < -0.01) {
+    throw new Error(
+      `Only ${barrel.current_volume_gal.toFixed(1)} gal available in ${barrel.barrel_number}, but the run bottles ${drawGal.toFixed(1)} gal.`,
+    );
+  }
+  const nextVolume = Math.max(0, volume);
+  runQuery(
+    'UPDATE barrels SET current_volume_gal = ?, status = ? WHERE id = ?',
+    [nextVolume, barrelStatusAfterVolume(nextVolume), barrelId],
+  );
+}
+
+function syncBarrelBottlingVolumes(input: {
+  previousBarrelId: number | null;
+  previousDrawGal: number;
+  nextBarrelId: number | null;
+  nextDrawGal: number;
+}): void {
+  if (input.previousBarrelId && input.previousDrawGal > 0.001) {
+    restoreBarrelVolumeAfterBottling(input.previousBarrelId, input.previousDrawGal);
+  }
+  if (input.nextBarrelId && input.nextDrawGal > 0.001) {
+    deductBarrelVolumeForBottling(input.nextBarrelId, input.nextDrawGal);
+  }
+}
+
 export function saveBottlingRun(
   run: Omit<BottlingRun, 'id' | 'created_at'> & { returns?: BottlingRunReturnInput[]; equipment_ids?: number[] },
   lines: BottlingRunLineInput[],
@@ -5551,6 +5607,11 @@ export function saveBottlingRun(
   const fromTank = run.source_holding_tank_equipment_id != null;
   const sourceBarrelId = fromTank ? null : run.source_barrel_id;
   const sourceTankId = fromTank ? run.source_holding_tank_equipment_id : null;
+  const fromBarrel = Boolean(sourceBarrelId);
+  const previousBottledGal = previous
+    ? (previous.bottled_volume_gal ?? bottledVolumeFromBottlingLines(previousLines) ?? 0)
+    : 0;
+  const previousDrawGal = barrelBottlingDrawGal(previous?.status ?? null, previousBottledGal);
   if (sourceTankId && status !== 'planned') {
     assertEquipmentUsableForProduction(sourceTankId, 'Source tank');
   }
@@ -5596,6 +5657,9 @@ export function saveBottlingRun(
       assertEquipmentUsableForProduction(eqId, 'Bottling equipment');
     }
   }
+  if (!fromTank && status !== 'planned' && !sourceBarrelId) {
+    throw new Error('Select the barrel to bottle from.');
+  }
   let bottledVolumeGal = totalCount > 0
     ? activeLines.reduce((sum, line) => sum + mlToGallons(line.bottle_count * line.bottle_size_ml), 0)
     : null;
@@ -5624,6 +5688,26 @@ export function saveBottlingRun(
       ? 'Multiple'
       : '';
   const headerSizeMl = activeLines.length === 1 ? activeLines[0].bottle_size_ml : 0;
+  const nextDrawGal = barrelBottlingDrawGal(status, bottledVolumeGal);
+  let barrelSourceAbv: number | null = null;
+  if (fromBarrel && status !== 'planned' && sourceBarrelId) {
+    const barrel = queryOne<{ initial_abv: number; current_volume_gal: number; barrel_number: string }>(
+      'SELECT initial_abv, current_volume_gal, barrel_number FROM barrels WHERE id = ?',
+      [sourceBarrelId],
+    );
+    if (!barrel) throw new Error('Barrel not found.');
+    barrelSourceAbv = barrel.initial_abv;
+    const headroom = barrelBottlingHeadroomGal(
+      barrel.current_volume_gal,
+      previousDrawGal,
+      previous?.source_barrel_id === sourceBarrelId,
+    );
+    if ((bottledVolumeGal ?? 0) > headroom + 0.01) {
+      throw new Error(
+        `Only ${headroom.toFixed(1)} gal available in ${barrel.barrel_number}, but the run bottles ${(bottledVolumeGal ?? 0).toFixed(1)} gal.`,
+      );
+    }
+  }
 
   const requestedReturns: BottlingRunReturnInput[] = fromTank
     ? (run.returns ?? (
@@ -5728,9 +5812,11 @@ export function saveBottlingRun(
     packaging_bottle: packagingSummary,
     bottle_size_ml: headerSizeMl,
     bottle_count: totalCount,
-    source_volume_gal: sourceVolumeGal,
-    source_abv: fromTank ? sourceAbv : null,
-    bottled_volume_gal: fromTank ? bottledVolumeGal : null,
+    source_volume_gal: fromTank
+      ? sourceVolumeGal
+      : (fromBarrel && status !== 'planned' ? bottledVolumeGal : null),
+    source_abv: fromTank ? sourceAbv : (fromBarrel && status !== 'planned' ? barrelSourceAbv : null),
+    bottled_volume_gal: (fromTank || fromBarrel) && status !== 'planned' ? bottledVolumeGal : null,
     volume_variance_gal: fromTank ? volumeVarianceGal : null,
     alcohol_variance_gal: fromTank ? alcoholVarianceGal : null,
     variance_reason: volumeNeedsReason || alcoholNeedsReason
@@ -5768,6 +5854,12 @@ export function saveBottlingRun(
     markEquipmentDirtyAfterBottling(eqId, header.batch_number);
   }
   syncBottlingPackagingInventory(previousLines, nextInventory, header.batch_number);
+  syncBarrelBottlingVolumes({
+    previousBarrelId: previous?.source_barrel_id ?? null,
+    previousDrawGal,
+    nextBarrelId: sourceBarrelId,
+    nextDrawGal,
+  });
   syncHoldingTankStatuses();
   syncBottlingEquipmentStatuses();
   recordStatusDateLog({
@@ -5787,7 +5879,14 @@ export function deleteBottlingRun(id: number): void {
   const previousLines = previous && normalizeBottlingStatus(previous.status) !== 'planned'
     ? bottlingLinesToInventoryInput(getBottlingRunLines(id))
     : [];
+  const previousBottledGal = previous
+    ? (previous.bottled_volume_gal ?? bottledVolumeFromBottlingLines(previousLines) ?? 0)
+    : 0;
+  const previousDrawGal = barrelBottlingDrawGal(previous?.status ?? null, previousBottledGal);
   syncBottlingPackagingInventory(previousLines, [], previous?.batch_number);
+  if (previous?.source_barrel_id && previousDrawGal > 0.001) {
+    restoreBarrelVolumeAfterBottling(previous.source_barrel_id, previousDrawGal);
+  }
   deleteStatusDateLog('bottling', id);
   if (previous && normalizeBottlingStatus(previous.status) !== 'planned') {
     for (const eqId of getBottlingRunEquipmentIds(id)) {
