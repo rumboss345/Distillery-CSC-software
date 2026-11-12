@@ -35,6 +35,18 @@ function finishedAbv(spirits: SpiritSourceInput[], ingredients: BlendIngredientI
 }
 
 describe('barrel leftover proofing', () => {
+  it('matches Seven Fathoms-style leftover vs full-pull water', () => {
+    const target = 40;
+    const leftover: SpiritSourceInput[] = [{ volumeGal: 119.99, abv: 52 }];
+    const pulls: SpiritSourceInput[] = [{ volumeGal: 212, abv: 52 }];
+    const base = [emptyWaterLine()];
+  const leftWater = waterGal(blendIngredientsWithSolvedProofingWater(base, leftover, target));
+    const pullWater = waterGal(blendIngredientsWithSolvedProofingWater(base, pulls, target));
+    expect(leftWater).toBeCloseTo(36.84, 1);
+    expect(pullWater).toBeCloseTo(65.09, 1);
+    expect(leftWater).toBeLessThan(pullWater);
+  });
+
   it('solves water from leftover charge, not full barrel pulls', () => {
     const target = 40;
     const leftover: SpiritSourceInput[] = [{ volumeGal: 30, abv: 57.5 }];
