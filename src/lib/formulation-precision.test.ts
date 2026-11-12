@@ -88,7 +88,7 @@ describe("Jack's Dark current-model regression", () => {
     expect(predicted.warnings.join(' ')).toContain(DENSITY_NOT_VERIFIED);
     // Current continuous-factor model. The older 0.1 proof-gallon path was about
     // 389.2 L and 32.78% ABV. Neither figure is a laboratory specification.
-    expect(predicted.liters).toBeCloseTo(389.1309, 2);
+    expect(predicted.liters).toBeCloseTo(389.5425, 2);
     expect(predicted.abv).toBeCloseTo(32.82, 2);
 
     const recipe = { spiritLb: 249, waterLb: 415, sugarLb: 250, flavorL: 1.75 };

@@ -1,6 +1,7 @@
 import type { BlendIngredientInput, BlendIngredientType, InventoryItem } from '../types';
 import { ML_PER_GALLON } from '../types';
-import { proofFromAbv, weightFromWineGallons } from '../services/spirit-gauging';
+import { proofFromAbv } from '../services/spirit-gauging';
+import { poundsPerWineGallonTable6 } from './calc-engine/table6';
 import { DENSITY_NOT_VERIFIED, formatGallonDisplay, formatQuantityDisplay } from './formulation-quantity';
 import {
   CLASS_I_CARAMEL_DENSITY_G_PER_ML,
@@ -315,16 +316,13 @@ export function spiritDensityGPerMl(abv: number): number {
 }
 
 /**
- * TTB Table No. 3 lb/US wine gal at the given ABV (percent).
- * Table 3 rounds proof gallons to 0.1, so the inverse of 1 gallon is coarse.
- * A 1,000 gallon basis keeps the pounds-per-gallon factor stable (93% is about 6.86, not 6.75).
+ * TTB Table No. 6 lb/US wine gal at the given ABV (percent).
+ * Formulation uses continuous specific gravity (§30.66), not Table 3 proof-gallon rounding.
  * Water at 0% uses 27 CFR §30.41.
  */
-const SPIRIT_LBS_PER_GALLON_BASIS = 1000;
-
 export function spiritLbsPerGallon(abv: number): number {
   if (abv <= 0) return WATER_LBS_PER_US_GALLON;
-  return weightFromWineGallons(SPIRIT_LBS_PER_GALLON_BASIS, proofFromAbv(abv)) / SPIRIT_LBS_PER_GALLON_BASIS;
+  return Number(poundsPerWineGallonTable6(proofFromAbv(abv).toFixed(8)));
 }
 
 /**
@@ -355,10 +353,10 @@ export function spiritVolumeGalFromAmount(amount: number, unit: string, abv: num
   return 0;
 }
 
-/** Net weight (lb) for a wine-gallon spirit volume at ABV % via TTB Table No. 3. */
+/** Net weight (lb) for a wine-gallon spirit volume at ABV % via TTB Table No. 6. */
 export function spiritWeightLbsFromVolumeGal(volumeGal: number, abv: number): number {
   if (volumeGal <= 0 || abv <= 0) return 0;
-  return weightFromWineGallons(volumeGal, proofFromAbv(abv));
+  return volumeGal * spiritLbsPerGallon(abv);
 }
 
 const KG_PER_LB = 1 / 2.2046226218;

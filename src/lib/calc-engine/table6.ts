@@ -39,6 +39,21 @@ function lerp(low: Decimal, high: Decimal, t: Decimal): Decimal {
   return low.plus(high.minus(low).times(t));
 }
 
+/**
+ * Pounds per US wine gallon at 60 °F from Table 6 specific gravity (27 CFR §30.66).
+ * Use for formulation and continuous spirit density — not Table 3 proof-gallon rounding.
+ */
+export function poundsPerWineGallonTable6(
+  proof: Decimal.Value,
+  basis: GravityBasis = 'air',
+): Decimal {
+  const row = table6At(proof);
+  const sg = basis === 'air' ? row.sgAir : row.sgVacuum;
+  return dec(TTB_WATER_POUNDS_PER_GALLON_TABLE6)
+    .times(sg)
+    .toDecimalPlaces(ROUNDING.poundsPerGallon, Decimal.ROUND_HALF_UP);
+}
+
 /** Table 6 row at a proof from 0 through 200. Fractional proofs interpolate water and specific gravity. */
 export function table6At(proof: Decimal.Value): Table6Point {
   const p = dec(proof);

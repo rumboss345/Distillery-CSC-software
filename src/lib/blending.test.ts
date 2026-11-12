@@ -29,7 +29,6 @@ import {
   toGallonsFromVolumeUnit,
   toLbs,
 } from './blending';
-import { proofFromAbv, weightFromWineGallons } from '../services/spirit-gauging';
 
 describe('recommendMeasureMode', () => {
   it('recommends weight for dry sugar', () => {
@@ -134,17 +133,16 @@ describe('spirit measurement', () => {
     expect(spiritDensityGPerMl(93)).toBeCloseTo((spiritLbsPerGallon(93) * 453.59237) / (3.785411784 * 1000), 8);
   });
 
-  it('converts spirit volume to weight via TTB Table No. 3', () => {
+  it('converts spirit volume to weight via TTB Table No. 6', () => {
     const lbs = spiritWeightLbsFromVolumeGal(10, 40);
-    expect(lbs).toBe(weightFromWineGallons(10, proofFromAbv(40)));
-    expect(spiritLbsPerGallon(93) * 1000).toBeCloseTo(weightFromWineGallons(1000, proofFromAbv(93)), 2);
+    expect(lbs).toBeCloseTo(10 * spiritLbsPerGallon(40), 6);
     expect(spiritLbsPerGallon(93)).toBeGreaterThan(6.8);
     expect(spiritLbsPerGallon(93)).toBeLessThan(6.9);
   });
 
-  it('matches Table No. 3 for 85.27 gal at 93% ABV', () => {
-    expect(spiritWeightLbsFromVolumeGal(85.27, 93)).toBe(584.75);
-    expect(formatSpiritPullWeightLbs(85.27, 93)).toBe('584.8 lbs');
+  it('matches Table No. 6 for 85.27 gal at 93% ABV', () => {
+    expect(spiritWeightLbsFromVolumeGal(85.27, 93)).toBeCloseTo(85.27 * spiritLbsPerGallon(93), 6);
+    expect(formatSpiritPullWeightLbs(85.27, 93)).toBe('584.7 lbs');
   });
 
   it('writes a spirit pull back into gallons or pounds', () => {
@@ -292,7 +290,7 @@ describe('convertSpiritAmount', () => {
     const lbs = convertSpiritAmount(10, 'gal', 'lbs', 40);
     expect(lbs).toBeCloseTo(10 * spiritLbsPerGallon(40), 6);
     expect(convertSpiritAmount(lbs, 'lbs', 'gal', 40)).toBeCloseTo(10, 6);
-    expect(spiritWeightLbsFromVolumeGal(10, 40)).toBe(weightFromWineGallons(10, proofFromAbv(40)));
+    expect(spiritWeightLbsFromVolumeGal(10, 40)).toBeCloseTo(10 * spiritLbsPerGallon(40), 6);
   });
 
   it('converts pounds to kilograms without needing a new density', () => {

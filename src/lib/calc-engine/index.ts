@@ -15,7 +15,7 @@ export {
 export type { IngredientClass, RecipeLine } from './recipe-lines';
 export { LAB_DIFFERENCE_TOLERANCE, ROUNDING } from './rounding';
 export { gaugeWeightByTable3, proofGallonsFromTable3, table3ColumnProofGallons } from './table3';
-export { diluteWithWater, gaugeWeightByTable6, table6At } from './table6';
+export { diluteWithWater, gaugeWeightByTable6, poundsPerWineGallonTable6, table6At } from './table6';
 export type { GravityBasis } from './table6';
 export {
   ABV_MATCH_TOLERANCE,

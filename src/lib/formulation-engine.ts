@@ -14,7 +14,8 @@ import {
 } from './material-densities';
 import { laaLitersFromVolumeAbv } from './reporting/alcohol-units';
 import { compositionFromProof } from './calc-engine/composition';
-import { proofFromAbv, weightFromWineGallons } from '../services/spirit-gauging';
+import { poundsPerWineGallonTable6 } from './calc-engine/table6';
+import { proofFromAbv } from '../services/spirit-gauging';
 import { correctAbvTo60F } from '../services/temperature-correction';
 
 export {
@@ -23,7 +24,7 @@ export {
 } from './material-densities';
 
 export const FORMULATION_CITATION =
-  'Recipe formulation converts spirit mass and volume with a continuous Table 3 pounds-per-gallon factor. '
+  'Recipe formulation converts spirit mass and volume with a continuous Table 6 pounds-per-gallon factor (27 CFR §30.66). '
   + 'It does not round proof gallons to 0.1. Legal gauging still uses TTB Table No. 3 and Table 6 separately. '
   + 'Proofing water uses 0.120074 wine gallons per pound (27 CFR §30.41). '
   + 'Dissolved sucrose adds 0.6219 ml per gram as a model approximation (Bureau of Standards Bulletin 14 / CRC, via Flanagan), not crystalline density. '
@@ -215,29 +216,25 @@ interface HydroPart {
   ethanolMassLb: number;
 }
 
-/**
- * Formulation uses a continuous pounds-per-gallon factor from a 1,000 gallon
- * Table 3 lookup. Legal gauging still decomposes weight into 0.1 proof gallons.
- * That regulatory rounding is not used to convert a recipe charge.
- */
-const TABLE3_FACTOR_BASIS_GALLONS = 1000;
+/** Table 6 pounds per wine gallon (60 °F). Cached by tenth proof. */
 const lbsPerGallonByProof = new Map<number, number>();
 
 function lbsPerWineGallon(proof: number): number {
   const key = Math.round(proof * 10) / 10;
   const cached = lbsPerGallonByProof.get(key);
   if (cached != null) return cached;
-  const value = weightFromWineGallons(TABLE3_FACTOR_BASIS_GALLONS, key) / TABLE3_FACTOR_BASIS_GALLONS;
+  const value = Number(poundsPerWineGallonTable6(key.toFixed(8)));
   lbsPerGallonByProof.set(key, value);
   return value;
 }
 
-/** Interpolate between tenth-proof Table 3 factors so 36.9% is not snapped to 37%. */
+/** Interpolate between tenth-proof Table 6 factors so 36.9% is not snapped to 37%. */
 function lbsPerWineGallonExact(proof: number): number {
-  const lower = Math.floor(proof * 10 + 1e-9) / 10;
-  const upper = Math.round((lower + 0.1) * 10) / 10;
+  const clamped = Math.min(200, Math.max(0, proof));
+  const lower = Math.floor(clamped * 10 + 1e-9) / 10;
+  const upper = Math.min(200, Math.round((lower + 0.1) * 10) / 10);
   if (upper <= lower) return lbsPerWineGallon(lower);
-  const fraction = (proof - lower) / (upper - lower);
+  const fraction = (clamped - lower) / (upper - lower);
   return lbsPerWineGallon(lower) + (lbsPerWineGallon(upper) - lbsPerWineGallon(lower)) * fraction;
 }
 
