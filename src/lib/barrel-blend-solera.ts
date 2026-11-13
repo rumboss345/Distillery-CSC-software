@@ -134,6 +134,37 @@ export function formatAngelShareNote(gal: number): string {
 
 export type BarrelBlendReviewRowKind = 'pull' | 'vat' | 'solera' | 'angel_share' | 'proof_charge';
 
+export function barrelReviewRowKindLabel(kind: BarrelBlendReviewRowKind): string {
+  switch (kind) {
+    case 'pull':
+      return 'Barrel pull';
+    case 'vat':
+      return 'Combined vat';
+    case 'solera':
+      return 'Solera refill';
+    case 'angel_share':
+      return "Angel's share";
+    case 'proof_charge':
+      return 'Leftover for proofing';
+    default:
+      return kind;
+  }
+}
+
+export function barrelReviewRowMeasureNote(
+  kind: BarrelBlendReviewRowKind,
+  state: Pick<BarrelBlendSoleraState, 'initial' | 'remainder'>,
+): string {
+  const checkpoint = kind === 'vat' ? state.initial : kind === 'proof_charge' ? state.remainder : null;
+  if (!checkpoint) return '';
+  const parts: string[] = [];
+  parts.push(checkpoint.measureMode === 'weight' ? 'Confirmed by weight' : 'Confirmed by volume');
+  if (checkpoint.tempF != null && Number.isFinite(checkpoint.tempF)) {
+    parts.push(`${checkpoint.tempF}°F`);
+  }
+  return parts.join(' · ');
+}
+
 export interface BarrelBlendReviewRow {
   kind: BarrelBlendReviewRowKind;
   label: string;
@@ -165,6 +196,33 @@ export function barrelProofingSpiritSources(
   const abv = abvFromCheckpoint(state.remainder);
   if (!(volumeGal > 0) || !(abv > 0)) return [];
   return [{ volumeGal, abv }];
+}
+
+export function barrelWorksheetReviewFromBlend(
+  pullSources: readonly {
+    barrel_id?: number | null;
+    volume_gal: number;
+    abv: number;
+  }[],
+  solera: BarrelBlendSoleraState,
+  pullLabel: (barrelId: number) => string,
+  soleraBarrelLabel: (barrelId: number) => string,
+): BarrelBlendReviewRow[] {
+  const pulls = pullSources
+    .filter((source) => (source.barrel_id ?? 0) > 0 && source.volume_gal > 0)
+    .map((source) => ({
+      label: `Pull — ${pullLabel(source.barrel_id as number)}`,
+      volumeGal: source.volume_gal,
+      abv: source.abv,
+    }));
+  const soleraLines = solera.returns
+    .filter((row) => row.barrel_id > 0 && row.volume_gal > 0)
+    .map((row) => ({
+      label: `Solera refill — ${soleraBarrelLabel(row.barrel_id)}`,
+      volumeGal: row.volume_gal,
+      abv: row.abv,
+    }));
+  return barrelBlendReviewRows(pulls, soleraLines, solera);
 }
 
 export function barrelBlendReviewRows(

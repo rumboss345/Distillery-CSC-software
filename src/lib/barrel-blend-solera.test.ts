@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   barrelBlendAngelShareGal,
   barrelBlendReviewRows,
+  barrelReviewRowKindLabel,
+  barrelReviewRowMeasureNote,
   blendCheckAbv,
   barrelBlendSpiritChargeForExecution,
+  barrelWorksheetReviewFromBlend,
   barrelProofingSpiritSources,
   expectedRemainderAfterSolera,
   syncSoleraReturnsToBlendCheck,
@@ -141,6 +144,43 @@ describe('barrelProofingSpiritSources', () => {
     expect(sources).toHaveLength(1);
     expect(sources[0].volumeGal).toBe(28.5);
     expect(sources[0].abv).toBeCloseTo(56.45, 2);
+  });
+});
+
+describe('barrelReviewRowKindLabel', () => {
+  it('labels worksheet row kinds', () => {
+    expect(barrelReviewRowKindLabel('solera')).toBe('Solera refill');
+    expect(barrelReviewRowKindLabel('proof_charge')).toBe('Leftover for proofing');
+  });
+});
+
+describe('barrelReviewRowMeasureNote', () => {
+  it('describes confirmed vat and leftover checkpoints', () => {
+    const state = {
+      initial: { measureMode: 'volume' as const, volumeGal: 40, abv: 58, tempF: 68 },
+      remainder: { measureMode: 'weight' as const, weightLbs: 200, abv: 55, tempF: 70 },
+    };
+    expect(barrelReviewRowMeasureNote('vat', state)).toBe('Confirmed by volume · 68°F');
+    expect(barrelReviewRowMeasureNote('proof_charge', state)).toBe('Confirmed by weight · 70°F');
+  });
+});
+
+describe('barrelWorksheetReviewFromBlend', () => {
+  it('builds worksheet rows from pulls and solera returns', () => {
+    const rows = barrelWorksheetReviewFromBlend(
+      [{ barrel_id: 1, volume_gal: 40, abv: 62 }],
+      {
+        ...emptyBarrelBlendSoleraState(),
+        initial: { measureMode: 'volume', volumeGal: 39.5, abv: 61 },
+        remainder: { measureMode: 'volume', volumeGal: 30, abv: 58 },
+        returns: [{ barrel_id: 2, volume_gal: 8, abv: 61 }],
+        preProofComplete: true,
+      },
+      (id) => `B-${id}`,
+      (id) => `B-${id}`,
+    );
+    expect(rows.some((row) => row.kind === 'solera' && row.label.includes('B-2'))).toBe(true);
+    expect(rows.some((row) => row.kind === 'proof_charge')).toBe(true);
   });
 });
 

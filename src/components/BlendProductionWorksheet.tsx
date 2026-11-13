@@ -8,7 +8,14 @@ import {
 import { formatAbvDisplay, formatGallonDisplay, formatQuantityDisplay } from '../lib/formulation-quantity';
 import { formulationSpiritWeightLb } from '../lib/formulation-spirit';
 import { buildBlendAlcoholAccount, BLEND_REFERENCE_TEMPERATURE_F } from '../lib/blend-alcohol-account';
+import {
+  barrelReviewRowKindLabel,
+  barrelReviewRowMeasureNote,
+  type BarrelBlendReviewRow,
+  type BarrelBlendSoleraState,
+} from '../lib/barrel-blend-solera';
 import { preBlendSpiritAndWater, type AdditiveInput, type SpiritAbvDelta } from '../lib/blend-formulation';
+import { spiritWeightLbsFromVolumeGal } from '../lib/blending';
 import type { BlendIngredientInput } from '../types';
 
 function worksheetAdditives(ingredients: BlendIngredientInput[]): AdditiveInput[] {
@@ -51,6 +58,11 @@ export interface BlendProductionWorksheetProps {
   waterAdjustmentNote: string | null;
   abvDeltas: SpiritAbvDelta[];
   notes: string;
+  /** Barrel aging blend: vat check, solera refills, leftover, and angel's share. */
+  barrelVerification?: {
+    rows: BarrelBlendReviewRow[];
+    state: BarrelBlendSoleraState;
+  };
 }
 
 function spiritPullDisplay(line: WorksheetSpiritLine): string {
@@ -85,6 +97,7 @@ export function BlendProductionWorksheet({
   waterAdjustmentNote,
   abvDeltas,
   notes,
+  barrelVerification,
 }: BlendProductionWorksheetProps) {
   const waterLines = ingredients.filter((i) => i.amount > 0 && i.ingredient_type === 'water');
   const otherAdditives = ingredients.filter((i) => i.amount > 0 && i.ingredient_type !== 'water');
@@ -99,6 +112,9 @@ export function BlendProductionWorksheet({
   const alcohol = account.ok ? account : null;
   const showPreBlend = preBlend.hasSpirit || preBlend.hasWater;
   let nextStep = 2;
+  const barrelVerifyRows = barrelVerification?.rows ?? [];
+  const showBarrelVerification = barrelVerifyRows.length > 0;
+  const barrelVerifyStep = showBarrelVerification ? nextStep++ : null;
   const waterStep = waterLines.length > 0 ? nextStep++ : null;
   const preBlendStep = showPreBlend ? nextStep++ : null;
   const otherStep = nextStep;
@@ -219,6 +235,54 @@ export function BlendProductionWorksheet({
           )}
         </table>
       </section>
+
+      {showBarrelVerification && barrelVerifyStep != null && barrelVerification && (
+        <section className="blend-worksheet-section" data-testid="barrel-blend-worksheet-verification">
+          <h2>{barrelVerifyStep}. Barrel verification &amp; solera</h2>
+          <p className="blend-worksheet-weight-hint" style={{ marginTop: 0 }}>
+            Confirmed amounts from the vat check and leftover measure. Solera refills list each barrel topped before proofing.
+            {!barrelVerification.state.preProofComplete && (
+              <> Complete the barrel measure step in the blending wizard to fill in confirmed vat and leftover rows.</>
+            )}
+          </p>
+          <table className="blend-worksheet-table blend-worksheet-checklist">
+            <thead>
+              <tr>
+                <th className="blend-worksheet-check">Done</th>
+                <th>Step</th>
+                <th>Detail</th>
+                <th className="num">Volume</th>
+                <th className="num">ABV</th>
+                <th className="num">Weight</th>
+                <th>Confirmed</th>
+              </tr>
+            </thead>
+            <tbody>
+              {barrelVerifyRows.map((row, index) => {
+                const weightLbs = row.kind === 'angel_share' || row.abv == null || !(row.volumeGal > 0)
+                  ? null
+                  : spiritWeightLbsFromVolumeGal(row.volumeGal, row.abv);
+                const measureNote = barrelReviewRowMeasureNote(row.kind, barrelVerification.state);
+                return (
+                  <tr key={`${row.kind}-${index}`}>
+                    <td className="blend-worksheet-check"><span className="blend-worksheet-box" /></td>
+                    <td>{barrelReviewRowKindLabel(row.kind)}</td>
+                    <td>{row.label}</td>
+                    <td className="num">{row.volumeGal > 0 ? `${formatGallonDisplay(row.volumeGal)} gal` : '—'}</td>
+                    <td className="num">{row.abv != null && row.abv > 0 ? `${row.abv.toFixed(1)}%` : '—'}</td>
+                    <td className="num">
+                      {weightLbs != null && weightLbs > 0
+                        ? `${formatQuantityDisplay(weightLbs, 2)} lbs`
+                        : '—'}
+                    </td>
+                    <td>{measureNote || (row.kind === 'solera' ? 'Return to barrel' : '—')}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </section>
+      )}
 
       {waterLines.length > 0 && (
         <section className="blend-worksheet-section">

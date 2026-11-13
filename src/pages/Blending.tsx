@@ -40,6 +40,7 @@ import {
   abvFromCheckpoint,
   barrelBlendAngelShareGal,
   barrelBlendReviewRows,
+  barrelWorksheetReviewFromBlend,
   barrelProofingSpiritSources,
   blendCheckAbv,
   checkpointFromDraft,
@@ -2278,6 +2279,27 @@ export function Blending() {
         recipeAbv: recipeTemplate?.spirit_sources[index]?.abv ?? s.recipe_abv,
       };
     });
+    const barrelBlendLabel = (barrelId: number) => {
+      const barrel = barrelInventory.find((b) => b.id === barrelId)
+        ?? getBarrels().find((b) => b.id === barrelId);
+      return barrel
+        ? spiritLabelForBarrel(barrel, barrelBlendProductName(barrel.id))
+        : `Barrel #${barrelId}`;
+    };
+    const barrelVerification = isBarrelBlendWizard
+      ? {
+        rows: barrelWorksheetReviewFromBlend(
+          activeSources,
+          barrelSolera,
+          barrelBlendLabel,
+          barrelBlendLabel,
+        ),
+        state: barrelSolera,
+      }
+      : undefined;
+    const worksheetNotes = isBarrelBlendWizard
+      ? stripBarrelSoleraFromNotes(form.notes)
+      : form.notes;
     return (
       <div className="blend-worksheet-print-area" ref={worksheetPrintRef}>
         <BlendProductionWorksheet
@@ -2296,7 +2318,8 @@ export function Blending() {
           ingredients={ingredients}
           waterAdjustmentNote={waterAdjustmentNote}
           abvDeltas={spiritAbvMismatch}
-          notes={form.notes}
+          notes={worksheetNotes}
+          barrelVerification={barrelVerification}
         />
       </div>
     );
@@ -3298,35 +3321,23 @@ export function Blending() {
         const straightSpirit = ingredients.every(
           (ingredient) => ingredient.amount <= 0 || ingredient.ingredient_type === 'water',
         );
-        const barrelReview = isBarrelBlendWizard && barrelSolera.preProofComplete
-          ? barrelBlendReviewRows(
-            activeSources
-              .filter((source) => source.barrel_id)
-              .map((source) => {
-                const barrel = barrelInventory.find((b) => b.id === source.barrel_id);
-                const name = barrel
-                  ? spiritLabelForBarrel(barrel, barrelBlendProductName(barrel.id))
-                  : 'Barrel pull';
-                return {
-                  label: `Pull — ${name}`,
-                  volumeGal: source.volume_gal,
-                  abv: source.abv,
-                };
-              }),
-            barrelSolera.returns
-              .filter((row) => row.barrel_id > 0 && row.volume_gal > 0)
-              .map((row) => {
-                const barrel = getBarrels().find((b) => b.id === row.barrel_id);
-                const name = barrel
-                  ? spiritLabelForBarrel(barrel, barrelBlendProductName(barrel.id))
-                  : `Barrel #${row.barrel_id}`;
-                return {
-                  label: `Solera top — ${name}`,
-                  volumeGal: row.volume_gal,
-                  abv: row.abv,
-                };
-              }),
+        const barrelReview = isBarrelBlendWizard
+          ? barrelWorksheetReviewFromBlend(
+            activeSources,
             barrelSolera,
+            (barrelId) => {
+              const barrel = barrelInventory.find((b) => b.id === barrelId)
+                ?? getBarrels().find((b) => b.id === barrelId);
+              return barrel
+                ? spiritLabelForBarrel(barrel, barrelBlendProductName(barrel.id))
+                : 'Barrel pull';
+            },
+            (barrelId) => {
+              const barrel = getBarrels().find((b) => b.id === barrelId);
+              return barrel
+                ? spiritLabelForBarrel(barrel, barrelBlendProductName(barrel.id))
+                : `Barrel #${barrelId}`;
+            },
           )
           : [];
         const spiritReviewEntries = isBarrelBlendWizard && barrelSolera.preProofComplete && barrelSolera.remainder
