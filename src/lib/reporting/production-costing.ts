@@ -22,6 +22,11 @@ import {
   computeMonthlyProcessWaterOverheadTotal,
   computeMonthlyUtilitiesTotal,
 } from './monthly-overhead';
+import {
+  laaLitersFromPureAlcoholGal,
+  summarizeProductionAlcoholBalance,
+  type ProductionAlcoholBalanceSummary,
+} from './production-alcohol-balance';
 import { eventInReportRange, type ReportDateRange } from './period';
 
 const STANDARD_BOTTLE_ABV = 40;
@@ -40,6 +45,15 @@ export interface ProductionCostSummary {
   costPerLaaLiterInclMonthlyOverhead: number | null;
   costPerLiterAt40AbvInclMonthlyOverhead: number | null;
   periodMonthlyOverheadTotal: number;
+  /** Bottles, labels, and other packaging in the period. */
+  totalBottlingPackagingCost: number;
+  productionAlcoholBalance: ProductionAlcoholBalanceSummary;
+  alcoholChargedLaaLiters: number;
+  /** All production spend per hearts LAA (packaging, water, overhead included). */
+  costPerLaaLiterFullProduction: number | null;
+  costPerLiterAt40AbvFullProduction: number | null;
+  /** Same spend per recorded alcohol charged (distillation balance), when available. */
+  costPerLaaLiterFullOnCharged: number | null;
   avgDistillationYieldPct: number | null;
   avgFermentBrixDrop: number | null;
 }
@@ -396,6 +410,31 @@ export function buildProductionCostReport(
     ? roundMoney(washCostInclOverhead / proofedLiters)
     : null;
 
+  const productionAlcoholBalance = summarizeProductionAlcoholBalance(range);
+  const alcoholChargedLaaLiters = laaLitersFromPureAlcoholGal(
+    productionAlcoholBalance.distillationChargedGal,
+  );
+  const fullProductionSpend = grandTotal;
+  const costPerLaaLiterFullProduction = totalLaaLiters > 0 && fullProductionSpend > 0
+    ? roundMoney(fullProductionSpend / totalLaaLiters)
+    : null;
+  const costPerLiterAt40AbvFullProduction = proofedLiters > 0 && fullProductionSpend > 0
+    ? roundMoney(fullProductionSpend / proofedLiters)
+    : null;
+  const costPerLaaLiterFullOnCharged = alcoholChargedLaaLiters > 0 && fullProductionSpend > 0
+    ? roundMoney(fullProductionSpend / alcoholChargedLaaLiters)
+    : null;
+
+  if (
+    productionAlcoholBalance.distillationRunsWithBalance === 0
+    && totalWashCost > 0
+    && totalLaaLiters > 0
+  ) {
+    warnings.push(
+      'Complete distillation runs with alcohol balance to show net loss or gain on full-production cost.',
+    );
+  }
+
   const withYield = washBatches.filter((row) => row.yieldPercent > 0);
   const avgDistillationYieldPct = withYield.length > 0
     ? roundMoney(withYield.reduce((s, row) => s + row.yieldPercent, 0) / withYield.length)
@@ -430,6 +469,12 @@ export function buildProductionCostReport(
       costPerLaaLiterInclMonthlyOverhead,
       costPerLiterAt40AbvInclMonthlyOverhead,
       periodMonthlyOverheadTotal,
+      totalBottlingPackagingCost: roundMoney(bottlingMaterial),
+      productionAlcoholBalance,
+      alcoholChargedLaaLiters: roundMoney(alcoholChargedLaaLiters),
+      costPerLaaLiterFullProduction,
+      costPerLiterAt40AbvFullProduction,
+      costPerLaaLiterFullOnCharged,
       avgDistillationYieldPct,
       avgFermentBrixDrop,
     },
