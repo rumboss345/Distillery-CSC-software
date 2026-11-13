@@ -39,7 +39,6 @@ import {
 import {
   abvFromCheckpoint,
   barrelBlendAngelShareGal,
-  barrelBlendReviewRows,
   barrelWorksheetReviewFromBlend,
   barrelProofingSpiritSources,
   blendCheckAbv,
