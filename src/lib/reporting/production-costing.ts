@@ -460,12 +460,6 @@ export function buildProductionCostReport(
     warnings.push('Enter unit costs on Inventory items (especially sugar, yeast, bottles, and labels) for accurate material totals.');
   }
 
-  if (bottlingSpirit > 0) {
-    warnings.push(
-      'Bottling spirit cost is allocated from wash/distillation totals in the same period (not added twice to summary).',
-    );
-  }
-
   return {
     summary: {
       totalMaterialCost: grandMaterial,
