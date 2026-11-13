@@ -63,7 +63,7 @@ import {
   VOLUME_LABEL_TARGET,
 } from '../lib/formulation-quantity';
 import { formulationSpiritWeightLb } from '../lib/formulation-spirit';
-import { formatInventoryOnHand, inventoryCategoryLabel } from '../lib/inventory-units';
+import { inventoryCategoryLabel } from '../lib/inventory-units';
 import { LITERS_PER_US_GALLON } from '../lib/material-densities';
 import type {
   BlendIngredientInput,
@@ -199,7 +199,7 @@ export function BlendRecipesTab({
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<number | undefined>();
   const [form, setForm] = useState(emptyRecipeForm());
-  const [spiritSources, setSpiritSources] = useState<SpiritRecipeRow[]>([emptySpiritLine()]);
+  const [spiritSources, setSpiritSources] = useState<SpiritRecipeRow[]>([]);
   const [ingredients, setIngredients] = useState<RecipeAdditiveRow[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [abvConfirmed, setAbvConfirmed] = useState(false);
@@ -276,7 +276,7 @@ export function BlendRecipesTab({
   const openNew = () => {
     setEditId(undefined);
     setForm(emptyRecipeForm());
-    setSpiritSources([emptySpiritLine()]);
+    setSpiritSources([]);
     setIngredients([]);
     setOriginalWater([]);
     setProofingPreview(null);
@@ -319,7 +319,7 @@ export function BlendRecipesTab({
             enteredQuantityKnown: known,
           };
         })
-        : [emptySpiritLine()],
+        : [],
     );
     const loadedIngredients = recipe.ingredients.map((ingredient) => (
       toRecipeAdditiveRow(ingredient, inventoryItems)
@@ -837,18 +837,8 @@ export function BlendRecipesTab({
             </section>
 
             <section className="blend-recipe-section">
-              <div className="blend-recipe-section-header">
-                <h4 className="blend-recipe-section-title">Spirit pulls</h4>
-                <button
-                  type="button"
-                  className="btn btn-sm btn-secondary"
-                  onClick={() => setSpiritSources((prev) => [...prev, emptySpiritLine()])}
-                >
-                  + Add spirit
-                </button>
-              </div>
-              <div className="blend-recipe-card-list">
-                {spiritSources.map((source, index) => {
+              <h4 className="blend-recipe-section-title">Spirit pulls</h4>
+              {spiritSources.map((source, index) => {
                   const synced = syncSpiritRecipeVolume(source);
                   const measureMode = inferMeasureMode(source.unit);
                   const unitOptions = spiritUnitsForMeasureMode(measureMode);
@@ -856,23 +846,10 @@ export function BlendRecipesTab({
                     ? spiritMeasureAlternate(source.amount, source.unit, source.abv)
                     : null;
                   return (
-                    <article key={index} className="blend-recipe-spirit-card">
-                      <header className="blend-recipe-card-header">
-                        <span className="blend-recipe-card-title">
-                          {source.spirit_label.trim() || `Spirit ${index + 1}`}
-                        </span>
-                        {spiritSources.length > 1 && (
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-ghost"
-                            onClick={() => setSpiritSources((prev) => prev.filter((_, i) => i !== index))}
-                          >
-                            Remove
-                          </button>
-                        )}
-                      </header>
+                    <div key={index} className="form-group full-width wash-nutrient-row">
+                      <div className="form-grid" style={{ marginBottom: 0 }}>
                       <div className="form-group">
-                        <label>Label</label>
+                        <label>{index === 0 ? 'Spirit label' : `Spirit ${index + 1} label`}</label>
                         <input
                           value={source.spirit_label}
                           onChange={(e) => updateSpiritSource(index, { spirit_label: e.target.value })}
@@ -951,27 +928,33 @@ export function BlendRecipesTab({
                           {alternate ? ` · ${alternate.label}` : ''}
                         </p>
                       )}
-                    </article>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-ghost"
+                        onClick={() => setSpiritSources((prev) => prev.filter((_, i) => i !== index))}
+                      >
+                        Remove spirit
+                      </button>
+                    </div>
                   );
                 })}
+              <div className="form-group full-width">
+                <button
+                  type="button"
+                  className="btn btn-sm btn-secondary"
+                  onClick={() => setSpiritSources((prev) => [...prev, emptySpiritLine()])}
+                >
+                  + Add spirit
+                </button>
+                <p className="field-hint">
+                  Measure each pull by weight or volume. Enter amount, unit, and ABV for proof calculations.
+                </p>
               </div>
             </section>
 
             <section className="blend-recipe-section">
-              <div className="blend-recipe-section-header">
-                <h4 className="blend-recipe-section-title">Additives</h4>
-                <button
-                  type="button"
-                  className="btn btn-sm btn-secondary"
-                  onClick={() => setIngredients((prev) => [...prev, emptyIngredient()])}
-                >
-                  + Add additive
-                </button>
-              </div>
-              {ingredients.length === 0 ? (
-                <p className="field-hint blend-recipe-empty-hint">No additives — pick an inventory category, then the item, or add proofing water.</p>
-              ) : (
-                <div className="blend-recipe-card-list">
+              <h4 className="blend-recipe-section-title">Additives</h4>
                   {ingredients.map((ingredient, index) => {
                     const measureMode = inferMeasureMode(ingredient.unit);
                     const recommendation = recommendMeasureMode(ingredient.ingredient_type);
@@ -991,25 +974,13 @@ export function BlendRecipesTab({
                       : inventoryCategories;
 
                     return (
-                      <article key={index} className="blend-recipe-additive-card">
-                        <header className="blend-recipe-card-header">
-                          <span className="blend-recipe-card-title">
-                            {ingredient.name.trim()
-                              || (isWater
-                                ? 'Proofing water'
-                                : (selectedCategory ? inventoryCategoryLabel(selectedCategory) : 'Additive'))}
-                          </span>
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-ghost"
-                            onClick={() => setIngredients((prev) => prev.filter((_, i) => i !== index))}
-                          >
-                            Remove
-                          </button>
-                        </header>
+                      <div key={index} className="form-group full-width wash-nutrient-row">
+                        <div className="form-grid" style={{ marginBottom: 0 }}>
                         <div className="blend-recipe-additive-fields">
                           <div className="form-group">
-                            <label htmlFor={`blend-additive-category-${index}`}>Category</label>
+                            <label htmlFor={`blend-additive-category-${index}`}>
+                              {index === 0 ? 'Category' : `Additive ${index + 1} category`}
+                            </label>
                             <select
                               id={`blend-additive-category-${index}`}
                               data-testid={index === 0 ? 'blend-additive-category' : `blend-additive-category-${index}`}
@@ -1036,7 +1007,7 @@ export function BlendRecipesTab({
                                   unit={ingredient.unit}
                                   options={inventoryOptions.map((item) => ({
                                     value: String(item.id),
-                                    label: `${item.name} (${formatInventoryOnHand(item.quantity)} ${item.unit})`,
+                                    label: item.name,
                                   }))}
                                   orphanLabel={
                                     ingredient.inventory_item_id != null
@@ -1184,11 +1155,29 @@ export function BlendRecipesTab({
                             )}
                           </div>
                         )}
-                      </article>
+                        </div>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-ghost"
+                          onClick={() => setIngredients((prev) => prev.filter((_, i) => i !== index))}
+                        >
+                          Remove additive
+                        </button>
+                      </div>
                     );
                   })}
-                </div>
-              )}
+              <div className="form-group full-width">
+                <button
+                  type="button"
+                  className="btn btn-sm btn-secondary"
+                  onClick={() => setIngredients((prev) => [...prev, emptyIngredient()])}
+                >
+                  + Add additive
+                </button>
+                <p className="field-hint">
+                  Pick an inventory category and item, or add proofing water. Measure by weight or volume.
+                </p>
+              </div>
             </section>
 
             <section className="blend-recipe-section blend-recipe-section--proof">
