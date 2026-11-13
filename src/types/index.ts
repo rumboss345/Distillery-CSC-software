@@ -799,6 +799,8 @@ export interface ProductionCostMonthlyOverhead {
   master_distiller: number;
   electric: number;
   gas_propane: number;
+  /** Facility process water (cooling, cleaning, etc.) — monthly total, not per-gallon spirit water. */
+  process_water: number;
 }
 
 export interface EquipmentVolumeReport {

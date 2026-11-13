@@ -36,6 +36,7 @@ const emptyOverheadRow = (): ProductionCostMonthlyOverhead => ({
   master_distiller: 0,
   electric: 0,
   gas_propane: 0,
+  process_water: 0,
 });
 
 function upsertOverheadMonth(
@@ -49,8 +50,14 @@ function upsertOverheadMonth(
     master_distiller: row.master_distiller >= 0 ? row.master_distiller : 0,
     electric: row.electric >= 0 ? row.electric : 0,
     gas_propane: row.gas_propane >= 0 ? row.gas_propane : 0,
+    process_water: row.process_water >= 0 ? row.process_water : 0,
   };
-  if (normalized.master_distiller === 0 && normalized.electric === 0 && normalized.gas_propane === 0) {
+  if (
+    normalized.master_distiller === 0
+    && normalized.electric === 0
+    && normalized.gas_propane === 0
+    && normalized.process_water === 0
+  ) {
     return null;
   }
   const without = draft.filter((item) => item.year_month !== ym);
@@ -121,13 +128,13 @@ export function CostingReport() {
     <div data-testid="production-costing-report">
       <CollapsibleSection
         title="Costing assumptions"
-        summary="Water, total labour, and monthly utilities"
+        summary="Spirit water rate, labour, utilities, facility process water"
         defaultOpen={false}
         storageKey="report-costing-assumptions"
       >
         <p className="field-hint" style={{ marginTop: 0 }}>
           Sugar, yeast, nutrients, bottles, and labels use unit costs from Inventory only.
-          Set those on each item; this panel covers water cost and monthly overhead (total labour, electric, and gas).
+          Set those on each item; this panel covers spirit water $/gal, monthly labour, utilities, and facility process water (cooling, cleaning).
           New monthly rows can be added with <strong>Add / update rate</strong> or included when you click <strong>Save assumptions</strong>.
         </p>
         {saveNotice && (
@@ -147,7 +154,10 @@ export function CostingReport() {
                 water_cost_per_gal: parseMoneyInput(e.target.value),
               })}
             />
-            <p className="field-hint">Default {DEFAULT_WATER_COST_PER_GAL.toFixed(2)}/gal. Wash, still proofing, tank dilution, and blend proofing water.</p>
+            <p className="field-hint">
+              Default {DEFAULT_WATER_COST_PER_GAL.toFixed(2)}/gal. Wash charge, still proofing, tank dilution, and blend proofing only.
+              Cooling and cleaning water go under monthly Process water below.
+            </p>
           </div>
         </div>
 
@@ -196,6 +206,17 @@ export function CostingReport() {
               onChange={(e) => setNewOverhead({ ...newOverhead, gas_propane: parseMoneyInput(e.target.value) })}
             />
           </div>
+          <div className="form-group">
+            <label>Process water — cooling, cleaning ($)</label>
+            <input
+              type="number"
+              min={0}
+              step={0.01}
+              data-testid="costing-overhead-process-water"
+              value={newOverhead.process_water || ''}
+              onChange={(e) => setNewOverhead({ ...newOverhead, process_water: parseMoneyInput(e.target.value) })}
+            />
+          </div>
           <div className="form-group" style={{ alignSelf: 'end' }}>
             <button type="button" className="btn btn-secondary btn-sm" onClick={addOverheadMonth}>
               Add / update rate
@@ -211,6 +232,7 @@ export function CostingReport() {
                   <th className="num">Total labour</th>
                   <th className="num">Electric</th>
                   <th className="num">Gas / propane</th>
+                  <th className="num">Process water</th>
                   <th />
                 </tr>
               </thead>
@@ -256,6 +278,20 @@ export function CostingReport() {
                         onChange={(e) => setOverheadDraft((prev) => prev.map((item) => (
                           item.year_month === row.year_month
                             ? { ...item, gas_propane: parseMoneyInput(e.target.value) }
+                            : item
+                        )))}
+                      />
+                    </td>
+                    <td className="num">
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.01}
+                        style={{ maxWidth: '7rem' }}
+                        value={row.process_water ?? 0}
+                        onChange={(e) => setOverheadDraft((prev) => prev.map((item) => (
+                          item.year_month === row.year_month
+                            ? { ...item, process_water: parseMoneyInput(e.target.value) }
                             : item
                         )))}
                       />
@@ -325,6 +361,9 @@ export function CostingReport() {
             {' · '}
             Total labour {money(summary.totalLabourCost)}
             {summary.totalMonthlyOverheadCost > 0 ? ` · Electric & gas ${money(summary.totalMonthlyOverheadCost)}` : ''}
+            {summary.totalMonthlyProcessWaterOverheadCost > 0
+              ? ` · Process water ${money(summary.totalMonthlyProcessWaterOverheadCost)}`
+              : ''}
           </div>
         </div>
         <div className="stat-card">
@@ -340,7 +379,7 @@ export function CostingReport() {
       </div>
 
       <p className="text-muted" style={{ margin: '-0.5rem 0 0.75rem', fontSize: '0.9rem' }}>
-        Including monthly overhead (total labour, electric, and gas in this period)
+        Including monthly overhead (labour, electric, gas, and facility process water in this period)
       </p>
       <div className="card-grid" style={{ marginBottom: '1.5rem' }}>
         <div className="stat-card">
