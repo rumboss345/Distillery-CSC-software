@@ -9,7 +9,7 @@ import { Modal } from './Modal';
 import { AssigneeCell, AssigneeSelect } from './AssigneeSelect';
 import { useAuth } from '../context/AuthContext';
 import { defaultAssignee, type AssignedEmployee } from '../lib/assignee';
-import { botanicalsFromRecipe, emptyGinBotanical, formatGinBotanicalsSummary } from '../lib/gin-botanicals';
+import { botanicalsFromRecipe, formatGinBotanicalsSummary } from '../lib/gin-botanicals';
 import type { GinBotanicalInput, GinRecipe } from '../types';
 
 export function GinRecipesTab({
@@ -29,7 +29,7 @@ export function GinRecipesTab({
   const [editId, setEditId] = useState<number | undefined>();
   const [name, setName] = useState('');
   const [notes, setNotes] = useState('');
-  const [lines, setLines] = useState<GinBotanicalInput[]>([emptyGinBotanical()]);
+  const [lines, setLines] = useState<GinBotanicalInput[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [assignee, setAssignee] = useState<AssignedEmployee>(defaultAssignee(null));
 
@@ -39,7 +39,7 @@ export function GinRecipesTab({
     setEditId(undefined);
     setName('');
     setNotes('');
-    setLines([emptyGinBotanical()]);
+    setLines([]);
     setAssignee(defaultAssignee(user));
     setShowForm(true);
   };
