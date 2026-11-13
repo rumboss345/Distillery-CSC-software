@@ -66,6 +66,7 @@ import { formatTankMenuLabel, tankContentsPhrase, tankDropdownLabel, tankOriginD
 import { AbvTemperatureInput, correctedAbvFromInputs } from '../components/AbvTemperatureInput';
 import { AdminCredentialConfirmModal } from '../components/AdminCredentialConfirmModal';
 import { GinBotanicalFields } from '../components/GinBotanicalFields';
+import { GinBotanicalsSummary } from '../components/GinBotanicalsSummary';
 import { Modal } from '../components/Modal';
 import { RecentCompletedNote } from '../components/RecentCompletedNote';
 import { StatusBadge } from '../components/StatusBadge';
@@ -83,7 +84,6 @@ import {
 import {
   botanicalsFromRecipe,
   emptyGinBotanical,
-  formatGinBotanicalsSummary,
   ginBotanicalPlaceError,
   linkBotanicalsToInventory,
 } from '../lib/gin-botanicals';
@@ -1266,10 +1266,11 @@ export function Distillation() {
                             {spiritChargeDetail(r) && (
                               <div className="field-hint">{spiritChargeDetail(r)}</div>
                             )}
-                            {runType === 'gin' && formatGinBotanicalsSummary(runBotanicals.filter((line) => line.distillation_run_id === r.id)) && (
-                              <div className="field-hint">
-                                {formatGinBotanicalsSummary(runBotanicals.filter((line) => line.distillation_run_id === r.id))}
-                              </div>
+                            {runType === 'gin' && (
+                              <GinBotanicalsSummary
+                                className="field-hint"
+                                lines={runBotanicals.filter((line) => line.distillation_run_id === r.id)}
+                              />
                             )}
                             {stillageLabel && (
                               <div className="field-hint">{stillageLabel}</div>

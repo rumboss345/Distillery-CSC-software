@@ -75,6 +75,17 @@ export function formatGinBotanicalLine(line: GinBotanicalInput): string {
   return place ? `${weight} · ${place}` : weight;
 }
 
+/** Shorter line for tables and charge summaries (pot/basket tag instead of full phrase). */
+export function formatGinBotanicalLineCompact(line: GinBotanicalInput): string {
+  const name = line.name.trim();
+  if (!(line.weight > 0)) return name;
+  const amount = `${line.weight} ${nutrientUnitLabel(line.weight_unit)}`;
+  const place = normalizeBotanicalPlace(line.place);
+  if (place === 'pot') return `${name} · ${amount} (pot)`;
+  if (place === 'basket') return `${name} · ${amount} (basket)`;
+  return `${name} · ${amount}`;
+}
+
 export function formatGinBotanicalsSummary(lines: GinBotanicalInput[]): string {
   const active = lines.filter(botanicalHasMeasure);
   if (active.length === 0) return '';
