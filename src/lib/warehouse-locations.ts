@@ -1,5 +1,22 @@
 export const UNASSIGNED_WAREHOUSE_LOCATION = 'Unassigned';
 
+export const BARREL_DRAG_MIME = 'application/x-csc-barrel-id';
+
+export function warehouseLocationGroupKey(group: { name: string; locationId: number | null }): string {
+  return `${group.locationId ?? 'orphan'}::${group.name}`;
+}
+
+/** Value stored on `barrels.warehouse_location` for a grouped row name. */
+export function warehouseLocationFieldFromGroupName(groupName: string): string {
+  if (groupName === UNASSIGNED_WAREHOUSE_LOCATION) return '';
+  return normalizeWarehouseLocationName(groupName);
+}
+
+export function isSameWarehouseLocation(a: string, b: string): boolean {
+  return normalizeWarehouseLocationName(a).toLocaleLowerCase()
+    === normalizeWarehouseLocationName(b).toLocaleLowerCase();
+}
+
 export function normalizeWarehouseLocationName(name: string): string {
   return name.trim().replace(/\s+/g, ' ');
 }

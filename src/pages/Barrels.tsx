@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type DragEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { differenceInDays, parseISO } from 'date-fns';
 import {
@@ -28,8 +28,13 @@ import { localIsoDate } from '../lib/planned-event-date';
 import { formatGal } from '../components/equipment/equipment-visual-shared';
 import { tankDropdownLabel } from '../lib/tank-menu-label';
 import {
+  BARREL_DRAG_MIME,
   UNASSIGNED_WAREHOUSE_LOCATION,
   groupBarrelsByLocation,
+  isSameWarehouseLocation,
+  warehouseLocationFieldFromGroupName,
+  warehouseLocationGroupKey,
+  type WarehouseLocationGroup,
 } from '../lib/warehouse-locations';
 import type { Barrel, BarrelStatus } from '../types';
 import '../components/equipment/process-view.css';
@@ -86,6 +91,8 @@ export function Barrels() {
   const [locationName, setLocationName] = useState('');
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [search, setSearch] = useState('');
+  const [draggingBarrelId, setDraggingBarrelId] = useState<number | null>(null);
+  const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
 
   const holdingTanks = getHoldingTanksWithContents();
   const tanksWithSpirit = holdingTanks.filter((t) => t.volume_gal > 0);
@@ -238,6 +245,60 @@ export function Barrels() {
     }
   };
 
+  const moveBarrelToLocation = (barrelId: number, group: WarehouseLocationGroup<Barrel>) => {
+    const barrel = barrels.find((item) => item.id === barrelId);
+    if (!barrel) return;
+    const warehouse_location = warehouseLocationFieldFromGroupName(group.name);
+    if (isSameWarehouseLocation(barrel.warehouse_location, warehouse_location)) return;
+    try {
+      saveBarrel({ ...barrel, warehouse_location }, barrel.id);
+      setSelectedId(barrel.id);
+      refresh();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Could not move barrel.');
+    }
+  };
+
+  const handleBarrelDragStart = (event: DragEvent, barrelId: number) => {
+    event.dataTransfer.setData(BARREL_DRAG_MIME, String(barrelId));
+    event.dataTransfer.effectAllowed = 'move';
+    setDraggingBarrelId(barrelId);
+  };
+
+  const handleBarrelDragEnd = () => {
+    setDraggingBarrelId(null);
+    setDropTargetKey(null);
+  };
+
+  const readDraggedBarrelId = (event: DragEvent): number | null => {
+    const raw = event.dataTransfer.getData(BARREL_DRAG_MIME);
+    const id = parseInt(raw, 10);
+    return Number.isFinite(id) && id > 0 ? id : null;
+  };
+
+  const handleLocationDragOver = (event: DragEvent, group: WarehouseLocationGroup<Barrel>) => {
+    if (barrelQuery) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    setDropTargetKey(warehouseLocationGroupKey(group));
+  };
+
+  const handleLocationDragLeave = (event: DragEvent, group: WarehouseLocationGroup<Barrel>) => {
+    const related = event.relatedTarget as Node | null;
+    if (related && event.currentTarget.contains(related)) return;
+    const key = warehouseLocationGroupKey(group);
+    setDropTargetKey((current) => (current === key ? null : current));
+  };
+
+  const handleLocationDrop = (event: DragEvent, group: WarehouseLocationGroup<Barrel>) => {
+    event.preventDefault();
+    setDropTargetKey(null);
+    const barrelId = readDraggedBarrelId(event);
+    if (barrelId == null) return;
+    moveBarrelToLocation(barrelId, group);
+    setDraggingBarrelId(null);
+  };
+
   const selectedAge = selected ? barrelAgeDays(selected.fill_date) : null;
   const selectedRun = selected ? runs.find((run) => run.id === selected.source_run_id) : undefined;
   const selectedTank = selected?.source_holding_tank_equipment_id
@@ -255,7 +316,8 @@ export function Barrels() {
         <div className="process-toolbar">
           <span className="process-toolbar-title">Warehouse</span>
           <span className="process-toolbar-hint">
-            Oldest heads are first in each location and show the darkest color. Select one for fill, age, and proof.
+            Drag barrels between locations. Oldest fill dates stay first in each row (darkest heads on the left).
+            {barrelQuery ? ' Clear search to drag.' : ''}
           </span>
           <input
             className="warehouse-search"
@@ -298,13 +360,15 @@ export function Barrels() {
                 )}
               </div>
             ) : groups.map((group, index) => {
+              const groupKey = warehouseLocationGroupKey(group);
+              const dropActive = !barrelQuery && dropTargetKey === groupKey;
               const gallons = group.barrels
                 .filter((barrel) => barrel.status === 'aging')
                 .reduce((sum, barrel) => sum + barrel.current_volume_gal, 0);
               return (
                 <section
                   key={group.locationId ?? group.name}
-                  className={`process-stage-zone warehouse-location${index % 2 === 0 ? ' process-stage-zone--alt' : ''}`}
+                  className={`process-stage-zone warehouse-location${index % 2 === 0 ? ' process-stage-zone--alt' : ''}${dropActive ? ' warehouse-location--drop-active' : ''}`}
                 >
                   <div className="process-stage-header">
                     <span className="process-stage-label">{group.name}</span>
@@ -331,19 +395,29 @@ export function Barrels() {
                       )}
                     </div>
                   </div>
-                  {group.barrels.length === 0 ? (
-                    <p className="warehouse-location-empty">No barrels in this location yet.</p>
-                  ) : (
-                    <div className="warehouse-barrel-row">
-                      {group.barrels.map((barrel) => {
+                  <div
+                    className={`warehouse-barrel-row${group.barrels.length === 0 ? ' warehouse-barrel-row--empty' : ''}${dropActive ? ' warehouse-barrel-row--drop-active' : ''}`}
+                    onDragOver={barrelQuery ? undefined : (event) => handleLocationDragOver(event, group)}
+                    onDragLeave={barrelQuery ? undefined : (event) => handleLocationDragLeave(event, group)}
+                    onDrop={barrelQuery ? undefined : (event) => handleLocationDrop(event, group)}
+                  >
+                    {group.barrels.length === 0 ? (
+                      <p className="warehouse-location-empty">
+                        {barrelQuery ? 'No barrels here.' : 'Drop barrels here or use + Barrel.'}
+                      </p>
+                    ) : (
+                      group.barrels.map((barrel) => {
                         const contents = barrelContents(barrel) || barrel.wood_type;
                         const age = barrelAgeDays(barrel.fill_date);
+                        const dragging = draggingBarrelId === barrel.id;
                         return (
                           <button
                             key={barrel.id}
                             type="button"
-                            className={`warehouse-barrel${selectedId === barrel.id ? ' warehouse-barrel--selected' : ''}`}
+                            draggable={!barrelQuery}
+                            className={`warehouse-barrel${selectedId === barrel.id ? ' warehouse-barrel--selected' : ''}${dragging ? ' warehouse-barrel--dragging' : ''}`}
                             aria-label={barrel.barrel_number}
+                            aria-grabbed={dragging}
                             title={[
                               barrel.barrel_number,
                               contents,
@@ -352,8 +426,11 @@ export function Barrels() {
                                 ? `${barrel.initial_abv.toFixed(1)}% ABV`
                                 : null,
                               age == null ? null : `${age} days`,
+                              barrelQuery ? null : 'Drag to another location',
                             ].filter(Boolean).join(' · ')}
                             onClick={() => setSelectedId(barrel.id)}
+                            onDragStart={barrelQuery ? undefined : (event) => handleBarrelDragStart(event, barrel.id)}
+                            onDragEnd={barrelQuery ? undefined : handleBarrelDragEnd}
                           >
                             <BarrelVisual
                               barrelNumber={barrel.barrel_number}
@@ -363,9 +440,9 @@ export function Barrels() {
                             />
                           </button>
                         );
-                      })}
-                    </div>
-                  )}
+                      })
+                    )}
+                  </div>
                 </section>
               );
             })}
