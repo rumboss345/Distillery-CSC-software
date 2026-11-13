@@ -1,4 +1,5 @@
-import type { BotanicalPlace, GinBotanicalInput } from '../types';
+import type { BotanicalPlace, GinBotanicalInput, InventoryItem } from '../types';
+import { matchInventoryItemInList } from './inventory-item-match';
 import { normalizeNutrientUnit, nutrientAmountInUnit, nutrientUnitLabel } from './wash-recipe-nutrients';
 
 const WEIGHT_UNITS = new Set(['g', 'kg', 'lbs', 'oz']);
@@ -31,6 +32,7 @@ export function botanicalHasMeasure(line: GinBotanicalInput): boolean {
 export function activeGinBotanicals(lines: GinBotanicalInput[]): GinBotanicalInput[] {
   return lines.filter(botanicalHasMeasure).map((line) => ({
     name: line.name.trim(),
+    inventory_item_id: line.inventory_item_id ?? null,
     amount: 0,
     weight: line.weight,
     weight_unit: normalizeBotanicalWeightUnit(line.weight_unit),
@@ -48,6 +50,21 @@ export function ginBotanicalPlaceError(lines: GinBotanicalInput[]): string | nul
 export function botanicalsFromRecipe(lines: GinBotanicalInput[]): GinBotanicalInput[] {
   const active = activeGinBotanicals(lines);
   return active.length > 0 ? active : [emptyGinBotanical()];
+}
+
+/** Align recipe names to stocked botanicals when the spelling is close. */
+export function linkBotanicalsToInventory(
+  lines: GinBotanicalInput[],
+  inventory: Pick<InventoryItem, 'id' | 'name'>[],
+): GinBotanicalInput[] {
+  return botanicalsFromRecipe(lines).map((line) => {
+    if (line.inventory_item_id != null) return line;
+    const matched = matchInventoryItemInList(inventory, line.name);
+    if (!matched) return line;
+    const item = inventory.find((row) => row.name === matched.name);
+    if (!item) return line;
+    return { ...line, name: item.name, inventory_item_id: item.id };
+  });
 }
 
 export function formatGinBotanicalLine(line: GinBotanicalInput): string {

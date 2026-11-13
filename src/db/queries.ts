@@ -40,6 +40,7 @@ import { DISTILLATION_SOURCE_TANK_REQUIRED } from '../lib/distillation-source-ta
 import { activeGinBotanicals, ginBotanicalPlaceError, normalizeBotanicalWeightUnit } from '../lib/gin-botanicals';
 import { preparedIngredientName } from '../lib/quick-ingredient';
 import type { InventoryAdjustSource } from '../lib/inventory-usage';
+import { suggestInventoryItemName } from '../lib/inventory-item-match';
 import {
   chargeExceedsStillCapacity,
   plannedRecordSkipsEquipmentStatus,
@@ -428,9 +429,16 @@ export function getInventoryByCategory(category: InventoryItem['category']): Inv
 function findInventoryItem(category: InventoryItem['category'], name: string): InventoryItem | undefined {
   const trimmed = name.trim();
   if (!trimmed) return undefined;
-  return queryOne<InventoryItem>(
+  const exact = queryOne<InventoryItem>(
     'SELECT * FROM inventory_items WHERE category = ? AND name = ? COLLATE NOCASE',
     [category, trimmed],
+  );
+  if (exact) return exact;
+  const fuzzyName = suggestInventoryItemName(getInventoryByCategory(category), trimmed);
+  if (!fuzzyName) return undefined;
+  return queryOne<InventoryItem>(
+    'SELECT * FROM inventory_items WHERE category = ? AND name = ? COLLATE NOCASE',
+    [category, fuzzyName],
   ) ?? undefined;
 }
 
@@ -451,8 +459,11 @@ function requireInventoryItem(category: InventoryItem['category'], name: string)
   }
   const item = findInventoryItem(category, trimmed);
   if (!item) {
+    const suggestion = suggestInventoryItemName(getInventoryByCategory(category), trimmed);
     throw new Error(
-      `Inventory item "${trimmed}" was not found in ${inventoryCategoryLabel(category)}. Add it on Inventory.`,
+      suggestion
+        ? `Inventory item "${trimmed}" was not found in ${inventoryCategoryLabel(category)}. Select "${suggestion}" from the list, or add "${trimmed}" on Inventory.`
+        : `Inventory item "${trimmed}" was not found in ${inventoryCategoryLabel(category)}. Add it on Inventory.`,
     );
   }
   return item;

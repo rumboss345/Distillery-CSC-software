@@ -43,6 +43,7 @@ import {
   getSpiritTransferVesselsWithContents,
   generateBatchNumber,
   getGinRecipes,
+  getInventoryByCategory,
   getRunBotanicals,
   saveGinRecipe,
   getFermentationReadyMaxBrix,
@@ -84,6 +85,7 @@ import {
   emptyGinBotanical,
   formatGinBotanicalsSummary,
   ginBotanicalPlaceError,
+  linkBotanicalsToInventory,
 } from '../lib/gin-botanicals';
 import { isBrixReadyForDistillation } from '../lib/fermentation';
 import { eventDateWhenLeavingPlanned, localIsoDate, localIsoDateTime } from '../lib/planned-event-date';
@@ -623,7 +625,7 @@ export function Distillation() {
     if (!recipeId) return;
     const recipe = ginRecipes.find((item) => item.id === recipeId);
     if (!recipe) return;
-    setBotanicals(botanicalsFromRecipe(recipe.botanicals));
+    setBotanicals(linkBotanicalsToInventory(recipe.botanicals, getInventoryByCategory('botanicals')));
     setGinRecipeName(recipe.name);
   };
 
