@@ -2032,6 +2032,29 @@ describe('PostgreSQL production modules', () => {
     }, runId, undefined, []])).rejects.toThrow(/source tank/i);
   });
 
+  it('deletes an inventory item after clearing production links', async () => {
+    await save('saveInventoryItem', [{
+      name: 'Temp botanical',
+      category: 'botanicals',
+      unit: 'g',
+      quantity: 5,
+      reorder_level: 0,
+      notes: '',
+      package_size_ml: null,
+      density_g_per_ml: null,
+      density_reference: '',
+      abv: null,
+    }]);
+    const item = engine.readProduction((api) => (
+      api.getInventoryItems().find((row) => row.name === 'Temp botanical')
+    ));
+    if (!item) throw new Error('Temp botanical missing');
+    await save('deleteInventoryItem', [item.id]);
+    expect(engine.readProduction((api) => (
+      api.getInventoryItems().some((row) => row.id === item.id)
+    ))).toBe(false);
+  });
+
   it('deletes an unused inventory category and keeps one that still has items', async () => {
     await save('addInventoryCategory', ['spices']);
     expect(engine.readProduction((api) => api.getInventoryCategories())).toContain('spices');

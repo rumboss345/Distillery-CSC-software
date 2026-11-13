@@ -173,9 +173,14 @@ export function Inventory() {
   };
 
   const handleDelete = (id: number) => {
-    if (confirm('Delete this inventory item?')) {
+    if (!confirm('Delete this inventory item? Past production records keep the name; only the stock row is removed.')) {
+      return;
+    }
+    try {
       deleteInventoryItem(id);
       refresh();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Could not delete that item.');
     }
   };
 
