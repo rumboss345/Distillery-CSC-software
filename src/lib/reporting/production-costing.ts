@@ -54,6 +54,11 @@ export interface ProductionCostSummary {
   costPerLiterAt40AbvFullProduction: number | null;
   /** Same spend per recorded alcohol charged (distillation balance), when available. */
   costPerLaaLiterFullOnCharged: number | null;
+  /** Same spend per recorded alcohol collected on still runs. */
+  costPerLaaLiterFullOnCollected: number | null;
+  alcoholCollectedLaaLiters: number;
+  /** Wash pipeline only (excludes packaging and monthly overhead in summary). */
+  totalWashPipelineCost: number;
   avgDistillationYieldPct: number | null;
   avgFermentBrixDrop: number | null;
 }
@@ -424,6 +429,12 @@ export function buildProductionCostReport(
   const costPerLaaLiterFullOnCharged = alcoholChargedLaaLiters > 0 && fullProductionSpend > 0
     ? roundMoney(fullProductionSpend / alcoholChargedLaaLiters)
     : null;
+  const alcoholCollectedLaaLiters = laaLitersFromPureAlcoholGal(
+    productionAlcoholBalance.distillationCollectedGal,
+  );
+  const costPerLaaLiterFullOnCollected = alcoholCollectedLaaLiters > 0 && fullProductionSpend > 0
+    ? roundMoney(fullProductionSpend / alcoholCollectedLaaLiters)
+    : null;
 
   if (
     productionAlcoholBalance.distillationRunsWithBalance === 0
@@ -475,6 +486,9 @@ export function buildProductionCostReport(
       costPerLaaLiterFullProduction,
       costPerLiterAt40AbvFullProduction,
       costPerLaaLiterFullOnCharged,
+      costPerLaaLiterFullOnCollected,
+      alcoholCollectedLaaLiters: roundMoney(alcoholCollectedLaaLiters),
+      totalWashPipelineCost: roundMoney(totalWashCost + processWaterCost),
       avgDistillationYieldPct,
       avgFermentBrixDrop,
     },

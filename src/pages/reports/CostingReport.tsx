@@ -403,44 +403,75 @@ export function CostingReport() {
         </div>
       </div>
 
-      <p className="text-muted" style={{ margin: '-0.5rem 0 0.75rem', fontSize: '0.9rem' }}>
-        Full production (all spend on hearts LAA, with recorded loss and gain)
-      </p>
-      <div className="card-grid" style={{ marginBottom: '1.5rem' }}>
-        <div className="stat-card">
-          <div className="label">Cost per litre (LAA)</div>
-          <div className="value accent">{money(summary.costPerLaaLiterFullProduction)}</div>
-          <div className="sub">
-            {money(summary.totalCost)} total spend · packaging {money(summary.totalBottlingPackagingCost)}
-            {' · '}
-            {num(summary.totalLaaLiters, 2)} L hearts LAA
+      <div
+        className="card"
+        style={{ marginBottom: '1.5rem', padding: '1rem 1.25rem' }}
+        data-testid="costing-full-production-box"
+      >
+        <h3 className="section-title" style={{ marginTop: 0, marginBottom: '0.35rem' }}>
+          Full production cost
+        </h3>
+        <p className="field-hint" style={{ marginTop: 0 }}>
+          All spend in period — wash materials, proofing water, bottles and labels, labour, utilities, and facility
+          water — compared to hearts LAA, still balances, and recorded alcohol loss or gain.
+        </p>
+        <div className="card-grid" style={{ marginBottom: '0.75rem' }}>
+          <div className="stat-card">
+            <div className="label">Cost per litre (LAA)</div>
+            <div className="value accent">{money(summary.costPerLaaLiterFullProduction)}</div>
+            <div className="sub">
+              On {num(summary.totalLaaLiters, 2)} L hearts LAA in period
+            </div>
+          </div>
+          <div className="stat-card">
+            <div className="label">Cost per litre at 40% ABV</div>
+            <div className="value">{money(summary.costPerLiterAt40AbvFullProduction)}</div>
+            <div className="sub">All-in spend on bottled-strength litres</div>
+          </div>
+          <div className="stat-card">
+            <div className="label">On alcohol charged</div>
+            <div className="value">{money(summary.costPerLaaLiterFullOnCharged)}</div>
+            <div className="sub">
+              {summary.alcoholChargedLaaLiters > 0
+                ? `${num(summary.alcoholChargedLaaLiters, 2)} L LAA into stills`
+                : 'Record distillation alcohol balance for this rate'}
+            </div>
+          </div>
+          <div className="stat-card">
+            <div className="label">On alcohol collected</div>
+            <div className="value">{money(summary.costPerLaaLiterFullOnCollected)}</div>
+            <div className="sub">
+              {summary.alcoholCollectedLaaLiters > 0
+                ? `${num(summary.alcoholCollectedLaaLiters, 2)} L LAA collected from stills`
+                : 'Record distillation cuts and balance for this rate'}
+            </div>
           </div>
         </div>
-        <div className="stat-card">
-          <div className="label">Cost per litre at 40% ABV</div>
-          <div className="value">{money(summary.costPerLiterAt40AbvFullProduction)}</div>
-          <div className="sub">Includes bottles, labels, process water, and monthly overhead</div>
-        </div>
-        <div className="stat-card">
-          <div className="label">On alcohol charged</div>
-          <div className="value">{money(summary.costPerLaaLiterFullOnCharged)}</div>
-          <div className="sub">
-            {summary.alcoholChargedLaaLiters > 0
-              ? `${num(summary.alcoholChargedLaaLiters, 2)} L LAA charged in still runs`
-              : 'Record distillation alcohol balance for this rate'}
+        <div className="card-grid">
+          <div className="stat-card">
+            <div className="label">All-in spend</div>
+            <div className="value">{money(summary.totalCost)}</div>
+            <div className="sub">
+              Wash &amp; proofing {money(summary.totalWashPipelineCost)}
+              {' · '}
+              Packaging {money(summary.totalBottlingPackagingCost)}
+              {summary.periodMonthlyOverheadTotal > 0
+                ? ` · Overhead ${money(summary.periodMonthlyOverheadTotal)}`
+                : ''}
+            </div>
           </div>
-        </div>
-        <div className="stat-card">
-          <div className="label">Alcohol loss / gain</div>
-          <div className="value" style={{ fontSize: '1.15rem', lineHeight: 1.35 }}>
-            {formatNetAlcoholLossGain(summary.productionAlcoholBalance.distillationNetAlcoholGal)}
-          </div>
-          <div className="sub">
-            {formatBottlingAlcoholVariance(summary.productionAlcoholBalance.bottlingAlcoholVarianceGal)
-              || 'No bottling alcohol variance in period'}
-            {summary.productionAlcoholBalance.bottlingRunsWithVariance > 0
-              ? ` · ${summary.productionAlcoholBalance.bottlingRunsWithVariance} bottling run(s)`
-              : ''}
+          <div className="stat-card">
+            <div className="label">Alcohol loss / gain</div>
+            <div className="value" style={{ fontSize: '1.15rem', lineHeight: 1.35 }}>
+              {formatNetAlcoholLossGain(summary.productionAlcoholBalance.distillationNetAlcoholGal)}
+            </div>
+            <div className="sub">
+              {formatBottlingAlcoholVariance(summary.productionAlcoholBalance.bottlingAlcoholVarianceGal)
+                || 'No bottling alcohol variance in period'}
+              {summary.productionAlcoholBalance.bottlingRunsWithVariance > 0
+                ? ` · ${summary.productionAlcoholBalance.bottlingRunsWithVariance} bottling run(s)`
+                : ''}
+            </div>
           </div>
         </div>
       </div>
