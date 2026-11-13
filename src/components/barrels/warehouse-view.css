@@ -68,6 +68,20 @@
   gap: 6px;
   padding: 8px 10px 12px;
   align-items: flex-start;
+  min-height: 3.5rem;
+  border-radius: var(--radius);
+  border: 2px dashed transparent;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.warehouse-view .warehouse-barrel-row--empty {
+  align-items: center;
+}
+
+.warehouse-view .warehouse-barrel-row--drop-active,
+.warehouse-view .warehouse-location--drop-active .warehouse-barrel-row {
+  border-color: #c8956c;
+  background: rgba(200, 149, 108, 0.12);
 }
 
 .warehouse-view .warehouse-barrel {
@@ -78,9 +92,18 @@
   border: 2px solid transparent;
   border-radius: 50%;
   background: transparent;
-  cursor: pointer;
+  cursor: grab;
   overflow: visible;
   flex: 0 0 52px;
+}
+
+.warehouse-view .warehouse-barrel:active {
+  cursor: grabbing;
+}
+
+.warehouse-view .warehouse-barrel--dragging {
+  opacity: 0.45;
+  cursor: grabbing;
 }
 
 .warehouse-view .barrel-head-svg {

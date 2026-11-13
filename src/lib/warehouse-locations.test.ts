@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   UNASSIGNED_WAREHOUSE_LOCATION,
   groupBarrelsByLocation,
+  isSameWarehouseLocation,
   normalizeWarehouseLocationName,
+  warehouseLocationFieldFromGroupName,
+  warehouseLocationGroupKey,
   warehouseLocationNameError,
 } from './warehouse-locations';
 
@@ -46,6 +49,13 @@ describe('warehouse locations', () => {
       [{ id: 2, name: 'Rickhouse B' }],
     );
     expect(groups[0].barrels.map((barrel) => barrel.barrel_number)).toEqual(['B-010', 'B-012', 'B-011']);
+  });
+
+  it('maps group names to barrel location fields', () => {
+    expect(warehouseLocationFieldFromGroupName('Rickhouse B')).toBe('Rickhouse B');
+    expect(warehouseLocationFieldFromGroupName(UNASSIGNED_WAREHOUSE_LOCATION)).toBe('');
+    expect(isSameWarehouseLocation('Rickhouse B', ' rickhouse b ')).toBe(true);
+    expect(warehouseLocationGroupKey({ name: 'A', locationId: 3 })).toBe('3::A');
   });
 
   it('shows a new location before any barrel is placed there', () => {
