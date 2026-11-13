@@ -19,7 +19,8 @@ export function GinBotanicalFields({
   lines: GinBotanicalInput[];
   onChange: (lines: GinBotanicalInput[]) => void;
 }) {
-  const inventoryOptions = getInventoryByCategory('botanicals').map((item) => ({
+  const botanicalInventory = getInventoryByCategory('botanicals');
+  const inventoryOptions = botanicalInventory.map((item) => ({
     value: item.name,
     label: `${item.name} (${formatInventoryOnHand(item.quantity)} ${item.unit} on hand)`,
   }));
@@ -55,8 +56,11 @@ export function GinBotanicalFields({
               unit={normalizeBotanicalWeightUnit(line.weight_unit)}
               options={inventoryOptions}
               orphanLabel={line.name || undefined}
-              onSelect={(name) => update(index, { name })}
-              onAdded={(item) => update(index, { name: item.name })}
+              onSelect={(name) => {
+                const item = botanicalInventory.find((row) => row.name === name);
+                update(index, { name, inventory_item_id: item?.id ?? null });
+              }}
+              onAdded={(item) => update(index, { name: item.name, inventory_item_id: item.id })}
             />
           </div>
           <div className="form-group">

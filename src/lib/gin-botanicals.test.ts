@@ -17,8 +17,8 @@ describe('gin botanicals', () => {
       { name: 'Empty', amount: 3, weight: 0, weight_unit: 'g' },
     ]);
     expect(lines).toEqual([
-      { name: 'Juniper', amount: 0, weight: 500, weight_unit: 'g', place: null },
-      { name: 'Coriander', amount: 0, weight: 1.5, weight_unit: 'lbs', place: null },
+      { name: 'Juniper', inventory_item_id: null, amount: 0, weight: 500, weight_unit: 'g', place: null },
+      { name: 'Coriander', inventory_item_id: null, amount: 0, weight: 1.5, weight_unit: 'lbs', place: null },
     ]);
   });
 
@@ -31,7 +31,7 @@ describe('gin botanicals', () => {
     expect(botanicalsFromRecipe([
       { name: 'Orris', amount: 1, weight: 20, weight_unit: 'g', place: 'basket' },
     ])).toEqual([
-      { name: 'Orris', amount: 0, weight: 20, weight_unit: 'g', place: 'basket' },
+      { name: 'Orris', inventory_item_id: null, amount: 0, weight: 20, weight_unit: 'g', place: 'basket' },
     ]);
   });
 
