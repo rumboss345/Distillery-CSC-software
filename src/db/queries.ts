@@ -848,10 +848,53 @@ export function getInventoryUsageLog(itemId: number, limit = 100): InventoryUsag
   );
 }
 
+function detachInventoryItemReferences(itemId: number): void {
+  const refUpdates: { sql: string; params: number[] }[] = [
+    {
+      sql: 'UPDATE mash_batches SET grain_inventory_item_id = NULL WHERE grain_inventory_item_id = ?',
+      params: [itemId],
+    },
+    {
+      sql: 'UPDATE mash_batches SET yeast_inventory_item_id = NULL WHERE yeast_inventory_item_id = ?',
+      params: [itemId],
+    },
+    { sql: 'UPDATE mash_batch_nutrients SET inventory_item_id = NULL WHERE inventory_item_id = ?', params: [itemId] },
+    { sql: 'UPDATE recipe_nutrients SET inventory_item_id = NULL WHERE inventory_item_id = ?', params: [itemId] },
+    {
+      sql: 'UPDATE distillation_run_botanicals SET inventory_item_id = NULL WHERE inventory_item_id = ?',
+      params: [itemId],
+    },
+    {
+      sql: 'UPDATE bottling_run_lines SET packaging_bottle_item_id = NULL WHERE packaging_bottle_item_id = ?',
+      params: [itemId],
+    },
+    {
+      sql: 'UPDATE bottling_run_lines SET packaging_label_item_id = NULL WHERE packaging_label_item_id = ?',
+      params: [itemId],
+    },
+    {
+      sql: 'UPDATE blend_recipe_ingredients SET inventory_item_id = NULL WHERE inventory_item_id = ?',
+      params: [itemId],
+    },
+    { sql: 'UPDATE blend_ingredients SET inventory_item_id = NULL WHERE inventory_item_id = ?', params: [itemId] },
+  ];
+  for (const { sql, params } of refUpdates) {
+    runQuery(sql, params);
+  }
+}
+
 export function deleteInventoryItem(id: number): void {
   const __remote = forwardProductionMutation('deleteInventoryItem', [id]);
   if (__remote.forwarded) return __remote.value as never;
 
+  const item = queryOne<{ id: number; name: string }>(
+    'SELECT id, name FROM inventory_items WHERE id = ?',
+    [id],
+  );
+  if (!item) {
+    throw new Error('That inventory item is not on file. Refresh the page and try again.');
+  }
+  detachInventoryItemReferences(id);
   runQuery('DELETE FROM inventory_items WHERE id = ?', [id]);
 }
 
