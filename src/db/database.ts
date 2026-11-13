@@ -737,9 +737,11 @@ function migrateProductionCostMonthlyOverhead(): void {
       master_distiller REAL NOT NULL DEFAULT 0,
       electric REAL NOT NULL DEFAULT 0,
       gas_propane REAL NOT NULL DEFAULT 0,
+      process_water REAL NOT NULL DEFAULT 0,
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `);
+  addColumnIfMissing('production_cost_monthly_overhead', 'process_water', 'REAL NOT NULL DEFAULT 0');
   const hasLegacy = queryOne<{ name: string }>(
     "SELECT name FROM sqlite_master WHERE type='table' AND name='production_cost_monthly_labour'",
   );

@@ -756,7 +756,8 @@ export function saveProductionCostSettings(settings: ProductionCostSettings): vo
 
 export function getProductionCostMonthlyOverhead(): ProductionCostMonthlyOverhead[] {
   return queryAll<ProductionCostMonthlyOverhead>(
-    `SELECT year_month, master_distiller, electric, gas_propane
+    `SELECT year_month, master_distiller, electric, gas_propane,
+            COALESCE(process_water, 0) AS process_water
      FROM production_cost_monthly_overhead ORDER BY year_month DESC`,
   );
 }
@@ -772,12 +773,13 @@ export function saveProductionCostMonthlyOverhead(entries: ProductionCostMonthly
     const master = row.master_distiller >= 0 ? row.master_distiller : 0;
     const electric = row.electric >= 0 ? row.electric : 0;
     const gas = row.gas_propane >= 0 ? row.gas_propane : 0;
-    if (master === 0 && electric === 0 && gas === 0) continue;
+    const processWater = row.process_water >= 0 ? row.process_water : 0;
+    if (master === 0 && electric === 0 && gas === 0 && processWater === 0) continue;
     runQuery(
       `INSERT INTO production_cost_monthly_overhead
-       (year_month, master_distiller, electric, gas_propane, updated_at)
-       VALUES (?, ?, ?, ?, datetime('now'))`,
-      [ym, master, electric, gas],
+       (year_month, master_distiller, electric, gas_propane, process_water, updated_at)
+       VALUES (?, ?, ?, ?, ?, datetime('now'))`,
+      [ym, master, electric, gas, processWater],
     );
   }
   notifySharedRefresh();

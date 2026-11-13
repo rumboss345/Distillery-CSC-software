@@ -17,7 +17,11 @@ import { laaLitersFromVolumeAbv, volumeLitersAtTargetAbv } from './alcohol-units
 import { heartsGpaForMashInRange } from './distillation-in-range';
 import { mlToGallons } from '../../types';
 import { buildFermentationPerformance } from './fermentation-performance';
-import { computeMonthlyLabourTotal, computeMonthlyUtilitiesTotal } from './monthly-overhead';
+import {
+  computeMonthlyLabourTotal,
+  computeMonthlyProcessWaterOverheadTotal,
+  computeMonthlyUtilitiesTotal,
+} from './monthly-overhead';
 import { eventInReportRange, type ReportDateRange } from './period';
 
 const STANDARD_BOTTLE_ABV = 40;
@@ -27,11 +31,12 @@ export interface ProductionCostSummary {
   totalWaterCost: number;
   totalLabourCost: number;
   totalMonthlyOverheadCost: number;
+  totalMonthlyProcessWaterOverheadCost: number;
   totalCost: number;
   totalLaaLiters: number;
   costPerLaaLiter: number | null;
   costPerLiterAt40Abv: number | null;
-  /** Wash materials plus prorated monthly labour, electric, and gas. */
+  /** Wash materials plus prorated monthly labour, utilities, and facility process water. */
   costPerLaaLiterInclMonthlyOverhead: number | null;
   costPerLiterAt40AbvInclMonthlyOverhead: number | null;
   periodMonthlyOverheadTotal: number;
@@ -166,6 +171,10 @@ function monthlyLabourTotal(range: ReportDateRange): number {
 
 function monthlyUtilitiesTotal(range: ReportDateRange): number {
   return computeMonthlyUtilitiesTotal(range, getProductionCostMonthlyOverhead());
+}
+
+function monthlyProcessWaterOverheadTotal(range: ReportDateRange): number {
+  return computeMonthlyProcessWaterOverheadTotal(range, getProductionCostMonthlyOverhead());
 }
 
 function processWaterGallonsInRange(range: ReportDateRange): number {
@@ -308,6 +317,7 @@ export function buildProductionCostReport(
   const processWaterCost = roundMoney(processWaterGal * waterCostPerGal(settings));
   const monthlyLabour = monthlyLabourTotal(range);
   const monthlyUtilities = monthlyUtilitiesTotal(range);
+  const monthlyProcessWaterOverhead = monthlyProcessWaterOverheadTotal(range);
 
   const washCostSubtotal = roundMoney(totalMaterial);
   const avgCostPerLaaLiter = totalGpa > 0 && washCostSubtotal > 0
@@ -359,7 +369,12 @@ export function buildProductionCostReport(
   const grandMaterial = roundMoney(totalMaterial + bottlingMaterial + processWaterCost);
   /** Wash pipeline + bottling packaging (spirit on bottles is an allocation of wash cost, not additive). */
   const grandTotal = roundMoney(
-    totalWashCost + bottlingMaterial + processWaterCost + monthlyLabour + monthlyUtilities,
+    totalWashCost
+    + bottlingMaterial
+    + processWaterCost
+    + monthlyLabour
+    + monthlyUtilities
+    + monthlyProcessWaterOverhead,
   );
   const totalLaaLiters = laaLitersFromGpa(totalGpa);
   const costPerLaaLiter = totalLaaLiters > 0 && totalWashCost > 0
@@ -370,7 +385,9 @@ export function buildProductionCostReport(
     ? roundMoney(totalWashCost / proofedLiters)
     : null;
 
-  const periodMonthlyOverheadTotal = roundMoney(monthlyLabour + monthlyUtilities);
+  const periodMonthlyOverheadTotal = roundMoney(
+    monthlyLabour + monthlyUtilities + monthlyProcessWaterOverhead,
+  );
   const washCostInclOverhead = roundMoney(totalWashCost + periodMonthlyOverheadTotal);
   const costPerLaaLiterInclMonthlyOverhead = totalLaaLiters > 0 && washCostInclOverhead > 0
     ? roundMoney(washCostInclOverhead / totalLaaLiters)
@@ -405,6 +422,7 @@ export function buildProductionCostReport(
       totalWaterCost: processWaterCost,
       totalLabourCost: monthlyLabour,
       totalMonthlyOverheadCost: monthlyUtilities,
+      totalMonthlyProcessWaterOverheadCost: monthlyProcessWaterOverhead,
       totalCost: grandTotal,
       totalLaaLiters: roundMoney(totalLaaLiters),
       costPerLaaLiter,

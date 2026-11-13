@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   computeMonthlyOverheadTotal,
+  computeMonthlyProcessWaterOverheadTotal,
   effectiveMonthlyOverheadForMonth,
   overlapDaysInMonth,
 } from './monthly-overhead';
@@ -12,11 +13,13 @@ const row = (
   master_distiller: number,
   electric = 0,
   gas_propane = 0,
+  process_water = 0,
 ): ProductionCostMonthlyOverhead => ({
   year_month,
   master_distiller,
   electric,
   gas_propane,
+  process_water,
 });
 
 describe('effectiveMonthlyOverheadForMonth', () => {
@@ -97,5 +100,17 @@ describe('computeMonthlyOverheadTotal', () => {
       label: 'Jan–Feb',
     };
     expect(computeMonthlyOverheadTotal(range, withChange)).toBe(7000);
+  });
+
+  it('includes facility process water in the monthly overhead total', () => {
+    const entries = [row('2026-01', 0, 0, 0, 450)];
+    const range: ReportDateRange = {
+      preset: 'custom',
+      from: '2026-03-01',
+      to: '2026-03-31',
+      label: 'Mar',
+    };
+    expect(computeMonthlyProcessWaterOverheadTotal(range, entries)).toBe(450);
+    expect(computeMonthlyOverheadTotal(range, entries)).toBe(450);
   });
 });

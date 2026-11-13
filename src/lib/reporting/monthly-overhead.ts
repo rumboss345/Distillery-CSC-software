@@ -13,8 +13,15 @@ export function monthlyUtilitiesAmount(row: ProductionCostMonthlyOverhead): numb
     + (row.gas_propane > 0 ? row.gas_propane : 0);
 }
 
+/** Monthly facility process water (cooling, cleaning, etc.) — not per-gallon spirit water. */
+export function monthlyProcessWaterOverheadAmount(row: ProductionCostMonthlyOverhead): number {
+  return row.process_water > 0 ? row.process_water : 0;
+}
+
 export function monthlyOverheadAmount(row: ProductionCostMonthlyOverhead): number {
-  return monthlyLabourAmount(row) + monthlyUtilitiesAmount(row);
+  return monthlyLabourAmount(row)
+    + monthlyUtilitiesAmount(row)
+    + monthlyProcessWaterOverheadAmount(row);
 }
 
 /** Latest saved rate row with year_month on or before the given calendar month. */
@@ -181,6 +188,14 @@ export function computeMonthlyUtilitiesTotal(
   now = new Date(),
 ): number {
   return computeMonthlyAmountTotal(range, entries, monthlyUtilitiesAmount, now);
+}
+
+export function computeMonthlyProcessWaterOverheadTotal(
+  range: ReportDateRange,
+  entries: ProductionCostMonthlyOverhead[],
+  now = new Date(),
+): number {
+  return computeMonthlyAmountTotal(range, entries, monthlyProcessWaterOverheadAmount, now);
 }
 
 export function computeMonthlyOverheadTotal(

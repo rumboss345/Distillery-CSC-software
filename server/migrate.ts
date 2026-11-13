@@ -392,6 +392,17 @@ export async function migrateDatabase(): Promise<void> {
       );
       await client.query(`INSERT INTO schema_migrations (version) VALUES ('021')`);
     }
+    const monthlyProcessWaterOverheadMigration = await client.query(
+      'SELECT version FROM schema_migrations WHERE version = $1',
+      ['022'],
+    );
+    if (monthlyProcessWaterOverheadMigration.rowCount === 0) {
+      await client.query(`
+        ALTER TABLE production_cost_monthly_overhead
+        ADD COLUMN IF NOT EXISTS process_water DOUBLE PRECISION NOT NULL DEFAULT 0
+      `);
+      await client.query(`INSERT INTO schema_migrations (version) VALUES ('022')`);
+    }
     await client.query(`
       INSERT INTO inventory_categories (name)
       SELECT 'botanicals'
