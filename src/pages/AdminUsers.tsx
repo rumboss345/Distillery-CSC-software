@@ -333,7 +333,8 @@ export function AdminUsers() {
   }
 
   function formatPermissions(u: AuthUser) {
-    if (isAdminRole(u.role)) return 'Full access';
+    if (isOwnerRole(u.role)) return 'Owner access';
+    if (isAdminRole(u.role)) return 'Administrator access';
     if (u.permissions.length === 0) return 'No access';
     return `${u.permissions.length} area${u.permissions.length === 1 ? '' : 's'}`;
   }
