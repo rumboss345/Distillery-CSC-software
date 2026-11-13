@@ -4,6 +4,7 @@ import {
   botanicalInventoryAdjustments,
   botanicalsFromRecipe,
   formatGinBotanicalLine,
+  formatGinBotanicalLineCompact,
   formatGinBotanicalsSummary,
   ginBotanicalPlaceError,
   normalizeBotanicalPlace,
@@ -25,6 +26,8 @@ describe('gin botanicals', () => {
   it('formats the weight as the amount, and copies a saved recipe', () => {
     expect(formatGinBotanicalLine({ name: 'Juniper', amount: 2, weight: 500, weight_unit: 'g', place: 'pot' }))
       .toBe('Juniper · 500 grams · in the pot');
+    expect(formatGinBotanicalLineCompact({ name: 'Juniper', amount: 2, weight: 500, weight_unit: 'g', place: 'pot' }))
+      .toBe('Juniper · 500 grams (pot)');
     expect(formatGinBotanicalsSummary([
       { name: 'Juniper', amount: 2, weight: 500, weight_unit: 'g', place: 'basket' },
     ])).toContain('in the basket');

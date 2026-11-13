@@ -9,7 +9,8 @@ import { Modal } from './Modal';
 import { AssigneeCell, AssigneeSelect } from './AssigneeSelect';
 import { useAuth } from '../context/AuthContext';
 import { defaultAssignee, type AssignedEmployee } from '../lib/assignee';
-import { botanicalsFromRecipe, formatGinBotanicalsSummary } from '../lib/gin-botanicals';
+import { botanicalHasMeasure, botanicalsFromRecipe } from '../lib/gin-botanicals';
+import { GinBotanicalsSummary } from './GinBotanicalsSummary';
 import type { GinBotanicalInput, GinRecipe } from '../types';
 
 export function GinRecipesTab({
@@ -113,7 +114,13 @@ export function GinRecipesTab({
                 >
                   <td><strong>{recipe.name}</strong></td>
                   <td><AssigneeCell name={recipe.assigned_user_name} /></td>
-                  <td>{formatGinBotanicalsSummary(recipe.botanicals) || '—'}</td>
+                  <td className="gin-recipe-botanicals-cell">
+                    {recipe.botanicals.some(botanicalHasMeasure) ? (
+                      <GinBotanicalsSummary lines={recipe.botanicals} />
+                    ) : (
+                      '—'
+                    )}
+                  </td>
                   <td className="td-actions" onClick={(e) => e.stopPropagation()}>
                     <button type="button" className="btn btn-sm btn-ghost" onClick={() => openEdit(recipe)}>Edit</button>
                     <button type="button" className="btn btn-sm btn-ghost" onClick={() => handleDelete(recipe.id)}>Delete</button>
@@ -128,7 +135,10 @@ export function GinRecipesTab({
         <div className="detail-panel card" style={{ marginTop: '1rem' }}>
           <h3>{selected.name}</h3>
           <p><strong>Employee:</strong> <AssigneeCell name={selected.assigned_user_name} /></p>
-          <p>{formatGinBotanicalsSummary(selected.botanicals) || 'No botanicals.'}</p>
+          <GinBotanicalsSummary lines={selected.botanicals} />
+          {!selected.botanicals.some(botanicalHasMeasure) && (
+            <p className="field-hint">No botanicals.</p>
+          )}
           {selected.notes ? <p className="field-hint">{selected.notes}</p> : null}
         </div>
       )}
