@@ -22,12 +22,60 @@ import type { ProductionCostMonthlyOverhead, ProductionCostSettings } from '../.
 
 function money(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return '—';
-  return `$${value.toFixed(2)}`;
+  return `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function num(value: number | null | undefined, digits = 1): string {
   if (value == null || !Number.isFinite(value)) return '—';
-  return value.toFixed(digits);
+  return value.toLocaleString('en-US', {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
+}
+
+function laaLiters(value: number, digits = 2): string {
+  return `${num(value, digits)} L LAA`;
+}
+
+function CostingSpendLines({
+  lines,
+}: {
+  lines: { label: string; amount: string }[];
+}) {
+  return (
+    <ul className="costing-spend-lines">
+      {lines.map((line) => (
+        <li key={line.label}>
+          <span>{line.label}</span>
+          <span className="num">{line.amount}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function CostingRatePair({
+  laa,
+  at40,
+  note,
+}: {
+  laa: string;
+  at40: string;
+  note?: string;
+}) {
+  return (
+    <div className="costing-rate-pair">
+      <div className="costing-rate-block">
+        <div className="costing-rate-label">Per litre (LAA)</div>
+        <div className="costing-rate-value accent">{laa}</div>
+      </div>
+      <div className="costing-rate-block">
+        <div className="costing-rate-label">Per litre at 40% ABV</div>
+        <div className="costing-rate-value">{at40}</div>
+      </div>
+      {note ? <p className="costing-rate-note field-hint">{note}</p> : null}
+    </div>
+  );
 }
 
 function parseMoneyInput(raw: string): number {
@@ -345,136 +393,153 @@ export function CostingReport() {
         </div>
       )}
 
-      <div className="card-grid" style={{ marginBottom: '1.5rem' }}>
-        <div className="stat-card">
-          <div className="label">Cost per litre (LAA)</div>
-          <div className="value accent">{money(summary.costPerLaaLiter)}</div>
-          <div className="sub">Wash through distillation · {num(summary.totalLaaLiters, 2)} L LAA in period</div>
-        </div>
-        <div className="stat-card">
-          <div className="label">Cost per litre at 40% ABV</div>
-          <div className="value">{money(summary.costPerLiterAt40Abv)}</div>
-          <div className="sub">Same production cost on a 40% ABV basis</div>
-        </div>
-        <div className="stat-card">
-          <div className="label">Production spend</div>
-          <div className="value">{money(summary.totalCost)}</div>
-          <div className="sub">
-            Materials {money(summary.totalMaterialCost)}
-            {summary.totalWaterCost > 0 ? ` (incl. water ${money(summary.totalWaterCost)})` : ''}
-            {' · '}
-            Total labour {money(summary.totalLabourCost)}
-            {summary.totalMonthlyOverheadCost > 0 ? ` · Electric & gas ${money(summary.totalMonthlyOverheadCost)}` : ''}
-            {summary.totalMonthlyProcessWaterOverheadCost > 0
-              ? ` · Process water ${money(summary.totalMonthlyProcessWaterOverheadCost)}`
-              : ''}
+      <section className="costing-report-section" data-testid="costing-wash-distillation-summary">
+        <h3 className="section-title costing-section-title">Wash &amp; distillation</h3>
+        <p className="field-hint costing-section-lead">
+          Rates use wash and distillation materials and process water only (hearts LAA in this period). Facility overhead is below.
+        </p>
+        <CostingRatePair
+          laa={money(summary.costPerLaaLiter)}
+          at40={money(summary.costPerLiterAt40Abv)}
+          note={`Hearts: ${laaLiters(summary.totalLaaLiters)} · Pipeline spend ${money(summary.totalWashPipelineCost)}`}
+        />
+        <div className="costing-summary-columns">
+          <div>
+            <h4 className="costing-block-title">All spend in period</h4>
+            <CostingSpendLines
+              lines={[
+                { label: 'Materials', amount: money(summary.totalMaterialCost) },
+                ...(summary.totalWaterCost > 0
+                  ? [{ label: 'Process water (washes & proofing)', amount: money(summary.totalWaterCost) }]
+                  : []),
+                { label: 'Labour', amount: money(summary.totalLabourCost) },
+                ...(summary.totalMonthlyOverheadCost > 0
+                  ? [{ label: 'Electric & gas', amount: money(summary.totalMonthlyOverheadCost) }]
+                  : []),
+                ...(summary.totalMonthlyProcessWaterOverheadCost > 0
+                  ? [{ label: 'Facility process water', amount: money(summary.totalMonthlyProcessWaterOverheadCost) }]
+                  : []),
+                { label: 'Total', amount: money(summary.totalCost) },
+              ]}
+            />
           </div>
-        </div>
-        <div className="stat-card">
-          <div className="label">Avg yields</div>
-          <div className="value">{num(summary.avgDistillationYieldPct)}%</div>
-          <div className="sub">
-            Distillation GPA / sugar lbs
+          <div>
+            <h4 className="costing-block-title">Average yields</h4>
+            <p className="costing-yield-stat">
+              <span className="costing-yield-value">{num(summary.avgDistillationYieldPct)}%</span>
+              <span className="field-hint">Distillation GPA ÷ sugar (lbs)</span>
+            </p>
             {summary.avgFermentBrixDrop != null && (
-              <> · Ferment ΔBrix {num(summary.avgFermentBrixDrop, 1)}</>
+              <p className="costing-yield-stat">
+                <span className="costing-yield-value">Δ {num(summary.avgFermentBrixDrop, 1)}°</span>
+                <span className="field-hint">Average ferment Brix drop</span>
+              </p>
             )}
           </div>
         </div>
-      </div>
+      </section>
 
-      <p className="text-muted" style={{ margin: '-0.5rem 0 0.75rem', fontSize: '0.9rem' }}>
-        Including monthly overhead (labour, electric, gas, and facility process water in this period)
-      </p>
-      <div className="card-grid" style={{ marginBottom: '1.5rem' }}>
-        <div className="stat-card">
-          <div className="label">Cost per litre (LAA)</div>
-          <div className="value accent">{money(summary.costPerLaaLiterInclMonthlyOverhead)}</div>
-          <div className="sub">
-            Wash, distillation, and overhead · {num(summary.totalLaaLiters, 2)} L LAA
-            {summary.periodMonthlyOverheadTotal > 0
-              ? ` · Overhead ${money(summary.periodMonthlyOverheadTotal)}`
-              : ''}
-          </div>
-        </div>
-        <div className="stat-card">
-          <div className="label">Cost per litre at 40% ABV</div>
-          <div className="value">{money(summary.costPerLiterAt40AbvInclMonthlyOverhead)}</div>
-          <div className="sub">Same basis on 40% ABV bottled strength</div>
-        </div>
-      </div>
+      <section className="costing-report-section" data-testid="costing-overhead-summary">
+        <h3 className="section-title costing-section-title">Including facility overhead</h3>
+        <p className="field-hint costing-section-lead">
+          Same hearts base, with this period&apos;s labour, utilities, and facility process water prorated in.
+        </p>
+        <CostingRatePair
+          laa={money(summary.costPerLaaLiterInclMonthlyOverhead)}
+          at40={money(summary.costPerLiterAt40AbvInclMonthlyOverhead)}
+          note={
+            summary.periodMonthlyOverheadTotal > 0
+              ? `Overhead in period: ${money(summary.periodMonthlyOverheadTotal)}`
+              : undefined
+          }
+        />
+        {summary.periodMonthlyOverheadTotal > 0 && (
+          <CostingSpendLines
+            lines={[
+              { label: 'Labour', amount: money(summary.totalLabourCost) },
+              { label: 'Electric & gas', amount: money(summary.totalMonthlyOverheadCost) },
+              { label: 'Facility process water', amount: money(summary.totalMonthlyProcessWaterOverheadCost) },
+              { label: 'Overhead subtotal', amount: money(summary.periodMonthlyOverheadTotal) },
+            ]}
+          />
+        )}
+      </section>
 
-      <div
-        className="card"
-        style={{ marginBottom: '1.5rem', padding: '1rem 1.25rem' }}
+      <section
+        className="costing-report-section costing-report-section--full"
         data-testid="costing-full-production-box"
       >
-        <h3 className="section-title" style={{ marginTop: 0, marginBottom: '0.35rem' }}>
-          Full production cost
-        </h3>
-        <p className="field-hint" style={{ marginTop: 0 }}>
-          All spend in period — wash materials, proofing water, bottles and labels, labour, utilities, and facility
-          water — compared to hearts LAA, still balances, and recorded alcohol loss or gain.
+        <h3 className="section-title costing-section-title">Full production cost</h3>
+        <p className="field-hint costing-section-lead">
+          All period spend (wash, packaging, overhead) on hearts LAA, still charges, and collections. Bottling spirit is allocated from wash/distillation — not counted twice.
         </p>
-        <div className="card-grid" style={{ marginBottom: '0.75rem' }}>
-          <div className="stat-card">
-            <div className="label">Cost per litre (LAA)</div>
-            <div className="value accent">{money(summary.costPerLaaLiterFullProduction)}</div>
-            <div className="sub">
-              On {num(summary.totalLaaLiters, 2)} L hearts LAA in period
-            </div>
+        <div className="costing-full-rates">
+          <div className="costing-rate-block">
+            <div className="costing-rate-label">Per litre LAA (hearts)</div>
+            <div className="costing-rate-value accent">{money(summary.costPerLaaLiterFullProduction)}</div>
+            <p className="field-hint">{laaLiters(summary.totalLaaLiters)} hearts</p>
           </div>
-          <div className="stat-card">
-            <div className="label">Cost per litre at 40% ABV</div>
-            <div className="value">{money(summary.costPerLiterAt40AbvFullProduction)}</div>
-            <div className="sub">All-in spend on bottled-strength litres</div>
+          <div className="costing-rate-block">
+            <div className="costing-rate-label">Per litre at 40% ABV</div>
+            <div className="costing-rate-value">{money(summary.costPerLiterAt40AbvFullProduction)}</div>
+            <p className="field-hint">All-in on proofed litres</p>
           </div>
-          <div className="stat-card">
-            <div className="label">On alcohol charged</div>
-            <div className="value">{money(summary.costPerLaaLiterFullOnCharged)}</div>
-            <div className="sub">
+          <div className="costing-rate-block">
+            <div className="costing-rate-label">Per LAA charged</div>
+            <div className="costing-rate-value">{money(summary.costPerLaaLiterFullOnCharged)}</div>
+            <p className="field-hint">
               {summary.alcoholChargedLaaLiters > 0
-                ? `${num(summary.alcoholChargedLaaLiters, 2)} L LAA into stills`
-                : 'Record distillation alcohol balance for this rate'}
-            </div>
+                ? laaLiters(summary.alcoholChargedLaaLiters) + ' into stills'
+                : 'Record still charges for this rate'}
+            </p>
           </div>
-          <div className="stat-card">
-            <div className="label">On alcohol collected</div>
-            <div className="value">{money(summary.costPerLaaLiterFullOnCollected)}</div>
-            <div className="sub">
+          <div className="costing-rate-block">
+            <div className="costing-rate-label">Per LAA collected</div>
+            <div className="costing-rate-value">{money(summary.costPerLaaLiterFullOnCollected)}</div>
+            <p className="field-hint">
               {summary.alcoholCollectedLaaLiters > 0
-                ? `${num(summary.alcoholCollectedLaaLiters, 2)} L LAA collected from stills`
-                : 'Record distillation cuts and balance for this rate'}
-            </div>
+                ? laaLiters(summary.alcoholCollectedLaaLiters) + ' from stills'
+                : 'Record cuts and balance for this rate'}
+            </p>
           </div>
         </div>
-        <div className="card-grid">
-          <div className="stat-card">
-            <div className="label">All-in spend</div>
-            <div className="value">{money(summary.totalCost)}</div>
-            <div className="sub">
-              Wash &amp; proofing {money(summary.totalWashPipelineCost)}
-              {' · '}
-              Packaging {money(summary.totalBottlingPackagingCost)}
-              {summary.periodMonthlyOverheadTotal > 0
-                ? ` · Overhead ${money(summary.periodMonthlyOverheadTotal)}`
-                : ''}
-            </div>
+        <div className="costing-summary-columns">
+          <div>
+            <h4 className="costing-block-title">Spend breakdown</h4>
+            <CostingSpendLines
+              lines={[
+                { label: 'Wash & proofing', amount: money(summary.totalWashPipelineCost) },
+                { label: 'Packaging (bottles & labels)', amount: money(summary.totalBottlingPackagingCost) },
+                ...(summary.periodMonthlyOverheadTotal > 0
+                  ? [{ label: 'Facility overhead', amount: money(summary.periodMonthlyOverheadTotal) }]
+                  : []),
+                { label: 'All-in total', amount: money(summary.totalCost) },
+              ]}
+            />
           </div>
-          <div className="stat-card">
-            <div className="label">Alcohol loss / gain</div>
-            <div className="value" style={{ fontSize: '1.15rem', lineHeight: 1.35 }}>
-              {formatNetAlcoholLossGain(summary.productionAlcoholBalance.distillationNetAlcoholGal)}
-            </div>
-            <div className="sub">
-              {formatBottlingAlcoholVariance(summary.productionAlcoholBalance.bottlingAlcoholVarianceGal)
-                || 'No bottling alcohol variance in period'}
-              {summary.productionAlcoholBalance.bottlingRunsWithVariance > 0
-                ? ` · ${summary.productionAlcoholBalance.bottlingRunsWithVariance} bottling run(s)`
-                : ''}
-            </div>
+          <div>
+            <h4 className="costing-block-title">Alcohol balance</h4>
+            <dl className="costing-balance-lines">
+              <div>
+                <dt>Distillation</dt>
+                <dd>{formatNetAlcoholLossGain(summary.productionAlcoholBalance.distillationNetAlcoholGal)}</dd>
+              </div>
+              <div>
+                <dt>Bottling</dt>
+                <dd>
+                  {formatBottlingAlcoholVariance(summary.productionAlcoholBalance.bottlingAlcoholVarianceGal)
+                    || 'No variance in period'}
+                  {summary.productionAlcoholBalance.bottlingRunsWithVariance > 0
+                    ? ` (${summary.productionAlcoholBalance.bottlingRunsWithVariance} run${
+                      summary.productionAlcoholBalance.bottlingRunsWithVariance === 1 ? '' : 's'
+                    })`
+                    : ''}
+                </dd>
+              </div>
+            </dl>
           </div>
         </div>
-      </div>
+      </section>
 
       <CollapsibleSection
         title="Wash & distillation batches"
