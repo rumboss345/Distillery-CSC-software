@@ -12,6 +12,10 @@ import {
 import { formatDateDisplay } from '../../lib/date-input';
 import { isOwnerRole } from '../../lib/roles';
 import { buildProductionCostReport } from '../../lib/reporting/production-costing';
+import {
+  formatBottlingAlcoholVariance,
+  formatNetAlcoholLossGain,
+} from '../../lib/reporting/production-alcohol-balance';
 import { useReportContext } from './report-context';
 import { CollapsibleSection } from '../../components/CollapsibleSection';
 import type { ProductionCostMonthlyOverhead, ProductionCostSettings } from '../../types';
@@ -396,6 +400,48 @@ export function CostingReport() {
           <div className="label">Cost per litre at 40% ABV</div>
           <div className="value">{money(summary.costPerLiterAt40AbvInclMonthlyOverhead)}</div>
           <div className="sub">Same basis on 40% ABV bottled strength</div>
+        </div>
+      </div>
+
+      <p className="text-muted" style={{ margin: '-0.5rem 0 0.75rem', fontSize: '0.9rem' }}>
+        Full production (all spend on hearts LAA, with recorded loss and gain)
+      </p>
+      <div className="card-grid" style={{ marginBottom: '1.5rem' }}>
+        <div className="stat-card">
+          <div className="label">Cost per litre (LAA)</div>
+          <div className="value accent">{money(summary.costPerLaaLiterFullProduction)}</div>
+          <div className="sub">
+            {money(summary.totalCost)} total spend · packaging {money(summary.totalBottlingPackagingCost)}
+            {' · '}
+            {num(summary.totalLaaLiters, 2)} L hearts LAA
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="label">Cost per litre at 40% ABV</div>
+          <div className="value">{money(summary.costPerLiterAt40AbvFullProduction)}</div>
+          <div className="sub">Includes bottles, labels, process water, and monthly overhead</div>
+        </div>
+        <div className="stat-card">
+          <div className="label">On alcohol charged</div>
+          <div className="value">{money(summary.costPerLaaLiterFullOnCharged)}</div>
+          <div className="sub">
+            {summary.alcoholChargedLaaLiters > 0
+              ? `${num(summary.alcoholChargedLaaLiters, 2)} L LAA charged in still runs`
+              : 'Record distillation alcohol balance for this rate'}
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="label">Alcohol loss / gain</div>
+          <div className="value" style={{ fontSize: '1.15rem', lineHeight: 1.35 }}>
+            {formatNetAlcoholLossGain(summary.productionAlcoholBalance.distillationNetAlcoholGal)}
+          </div>
+          <div className="sub">
+            {formatBottlingAlcoholVariance(summary.productionAlcoholBalance.bottlingAlcoholVarianceGal)
+              || 'No bottling alcohol variance in period'}
+            {summary.productionAlcoholBalance.bottlingRunsWithVariance > 0
+              ? ` · ${summary.productionAlcoholBalance.bottlingRunsWithVariance} bottling run(s)`
+              : ''}
+          </div>
         </div>
       </div>
 
