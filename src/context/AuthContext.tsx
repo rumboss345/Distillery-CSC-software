@@ -19,7 +19,7 @@ import {
   type ProcessStageKey,
   userHasPermission,
 } from '../lib/permissions';
-import { isAdminRole } from '../lib/roles';
+import { hasFullProductionAccess } from '../lib/roles';
 import { ensureSharedDatabase } from '../db/database';
 import { setMutationActorRole } from '../db/mutation-actor';
 
@@ -87,7 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const hasProcessAssignment = useCallback(
     (key: ProcessStageKey) => {
       if (!user) return false;
-      if (isAdminRole(user.role)) return true;
+      if (hasFullProductionAccess(user.role)) return true;
       return user.processAssignments?.includes(key) ?? false;
     },
     [user],

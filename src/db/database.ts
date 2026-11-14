@@ -1731,6 +1731,7 @@ function migrateAdvancedBlending(): void {
   migrateInventoryUsageLog();
   migrateHoldingTankTransferLiquidLabel();
   migrateDistillerySettings();
+  migrateBottlingMeasuredAbvColumns();
 }
 
 function migrateDistillerySettings(): void {
@@ -1843,6 +1844,16 @@ function migrateDistillationAlcoholLossColumns(): void {
   addColumnIfMissing('distillation_runs', 'alcohol_collected_gal', 'REAL');
   addColumnIfMissing('distillation_runs', 'alcohol_loss_gal', 'REAL');
   addColumnIfMissing('distillation_runs', 'alcohol_charge_basis', 'TEXT');
+}
+
+/** Bottled-product ABV check and the operator on the run. Existing runs stay blank. */
+function migrateBottlingMeasuredAbvColumns(): void {
+  if (!db) return;
+  addColumnIfMissing('bottling_runs', 'measured_abv', 'REAL');
+  addColumnIfMissing('bottling_runs', 'measured_abv_observed', 'REAL');
+  addColumnIfMissing('bottling_runs', 'measured_temp_f', 'REAL');
+  addColumnIfMissing('bottling_runs', 'assigned_user_id', 'INTEGER');
+  addColumnIfMissing('bottling_runs', 'assigned_user_name', 'TEXT');
 }
 
 const DB_STORAGE_KEY = 'distillery-tracker-db-v5';

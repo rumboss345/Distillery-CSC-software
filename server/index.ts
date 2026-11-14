@@ -70,6 +70,8 @@ import {
   OWNER_RESET_DATA_ERROR,
   isAdminRole,
   isOwnerRole,
+  isStaffRole,
+  type AuthRole,
   isReservedAuthEmail,
   parseCreatedRole,
   RESERVED_AUTH_EMAIL_ERROR,
@@ -126,7 +128,7 @@ if (isProduction && !process.env.APP_URL) {
 interface AuthPayload {
   userId: number;
   email: string;
-  role: 'owner' | 'admin' | 'user';
+  role: AuthRole;
 }
 
 const ADMIN_APPROVAL_PURPOSE = 'admin-approval';
@@ -652,7 +654,7 @@ app.post('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) =
       ? req.body.processAssignments.map(String)
       : [],
   );
-  let role: 'owner' | 'admin' | 'user';
+  let role: AuthRole;
   try {
     role = parseCreatedRole(req.body.role, req.user!.role);
   } catch (err) {
@@ -711,6 +713,7 @@ app.patch('/api/admin/users/:id', authMiddleware, adminMiddleware, async (req, r
     res.status(400).json({ error: 'Password must be at least 8 characters' });
     return;
   }
+  const role = isStaffRole(req.body.role) ? req.body.role : undefined;
 
   try {
     const user = await updateUserByAdmin(id, {
@@ -718,6 +721,7 @@ app.patch('/api/admin/users/:id', authMiddleware, adminMiddleware, async (req, r
       permissions,
       processAssignments,
       password: password || undefined,
+      role,
     }, req.user!.role);
     if (!user) {
       res.status(404).json({ error: 'User not found or cannot be modified' });

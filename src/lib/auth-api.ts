@@ -160,6 +160,7 @@ export async function updateAdminUser(
     permissions?: PermissionKey[];
     processAssignments?: ProcessStageKey[];
     password?: string;
+    role?: 'manager' | 'user';
   },
 ) {
   return apiFetch<{ message: string; user: AuthUser }>(`/api/admin/users/${id}`, {

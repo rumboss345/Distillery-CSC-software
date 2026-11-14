@@ -164,6 +164,7 @@ export const PRODUCTION_MUTATIONS: Record<string, ProductionMutation> = {
   moveEquipmentToPlan: { access: 'equipment', table: 'floor_equipment', idIndex: 0 },
   deleteFloorEquipment: { access: 'admin', table: 'floor_equipment', idIndex: 0 },
   saveFermentationReadyMaxBrix: { access: 'admin' },
+  saveDashboardThresholds: { access: 'admin' },
   emptyAllHoldingTanks: { access: 'owner' },
   saveProductionCostSettings: { access: 'owner' },
   saveProductionCostMonthlyOverhead: { access: 'owner' },
@@ -177,6 +178,7 @@ export function userMayMutate(
   if (access === 'owner') return role === 'owner';
   if (role === 'admin' || role === 'owner') return true;
   if (access === 'admin') return false;
+  if (role === 'manager') return true;
   const required = Array.isArray(access) ? access : [access];
   return required.some((key) => permissions.includes(key));
 }

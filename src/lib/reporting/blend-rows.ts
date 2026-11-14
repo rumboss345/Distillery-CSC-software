@@ -1,6 +1,6 @@
 import { getBlendProducts, getBlendSpiritSources } from '../../db/queries';
 import { compareStoredDatesDesc } from '../date-input';
-import { laaGalFromVolumeAbv, roundVolume, safePercent } from './alcohol-units';
+import { laaGalFromVolumeAbv, roundAbv, roundVolume, safePercent } from './alcohol-units';
 import { eventInReportRange, type ReportDateRange } from './period';
 
 export interface BlendReportRow {
@@ -18,7 +18,16 @@ export interface BlendReportRow {
   final_laa_gal: number;
   theoretical_volume_gal: number | null;
   theoretical_abv: number | null;
+  /** Measured finished volume when entered, else the recorded final volume. */
+  actual_volume_gal: number;
+  /** Actual minus planned (theoretical) volume. */
+  volume_variance_gal: number | null;
   volume_variance_pct: number | null;
+  /** Target ABV of the blend, else the planned (theoretical) ABV. */
+  planned_abv: number | null;
+  /** Measured ABV when entered, else the recorded final ABV. */
+  measured_abv: number | null;
+  abv_variance_points: number | null;
   output_tank: string;
   operator: string;
 }
@@ -42,10 +51,17 @@ export function buildBlendReportRows(range: ReportDateRange): BlendReportRow[] {
     const finalVol = b.final_volume_gal ?? 0;
     const finalAbv = b.final_abv ?? 0;
     const theoVol = b.theoretical_volume_gal;
+    const actualVol = b.actual_volume_gal != null && b.actual_volume_gal > 0 ? b.actual_volume_gal : finalVol;
     const volVarPct =
       theoVol != null && theoVol > 0
-        ? safePercent(finalVol - theoVol, theoVol)
+        ? safePercent(actualVol - theoVol, theoVol)
         : null;
+    const plannedAbv = b.target_abv != null && b.target_abv > 0
+      ? b.target_abv
+      : b.theoretical_abv != null && b.theoretical_abv > 0 ? b.theoretical_abv : null;
+    const measuredAbv = b.actual_abv != null && b.actual_abv > 0
+      ? b.actual_abv
+      : finalAbv > 0 ? finalAbv : null;
 
     rows.push({
       blend_id: b.id,
@@ -62,7 +78,12 @@ export function buildBlendReportRows(range: ReportDateRange): BlendReportRow[] {
       final_laa_gal: laaGalFromVolumeAbv(finalVol, finalAbv),
       theoretical_volume_gal: theoVol,
       theoretical_abv: b.theoretical_abv,
+      actual_volume_gal: roundVolume(actualVol),
+      volume_variance_gal: theoVol != null && theoVol > 0 ? roundVolume(actualVol - theoVol) : null,
       volume_variance_pct: volVarPct,
+      planned_abv: plannedAbv,
+      measured_abv: measuredAbv,
+      abv_variance_points: plannedAbv != null && measuredAbv != null ? roundAbv(measuredAbv - plannedAbv) : null,
       output_tank: b.output_tank_name ?? '—',
       operator: b.assigned_user_name?.trim() || '—',
     });

@@ -500,6 +500,14 @@ export interface BottlingRun {
   bottle_size_ml: number;
   bottle_count: number;
   final_abv: number;
+  /** Bottled-product ABV checked on the line, corrected to 60 °F. Blank when no check was entered. */
+  measured_abv?: number | null;
+  /** Hydrometer reading before temperature correction. */
+  measured_abv_observed?: number | null;
+  /** Liquid temperature (°F) for the measured ABV. */
+  measured_temp_f?: number | null;
+  assigned_user_id?: number | null;
+  assigned_user_name?: string | null;
   product_name: string;
   lot_number: string;
   notes: string;

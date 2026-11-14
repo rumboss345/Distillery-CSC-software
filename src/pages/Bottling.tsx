@@ -2,6 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useEquipmentReturn } from '../lib/equipment-return';
 import { useAuth } from '../context/AuthContext';
+import { AbvTemperatureInput, correctedAbvFromInputs } from '../components/AbvTemperatureInput';
+import { AssigneeSelect } from '../components/AssigneeSelect';
+import { defaultAssignee } from '../lib/assignee';
 import { RecentCompletedNote } from '../components/RecentCompletedNote';
 import { StatusBadge } from '../components/StatusBadge';
 import { StatusDateLog } from '../components/StatusDateLog';
@@ -155,6 +158,11 @@ const emptyRun = (): RunHeaderForm => ({
   bottle_size_ml: 750,
   bottle_count: 0,
   final_abv: 0,
+  measured_abv: null,
+  measured_abv_observed: null,
+  measured_temp_f: null,
+  assigned_user_id: null,
+  assigned_user_name: null,
   product_name: '',
   lot_number: '',
   notes: '',
@@ -212,6 +220,8 @@ export function Bottling() {
   const [lines, setLines] = useState<BottlingRunLineInput[]>([emptyLine()]);
   const [sourceType, setSourceType] = useState<BottlingSourceType>('none');
   const [varianceReason, setVarianceReason] = useState('');
+  const [measuredAbvInput, setMeasuredAbvInput] = useState('');
+  const [measuredTempInput, setMeasuredTempInput] = useState('');
   const [returnLines, setReturnLines] = useState<BottlingRunReturnInput[]>([]);
   /** When true, leftover spirit defaults to the Spirit Source tank instead of variance. */
   const [returnLeaveInSource, setReturnLeaveInSource] = useState(true);
@@ -421,9 +431,12 @@ export function Bottling() {
     setEditId(undefined);
     setForm({
       ...emptyRun(),
+      ...defaultAssignee(user),
       status,
       bottling_date: planDate ?? emptyRun().bottling_date,
     });
+    setMeasuredAbvInput('');
+    setMeasuredTempInput('');
     setLines([emptyLine()]);
     setReturnLines([]);
     setReturnLeaveInSource(true);
@@ -448,11 +461,14 @@ export function Bottling() {
       setEditId(undefined);
       setForm({
         ...emptyRun(),
+        ...defaultAssignee(user),
         status: 'running',
         source_holding_tank_equipment_id: tankId,
         product_name: tankContentsPhrase(tankId) ?? '',
         final_abv: roundAbv(contents.abv),
       });
+      setMeasuredAbvInput('');
+      setMeasuredTempInput('');
       setLines([emptyLine()]);
       setReturnLines([]);
       setReturnLeaveInSource(true);
@@ -498,11 +514,21 @@ export function Bottling() {
       bottle_size_ml: run.bottle_size_ml,
       bottle_count: run.bottle_count,
       final_abv: roundAbv(run.final_abv),
+      measured_abv: run.measured_abv ?? null,
+      measured_abv_observed: run.measured_abv_observed ?? null,
+      measured_temp_f: run.measured_temp_f ?? null,
+      assigned_user_id: run.assigned_user_id ?? null,
+      assigned_user_name: run.assigned_user_name ?? null,
       product_name: run.product_name,
       lot_number: run.lot_number,
       notes: run.notes,
       status: normalizeBottlingStatus(run.status),
     });
+    {
+      const observed = run.measured_abv_observed ?? run.measured_abv;
+      setMeasuredAbvInput(observed != null && observed > 0 ? String(observed) : '');
+      setMeasuredTempInput(run.measured_temp_f != null ? String(run.measured_temp_f) : '');
+    }
     setLines(linesFromRun(run));
     setReturnLines(returnsFromRun(run));
     setReturnLeaveInSource(
@@ -756,8 +782,14 @@ export function Bottling() {
       }
     }
     try {
+      const measuredObserved = parseFloat(measuredAbvInput);
+      const measuredTemp = parseFloat(measuredTempInput);
+      const hasMeasured = bottlingStatus !== 'planned' && Number.isFinite(measuredObserved) && measuredObserved > 0;
       saveBottlingRun({
         ...form,
+        measured_abv: hasMeasured ? correctedAbvFromInputs(measuredAbvInput, measuredTempInput) : null,
+        measured_abv_observed: hasMeasured ? measuredObserved : null,
+        measured_temp_f: hasMeasured && Number.isFinite(measuredTemp) ? measuredTemp : null,
         status: bottlingStatus,
         source_barrel_id: sourceType === 'barrel' ? form.source_barrel_id : null,
         source_holding_tank_equipment_id: sourceType === 'tank' ? form.source_holding_tank_equipment_id : null,
@@ -1365,7 +1397,32 @@ export function Bottling() {
                   setForm({ ...form, final_abv: limited.trim() === '' || !Number.isFinite(parsed) ? 0 : roundAbv(parsed) });
                 }}
               />
+              <p className="field-hint">Planned ABV for the product. Used for the bottled pure alcohol.</p>
             </div>
+            <div className="form-group">
+              <label>Assigned employee</label>
+              <AssigneeSelect
+                value={{
+                  assigned_user_id: form.assigned_user_id ?? null,
+                  assigned_user_name: form.assigned_user_name ?? null,
+                }}
+                onChange={(assignee) => setForm({ ...form, ...assignee })}
+              />
+            </div>
+            {bottlingStatus !== 'planned' && (
+              <div className="form-group full-width">
+                <AbvTemperatureInput
+                  abvLabel="Measured bottled ABV (% at sample temp, optional)"
+                  abvValue={measuredAbvInput}
+                  temperatureValue={measuredTempInput}
+                  onAbvChange={setMeasuredAbvInput}
+                  onTemperatureChange={setMeasuredTempInput}
+                />
+                <p className="field-hint">
+                  A hydrometer check of the bottled product. It is stored corrected to 60 °F and compared with the final ABV on the dashboard.
+                </p>
+              </div>
+            )}
             {sourceType === 'tank' && (volumeNeedsReason || alcoholNeedsReason) && (
               <div className="form-group full-width">
                 <label htmlFor="bottling-variance-why">Why the volume or alcohol differs from the tank</label>

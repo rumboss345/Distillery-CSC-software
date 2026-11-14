@@ -1,4 +1,4 @@
-import { isAdminRole } from './roles';
+import { hasFullProductionAccess } from './roles';
 
 export const PERMISSION_KEYS = [
   'dashboard',
@@ -68,7 +68,7 @@ export function userHasPermission(
   permissions: string[] | undefined,
   key: PermissionKey,
 ): boolean {
-  if (isAdminRole(role)) return true;
+  if (hasFullProductionAccess(role)) return true;
   return permissions?.includes(key) ?? false;
 }
 
