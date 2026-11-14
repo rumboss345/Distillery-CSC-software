@@ -141,7 +141,11 @@ export interface TodayProduction {
 
 export function buildTodayProduction(events: CalendarEvent[], today: string): TodayProduction {
   const [day] = buildSevenDaySchedule(events, today, 1);
-  const jobs = day?.jobs ?? [];
+  return summarizeTodayJobs(day?.jobs ?? []);
+}
+
+/** Groups the jobs on today's schedule row. */
+export function summarizeTodayJobs(jobs: ScheduleJob[]): TodayProduction {
   const inProgress = jobs.filter((job) => job.state === 'in_progress');
   const plannedToday = jobs.filter((job) => job.state === 'planned');
   const overdue = jobs.filter((job) => job.state === 'overdue');
@@ -168,4 +172,12 @@ export function filterJobs(
     if (!name) return true;
     return job.operator.trim().toLowerCase() === name || job.operator === 'Unassigned';
   });
+}
+
+export function filterScheduleDays(
+  days: ScheduleDay[],
+  hasPermission: (key: PermissionKey) => boolean,
+  onlyOperator?: string | null,
+): ScheduleDay[] {
+  return days.map((day) => ({ ...day, jobs: filterJobs(day.jobs, hasPermission, onlyOperator) }));
 }

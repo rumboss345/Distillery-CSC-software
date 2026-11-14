@@ -119,10 +119,17 @@ function signed(value: number, decimals: number): string {
   return `${value > 0 ? '+' : ''}${value.toFixed(decimals)}`;
 }
 
-/** Items at or below their reorder level. Zero or negative stock is critical. */
+/**
+ * Items at or below their reorder level, the same rule as the Low Stock card.
+ * Zero or negative stock is critical.
+ */
+export function isLowStock(item: Pick<AttentionInventoryItem, 'quantity' | 'reorder_level'>): boolean {
+  return item.quantity <= item.reorder_level;
+}
+
 export function inventoryAttention(items: AttentionInventoryItem[]): AttentionItem[] {
   return items
-    .filter((item) => item.reorder_level > 0 && item.quantity <= item.reorder_level)
+    .filter(isLowStock)
     .map((item) => ({
       key: `inventory:${item.id}`,
       severity: item.quantity <= 0 ? 'critical' : 'warning',
