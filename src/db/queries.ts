@@ -5907,6 +5907,14 @@ function syncBarrelBottlingVolumes(input: {
   }
 }
 
+function positiveOrNull(value: number | null | undefined): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function finiteOrNull(value: number | null | undefined): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
 export function saveBottlingRun(
   run: Omit<BottlingRun, 'id' | 'created_at'> & { returns?: BottlingRunReturnInput[]; equipment_ids?: number[] },
   lines: BottlingRunLineInput[],
@@ -6168,6 +6176,17 @@ export function saveBottlingRun(
     persistBottlingRunReturns(runId, storedReturns);
   }
   persistBottlingRunEquipment(runId, equipmentIds);
+  runQuery(
+    `UPDATE bottling_runs SET measured_abv=?, measured_abv_observed=?, measured_temp_f=?, assigned_user_id=?, assigned_user_name=? WHERE id=?`,
+    [
+      positiveOrNull(run.measured_abv),
+      positiveOrNull(run.measured_abv_observed),
+      finiteOrNull(run.measured_temp_f),
+      run.assigned_user_id ?? null,
+      run.assigned_user_name?.trim() || null,
+      runId,
+    ],
+  );
   for (const eqId of bottlingEquipmentToRelease(equipmentUse)) {
     releaseEquipmentWithoutCleaningHold(eqId);
   }

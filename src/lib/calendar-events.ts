@@ -400,6 +400,7 @@ export function buildCalendarEventsFromData(
       title: bottling.product_name || bottling.batch_number,
       status,
       statusCategory: mapBottlingStatus(status),
+      assignee: bottling.assigned_user_name || undefined,
       detail: bottling.lines.length > 0
         ? formatLinesSummary(bottling.lines)
         : `${bottling.bottle_count} bottles`,

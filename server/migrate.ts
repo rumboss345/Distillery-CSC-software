@@ -24,7 +24,7 @@ export async function migrateDatabase(): Promise<void> {
           email TEXT NOT NULL,
           password_hash TEXT NOT NULL,
           name TEXT,
-          role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('owner', 'admin', 'user')),
+          role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('owner', 'admin', 'manager', 'user')),
           status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
           approval_token TEXT UNIQUE,
           created_at TEXT NOT NULL DEFAULT to_char(CURRENT_TIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')
@@ -402,6 +402,32 @@ export async function migrateDatabase(): Promise<void> {
         ADD COLUMN IF NOT EXISTS process_water DOUBLE PRECISION NOT NULL DEFAULT 0
       `);
       await client.query(`INSERT INTO schema_migrations (version) VALUES ('022')`);
+    }
+    const bottlingMeasuredAbvMigration = await client.query(
+      'SELECT version FROM schema_migrations WHERE version = $1',
+      ['023'],
+    );
+    if (bottlingMeasuredAbvMigration.rowCount === 0) {
+      await client.query(`
+        ALTER TABLE bottling_runs
+        ADD COLUMN IF NOT EXISTS measured_abv DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS measured_abv_observed DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS measured_temp_f DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS assigned_user_id INTEGER,
+        ADD COLUMN IF NOT EXISTS assigned_user_name TEXT
+      `);
+      await client.query(`INSERT INTO schema_migrations (version) VALUES ('023')`);
+    }
+    const productionManagerRoleMigration = await client.query(
+      'SELECT version FROM schema_migrations WHERE version = $1',
+      ['024'],
+    );
+    if (productionManagerRoleMigration.rowCount === 0) {
+      await client.query(`ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check`);
+      await client.query(
+        `ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('owner', 'admin', 'manager', 'user'))`,
+      );
+      await client.query(`INSERT INTO schema_migrations (version) VALUES ('024')`);
     }
     await client.query(`
       INSERT INTO inventory_categories (name)
