@@ -27,6 +27,9 @@ export interface LiquidMovementRow {
   source_tank_id: number | null;
   /** Tank or vessel the liquid went into. Null when it left the tanks. */
   dest_tank_id: number | null;
+  /** Volume sets only: the tank reading before it was set. */
+  book_volume_gal?: number;
+  book_abv?: number;
   product_liquid: string;
   batch_ref: string;
   volume_gal: number;
@@ -317,12 +320,13 @@ export function buildLiquidMovements(range: ReportDateRange): LiquidMovementRow[
     product_name: string;
     source_volume_gal: number | null;
     final_abv: number;
+    source_abv: number | null;
     tank_name: string | null;
     tank_id: number;
     variance_changed_by: string | null;
   }>(`
     SELECT br.id, br.bottling_date, br.batch_number, br.product_name,
-           br.source_volume_gal, br.final_abv, fe.name as tank_name,
+           br.source_volume_gal, br.final_abv, br.source_abv, fe.name as tank_name,
            br.source_holding_tank_equipment_id as tank_id, br.variance_changed_by
     FROM bottling_runs br
     LEFT JOIN floor_equipment fe ON fe.id = br.source_holding_tank_equipment_id
@@ -343,8 +347,8 @@ export function buildLiquidMovements(range: ReportDateRange): LiquidMovementRow[
       product_liquid: b.product_name,
       batch_ref: b.batch_number,
       volume_gal: vol,
-      abv: b.final_abv,
-      laa_gal: laaGalFromVolumeAbv(vol, b.final_abv),
+      abv: b.source_abv ?? b.final_abv,
+      laa_gal: laaGalFromVolumeAbv(vol, b.source_abv ?? b.final_abv),
       user_label: b.variance_changed_by?.trim() || '—',
       reference: `Bottling ${b.id}`,
       notes: '',
@@ -436,8 +440,9 @@ export function buildLiquidMovements(range: ReportDateRange): LiquidMovementRow[
     tank_name: string;
     tank_id: number;
     operator: string;
+    alcohol_loss_gal: number | null;
   }>(`
-    SELECT r.id, r.run_date, r.batch_number, r.run_type, r.still_name,
+    SELECT r.id, r.run_date, r.batch_number, r.run_type, r.still_name, r.alcohol_loss_gal,
            r.stillage_volume_gal as volume_gal, fe.name as tank_name,
            r.stillage_holding_tank_equipment_id as tank_id, r.assigned_user_name as operator
     FROM distillation_runs r
@@ -448,6 +453,7 @@ export function buildLiquidMovements(range: ReportDateRange): LiquidMovementRow[
   `);
   for (const r of stillage) {
     if (!eventInReportRange(r.run_date, range)) continue;
+    const stillageLaa = (r.alcohol_loss_gal ?? 0) > 0 ? Math.min(r.alcohol_loss_gal!, r.volume_gal) : 0;
     rows.push({
       row_key: `stillage:${r.id}`,
       occurred_at: r.run_date,
@@ -459,8 +465,8 @@ export function buildLiquidMovements(range: ReportDateRange): LiquidMovementRow[
       product_liquid: `${runTypeLabel(r.run_type)} · Stillage`,
       batch_ref: r.batch_number,
       volume_gal: r.volume_gal,
-      abv: 0,
-      laa_gal: 0,
+      abv: stillageLaa > 0 ? (stillageLaa / r.volume_gal) * 100 : 0,
+      laa_gal: stillageLaa,
       user_label: r.operator || '—',
       reference: `Run ${r.id}`,
       notes: '',
@@ -545,6 +551,8 @@ export function buildLiquidMovements(range: ReportDateRange): LiquidMovementRow[
       laa_gal: laaGalFromVolumeAbv(volume, v.set_abv),
       user_label: v.changed_by?.trim() || '—',
       reference: `Volume set ${v.id}`,
+      book_volume_gal: v.book_volume_gal,
+      book_abv: v.book_abv,
       notes: [
         `Book ${v.book_volume_gal.toFixed(1)} gal set to ${v.set_volume_gal.toFixed(1)} gal at ${v.set_abv.toFixed(1)}% ABV`,
         v.notes.trim(),

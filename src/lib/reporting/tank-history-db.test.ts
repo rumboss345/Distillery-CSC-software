@@ -4,7 +4,8 @@ import { SCHEMA } from '../../db/schema';
 import { bindSqlHandle } from '../../db/sql-session';
 import { buildLiquidMovements } from './movements';
 import type { ReportDateRange } from './period';
-import { buildTankHistory } from './tank-history';
+import { getHoldingTankContents } from '../../db/queries';
+import { applyTankBalances, buildTankHistory } from './tank-history';
 
 let db: Database;
 
@@ -34,13 +35,16 @@ beforeAll(async () => {
   db.run(`INSERT INTO holding_tank_transfers
             (id, spirit_type, source_tank_equipment_id, dest_tank_equipment_id, volume_gal, abv, transfer_date, liquid_label, created_at)
           VALUES (1, 'high_wines', 1, 2, 25, 70, '2026-11-03', '', '2026-11-03 09:00:00')`);
-  db.run(`INSERT INTO bottling_runs (id, batch_number, bottling_date, product_name, final_abv, source_holding_tank_equipment_id, source_volume_gal)
-          VALUES (1, 'BT-1', '2026-11-04', 'Silver', 40, 2, 20)`);
+  db.run(`INSERT INTO bottling_runs (id, batch_number, bottling_date, product_name, final_abv, source_abv, source_holding_tank_equipment_id, source_volume_gal)
+          VALUES (1, 'BT-1', '2026-11-04', 'Silver', 40, 70, 2, 20)`);
   db.run(`INSERT INTO bottling_run_returns (id, bottling_run_id, holding_tank_equipment_id, volume_gal)
           VALUES (1, 1, 1, 2)`);
   db.run(`INSERT INTO holding_tank_volume_variances
             (id, tank_equipment_id, book_volume_gal, book_abv, set_volume_gal, set_abv, variance_gal, recorded_at, notes, changed_by, created_at)
           VALUES (1, 2, 5, 70, 4, 70, -1, '2026-11-05', 'Dipped', 'Ben', '2026-11-05 08:00:00')`);
+  db.run(`INSERT INTO holding_tank_opening_balances
+            (tank_equipment_id, volume_gal, alcohol_gal, measured_volume_gal, measured_abv, recorded_at)
+          VALUES (2, -1, -0.7, 4, 70, '2026-11-05')`);
 });
 
 describe('tank history from production records', () => {
@@ -66,6 +70,21 @@ describe('tank history from production records', () => {
     const stillage = buildTankHistory(movements, tanks, 3);
     expect(stillage).toHaveLength(1);
     expect(stillage[0]).toMatchObject({ direction: 'in', counterpart: 'Carl', volume_gal: 80 });
+  });
+
+  it('walks each tank total back from what the tank holds now', () => {
+    const current = tanks.map((t) => ({ id: t.id, ...getHoldingTankContents(t.id) }));
+    const ht1 = applyTankBalances(buildTankHistory(buildLiquidMovements(ALL), tanks, 1), current);
+    expect(current[0].volume_gal).toBeCloseTo(17);
+    expect(ht1.map((e) => e.after_volume_gal)).toEqual([17, 15, 40]);
+    expect(ht1[2].after_abv).toBe(70);
+
+    const ht2 = applyTankBalances(buildTankHistory(buildLiquidMovements(ALL), tanks, 2), current);
+    expect(ht2.map((e) => [e.after_volume_gal, e.after_abv])).toEqual([
+      [4, 70],
+      [5, 70],
+      [25, 70],
+    ]);
   });
 
   it('respects the report period', () => {

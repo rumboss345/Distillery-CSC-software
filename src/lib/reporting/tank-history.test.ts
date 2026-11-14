@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { LiquidMovementRow } from './movements';
-import { buildTankHistory, tankHistoryTotals, visibleTankHistory } from './tank-history';
+import { applyTankBalances, buildTankHistory, tankHistoryTotals, visibleTankHistory } from './tank-history';
 
 function movement(overrides: Partial<LiquidMovementRow>): LiquidMovementRow {
   return {
@@ -62,5 +62,35 @@ describe('buildTankHistory', () => {
     expect(tankHistoryTotals(entries)).toEqual({ in_gal: 120, out_gal: 0 });
     expect(visibleTankHistory(entries, false)).toHaveLength(10);
     expect(visibleTankHistory(entries, true)).toHaveLength(12);
+  });
+});
+
+describe('applyTankBalances', () => {
+  it('shows the tank total and ABV after each in and out, newest matching today', () => {
+    const entries = buildTankHistory([
+      movement({ row_key: 'draw', occurred_at: '2026-11-03', movement_type: 'still_charge', dest_tank_id: null, dest_label: 'Carl', volume_gal: 20, abv: 60, laa_gal: 12 }),
+      movement({ row_key: 'water', occurred_at: '2026-11-02', movement_type: 'tank_dilution', source_tank_id: null, source_label: 'Water', dest_tank_id: 1, volume_gal: 20, abv: 0, laa_gal: 0 }),
+      movement({ row_key: 'fill', occurred_at: '2026-11-01', movement_type: 'distillation_cut', source_tank_id: null, source_label: 'Carl', dest_tank_id: 1, volume_gal: 100, abv: 72, laa_gal: 72 }),
+    ], tanks, 1);
+    const balanced = applyTankBalances(entries, [{ id: 1, volume_gal: 100, abv: 60 }]);
+    expect(balanced.map((e) => [e.key, e.after_volume_gal, e.after_abv])).toEqual([
+      ['draw:out', 100, 60],
+      ['water:in', 120, 60],
+      ['fill:in', 100, 72],
+    ]);
+  });
+
+  it('restores the book reading before a volume set and shows empty tanks as zero', () => {
+    const entries = buildTankHistory([
+      movement({ row_key: 'set', movement_type: 'tank_volume_set', source_tank_id: 1, dest_tank_id: null, dest_label: 'Volume set', volume_gal: 5, abv: 58.5, laa_gal: 2.925, book_volume_gal: 10, book_abv: 63.5 }),
+      movement({ row_key: 'draw', movement_type: 'still_charge', source_tank_id: 1, dest_tank_id: null, volume_gal: 30, abv: 63.5, laa_gal: 19.05 }),
+    ], tanks, 1);
+    const balanced = applyTankBalances(entries, [{ id: 1, volume_gal: 5, abv: 58.5 }]);
+    expect(balanced.map((e) => [e.after_volume_gal, e.after_abv])).toEqual([
+      [5, 58.5],
+      [10, 63.5],
+    ]);
+    const emptied = applyTankBalances(buildTankHistory([movement({})], tanks, 1), [{ id: 1, volume_gal: 0, abv: null }]);
+    expect(emptied[0]).toMatchObject({ after_volume_gal: 0, after_abv: 0 });
   });
 });
