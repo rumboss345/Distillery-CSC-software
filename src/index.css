@@ -369,6 +369,49 @@ body.nav-open {
   align-items: flex-end;
 }
 
+.tank-history-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.tank-history-toolbar .form-group {
+  margin: 0 1rem 0 0;
+}
+
+.tank-history-toolbar select {
+  min-width: 12rem;
+}
+
+.tank-history-totals {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.tank-history-sub {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+.tank-history-volume {
+  white-space: nowrap;
+}
+
+.tank-history-notes {
+  max-width: 22rem;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.tank-history-more {
+  display: flex;
+  justify-content: center;
+  margin-top: 0.75rem;
+}
+
 .report-filters-panel .form-group {
   margin: 0;
 }

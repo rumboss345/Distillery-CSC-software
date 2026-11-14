@@ -1,14 +1,23 @@
-import { formatCalendarDay } from '../../lib/date-input';
-import { filterRowsByPerson, reportPeriodLabel } from '../../lib/reporting/person';
-import { buildTankInventoryReportRows } from '../../lib/reporting/tank-rows';
+import { useEffect, useMemo, useState } from 'react';
+import { formatCalendarDay, formatRecordedAt } from '../../lib/date-input';
+import { buildLiquidMovements } from '../../lib/reporting/movements';
+import { emptyForEmployee, filterRowsByPerson, reportPeriodLabel } from '../../lib/reporting/person';
+import {
+  buildTankHistory,
+  TANK_HISTORY_COLLAPSED_COUNT,
+  tankHistoryTotals,
+  visibleTankHistory,
+} from '../../lib/reporting/tank-history';
+import { buildTankInventoryReportRows, type TankInventoryReportRow } from '../../lib/reporting/tank-rows';
 import { useReportContext } from './report-context';
 import { ReportTableShell } from './ReportTableShell';
 
 export function TankInventoryReport() {
   const { range, employee } = useReportContext();
   const periodLabel = reportPeriodLabel('Current', employee);
+  const allTanks = useMemo(() => buildTankInventoryReportRows(range), [range]);
   const rows = filterRowsByPerson(
-    buildTankInventoryReportRows(range),
+    allTanks,
     (row) => row.last_movement_user,
     employee,
   );
@@ -24,6 +33,7 @@ export function TankInventoryReport() {
   ]);
 
   return (
+    <>
     <ReportTableShell
       title="Tank inventory"
       description={employee
@@ -74,6 +84,149 @@ export function TankInventoryReport() {
           ))}
         </tbody>
       </table>
+    </ReportTableShell>
+    <TankHistorySection tanks={allTanks} />
+    </>
+  );
+}
+
+function TankHistorySection({ tanks }: { tanks: TankInventoryReportRow[] }) {
+  const { range, employee } = useReportContext();
+  const [tankId, setTankId] = useState<number | null>(null);
+  const [expanded, setExpanded] = useState(false);
+
+  const tankOptions = useMemo(
+    () => [...tanks].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })),
+    [tanks],
+  );
+  const entries = useMemo(
+    () => filterRowsByPerson(
+      buildTankHistory(buildLiquidMovements(range), tanks.map((t) => ({ id: t.equipment_id, name: t.name })), tankId),
+      (e) => e.user_label,
+      employee,
+    ),
+    [range, tanks, tankId, employee],
+  );
+
+  useEffect(() => {
+    setExpanded(false);
+  }, [range, tankId, employee]);
+
+  const visible = visibleTankHistory(entries, expanded);
+  const totals = tankHistoryTotals(entries);
+  const hiddenCount = entries.length - visible.length;
+  const tankName = tankId != null ? tankOptions.find((t) => t.equipment_id === tankId)?.name : null;
+
+  const csvHeaders = [
+    'Date', 'Tank', 'In/Out', 'From/To', 'Movement', 'What', 'Batch', 'Volume gal', 'ABV', 'LAA gal', 'By', 'Reference', 'Notes',
+  ];
+  const csvRows = entries.map((e) => [
+    e.occurred_at, e.tank_name, e.direction === 'in' ? 'In' : 'Out', e.counterpart, e.movement_label, e.what,
+    e.batch_ref, e.volume_gal, e.abv, e.laa_gal, e.user_label, e.reference, e.notes,
+  ]);
+
+  return (
+    <ReportTableShell
+      title={tankName ? `Tank history · ${tankName}` : 'Tank history'}
+      description="What went into and out of each tank, where it came from and where it went. Newest first."
+      periodLabel={reportPeriodLabel(range.label, employee)}
+      csvFilename={tankName ? `tank-history-${tankName}` : 'tank-history'}
+      csvHeaders={csvHeaders}
+      csvRows={csvRows}
+      isEmpty={false}
+      tableWrap={false}
+    >
+      <div className="tank-history-toolbar">
+        <div className="form-group">
+          <label htmlFor="tank-history-tank">Tank</label>
+          <select
+            id="tank-history-tank"
+            value={tankId ?? ''}
+            onChange={(e) => setTankId(e.target.value ? Number(e.target.value) : null)}
+          >
+            <option value="">All tanks</option>
+            {tankOptions.map((t) => (
+              <option key={t.equipment_id} value={t.equipment_id}>{t.name}</option>
+            ))}
+          </select>
+        </div>
+        {entries.length > 0 && (
+          <p className="tank-history-totals">
+            {entries.length} {entries.length === 1 ? 'entry' : 'entries'}
+            {' · '}In <strong>{totals.in_gal.toFixed(2)} gal</strong>
+            {' · '}Out <strong>{totals.out_gal.toFixed(2)} gal</strong>
+          </p>
+        )}
+      </div>
+      {entries.length === 0 ? (
+        <div className="empty-state">
+          <p>
+            {emptyForEmployee(
+              tankName ? `Nothing went into or out of ${tankName} in this period.` : 'No tank ins or outs in this period.',
+              employee,
+            )}
+          </p>
+        </div>
+      ) : (
+        <>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  {tankId == null && <th>Tank</th>}
+                  <th>In / Out</th>
+                  <th>From / To</th>
+                  <th>What</th>
+                  <th className="num">Volume</th>
+                  <th className="num">ABV</th>
+                  <th className="num">LAA</th>
+                  <th>By</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((e) => (
+                  <tr key={e.key}>
+                    <td>{formatRecordedAt(e.occurred_at)}</td>
+                    {tankId == null && <td><strong>{e.tank_name}</strong></td>}
+                    <td>
+                      <span className={`badge ${e.direction === 'in' ? 'badge-complete' : 'badge-mashing'}`}>
+                        {e.direction === 'in' ? 'In' : 'Out'}
+                      </span>
+                    </td>
+                    <td>
+                      {e.direction === 'in' ? 'From ' : 'To '}
+                      <strong>{e.counterpart}</strong>
+                      {e.movement_label !== e.counterpart && (
+                        <div className="tank-history-sub">{e.movement_label}</div>
+                      )}
+                    </td>
+                    <td>
+                      {e.what || '—'}
+                      {e.batch_ref && <div className="tank-history-sub">{e.batch_ref}</div>}
+                    </td>
+                    <td className="num tank-history-volume">
+                      {e.direction === 'in' ? '+' : '−'}{e.volume_gal.toFixed(2)} gal
+                    </td>
+                    <td className="num">{e.abv > 0 ? `${e.abv.toFixed(2)}%` : '—'}</td>
+                    <td className="num tank-history-volume">{e.laa_gal > 0 ? `${e.laa_gal.toFixed(2)} gal` : '—'}</td>
+                    <td>{e.user_label?.trim() || '—'}</td>
+                    <td className="tank-history-notes">{e.notes || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {entries.length > TANK_HISTORY_COLLAPSED_COUNT && (
+            <div className="tank-history-more">
+              <button type="button" className="btn btn-sm btn-ghost" onClick={() => setExpanded((v) => !v)}>
+                {expanded ? `Show latest ${TANK_HISTORY_COLLAPSED_COUNT}` : `Show all ${entries.length} (${hiddenCount} more)`}
+              </button>
+            </div>
+          )}
+        </>
+      )}
     </ReportTableShell>
   );
 }

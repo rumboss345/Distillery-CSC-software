@@ -20,12 +20,12 @@ export interface TankInventoryReportRow {
   last_movement_user: string | null;
 }
 
-export function lastMovementForTankName(
-  tankName: string,
+export function lastMovementForTank(
+  tankId: number,
   movements: LiquidMovementRow[],
 ): Pick<TankInventoryReportRow, 'last_movement_at' | 'last_movement_type' | 'last_movement_user'> {
   for (const m of movements) {
-    if (m.source_label === tankName || m.dest_label === tankName) {
+    if (m.source_tank_id === tankId || m.dest_tank_id === tankId) {
       return {
         last_movement_at: m.occurred_at,
         last_movement_type: m.movement_type,
@@ -53,7 +53,7 @@ export function buildTankInventoryReportRows(
         : 0;
     const fillPct =
       eq.capacity_gal > 0 ? Math.round((eq.volume_gal / eq.capacity_gal) * 1000) / 10 : null;
-    const last = lastMovementForTankName(eq.name, movements);
+    const last = lastMovementForTank(eq.id, movements);
 
     return {
       equipment_id: eq.id,
