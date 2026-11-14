@@ -26,6 +26,22 @@ function JobRow({ job, showDeadline }: { job: ScheduleJob; showDeadline: boolean
   );
 }
 
+function CleaningList({ jobs }: { jobs: ScheduleJob[] }) {
+  if (jobs.length === 0) return null;
+  return (
+    <div className="dash-job-group dash-cleaning" data-testid="dashboard-needs-cleaning">
+      <h4 className="dash-job-group-title">To clean ({jobs.length})</h4>
+      <ul className="dash-cleaning-list">
+        {jobs.map((job) => (
+          <li key={job.id}>
+            <Link to={job.href} title={job.detail}>{job.title}</Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function TodayProductionPanel({
   today,
   title = "Today's production",
@@ -51,7 +67,7 @@ export function TodayProductionPanel({
         </div>
       </header>
       {open === 0 && today.doneToday.length === 0 ? (
-        <p className="dash-empty">Nothing is planned or running today.</p>
+        <p className="dash-empty">No production is planned or running today.</p>
       ) : (
         groups.filter((group) => group.jobs.length > 0).map((group) => (
           <div key={group.label} className="dash-job-group">
@@ -62,6 +78,7 @@ export function TodayProductionPanel({
           </div>
         ))
       )}
+      <CleaningList jobs={today.needsCleaning} />
     </section>
   );
 }
@@ -81,13 +98,23 @@ export function SevenDaySchedulePanel({ days }: { days: ScheduleDay[] }) {
           {days.map((day) => (
             <div key={day.date} className={`dash-schedule-day${day.isToday ? ' dash-schedule-today' : ''}`}>
               <h4 className="dash-schedule-date">{day.label}</h4>
-              {day.jobs.length === 0 ? (
-                <p className="dash-schedule-none">Nothing scheduled</p>
-              ) : (
-                <ul className="dash-job-list">
-                  {day.jobs.map((job) => <JobRow key={`${day.date}-${job.id}`} job={job} showDeadline />)}
-                </ul>
-              )}
+              {(() => {
+                const production = day.jobs.filter((job) => job.kind !== 'cleaning');
+                const cleaning = day.jobs.filter((job) => job.kind === 'cleaning');
+                return (
+                  <>
+                    {production.length === 0 && cleaning.length === 0 && (
+                      <p className="dash-schedule-none">Nothing scheduled</p>
+                    )}
+                    {production.length > 0 && (
+                      <ul className="dash-job-list">
+                        {production.map((job) => <JobRow key={`${day.date}-${job.id}`} job={job} showDeadline />)}
+                      </ul>
+                    )}
+                    <CleaningList jobs={cleaning} />
+                  </>
+                );
+              })()}
             </div>
           ))}
         </div>
