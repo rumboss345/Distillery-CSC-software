@@ -42,6 +42,8 @@ export interface LiquidMovementRow {
 }
 
 const BLEND_LEDGER = "('executed', 'bottled', 'blended')";
+/** Planned runs have not touched any tank yet. */
+const RUN_LEDGER = "('running', 'complete')";
 
 /** Runs store only a date; the first cut's time places the charge within that day. */
 const CHARGE_OCCURRED_AT_SQL = `
@@ -88,6 +90,7 @@ export function buildLiquidMovements(
     JOIN distillation_runs r ON r.id = c.distillation_run_id
     LEFT JOIN floor_equipment fe ON fe.id = c.holding_tank_equipment_id
     WHERE c.volume_gal > 0
+      AND r.status IN ${RUN_LEDGER}
   `);
   for (const c of cuts) {
     if (!eventInReportRange(c.occurred_at, range)) continue;
@@ -131,6 +134,7 @@ export function buildLiquidMovements(
     FROM distillation_runs r
     LEFT JOIN floor_equipment src ON src.id = r.source_holding_tank_equipment_id
     WHERE r.source_holding_tank_equipment_id IS NOT NULL AND r.charge_volume_gal > 0
+      AND r.status IN ${RUN_LEDGER}
       AND NOT EXISTS (
         SELECT 1 FROM distillation_run_tank_sources s WHERE s.distillation_run_id = r.id
       )
@@ -158,6 +162,7 @@ export function buildLiquidMovements(
     JOIN distillation_runs r ON r.id = s.distillation_run_id
     JOIN floor_equipment src ON src.id = s.holding_tank_equipment_id
     WHERE s.volume_gal > 0
+      AND r.status IN ${RUN_LEDGER}
   `);
   for (const r of splitCharges) {
     if (!eventInReportRange(r.run_date, range)) continue;
@@ -442,11 +447,11 @@ export function buildLiquidMovements(
     tank_id: number;
     changed_by: string | null;
   }>(`
-    SELECT d.id, d.recorded_at, d.water_gal, d.spirit_abv, d.finished_abv,
+    SELECT d.id, d.recorded_at, d.finished_volume_gal - d.spirit_volume_gal as water_gal, d.spirit_abv, d.finished_abv,
            d.finished_volume_gal, e.name as tank_name, d.tank_equipment_id as tank_id, d.changed_by
     FROM holding_tank_dilutions d
     JOIN floor_equipment e ON e.id = d.tank_equipment_id
-    WHERE d.water_gal > 0
+    WHERE d.finished_volume_gal > d.spirit_volume_gal
   `);
   for (const row of dilutions) {
     if (!eventInReportRange(row.recorded_at, range)) continue;
@@ -569,12 +574,14 @@ export function buildLiquidMovements(
     FROM holding_tank_volume_variances v
     JOIN floor_equipment fe ON fe.id = v.tank_equipment_id
     WHERE ABS(v.set_volume_gal - v.book_volume_gal) > 0.001
+       OR ABS(v.set_abv - v.book_abv) > 0.001
   `);
   for (const v of volumeSets) {
     if (!eventInReportRange(v.recorded_at, range)) continue;
     const change = v.set_volume_gal - v.book_volume_gal;
-    const gained = change > 0;
-    const volume = Math.round(Math.abs(change) * 1000) / 1000;
+    const abvOnly = Math.abs(change) <= 0.001;
+    const gained = abvOnly ? v.set_abv > v.book_abv : change > 0;
+    const volume = abvOnly ? 0 : Math.round(Math.abs(change) * 1000) / 1000;
     rows.push({
       row_key: `volume_set:${v.id}`,
       occurred_at: v.recorded_at,
@@ -583,7 +590,9 @@ export function buildLiquidMovements(
       dest_label: gained ? v.tank_name : 'Volume set',
       source_tank_id: gained ? null : v.tank_id,
       dest_tank_id: gained ? v.tank_id : null,
-      product_liquid: gained ? 'Volume set higher' : 'Volume set lower',
+      product_liquid: abvOnly
+        ? (gained ? 'ABV set higher' : 'ABV set lower')
+        : (gained ? 'Volume set higher' : 'Volume set lower'),
       batch_ref: '',
       volume_gal: volume,
       abv: v.set_abv,
@@ -595,6 +604,53 @@ export function buildLiquidMovements(
       notes: [
         `Book ${v.book_volume_gal.toFixed(1)} gal set to ${v.set_volume_gal.toFixed(1)} gal at ${v.set_abv.toFixed(1)}% ABV`,
         v.notes.trim(),
+      ].filter(Boolean).join(' · '),
+    });
+  }
+
+  const legacyOpenings = queryAll<{
+    id: number;
+    recorded_at: string;
+    volume_gal: number;
+    alcohol_gal: number;
+    measured_volume_gal: number;
+    measured_abv: number;
+    tank_name: string;
+    tank_id: number;
+    notes: string;
+  }>(`
+    SELECT o.id, o.recorded_at, o.volume_gal, o.alcohol_gal, o.measured_volume_gal, o.measured_abv,
+           fe.name as tank_name, o.tank_equipment_id as tank_id, COALESCE(o.notes, '') as notes
+    FROM holding_tank_opening_balances o
+    JOIN floor_equipment fe ON fe.id = o.tank_equipment_id
+    WHERE (ABS(o.volume_gal) > 0.001 OR ABS(o.alcohol_gal) > 0.001)
+      AND NOT EXISTS (
+        SELECT 1 FROM holding_tank_volume_variances v WHERE v.tank_equipment_id = o.tank_equipment_id
+      )
+  `);
+  for (const o of legacyOpenings) {
+    if (!eventInReportRange(o.recorded_at, range)) continue;
+    const gained = o.volume_gal > 0.001 || (Math.abs(o.volume_gal) <= 0.001 && o.alcohol_gal > 0);
+    const volume = Math.round(Math.abs(o.volume_gal) * 1000) / 1000;
+    const laa = gained ? o.alcohol_gal : -o.alcohol_gal;
+    rows.push({
+      row_key: `opening:${o.id}`,
+      occurred_at: o.recorded_at,
+      movement_type: 'tank_volume_set',
+      source_label: gained ? 'On-hand reading' : o.tank_name,
+      dest_label: gained ? o.tank_name : 'On-hand reading',
+      source_tank_id: gained ? null : o.tank_id,
+      dest_tank_id: gained ? o.tank_id : null,
+      product_liquid: 'On-hand reading',
+      batch_ref: '',
+      volume_gal: volume,
+      abv: volume > 0 && laa > 0 ? (laa / volume) * 100 : 0,
+      laa_gal: laa,
+      user_label: '—',
+      reference: `On-hand reading ${o.id}`,
+      notes: [
+        `Measured ${o.measured_volume_gal.toFixed(1)} gal at ${o.measured_abv.toFixed(1)}% ABV`,
+        o.notes.trim(),
       ].filter(Boolean).join(' · '),
     });
   }

@@ -1800,7 +1800,10 @@ function computeHoldingTankContents(
 
   const blendOuts = queryOne<{ volume_gal: number; gpa: number }>(
     blendTankDrawsSql('?', '?'),
-    [tankId, excludeBlendId ?? null, excludeBlendId ?? -1],
+    [
+      tankId, excludeBlendId ?? null, excludeBlendId ?? -1,
+      tankId, excludeBlendId ?? null, excludeBlendId ?? -1,
+    ],
   );
 
   const bottlingOuts = queryOne<{ volume_gal: number; gpa: number }>(`
