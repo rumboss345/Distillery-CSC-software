@@ -27,6 +27,8 @@ export interface TankHistoryEntry {
   /** Tank total after this in or out. Null until balances are applied. */
   after_volume_gal: number | null;
   after_abv: number | null;
+  /** Gallons the tank lost around this entry with no matching record. */
+  unexplained_out_gal?: number;
 }
 
 const TANK_EMPTY_GAL = 0.05;
@@ -132,6 +134,9 @@ export function applyTankBalances(
       laa = tank.laa + sign * e.laa_gal;
     }
     state.set(e.tank_id, { volume: Math.max(0, volume), laa: Math.max(0, laa) });
+    if (volume < -TANK_EMPTY_GAL) {
+      return { ...after, unexplained_out_gal: roundBalance(-volume) };
+    }
     return after;
   });
 }
