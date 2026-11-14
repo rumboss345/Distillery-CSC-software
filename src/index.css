@@ -6126,9 +6126,14 @@ tr.row-overdue > td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
   margin-bottom: 0.15rem;
 }
 
+.dash-table a,
+.dash-recon-records a {
+  color: var(--accent);
+}
+
 .dash-chart-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
   gap: 1rem;
 }
 
@@ -6242,6 +6247,11 @@ tr.row-overdue > td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
   .dash-job-link {
     grid-template-columns: minmax(0, 1fr);
     gap: 0.35rem;
+  }
+
+  .dash-severity-tag,
+  .dash-job-state {
+    justify-self: start;
   }
 
   .dash-attention-meta,
