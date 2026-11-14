@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { formatCalendarDay, formatRecordedAt } from '../../lib/date-input';
 import { buildLiquidMovements } from '../../lib/reporting/movements';
+import { eventInReportRange, type ReportDateRange } from '../../lib/reporting/period';
 import { emptyForEmployee, filterRowsByPerson, reportPeriodLabel } from '../../lib/reporting/person';
 import {
+  applyTankBalances,
   buildTankHistory,
   TANK_HISTORY_COLLAPSED_COUNT,
   tankHistoryTotals,
@@ -90,6 +92,8 @@ export function TankInventoryReport() {
   );
 }
 
+const ALL_TIME: ReportDateRange = { preset: 'all', from: null, to: null, label: 'All time' };
+
 function TankHistorySection({ tanks }: { tanks: TankInventoryReportRow[] }) {
   const { range, employee } = useReportContext();
   const [tankId, setTankId] = useState<number | null>(null);
@@ -99,13 +103,21 @@ function TankHistorySection({ tanks }: { tanks: TankInventoryReportRow[] }) {
     () => [...tanks].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })),
     [tanks],
   );
+  const balancedHistory = useMemo(() => applyTankBalances(
+    buildTankHistory(
+      buildLiquidMovements(ALL_TIME),
+      tanks.map((t) => ({ id: t.equipment_id, name: t.name })),
+    ),
+    tanks.map((t) => ({ id: t.equipment_id, volume_gal: t.volume_gal, abv: t.abv })),
+  ), [tanks]);
   const entries = useMemo(
     () => filterRowsByPerson(
-      buildTankHistory(buildLiquidMovements(range), tanks.map((t) => ({ id: t.equipment_id, name: t.name })), tankId),
+      balancedHistory.filter((e) =>
+        (tankId == null || e.tank_id === tankId) && eventInReportRange(e.occurred_at, range)),
       (e) => e.user_label,
       employee,
     ),
-    [range, tanks, tankId, employee],
+    [balancedHistory, range, tankId, employee],
   );
 
   useEffect(() => {
@@ -118,11 +130,13 @@ function TankHistorySection({ tanks }: { tanks: TankInventoryReportRow[] }) {
   const tankName = tankId != null ? tankOptions.find((t) => t.equipment_id === tankId)?.name : null;
 
   const csvHeaders = [
-    'Date', 'Tank', 'In/Out', 'From/To', 'Movement', 'What', 'Batch', 'Volume gal', 'ABV', 'LAA gal', 'By', 'Reference', 'Notes',
+    'Date', 'Tank', 'In/Out', 'From/To', 'Movement', 'What', 'Batch', 'Volume gal', 'ABV', 'LAA gal',
+    'Tank total after gal', 'Tank ABV after', 'By', 'Reference', 'Notes',
   ];
   const csvRows = entries.map((e) => [
     e.occurred_at, e.tank_name, e.direction === 'in' ? 'In' : 'Out', e.counterpart, e.movement_label, e.what,
-    e.batch_ref, e.volume_gal, e.abv, e.laa_gal, e.user_label, e.reference, e.notes,
+    e.batch_ref, e.volume_gal, e.abv, e.laa_gal, e.after_volume_gal ?? '', e.after_abv ?? '',
+    e.user_label, e.reference, e.notes,
   ]);
 
   return (
@@ -181,6 +195,7 @@ function TankHistorySection({ tanks }: { tanks: TankInventoryReportRow[] }) {
                   <th className="num">Volume</th>
                   <th className="num">ABV</th>
                   <th className="num">LAA</th>
+                  <th className="num">Tank total after</th>
                   <th>By</th>
                   <th>Notes</th>
                 </tr>
@@ -211,6 +226,14 @@ function TankHistorySection({ tanks }: { tanks: TankInventoryReportRow[] }) {
                     </td>
                     <td className="num">{e.abv > 0 ? `${e.abv.toFixed(2)}%` : '—'}</td>
                     <td className="num tank-history-volume">{e.laa_gal > 0 ? `${e.laa_gal.toFixed(2)} gal` : '—'}</td>
+                    <td className="num tank-history-volume">
+                      {e.after_volume_gal == null ? '—' : e.after_volume_gal > 0 ? (
+                        <>
+                          <strong>{e.after_volume_gal.toFixed(2)} gal</strong>
+                          <div className="tank-history-sub">{(e.after_abv ?? 0).toFixed(2)}% ABV</div>
+                        </>
+                      ) : 'Empty'}
+                    </td>
                     <td>{e.user_label?.trim() || '—'}</td>
                     <td className="tank-history-notes">{e.notes || '—'}</td>
                   </tr>
