@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { inputValueUpToDecimals, limitDecimalPlaces } from '../lib/decimal-places';
 import { useSearchParams } from 'react-router-dom';
 import { useEquipmentReturn } from '../lib/equipment-return';
 import { RecentCompletedNote } from '../components/RecentCompletedNote';
@@ -295,7 +296,7 @@ function spiritRowWithObservedAbv(
     follows_recipe_index: null,
     extra_pull: false,
     ...row,
-    observed_abv: row.abv > 0 ? row.abv.toString() : '',
+    observed_abv: inputValueUpToDecimals(row.abv),
     sample_temp_f: '60',
   };
 }
@@ -1121,7 +1122,7 @@ export function Blending() {
           volume_gal: contents.volume_gal,
           amount: contents.volume_gal,
           abv,
-          observed_abv: abv > 0 ? (Math.round(abv * 10) / 10).toString() : '',
+          observed_abv: inputValueUpToDecimals(abv),
         }]);
       }
       const next = new URLSearchParams(searchParams);
@@ -1340,11 +1341,11 @@ export function Blending() {
           ? chargeable.available_abv
           : getHoldingTankContents(patch.holding_tank_equipment_id, undefined, editId).abv;
         next.abv = tankAbv;
-        next.observed_abv = tankAbv > 0 ? tankAbv.toString() : '';
+        next.observed_abv = inputValueUpToDecimals(tankAbv);
         next.sample_temp_f = '60';
       } else if (patch.equipment_type !== undefined && src.recipe_abv > 0) {
         next.abv = src.recipe_abv;
-        next.observed_abv = src.recipe_abv.toString();
+        next.observed_abv = inputValueUpToDecimals(src.recipe_abv);
         next.sample_temp_f = '60';
       }
       if (patch.observed_abv !== undefined || patch.sample_temp_f !== undefined) {
@@ -1414,7 +1415,7 @@ export function Blending() {
       barrel_id: barrel.id,
       holding_tank_equipment_id: 0,
       abv: barrel.initial_abv,
-      observed_abv: barrel.initial_abv > 0 ? barrel.initial_abv.toString() : '',
+      observed_abv: inputValueUpToDecimals(barrel.initial_abv),
       unit: 'gal',
       ...(hasRecipePull ? {} : { amount: barrel.current_volume_gal }),
     });
@@ -3031,10 +3032,10 @@ export function Blending() {
                       <label>Amount to pull</label>
                       <input
                         type="number"
-                        step="0.1"
+                        step="0.01"
                         data-testid={`spirit-pull-amount-${index}`}
-                        value={src.amount || ''}
-                        onChange={(e) => updateSpiritSource(index, { amount: parseFloat(e.target.value) || 0 })}
+                        value={inputValueUpToDecimals(src.amount)}
+                        onChange={(e) => updateSpiritSource(index, { amount: parseFloat(limitDecimalPlaces(e.target.value)) || 0 })}
                       />
                     </div>
                     <div className="form-group">
@@ -3053,9 +3054,10 @@ export function Blending() {
                     abvLabel="Observed proof (ABV % at sample temp)"
                     abvValue={src.observed_abv}
                     temperatureValue={src.sample_temp_f}
-                    onAbvChange={(value) => updateSpiritSource(index, { observed_abv: value })}
+                    onAbvChange={(value) => updateSpiritSource(index, { observed_abv: limitDecimalPlaces(value) })}
                     onTemperatureChange={(value) => updateSpiritSource(index, { sample_temp_f: value })}
-                    abvPlaceholder={src.abv > 0 ? src.abv.toFixed(1) : undefined}
+                    abvPlaceholder={src.abv > 0 ? src.abv.toFixed(2) : undefined}
+                    abvStep="0.01"
                   />
                   {synced.volume_gal > 0 && (
                     <p className="measure-alt">

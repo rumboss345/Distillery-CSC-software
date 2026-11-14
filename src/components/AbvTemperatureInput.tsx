@@ -12,6 +12,7 @@ export interface AbvTemperatureInputProps {
   onTemperatureChange: (value: string) => void;
   abvPlaceholder?: string;
   temperaturePlaceholder?: string;
+  abvStep?: string;
 }
 
 export function AbvTemperatureInput({
@@ -22,6 +23,7 @@ export function AbvTemperatureInput({
   onTemperatureChange,
   abvPlaceholder,
   temperaturePlaceholder = '60',
+  abvStep = '0.1',
 }: AbvTemperatureInputProps) {
   const observedAbv = abvValue.trim() ? parseFloat(abvValue) : null;
   const temperatureF = temperatureValue.trim() ? parseFloat(temperatureValue) : STANDARD_GAUGING_TEMP_F;
@@ -33,7 +35,7 @@ export function AbvTemperatureInput({
         {abvLabel}
         <input
           type="number"
-          step="0.1"
+          step={abvStep}
           min={0}
           max={MAX_ENTERED_ABV}
           placeholder={abvPlaceholder}
