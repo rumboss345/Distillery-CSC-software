@@ -38,7 +38,15 @@ import {
 } from '../lib/permissions';
 import { CollapsibleSection } from '../components/CollapsibleSection';
 import { Modal } from '../components/Modal';
-import { isAdminRole, isOwnerRole, OWNER_RESET_DATA_ERROR, roleLabel, type AuthRole } from '../lib/roles';
+import {
+  hasFullProductionAccess,
+  isAdminRole,
+  isOwnerRole,
+  isStaffRole,
+  OWNER_RESET_DATA_ERROR,
+  roleLabel,
+  type AuthRole,
+} from '../lib/roles';
 import './admin.css';
 
 const emptyForm = () => ({
@@ -68,6 +76,7 @@ export function AdminUsers() {
   const [editProcessAssignments, setEditProcessAssignments] = useState<ProcessStageKey[]>([]);
   const [editName, setEditName] = useState('');
   const [editPassword, setEditPassword] = useState('');
+  const [editRole, setEditRole] = useState<'manager' | 'user'>('user');
   const [fermentationReadyBrixInput, setFermentationReadyBrixInput] = useState('');
   const [productionSettingsNote, setProductionSettingsNote] = useState('');
 
@@ -137,6 +146,7 @@ export function AdminUsers() {
     setEditPassword('');
     setEditPermissions([...u.permissions]);
     setEditProcessAssignments([...u.processAssignments]);
+    setEditRole(u.role === 'manager' ? 'manager' : 'user');
   }
 
   async function handleSaveEdit() {
@@ -159,6 +169,7 @@ export function AdminUsers() {
           permissions: editPermissions,
           processAssignments: editProcessAssignments,
           password: editPassword || undefined,
+          role: isStaffRole(editUser.role) ? editRole : undefined,
         });
       setMessage(result.message);
       setEditUser(null);
@@ -248,7 +259,7 @@ export function AdminUsers() {
   }
 
   function formatAssignments(u: AuthUser) {
-    if (isAdminRole(u.role)) return 'All processes';
+    if (hasFullProductionAccess(u.role)) return 'All processes';
     if (u.processAssignments.length === 0) return 'None assigned';
     return u.processAssignments.map((k) => PROCESS_STAGE_LABELS[k]).join(', ');
   }
@@ -335,6 +346,7 @@ export function AdminUsers() {
   function formatPermissions(u: AuthUser) {
     if (isOwnerRole(u.role)) return 'Owner access';
     if (isAdminRole(u.role)) return 'Administrator access';
+    if (u.role === 'manager') return 'All production pages';
     if (u.permissions.length === 0) return 'No access';
     return `${u.permissions.length} area${u.permissions.length === 1 ? '' : 's'}`;
   }
@@ -444,6 +456,7 @@ export function AdminUsers() {
               onChange={(e) => setForm({ ...form, role: e.target.value as AuthRole })}
             >
               <option value="user">Production user</option>
+              <option value="manager">Production manager</option>
               <option value="admin">Administrator</option>
               {isOwnerRole(user?.role) && <option value="owner">Owner</option>}
             </select>
@@ -453,7 +466,9 @@ export function AdminUsers() {
               ? 'Owners can create other owners and are the only people who can reset an administrator password.'
               : form.role === 'admin'
                 ? 'This user can manage users and open every page. They can also confirm actions that need an administrator password. An owner must reset their password.'
-                : 'A production user uses the pages and processes you choose below.'}
+                : form.role === 'manager'
+                  ? 'A production manager opens every production page and works every process stage. They cannot manage users, confirm administrator actions, or clear data.'
+                  : 'A production user uses the pages and processes you choose below.'}
           </p>
 
           {form.role === 'user' && (
@@ -697,7 +712,21 @@ export function AdminUsers() {
               </p>
             )}
 
-            {!isAdminRole(editUser.role) && (
+            {isStaffRole(editUser.role) && (
+              <label>
+                Role
+                <select
+                  data-testid="edit-user-role"
+                  value={editRole}
+                  onChange={(e) => setEditRole(e.target.value === 'manager' ? 'manager' : 'user')}
+                >
+                  <option value="user">Production user</option>
+                  <option value="manager">Production manager</option>
+                </select>
+              </label>
+            )}
+
+            {isStaffRole(editUser.role) && editRole === 'user' && (
               <>
                 <h3 className="admin-subtitle">Page access</h3>
                 {renderPermissionChecks(editPermissions, setEditPermissions)}

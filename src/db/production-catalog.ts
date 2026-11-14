@@ -177,6 +177,7 @@ export function userMayMutate(
   if (access === 'owner') return role === 'owner';
   if (role === 'admin' || role === 'owner') return true;
   if (access === 'admin') return false;
+  if (role === 'manager') return true;
   const required = Array.isArray(access) ? access : [access];
   return required.some((key) => permissions.includes(key));
 }

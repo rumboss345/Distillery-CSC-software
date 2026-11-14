@@ -17,8 +17,10 @@ import {
   OWNER_CREATE_ERROR,
   OWNER_REMOVE_ERROR,
   OWNER_RESET_ADMIN_ERROR,
+  hasFullProductionAccess,
   isAdminRole,
   isOwnerRole,
+  isStaffRole,
   isReservedAuthEmail,
   isSiteOwnerEmail,
   RESERVED_AUTH_EMAIL_ERROR,
@@ -105,8 +107,8 @@ export async function setUserProcessAssignments(userId: number, stages: ProcessS
 }
 
 export async function publicUser(user: User): Promise<PublicUser> {
-  const permissions = isAdminRole(user.role) ? [...DEFAULT_USER_PERMISSIONS] : await getUserPermissions(user.id);
-  const processAssignments = isAdminRole(user.role)
+  const permissions = hasFullProductionAccess(user.role) ? [...DEFAULT_USER_PERMISSIONS] : await getUserPermissions(user.id);
+  const processAssignments = hasFullProductionAccess(user.role)
     ? sanitizeProcessStages([...PROCESS_STAGE_KEYS])
     : await getUserProcessAssignments(user.id);
   return {
@@ -147,12 +149,12 @@ export async function createUserByAdmin(
 ): Promise<User> {
   const normalized = email.toLowerCase();
   if (await getUserByEmail(normalized)) throw new Error('An account with this email already exists');
-  let storedRole: UserRole = role === 'owner' ? 'owner' : role === 'admin' ? 'admin' : 'user';
+  let storedRole: UserRole = role === 'owner' || role === 'admin' || role === 'manager' ? role : 'user';
   if (isSiteOwnerEmail(normalized)) storedRole = 'owner';
   if (storedRole === 'owner' && !isOwnerRole(actorRole) && !isSiteOwnerEmail(normalized)) {
     throw new Error(OWNER_CREATE_ERROR);
   }
-  const fullAccess = isAdminRole(storedRole);
+  const fullAccess = hasFullProductionAccess(storedRole);
   const passwordHash = bcrypt.hashSync(password, 12);
   const result = await getPool().query(
     `INSERT INTO users (email, password_hash, name, role, status, approval_token)
@@ -173,6 +175,7 @@ export async function updateUserByAdmin(
     permissions?: PermissionKey[];
     processAssignments?: ProcessStageKey[];
     password?: string;
+    role?: UserRole;
   },
   actorRole: UserRole = 'admin',
 ): Promise<User | null> {
@@ -189,7 +192,15 @@ export async function updateUserByAdmin(
     await getPool().query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, id]);
     await getPool().query('DELETE FROM password_reset_tokens WHERE user_id = $1', [id]);
   }
-  if (!isAdminRole(user.role)) {
+  let role = user.role;
+  if (updates.role && updates.role !== user.role && isStaffRole(user.role) && isStaffRole(updates.role)) {
+    await getPool().query('UPDATE users SET role = $1 WHERE id = $2', [updates.role, id]);
+    role = updates.role;
+  }
+  if (hasFullProductionAccess(role) && !isAdminRole(role)) {
+    await setUserPermissions(id, [...DEFAULT_USER_PERMISSIONS]);
+    await setUserProcessAssignments(id, [...PROCESS_STAGE_KEYS]);
+  } else if (!isAdminRole(role)) {
     if (updates.permissions) await setUserPermissions(id, updates.permissions);
     if (updates.processAssignments) await setUserProcessAssignments(id, updates.processAssignments);
   }

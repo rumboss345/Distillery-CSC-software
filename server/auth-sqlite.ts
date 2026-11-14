@@ -18,8 +18,10 @@ import {
   OWNER_CREATE_ERROR,
   OWNER_REMOVE_ERROR,
   OWNER_RESET_ADMIN_ERROR,
+  hasFullProductionAccess,
   isAdminRole,
   isOwnerRole,
+  isStaffRole,
   isReservedAuthEmail,
   isSiteOwnerEmail,
   RESERVED_AUTH_EMAIL_ERROR,
@@ -78,7 +80,7 @@ function ensureDb() {
       email TEXT NOT NULL UNIQUE COLLATE NOCASE,
       password_hash TEXT NOT NULL,
       name TEXT,
-      role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('owner', 'admin', 'user')),
+      role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('owner', 'admin', 'manager', 'user')),
       status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'approved', 'rejected')),
       approval_token TEXT UNIQUE,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -125,7 +127,7 @@ function migrateUserRoles() {
   const row = db
     .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'users'`)
     .get() as { sql: string } | undefined;
-  if (!row?.sql || row.sql.includes("'owner'")) return;
+  if (!row?.sql || row.sql.includes("'manager'")) return;
   db.exec(`
     PRAGMA foreign_keys = OFF;
     CREATE TABLE users_role_upgrade (
@@ -133,7 +135,7 @@ function migrateUserRoles() {
       email TEXT NOT NULL UNIQUE COLLATE NOCASE,
       password_hash TEXT NOT NULL,
       name TEXT,
-      role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('owner', 'admin', 'user')),
+      role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('owner', 'admin', 'manager', 'user')),
       status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'approved', 'rejected')),
       approval_token TEXT UNIQUE,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -253,9 +255,9 @@ export function setUserProcessAssignments(userId: number, stages: ProcessStageKe
 
 export function publicUser(user: User): PublicUser {
   const permissions =
-    isAdminRole(user.role) ? [...DEFAULT_USER_PERMISSIONS] : getUserPermissions(user.id);
+    hasFullProductionAccess(user.role) ? [...DEFAULT_USER_PERMISSIONS] : getUserPermissions(user.id);
   const processAssignments =
-    isAdminRole(user.role)
+    hasFullProductionAccess(user.role)
       ? sanitizeProcessStages([...PROCESS_STAGE_KEYS])
       : getUserProcessAssignments(user.id);
 
@@ -299,12 +301,12 @@ export function createUserByAdmin(
   if (getUserByEmail(normalized)) {
     throw new Error('An account with this email already exists');
   }
-  let storedRole: UserRole = role === 'owner' ? 'owner' : role === 'admin' ? 'admin' : 'user';
+  let storedRole: UserRole = role === 'owner' || role === 'admin' || role === 'manager' ? role : 'user';
   if (isSiteOwnerEmail(normalized)) storedRole = 'owner';
   if (storedRole === 'owner' && !isOwnerRole(actorRole) && !isSiteOwnerEmail(normalized)) {
     throw new Error(OWNER_CREATE_ERROR);
   }
-  const fullAccess = isAdminRole(storedRole);
+  const fullAccess = hasFullProductionAccess(storedRole);
   const passwordHash = bcrypt.hashSync(password, 12);
   const result = ensureDb()
     .prepare(
@@ -328,6 +330,7 @@ export function updateUserByAdmin(
     permissions?: PermissionKey[];
     processAssignments?: ProcessStageKey[];
     password?: string;
+    role?: UserRole;
   },
   actorRole: UserRole = 'admin',
 ): User | null {
@@ -345,7 +348,15 @@ export function updateUserByAdmin(
     ensureDb().prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(passwordHash, id);
     ensureDb().prepare('DELETE FROM password_reset_tokens WHERE user_id = ?').run(id);
   }
-  if (!isAdminRole(user.role)) {
+  let role = user.role;
+  if (updates.role && updates.role !== user.role && isStaffRole(user.role) && isStaffRole(updates.role)) {
+    ensureDb().prepare('UPDATE users SET role = ? WHERE id = ?').run(updates.role, id);
+    role = updates.role;
+  }
+  if (hasFullProductionAccess(role) && !isAdminRole(role)) {
+    setUserPermissions(id, [...DEFAULT_USER_PERMISSIONS]);
+    setUserProcessAssignments(id, [...PROCESS_STAGE_KEYS]);
+  } else if (!isAdminRole(role)) {
     if (updates.permissions) {
       setUserPermissions(id, updates.permissions);
     }

@@ -1,4 +1,4 @@
-export type AuthRole = 'owner' | 'admin' | 'user';
+export type AuthRole = 'owner' | 'admin' | 'manager' | 'user';
 
 export const OWNER_CREATE_ERROR = 'Only an owner can create another owner.';
 export const RESERVED_AUTH_EMAIL_ERROR =
@@ -49,9 +49,22 @@ export function isAdminRole(role: string | null | undefined): boolean {
   return role === 'owner' || role === 'admin';
 }
 
+export function isManagerRole(role: string | null | undefined): boolean {
+  return role === 'manager';
+}
+
+/**
+ * Production managers open every production page and work every process stage,
+ * but cannot manage users, confirm administrator actions, or clear data.
+ */
+export function hasFullProductionAccess(role: string | null | undefined): boolean {
+  return isAdminRole(role) || isManagerRole(role);
+}
+
 export function roleLabel(role: string | null | undefined): string {
   if (role === 'owner') return 'Owner';
   if (role === 'admin') return 'Administrator';
+  if (role === 'manager') return 'Production manager';
   return 'User';
 }
 
@@ -61,5 +74,20 @@ export function parseCreatedRole(value: unknown, actorRole: string): AuthRole {
     return 'owner';
   }
   if (value === 'admin') return 'admin';
+  if (value === 'manager') return 'manager';
   return 'user';
+}
+
+/** Staff roles an administrator can switch between on an existing account. */
+export function isStaffRole(role: string | null | undefined): role is 'manager' | 'user' {
+  return role === 'manager' || role === 'user';
+}
+
+export type DashboardView = 'owner' | 'manager' | 'operator';
+
+/** Owners and administrators see the business view; managers the production view; everyone else their own work. */
+export function dashboardViewForRole(role: string | null | undefined): DashboardView {
+  if (isAdminRole(role)) return 'owner';
+  if (isManagerRole(role)) return 'manager';
+  return 'operator';
 }
