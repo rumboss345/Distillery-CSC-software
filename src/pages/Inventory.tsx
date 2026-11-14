@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   getInventoryItems,
   getInventoryCategories,
@@ -218,6 +219,23 @@ export function Inventory() {
   const openHistory = (item: InventoryItem) => {
     setShowHistory(item.id);
   };
+
+  const [searchParams, setSearchParams] = useSearchParams();
+  const linkedItemHandled = useRef(false);
+  useEffect(() => {
+    const itemId = Number(searchParams.get('item')) || 0;
+    if (!itemId || linkedItemHandled.current) return;
+    linkedItemHandled.current = true;
+    const item = getInventoryItems().find((row) => row.id === itemId);
+    if (item) {
+      setShowAdjust(item.id);
+      setAdjustAmount('');
+      setAdjustUnit(defaultAdjustmentUnit(item.unit));
+    }
+    const next = new URLSearchParams(searchParams);
+    next.delete('item');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const handleAdjust = () => {
     if (!showAdjust || adjustDelta == null) return;
