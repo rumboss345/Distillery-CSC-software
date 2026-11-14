@@ -102,14 +102,24 @@ function dayKeys(today: string, days: number): string[] {
 }
 
 /**
+ * Only equipment that is dirty now. Finished cleaning and past dirty spans are calendar history,
+ * not work to do.
+ */
+export function isOpenCleaning(event: CalendarEvent): boolean {
+  return event.kind === 'cleaning' && Boolean(event.continuesUntilCleaned);
+}
+
+/**
  * The next seven days, today first.
  * Today also carries planned work whose day has passed, so nothing late drops off the list.
  * Finished work only shows on the day it happened.
+ * Cleaning shows only equipment that still needs cleaning, once, on today.
  */
 export function buildSevenDaySchedule(events: CalendarEvent[], today: string, days = 7): ScheduleDay[] {
   return dayKeys(today, days).map((date, index) => {
     const jobs: ScheduleJob[] = [];
     for (const event of events) {
+      if (event.kind === 'cleaning' && (index > 0 || !isOpenCleaning(event))) continue;
       const job = toScheduleJob(event, today);
       if (index === 0 && job.state === 'overdue') {
         jobs.push(job);
@@ -135,6 +145,8 @@ export interface TodayProduction {
   plannedToday: ScheduleJob[];
   overdue: ScheduleJob[];
   doneToday: ScheduleJob[];
+  /** Equipment that still needs cleaning. Kept apart so it does not bury production work. */
+  needsCleaning: ScheduleJob[];
   /** Counts of today's open work by activity, for the summary chips. */
   openByKind: { kind: CalendarActivityKind; label: string; count: number }[];
 }
@@ -145,7 +157,9 @@ export function buildTodayProduction(events: CalendarEvent[], today: string): To
 }
 
 /** Groups the jobs on today's schedule row. */
-export function summarizeTodayJobs(jobs: ScheduleJob[]): TodayProduction {
+export function summarizeTodayJobs(allJobs: ScheduleJob[]): TodayProduction {
+  const needsCleaning = allJobs.filter((job) => job.kind === 'cleaning');
+  const jobs = allJobs.filter((job) => job.kind !== 'cleaning');
   const inProgress = jobs.filter((job) => job.state === 'in_progress');
   const plannedToday = jobs.filter((job) => job.state === 'planned');
   const overdue = jobs.filter((job) => job.state === 'overdue');
@@ -157,7 +171,10 @@ export function summarizeTodayJobs(jobs: ScheduleJob[]): TodayProduction {
   const openByKind = [...counts.entries()]
     .map(([kind, count]) => ({ kind, label: CALENDAR_KIND_LABELS[kind], count }))
     .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
-  return { inProgress, plannedToday, overdue, doneToday, openByKind };
+  if (needsCleaning.length > 0) {
+    openByKind.push({ kind: 'cleaning', label: 'To clean', count: needsCleaning.length });
+  }
+  return { inProgress, plannedToday, overdue, doneToday, needsCleaning, openByKind };
 }
 
 /** Jobs the person can open, optionally only their own. */

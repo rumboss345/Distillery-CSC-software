@@ -6267,3 +6267,36 @@ tr.row-overdue > td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.dash-cleaning {
+  margin-top: 0.75rem;
+}
+
+.dash-cleaning-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.35rem;
+}
+
+.dash-cleaning-list a {
+  display: block;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: 0.85rem;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dash-cleaning-list a:hover,
+.dash-cleaning-list a:focus-visible {
+  border-color: var(--warning);
+  background: var(--bg-hover);
+}

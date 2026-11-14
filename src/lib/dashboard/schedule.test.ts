@@ -76,3 +76,27 @@ describe('operator filtering', () => {
     expect(days[4].jobs.map((job) => job.id)).toEqual(['later']);
   });
 });
+
+describe('cleaning on the dashboard', () => {
+  const cleaning: CalendarEvent[] = [
+    event({ id: 'dirty-old', kind: 'cleaning', startDate: '2026-11-10', title: 'Still 1', status: 'upcoming', continuesUntilCleaned: true }),
+    event({ id: 'dirty-today', kind: 'cleaning', startDate: TODAY, title: 'Fermenter 2', status: 'upcoming', continuesUntilCleaned: true }),
+    event({ id: 'past-span', kind: 'cleaning', startDate: '2026-11-01', endDate: '2026-11-03', title: 'Tank 4', status: 'upcoming' }),
+    event({ id: 'cleaned', kind: 'cleaning', startDate: TODAY, title: 'Tank 5', status: 'done', statusCategory: 'complete' }),
+  ];
+
+  it('shows only equipment that still needs cleaning, once, on today', () => {
+    const days = buildSevenDaySchedule([...events, ...cleaning], TODAY);
+    const cleaningIds = (index: number) => days[index].jobs.filter((job) => job.kind === 'cleaning').map((job) => job.id);
+    expect(cleaningIds(0).sort()).toEqual(['dirty-old', 'dirty-today']);
+    for (let index = 1; index < days.length; index += 1) expect(cleaningIds(index)).toEqual([]);
+  });
+
+  it('keeps cleaning out of overdue production work', () => {
+    const today = buildTodayProduction([...events, ...cleaning], TODAY);
+    expect(today.overdue.map((job) => job.id)).toEqual(['late']);
+    expect(today.needsCleaning.map((job) => job.title).sort()).toEqual(['Fermenter 2', 'Still 1']);
+    expect(today.doneToday.map((job) => job.id)).toEqual(['done']);
+    expect(today.openByKind.find((row) => row.kind === 'cleaning')?.count).toBe(2);
+  });
+});
