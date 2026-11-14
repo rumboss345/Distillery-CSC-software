@@ -31,6 +31,8 @@ export interface TankLot {
   distillationLabel?: string | null;
   /** Contents phrase captured when a transfer was saved (product and cut names). */
   transferLiquidLabel?: string | null;
+  /** The transfer was saved as moving a finished blend. */
+  transferBlended?: boolean;
 }
 
 export interface TankWithdrawal {
@@ -168,24 +170,27 @@ export function productNamesFromRemainingLots(lots: TankLot[]): string | null {
   return unique.length > 0 ? unique.join(' · ') : null;
 }
 
-/**
- * Product name for the liquid these intakes describe (newest first).
- * The newest blend names the tank. Older blends stay in the history and are not added on.
- * A transfer asks the caller for the source tank's name at that time.
- * A cut, stillage, or opening balance does not use an older blend.
- */
-/** Single line for gallons still in a tank. Blend names come first; multiple layers join with · */
+/** Spirit type for liquid that came out of a finished blend, wherever it has been moved since. */
+export const BLENDED_SPIRIT_TYPE = 'Blended';
+
+/** "Blended · Gold Rum": the spirit type, then the blend names. */
+export function blendedContentsLabel(blendNames: string | null | undefined): string | null {
+  const names = blendNames?.trim() ?? '';
+  return names ? `${BLENDED_SPIRIT_TYPE} · ${names}` : null;
+}
+
+/** Single line for gallons still in a tank. Blends come first; multiple layers join with · */
 export function primaryTankLiquidLabel(lots: TankLot[]): string | null {
   const remaining = lots.filter((lot) => lot.volumeGal > 0.05);
   if (remaining.length === 0) return null;
 
-  const blendNames = productNamesFromRemainingLots(remaining);
+  const blended = blendedContentsLabel(productNamesFromRemainingLots(remaining));
   const spiritNames = distillationLabelsFromLots(remaining);
 
-  if (blendNames && spiritNames) {
-    return `${blendNames} · ${spiritNames}`;
+  if (blended && spiritNames) {
+    return `${blended} · ${spiritNames}`;
   }
-  if (blendNames) return blendNames;
+  if (blended) return blended;
   if (spiritNames) return spiritNames;
 
   const ordered = [...remaining].sort((a, b) => storedTime(b.at) - storedTime(a.at));
@@ -210,6 +215,12 @@ export function liquidLabelForGallonsTaken(lots: TankLot[], volumeGal: number): 
   return primaryTankLiquidLabel(taken);
 }
 
+/**
+ * Product name for the liquid these intakes describe (newest first).
+ * The newest blend names the tank. Older blends stay in the history and are not added on.
+ * A transfer asks the caller for the source tank's name at that time.
+ * A cut, stillage, or opening balance does not use an older blend.
+ */
 export function productNameFromIntakes(
   entriesNewestFirst: TankProductIntake[],
   resolveTransfer: (sourceTankId: number, occurredAt: string) => string | null,

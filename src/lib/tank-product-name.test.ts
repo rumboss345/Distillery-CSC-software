@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  BLENDED_SPIRIT_TYPE,
+  blendedContentsLabel,
   applyTankWithdrawals,
   consumeOldestLots,
   distillationLabelsFromLots,
@@ -178,7 +180,7 @@ describe('primaryTankLiquidLabel', () => {
         cutType: 'hearts',
         runType: 'low_wines',
       },
-    ])).toBe('GR Dark · Rum Run · Hearts');
+    ])).toBe('Blended · GR Dark · Rum Run · Hearts');
   });
 
   it('uses a saved transfer label when gallons came in by transfer', () => {
@@ -191,6 +193,27 @@ describe('primaryTankLiquidLabel', () => {
         transferLiquidLabel: 'Dark Rum',
       },
     ])).toBe('Dark Rum');
+  });
+
+  it('keeps a blend named and blended after it is moved to another tank', () => {
+    expect(primaryTankLiquidLabel([
+      {
+        at: '2026-04-02 11:00:00',
+        volumeGal: 50,
+        kind: 'transfer',
+        sourceTankId: 3,
+        productName: 'Gold Rum',
+        transferLiquidLabel: 'Gold Rum',
+      },
+    ])).toBe('Blended · Gold Rum');
+  });
+});
+
+describe('blendedContentsLabel', () => {
+  it('puts the blended spirit type before the blend name', () => {
+    expect(blendedContentsLabel('Gold Rum')).toBe(`${BLENDED_SPIRIT_TYPE} · Gold Rum`);
+    expect(blendedContentsLabel('  ')).toBeNull();
+    expect(blendedContentsLabel(null)).toBeNull();
   });
 });
 
