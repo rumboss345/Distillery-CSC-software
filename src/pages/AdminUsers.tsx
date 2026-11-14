@@ -24,6 +24,8 @@ import {
   getFermentationReadyMaxBrix,
   getHoldingTanksWithContents,
   saveFermentationReadyMaxBrix,
+  getDashboardThresholds,
+  saveDashboardThresholds,
 } from '../db/queries';
 import { parseFermentationReadyMaxBrix } from '../lib/fermentation';
 import { useAuth } from '../context/AuthContext';
@@ -47,7 +49,23 @@ import {
   roleLabel,
   type AuthRole,
 } from '../lib/roles';
+import {
+  DASHBOARD_THRESHOLD_LABELS,
+  DEFAULT_DASHBOARD_THRESHOLDS,
+  parseDashboardThresholds,
+  type DashboardThresholds,
+} from '../lib/dashboard/thresholds';
 import './admin.css';
+
+function thresholdsToInputs(thresholds: DashboardThresholds): Record<keyof DashboardThresholds, string> {
+  return {
+    fermenterCheckHours: String(thresholds.fermenterCheckHours),
+    blendVolumeVariancePct: String(thresholds.blendVolumeVariancePct),
+    bottlingVarianceGal: String(thresholds.bottlingVarianceGal),
+    abvVariancePoints: String(thresholds.abvVariancePoints),
+    longRunningRunDays: String(thresholds.longRunningRunDays),
+  };
+}
 
 const emptyForm = () => ({
   email: '',
@@ -79,6 +97,10 @@ export function AdminUsers() {
   const [editRole, setEditRole] = useState<'manager' | 'user'>('user');
   const [fermentationReadyBrixInput, setFermentationReadyBrixInput] = useState('');
   const [productionSettingsNote, setProductionSettingsNote] = useState('');
+  const [thresholdInputs, setThresholdInputs] = useState<Record<keyof DashboardThresholds, string>>(
+    () => thresholdsToInputs(DEFAULT_DASHBOARD_THRESHOLDS),
+  );
+  const [thresholdNote, setThresholdNote] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -88,6 +110,7 @@ export function AdminUsers() {
       setAllUsers(usersRes.users);
       setPending(pendingRes.users);
       setFermentationReadyBrixInput(String(getFermentationReadyMaxBrix()));
+      setThresholdInputs(thresholdsToInputs(getDashboardThresholds()));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load users');
     } finally {
@@ -351,6 +374,27 @@ export function AdminUsers() {
     return `${u.permissions.length} area${u.permissions.length === 1 ? '' : 's'}`;
   }
 
+  function handleSaveDashboardThresholds() {
+    setThresholdNote('');
+    const raw: Record<string, number> = {};
+    for (const key of Object.keys(thresholdInputs) as (keyof DashboardThresholds)[]) {
+      const parsed = Number(thresholdInputs[key].trim());
+      if (!thresholdInputs[key].trim() || !Number.isFinite(parsed) || parsed <= 0) {
+        window.alert(`Enter a positive number for ${DASHBOARD_THRESHOLD_LABELS[key].toLowerCase()}.`);
+        return;
+      }
+      raw[key] = parsed;
+    }
+    const saved = parseDashboardThresholds(raw);
+    try {
+      saveDashboardThresholds(saved);
+      setThresholdInputs(thresholdsToInputs(saved));
+      setThresholdNote('Dashboard alert limits saved for everyone signed in.');
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Could not save the dashboard alert limits.');
+    }
+  }
+
   function handleSaveFermentationReadyBrix() {
     setProductionSettingsNote('');
     const trimmed = fermentationReadyBrixInput.trim();
@@ -574,6 +618,39 @@ export function AdminUsers() {
         {productionSettingsNote ? (
           <p className="admin-hint" data-testid="fermentation-ready-brix-note">{productionSettingsNote}</p>
         ) : null}
+
+        <h3 className="admin-subtitle">Dashboard alert limits</h3>
+        <p className="admin-hint">
+          The dashboard's Needs attention list flags records past these limits.
+        </p>
+        <form
+          className="admin-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleSaveDashboardThresholds();
+          }}
+        >
+          <div className="form-row">
+            {(Object.keys(thresholdInputs) as (keyof DashboardThresholds)[]).map((key) => (
+              <label key={key} htmlFor={`dashboard-threshold-${key}`}>
+                {DASHBOARD_THRESHOLD_LABELS[key]}
+                <input
+                  id={`dashboard-threshold-${key}`}
+                  type="number"
+                  min={0}
+                  step="any"
+                  required
+                  value={thresholdInputs[key]}
+                  onChange={(e) => setThresholdInputs({ ...thresholdInputs, [key]: e.target.value })}
+                />
+              </label>
+            ))}
+          </div>
+          <button type="submit" className="btn btn-primary" data-testid="save-dashboard-thresholds">
+            Save alert limits
+          </button>
+        </form>
+        {thresholdNote ? <p className="admin-hint">{thresholdNote}</p> : null}
       </div>
 
       <div className="card admin-section" data-testid="admin-data-management">

@@ -189,6 +189,11 @@ import type {
   ProductionCostMonthlyOverhead,
 } from '../types';
 import { mlToGallons } from '../types';
+import {
+  DASHBOARD_THRESHOLDS_SETTING_KEY,
+  parseDashboardThresholds,
+  type DashboardThresholds,
+} from '../lib/dashboard/thresholds';
 import { reconcileRecipeProofingWater } from '../lib/blend-abv-confirm';
 import {
   computeTheoreticalBlend,
@@ -734,6 +739,27 @@ export function saveFermentationReadyMaxBrix(brix: number): void {
     `INSERT INTO distillery_settings (key, value, updated_at) VALUES (?, ?, datetime('now'))
      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
     [FERMENTATION_READY_MAX_BRIX_SETTING_KEY, String(value)],
+  );
+  notifySharedRefresh();
+}
+
+export function getDashboardThresholds(): DashboardThresholds {
+  const row = queryOne<{ value: string }>(
+    'SELECT value FROM distillery_settings WHERE key = ?',
+    [DASHBOARD_THRESHOLDS_SETTING_KEY],
+  );
+  return parseDashboardThresholds(row?.value);
+}
+
+export function saveDashboardThresholds(thresholds: DashboardThresholds): void {
+  const __remote = forwardProductionMutation('saveDashboardThresholds', [thresholds]);
+  if (__remote.forwarded) return __remote.value as never;
+
+  const value = parseDashboardThresholds(thresholds);
+  runQuery(
+    `INSERT INTO distillery_settings (key, value, updated_at) VALUES (?, ?, datetime('now'))
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+    [DASHBOARD_THRESHOLDS_SETTING_KEY, JSON.stringify(value)],
   );
   notifySharedRefresh();
 }
