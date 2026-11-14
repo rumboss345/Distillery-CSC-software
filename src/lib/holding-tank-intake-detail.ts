@@ -14,6 +14,7 @@ export const INTAKE_KIND_LABELS: Record<HoldingTankIntakeEntry['kind'], string> 
 const SPIRIT_TYPE_LABELS: Record<SpiritTransferType, string> = {
   low_wines: 'Low wines',
   high_wines: 'High wines',
+  blended: 'Blended',
 };
 
 function capitalizeCut(cutType: string): string {

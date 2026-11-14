@@ -187,6 +187,7 @@ import type {
   YieldReport,
   ProductionCostSettings,
   ProductionCostMonthlyOverhead,
+  SpiritTransferType,
 } from '../types';
 import { mlToGallons } from '../types';
 import {
@@ -2653,7 +2654,9 @@ export function getHoldingTankIntakeHistory(
       );
       const stored = t.liquid_label?.trim() || '';
       const liquid = stored || transferredLiquidPhrase(moved.productName, moved.distillationLabel);
-      const spiritType = t.spirit_type === 'high_wines' ? 'high_wines' as const : 'low_wines' as const;
+      const spiritType: SpiritTransferType = t.spirit_type === 'blended' || moved.productName?.trim()
+        ? 'blended'
+        : t.spirit_type === 'high_wines' ? 'high_wines' : 'low_wines';
       return {
         kind: 'transfer' as const,
         id: t.id,
@@ -2661,7 +2664,7 @@ export function getHoldingTankIntakeHistory(
         volume_gal: t.volume_gal,
         abv: t.abv,
         summary: transferIntakeSummary(t.source_tank_name, liquid),
-        detail: spiritType === 'high_wines' ? 'High wines transfer' : 'Low wines transfer',
+        detail: SPIRIT_TRANSFER_DETAILS[spiritType],
         notes: t.notes?.trim() || undefined,
         sourceTankId: t.source_tank_equipment_id,
         sourceTankName: t.source_tank_name,
@@ -2772,9 +2775,10 @@ function tankLotsOnHand(tankId: number, asOf: string | null): { ins: TankLot[]; 
     volume_gal: number;
     source_tank_equipment_id: number;
     liquid_label: string;
+    spirit_type: string;
   }>(`
     SELECT COALESCE(created_at, transfer_date) as at, volume_gal, source_tank_equipment_id,
-           COALESCE(liquid_label, '') as liquid_label
+           COALESCE(liquid_label, '') as liquid_label, spirit_type
     FROM holding_tank_transfers
     WHERE dest_tank_equipment_id = ? AND volume_gal > 0
   `, [tankId])) {
@@ -2785,6 +2789,7 @@ function tankLotsOnHand(tankId: number, asOf: string | null): { ins: TankLot[]; 
       kind: 'transfer',
       sourceTankId: row.source_tank_equipment_id,
       transferLiquidLabel: row.liquid_label?.trim() || null,
+      transferBlended: row.spirit_type === 'blended',
     });
   }
 
@@ -2933,10 +2938,10 @@ function tankLotsOnHand(tankId: number, asOf: string | null): { ins: TankLot[]; 
 function annotateTransferLots(lots: TankLot[], seen: Set<number>): void {
   for (const lot of lots) {
     if (lot.kind !== 'transfer' || !lot.sourceTankId) continue;
-    if (lot.transferLiquidLabel?.trim()) continue;
     if (lot.productName?.trim() && lot.distillationLabel?.trim()) continue;
     const details = withdrawnDetails(lot.sourceTankId, lot.at, lot.volumeGal, seen);
     if (!lot.productName?.trim()) lot.productName = details.productName;
+    if (!lot.productName?.trim() && lot.transferBlended) lot.productName = lot.transferLiquidLabel ?? null;
     if (!lot.distillationLabel?.trim()) lot.distillationLabel = details.distillationLabel;
   }
 }
@@ -3030,15 +3035,23 @@ export function holdingTankContentsLabel(tankId: number, volumeGal?: number): st
   return primaryTankLiquidLabel(tankRemainingLots(tankId, null));
 }
 
-function withdrawnLiquidLabelForTransfer(
+const SPIRIT_TRANSFER_DETAILS: Record<SpiritTransferType, string> = {
+  low_wines: 'Low wines transfer',
+  high_wines: 'High wines transfer',
+  blended: 'Blended transfer',
+};
+
+/** What a transfer moves, and whether it is a finished blend. Blends keep their name in every later tank. */
+function withdrawnLiquidForTransfer(
   sourceTankId: number,
   at: string,
   volumeGal: number,
-): string {
+): { label: string; blended: boolean } {
   const details = withdrawnDetails(sourceTankId, at, volumeGal, new Set());
+  const blended = Boolean(details.productName?.trim());
   const phrase = transferredLiquidPhrase(details.productName, details.distillationLabel);
-  if (phrase?.trim()) return phrase.trim();
-  return holdingTankContentsLabel(sourceTankId) ?? '';
+  if (phrase?.trim()) return { label: phrase.trim(), blended };
+  return { label: holdingTankContentsLabel(sourceTankId) ?? '', blended };
 }
 
 /** Product name of a tank at a fill or transfer, even if that tank is empty now. */
@@ -3144,7 +3157,7 @@ export function saveHoldingTankTransfer(
     throw new Error(`Only ${available.volume_gal.toFixed(1)} gal available in the source tank.`);
   }
   const occurredAt = transfer.transfer_date?.trim() || localIsoDate(new Date());
-  const liquidLabel = withdrawnLiquidLabelForTransfer(
+  const withdrawn = withdrawnLiquidForTransfer(
     transfer.source_tank_equipment_id,
     occurredAt,
     transfer.volume_gal,
@@ -3154,14 +3167,14 @@ export function saveHoldingTankTransfer(
       (spirit_type, source_tank_equipment_id, dest_tank_equipment_id, volume_gal, abv, transfer_date, notes, liquid_label)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [
-      transfer.spirit_type ?? 'low_wines',
+      withdrawn.blended ? 'blended' : transfer.spirit_type ?? 'low_wines',
       transfer.source_tank_equipment_id,
       transfer.dest_tank_equipment_id,
       transfer.volume_gal,
       transfer.abv,
       transfer.transfer_date,
       transfer.notes,
-      liquidLabel,
+      withdrawn.label,
     ],
   );
   syncHoldingTankStatuses();

@@ -21,7 +21,7 @@ export type SpiritProofPlace = 'before_still' | 'in_still';
 
 export type CutType = 'heads' | 'hearts' | 'tails';
 
-export type SpiritTransferType = 'low_wines' | 'high_wines';
+export type SpiritTransferType = 'low_wines' | 'high_wines' | 'blended';
 
 export type BarrelStatus = 'aging' | 'empty' | 'dumped';
 
