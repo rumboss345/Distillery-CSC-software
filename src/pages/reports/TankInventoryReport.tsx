@@ -105,7 +105,7 @@ function TankHistorySection({ tanks }: { tanks: TankInventoryReportRow[] }) {
   );
   const balancedHistory = useMemo(() => applyTankBalances(
     buildTankHistory(
-      buildLiquidMovements(ALL_TIME),
+      buildLiquidMovements(ALL_TIME, { includePlannedBottlings: true }),
       tanks.map((t) => ({ id: t.equipment_id, name: t.name })),
     ),
     tanks.map((t) => ({ id: t.equipment_id, volume_gal: t.volume_gal, abv: t.abv })),
@@ -235,7 +235,15 @@ function TankHistorySection({ tanks }: { tanks: TankInventoryReportRow[] }) {
                       ) : 'Empty'}
                     </td>
                     <td>{e.user_label?.trim() || '—'}</td>
-                    <td className="tank-history-notes">{e.notes || '—'}</td>
+                    <td className="tank-history-notes">
+                      {e.notes || (e.unexplained_out_gal ? '' : '—')}
+                      {e.unexplained_out_gal != null && (
+                        <div className="tank-history-warning">
+                          {e.unexplained_out_gal.toFixed(2)} gal left this tank after this with no record in this history.
+                          The tank reads {e.after_volume_gal ? `${e.after_volume_gal.toFixed(2)} gal` : 'empty'} here because of it.
+                        </div>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

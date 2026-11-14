@@ -406,6 +406,11 @@ body.nav-open {
   font-size: 0.85rem;
 }
 
+.tank-history-warning {
+  color: var(--warning);
+  font-weight: 600;
+}
+
 .tank-history-more {
   display: flex;
   justify-content: center;

@@ -12,6 +12,7 @@ export type LiquidMovementType =
   | 'blend_output'
   | 'blend_draw'
   | 'bottling'
+  | 'bottling_planned'
   | 'bottling_return'
   | 'barrel_fill'
   | 'stillage'
@@ -42,7 +43,29 @@ export interface LiquidMovementRow {
 
 const BLEND_LEDGER = "('executed', 'bottled', 'blended')";
 
-export function buildLiquidMovements(range: ReportDateRange): LiquidMovementRow[] {
+/** Runs store only a date; the first cut's time places the charge within that day. */
+const CHARGE_OCCURRED_AT_SQL = `
+  COALESCE(
+    (SELECT MIN(c.start_time) FROM distillation_cuts c
+     WHERE c.distillation_run_id = r.id
+       AND c.start_time IS NOT NULL
+       AND substr(c.start_time, 1, 10) = substr(r.run_date, 1, 10)),
+    r.run_date
+  )
+`;
+
+export interface LiquidMovementOptions {
+  /**
+   * Planned bottlings hold their tank gallons in the tank ledger before they
+   * run. Include them when balancing a tank's history.
+   */
+  includePlannedBottlings?: boolean;
+}
+
+export function buildLiquidMovements(
+  range: ReportDateRange,
+  options: LiquidMovementOptions = {},
+): LiquidMovementRow[] {
   const rows: LiquidMovementRow[] = [];
 
   const cuts = queryAll<{
@@ -102,7 +125,7 @@ export function buildLiquidMovements(range: ReportDateRange): LiquidMovementRow[
     operator: string;
     tank_id: number;
   }>(`
-    SELECT r.id, r.run_date, r.batch_number, r.still_name, src.name as tank_name,
+    SELECT r.id, ${CHARGE_OCCURRED_AT_SQL} as run_date, r.batch_number, r.still_name, src.name as tank_name,
            r.source_holding_tank_equipment_id as tank_id, r.charge_volume_gal, r.charge_abv, r.proof_water_gal, r.proof_spirit_gal,
            r.proof_spirit_abv, r.proof_place, r.assigned_user_name as operator
     FROM distillation_runs r
@@ -127,7 +150,7 @@ export function buildLiquidMovements(range: ReportDateRange): LiquidMovementRow[
     operator: string;
     tank_id: number;
   }>(`
-    SELECT r.id, s.id as source_id, r.run_date, r.batch_number, r.still_name, src.name as tank_name,
+    SELECT r.id, s.id as source_id, ${CHARGE_OCCURRED_AT_SQL} as run_date, r.batch_number, r.still_name, src.name as tank_name,
            s.holding_tank_equipment_id as tank_id,
            s.volume_gal, s.abv, r.charge_abv, r.proof_water_gal, r.proof_place,
            r.assigned_user_name as operator
@@ -291,11 +314,21 @@ export function buildLiquidMovements(range: ReportDateRange): LiquidMovementRow[
     LEFT JOIN floor_equipment fe ON fe.id = bss.holding_tank_equipment_id
     LEFT JOIN barrels bar ON bar.id = bss.barrel_id
     WHERE b.status IN ${BLEND_LEDGER} AND bss.volume_gal > 0
+    UNION ALL
+    SELECT -b.id as id, b.id as blend_id, fe.id as tank_id, COALESCE(b.executed_at, b.blend_date) as occurred_at,
+           b.batch_number, b.product_name, b.base_spirit_volume_gal as volume_gal, b.base_spirit_abv as abv,
+           COALESCE(fe.name, 'Source') as source_label,
+           b.assigned_user_name as operator
+    FROM blend_products b
+    JOIN floor_equipment fe ON fe.id = b.source_holding_tank_equipment_id
+    WHERE b.status IN ${BLEND_LEDGER}
+      AND b.base_spirit_volume_gal > 0
+      AND NOT EXISTS (SELECT 1 FROM blend_spirit_sources bss WHERE bss.blend_product_id = b.id)
   `);
   for (const d of blendDraws) {
     if (!eventInReportRange(d.occurred_at, range)) continue;
     rows.push({
-      row_key: `blend_draw:${d.id}`,
+      row_key: d.id < 0 ? `blend_base:${d.blend_id}` : `blend_draw:${d.id}`,
       occurred_at: d.occurred_at,
       movement_type: 'blend_draw',
       source_label: d.source_label,
@@ -308,7 +341,7 @@ export function buildLiquidMovements(range: ReportDateRange): LiquidMovementRow[
       abv: d.abv,
       laa_gal: laaGalFromVolumeAbv(d.volume_gal, d.abv),
       user_label: d.operator || '—',
-      reference: `Blend source ${d.id}`,
+      reference: d.id < 0 ? `Blend ${d.blend_id}` : `Blend source ${d.id}`,
       notes: '',
     });
   }
@@ -324,22 +357,26 @@ export function buildLiquidMovements(range: ReportDateRange): LiquidMovementRow[
     tank_name: string | null;
     tank_id: number;
     variance_changed_by: string | null;
+    status: string | null;
+    created_at: string | null;
   }>(`
-    SELECT br.id, br.bottling_date, br.batch_number, br.product_name,
+    SELECT br.id, br.bottling_date, br.created_at, br.batch_number, br.product_name,
            br.source_volume_gal, br.final_abv, br.source_abv, fe.name as tank_name,
-           br.source_holding_tank_equipment_id as tank_id, br.variance_changed_by
+           br.source_holding_tank_equipment_id as tank_id, br.variance_changed_by, br.status
     FROM bottling_runs br
     LEFT JOIN floor_equipment fe ON fe.id = br.source_holding_tank_equipment_id
     WHERE br.source_holding_tank_equipment_id IS NOT NULL AND br.source_volume_gal > 0
-      AND COALESCE(br.status, 'complete') != 'planned'
   `);
   for (const b of bottlings) {
-    if (!eventInReportRange(b.bottling_date, range)) continue;
+    const planned = (b.status ?? 'complete') === 'planned';
+    if (planned && !options.includePlannedBottlings) continue;
+    const occurredAt = planned ? (b.created_at || b.bottling_date) : b.bottling_date;
+    if (!eventInReportRange(occurredAt, range)) continue;
     const vol = b.source_volume_gal ?? 0;
     rows.push({
       row_key: `bottle:${b.id}`,
-      occurred_at: b.bottling_date,
-      movement_type: 'bottling',
+      occurred_at: occurredAt,
+      movement_type: planned ? 'bottling_planned' : 'bottling',
       source_label: b.tank_name ?? 'Tank',
       dest_label: `Bottling ${b.batch_number}`.trim(),
       source_tank_id: b.tank_id,
@@ -351,7 +388,9 @@ export function buildLiquidMovements(range: ReportDateRange): LiquidMovementRow[
       laa_gal: laaGalFromVolumeAbv(vol, b.source_abv ?? b.final_abv),
       user_label: b.variance_changed_by?.trim() || '—',
       reference: `Bottling ${b.id}`,
-      notes: '',
+      notes: planned
+        ? `Planned bottling for ${b.bottling_date}: these gallons are held for it and no longer show as available in the tank`
+        : '',
     });
   }
 
@@ -585,6 +624,7 @@ export const MOVEMENT_TYPE_LABELS: Record<LiquidMovementType, string> = {
   blend_output: 'Blend output',
   blend_draw: 'Blend draw',
   bottling: 'Bottling draw',
+  bottling_planned: 'Planned bottling',
   bottling_return: 'Bottling return',
   barrel_fill: 'Barrel fill',
   stillage: 'Stillage',
