@@ -567,14 +567,16 @@ export function buildLiquidMovements(
     tank_id: number;
     notes: string;
     changed_by: string | null;
+    liquid_label: string;
   }>(`
     SELECT v.id, COALESCE(v.created_at, v.recorded_at) as recorded_at, v.book_volume_gal, v.book_abv,
            v.set_volume_gal, v.set_abv, fe.name as tank_name, v.tank_equipment_id as tank_id,
-           COALESCE(v.notes, '') as notes, v.changed_by
+           COALESCE(v.notes, '') as notes, v.changed_by, COALESCE(v.liquid_label, '') as liquid_label
     FROM holding_tank_volume_variances v
     JOIN floor_equipment fe ON fe.id = v.tank_equipment_id
     WHERE ABS(v.set_volume_gal - v.book_volume_gal) > 0.001
        OR ABS(v.set_abv - v.book_abv) > 0.001
+       OR TRIM(COALESCE(v.liquid_label, '')) != ''
   `);
   for (const v of volumeSets) {
     if (!eventInReportRange(v.recorded_at, range)) continue;
@@ -590,9 +592,9 @@ export function buildLiquidMovements(
       dest_label: gained ? v.tank_name : 'Volume set',
       source_tank_id: gained ? null : v.tank_id,
       dest_tank_id: gained ? v.tank_id : null,
-      product_liquid: abvOnly
+      product_liquid: v.liquid_label.trim() || (abvOnly
         ? (gained ? 'ABV set higher' : 'ABV set lower')
-        : (gained ? 'Volume set higher' : 'Volume set lower'),
+        : (gained ? 'Volume set higher' : 'Volume set lower')),
       batch_ref: '',
       volume_gal: volume,
       abv: v.set_abv,

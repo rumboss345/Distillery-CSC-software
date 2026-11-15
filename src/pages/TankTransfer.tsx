@@ -14,6 +14,7 @@ import {
   deleteDiscardedFermentation,
   deleteHoldingTankDilution,
   deleteHoldingTankTransfer,
+  getBlendProducts,
   getCollectionVesselStoredCutType,
   getDiscardedFermentations,
   getFermentersWithWash,
@@ -38,6 +39,7 @@ import { isSpiritLedgerEquipmentType } from '../lib/equipment';
 import { mixedSpiritConfirmMessage } from '../lib/blend-spirit-mix';
 import { tankContentsPhrase, tankDropdownLabel } from '../lib/tank-menu-label';
 import { isStillageTankType, STILLAGE_DISCARD_DESTINATION } from '../lib/stillage';
+import { tankLiquidOptionGroups, tankLiquidOptionListed } from '../lib/tank-liquid-options';
 import { limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
 import { formatDateDisplay } from '../lib/date-input';
@@ -72,7 +74,7 @@ const tankContentsSummary = (tankId: number, volumeGal: number): string => {
   const product = holdingTankProductName(tankId, volumeGal);
   if (product) return product;
   const intake = getHoldingTankIntakeHistory(tankId, 1)[0]?.summary;
-  if (intake) return intake;
+  if (intake) return intake.replace(/^On hand · /, '');
   const cutType = getCollectionVesselStoredCutType(tankId);
   if (!cutType) return '—';
   return cutType.charAt(0).toUpperCase() + cutType.slice(1);
@@ -95,6 +97,8 @@ const emptyFermenterForm = () => ({
   transfer_date: localIsoDate(),
   notes: '',
 });
+
+const OTHER_LIQUID = '__other__';
 
 export function TankTransfer() {
   const { user } = useAuth();
@@ -173,11 +177,26 @@ export function TankTransfer() {
     abv: '',
     recorded_at: localIsoDate(),
     notes: '',
+    liquid_choice: '',
+    liquid_other: '',
   });
 
   void key;
 
   const onHandBook = onHandTankId != null ? getHoldingTankContents(onHandTankId) : null;
+  const onHandTank = onHandTankId != null ? tanksWithContents.find((tank) => tank.id === onHandTankId) : undefined;
+  const onHandLiquidGroups = onHandTankId != null
+    ? tankLiquidOptionGroups({
+      stillageTank: isStillageTankType(onHandTank?.equipment_type),
+      currentLabel: getHoldingTankOnHand(onHandTankId)?.liquid_label || tankContentsPhrase(onHandTankId),
+      blendNames: getBlendProducts()
+        .filter((blend) => ['executed', 'bottled', 'blended'].includes(blend.status))
+        .map((blend) => blend.product_name),
+    })
+    : [];
+  const onHandLiquid = onHandForm.liquid_choice === OTHER_LIQUID
+    ? onHandForm.liquid_other.trim()
+    : onHandForm.liquid_choice.trim();
   const onHandEnteredGal = onHandForm.volume_gal.trim() === '' ? null : parseFloat(onHandForm.volume_gal);
   const onHandVariance = onHandBook != null && onHandEnteredGal != null && Number.isFinite(onHandEnteredGal)
     ? tankVolumeVarianceGal(onHandBook.volume_gal, onHandEnteredGal)
@@ -545,12 +564,15 @@ export function TankTransfer() {
     if (!isAdmin) return;
     const contents = getHoldingTankContents(tankId);
     const existing = getHoldingTankOnHand(tankId);
+    const current = (existing?.liquid_label?.trim() || tankContentsPhrase(tankId) || '').trim();
     setOnHandTankId(tankId);
     setOnHandForm({
       volume_gal: contents.volume_gal > 0.001 ? contents.volume_gal.toFixed(1) : '',
       abv: contents.volume_gal > 0.001 ? contents.abv.toFixed(1) : '',
       recorded_at: existing?.recorded_at?.slice(0, 10) || localIsoDate(),
       notes: existing?.notes ?? '',
+      liquid_choice: current,
+      liquid_other: '',
     });
   };
 
@@ -564,6 +586,10 @@ export function TankTransfer() {
     }
     if (!Number.isFinite(abv) || abv < 0 || abv > MAX_ENTERED_ABV) {
       alert('Enter an ABV from 0 to 99.');
+      return;
+    }
+    if (volumeGal > 0.05 && !onHandLiquid) {
+      alert('Choose what is in the tank.');
       return;
     }
     const tank = tanksWithContents.find((item) => item.id === onHandTankId);
@@ -592,6 +618,7 @@ export function TankTransfer() {
         recordedAt: onHandForm.recorded_at,
         notes: onHandForm.notes,
         changedBy,
+        liquidLabel: volumeGal > 0.05 ? onHandLiquid : '',
       });
       setOnHandTankId(null);
       refresh();
@@ -1423,6 +1450,48 @@ export function TankTransfer() {
                 value={onHandForm.abv}
                 onChange={(e) => setOnHandForm({ ...onHandForm, abv: limitAbvInput(e.target.value) })}
               />
+            </div>
+            <div className="form-group full-width">
+              <label htmlFor="on-hand-liquid">What is in the tank</label>
+              <select
+                id="on-hand-liquid"
+                value={
+                  onHandForm.liquid_choice === OTHER_LIQUID
+                  || !onHandForm.liquid_choice
+                  || tankLiquidOptionListed(onHandLiquidGroups, onHandForm.liquid_choice)
+                    ? onHandForm.liquid_choice
+                    : OTHER_LIQUID
+                }
+                onChange={(e) => setOnHandForm({
+                  ...onHandForm,
+                  liquid_choice: e.target.value,
+                  liquid_other: e.target.value === OTHER_LIQUID ? onHandForm.liquid_other : '',
+                })}
+                required={(parseFloat(onHandForm.volume_gal) || 0) > 0.05}
+              >
+                <option value="">Choose what this liquid is</option>
+                {onHandLiquidGroups.map((group) => (
+                  <optgroup key={group.label} label={group.label}>
+                    {group.options.map((option) => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </optgroup>
+                ))}
+                <option value={OTHER_LIQUID}>Other (type it)</option>
+              </select>
+              {onHandForm.liquid_choice === OTHER_LIQUID && (
+                <input
+                  id="on-hand-liquid-other"
+                  style={{ marginTop: '0.5rem' }}
+                  value={onHandForm.liquid_other}
+                  onChange={(e) => setOnHandForm({ ...onHandForm, liquid_other: e.target.value })}
+                  placeholder="For example: Rum Run · Tails, or Blended · Gold Rum"
+                />
+              )}
+              <p className="field-hint">
+                Required when the tank holds anything. This names the tank's contents from now on and moves with the
+                liquid when it is transferred.
+              </p>
             </div>
             <div className="form-group full-width">
               <label htmlFor="on-hand-notes">

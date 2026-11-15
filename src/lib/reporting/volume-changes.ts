@@ -136,7 +136,7 @@ export function buildVolumeChangeRows(range: ReportDateRange): VolumeChangeRow[]
       occurred_at: variance.recorded_at,
       kind: VOLUME_CHANGE_KINDS.setVolume,
       place: variance.tank_name,
-      change: `${variance.book_volume_gal.toFixed(2)} gal to ${variance.set_volume_gal.toFixed(2)} gal (${formatTankVolumeVariance(variance.variance_gal)})${abvNote}`,
+      change: `${variance.book_volume_gal.toFixed(2)} gal to ${variance.set_volume_gal.toFixed(2)} gal (${formatTankVolumeVariance(variance.variance_gal)})${abvNote}${variance.liquid_label?.trim() ? ` · ${variance.liquid_label.trim()}` : ''}`,
       why: shown(variance.notes),
       who: shown(variance.changed_by),
       gallons: variance.variance_gal,
