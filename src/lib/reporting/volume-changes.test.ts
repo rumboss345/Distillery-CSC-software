@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { formatTankVolumeVariance } from '../tank-volume-variance';
 import {
   VOLUME_CHANGE_KINDS,
+  blendPlanUsable,
   describeWateredDownChange,
   distillationAlcoholChangeGal,
   formatGpaAfterLossOrGainNote,
@@ -164,5 +165,16 @@ describe('volume change groups', () => {
     expect(totalVolumeVarianceGal(rows)).toBeCloseTo(-7, 5);
     expect(totalVolumeVarianceAbv(rows)).toBeCloseTo(-6.5, 5);
     expect(formatVolumeVarianceAbv(totalVolumeVarianceAbv(rows))).toBe('-6.5% ABV');
+  });
+});
+
+describe('blend plans with no real baseline', () => {
+  it('skips a blend whose theoretical ABV or gallons are impossible', () => {
+    expect(blendPlanUsable(250, 40)).toBe(true);
+    expect(blendPlanUsable(null, null)).toBe(true);
+    expect(blendPlanUsable(1e-13, 1840957855081709)).toBe(false);
+    expect(blendPlanUsable(250, 1840957855081709)).toBe(false);
+    expect(blendPlanUsable(0.01, 40)).toBe(false);
+    expect(blendPlanUsable(250, -5)).toBe(false);
   });
 });
