@@ -485,6 +485,8 @@ CREATE TABLE IF NOT EXISTS holding_tank_opening_balances (
   measured_abv REAL NOT NULL,
   recorded_at TEXT NOT NULL,
   notes TEXT NOT NULL DEFAULT '',
+  liquid_label TEXT NOT NULL DEFAULT '',
+  labelled_at TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -500,6 +502,7 @@ CREATE TABLE IF NOT EXISTS holding_tank_volume_variances (
   variance_gal REAL NOT NULL,
   recorded_at TEXT NOT NULL,
   notes TEXT NOT NULL DEFAULT '',
+  liquid_label TEXT NOT NULL DEFAULT '',
   changed_by TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );

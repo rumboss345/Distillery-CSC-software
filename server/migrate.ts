@@ -429,6 +429,20 @@ export async function migrateDatabase(): Promise<void> {
       );
       await client.query(`INSERT INTO schema_migrations (version) VALUES ('024')`);
     }
+    const tankReadingLabelMigration = await client.query(
+      'SELECT version FROM schema_migrations WHERE version = $1',
+      ['025'],
+    );
+    if (tankReadingLabelMigration.rowCount === 0) {
+      await client.query(
+        `ALTER TABLE holding_tank_opening_balances ADD COLUMN IF NOT EXISTS liquid_label TEXT NOT NULL DEFAULT ''`,
+      );
+      await client.query(`ALTER TABLE holding_tank_opening_balances ADD COLUMN IF NOT EXISTS labelled_at TEXT`);
+      await client.query(
+        `ALTER TABLE holding_tank_volume_variances ADD COLUMN IF NOT EXISTS liquid_label TEXT NOT NULL DEFAULT ''`,
+      );
+      await client.query(`INSERT INTO schema_migrations (version) VALUES ('025')`);
+    }
     await client.query(`
       INSERT INTO inventory_categories (name)
       SELECT 'botanicals'

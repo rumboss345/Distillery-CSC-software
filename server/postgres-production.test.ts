@@ -293,6 +293,7 @@ describe('PostgreSQL production modules', () => {
       recordedAt: '2026-10-23',
       notes: 'Opening gauge',
       changedBy: 'Admin',
+      liquidLabel: 'Rum Run · Hearts',
     }]);
     expect(engine.readProduction((api) => api.getHoldingTankContents(spiritId).volume_gal)).toBeCloseTo(100, 3);
 
@@ -367,6 +368,7 @@ describe('PostgreSQL production modules', () => {
       recordedAt: '2026-10-23',
       notes: 'Bottling gauge',
       changedBy: 'Admin',
+      liquidLabel: 'Blended · Gold',
     }]);
     await save('saveBottlingRun', [{
       batch_number: 'BT-TEST-001',
@@ -641,6 +643,7 @@ describe('PostgreSQL production modules', () => {
       recordedAt: '2026-10-27',
       notes: 'Fill for leave-in-source bottling',
       changedBy: 'Admin',
+      liquidLabel: 'Blended · Gold',
     }]);
     expect(engine.readProduction((api) => api.getHoldingTankContents(sourceId).volume_gal)).toBeCloseTo(25, 3);
 
@@ -691,6 +694,7 @@ describe('PostgreSQL production modules', () => {
       api.getFloorEquipment().find((item) => item.name === 'Leave Variance Tank')!.id
     ));
     await save('saveHoldingTankOnHand', [{
+      liquidLabel: 'Rum Run · Hearts',
       tankEquipmentId: varianceId,
       volumeGal: 10,
       abv: 40,
@@ -733,6 +737,7 @@ describe('PostgreSQL production modules', () => {
       api.getFloorEquipment().find((item) => item.name === 'Proof Mismatch Tank')!.id
     ));
     await save('saveHoldingTankOnHand', [{
+      liquidLabel: 'Rum Run · Hearts',
       tankEquipmentId: sourceId,
       volumeGal: 10,
       abv: 45,
@@ -787,6 +792,7 @@ describe('PostgreSQL production modules', () => {
       abv: null,
     }]);
     await save('saveHoldingTankOnHand', [{
+      liquidLabel: 'Rum Run · Hearts',
       tankEquipmentId: sourceId,
       volumeGal: 25,
       abv: 40,
@@ -874,6 +880,7 @@ describe('PostgreSQL production modules', () => {
       api.getFloorEquipment().find((item) => item.name === 'Empty Start Tank')!.id
     ));
     await save('saveHoldingTankOnHand', [{
+      liquidLabel: 'Rum Run · Hearts',
       tankEquipmentId: sourceId,
       volumeGal: 12,
       abv: 40,
@@ -1518,6 +1525,7 @@ describe('PostgreSQL production modules', () => {
     const onHand = engine.readProduction((api) => api.getHoldingTankContents(spiritId).volume_gal);
     if (onHand < 1) {
       await save('saveHoldingTankOnHand', [{
+        liquidLabel: 'Rum Run · Hearts',
         tankEquipmentId: spiritId,
         volumeGal: 20,
         abv: 93,
@@ -2091,6 +2099,7 @@ describe('PostgreSQL production modules', () => {
     if (!extraId) throw new Error('Remove Me Tank is missing');
 
     await save('saveHoldingTankOnHand', [{
+      liquidLabel: 'Rum Run · Hearts',
       tankEquipmentId: extraId,
       volumeGal: 12,
       abv: 40,

@@ -119,12 +119,12 @@ beforeAll(async () => {
   const a = getHoldingTankContents(1);
   saveHoldingTankOnHand({
     tankEquipmentId: 1, volumeGal: a.volume_gal - 2, abv: 69, recordedAt: '2026-11-14',
-    notes: 'Dipped tank, reading lower', changedBy: 'Ben',
+    notes: 'Dipped tank, reading lower', changedBy: 'Ben', liquidLabel: 'Low Wine Run · Hearts',
   });
   const b = getHoldingTankContents(2);
   saveHoldingTankOnHand({
     tankEquipmentId: 2, volumeGal: b.volume_gal, abv: b.abv - 1, recordedAt: '2026-11-14',
-    notes: 'Hydrometer reading lower', changedBy: 'Ben',
+    notes: 'Hydrometer reading lower', changedBy: 'Ben', liquidLabel: 'Blended · Gold',
   });
 
   db.run(`INSERT INTO holding_tank_transfers

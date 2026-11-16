@@ -73,6 +73,7 @@ import { countActiveFermentations, fermenterShowsAssignedWash } from '../lib/mas
 import { compareStoredDatesDesc } from '../lib/date-input';
 import {
   applyTankWithdrawals,
+  BLENDED_SPIRIT_TYPE,
   consumeOldestLots,
   distillationLabelsFromLots,
   instantBefore,
@@ -1954,6 +1955,7 @@ export interface HoldingTankOnHand {
   measured_abv: number;
   recorded_at: string;
   notes: string;
+  liquid_label: string;
 }
 
 export interface HoldingTankVolumeVariance {
@@ -1968,6 +1970,7 @@ export interface HoldingTankVolumeVariance {
   recorded_at: string;
   notes: string;
   changed_by: string | null;
+  liquid_label: string;
 }
 
 function recordHoldingTankVolumeVariance(input: {
@@ -1979,13 +1982,14 @@ function recordHoldingTankVolumeVariance(input: {
   recordedAt: string;
   notes: string;
   changedBy: string;
+  liquidLabel?: string;
 }): void {
   const bookVolume = roundThousandths(input.bookVolumeGal);
   const setVolume = roundThousandths(input.setVolumeGal);
   insertRow(
     `INSERT INTO holding_tank_volume_variances
-      (tank_equipment_id, book_volume_gal, book_abv, set_volume_gal, set_abv, variance_gal, recorded_at, notes, changed_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (tank_equipment_id, book_volume_gal, book_abv, set_volume_gal, set_abv, variance_gal, recorded_at, notes, changed_by, liquid_label)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       input.tankEquipmentId,
       bookVolume,
@@ -1996,6 +2000,7 @@ function recordHoldingTankVolumeVariance(input: {
       input.recordedAt,
       input.notes,
       input.changedBy,
+      input.liquidLabel?.trim() ?? '',
     ],
   );
 }
@@ -2004,7 +2009,7 @@ export function getHoldingTankVolumeVariances(): HoldingTankVolumeVariance[] {
   return queryAll<HoldingTankVolumeVariance>(`
     SELECT v.id, v.tank_equipment_id, e.name as tank_name,
            v.book_volume_gal, v.book_abv, v.set_volume_gal, v.set_abv,
-           v.variance_gal, v.recorded_at, v.notes, v.changed_by
+           v.variance_gal, v.recorded_at, v.notes, v.changed_by, COALESCE(v.liquid_label, '') as liquid_label
     FROM holding_tank_volume_variances v
     JOIN floor_equipment e ON e.id = v.tank_equipment_id
     ORDER BY v.recorded_at DESC, v.id DESC
@@ -2013,12 +2018,16 @@ export function getHoldingTankVolumeVariances(): HoldingTankVolumeVariance[] {
 
 export function getHoldingTankOnHand(tankId: number): HoldingTankOnHand | null {
   return queryOne<HoldingTankOnHand>(
-    `SELECT id, tank_equipment_id, measured_volume_gal, measured_abv, recorded_at, notes
+    `SELECT id, tank_equipment_id, measured_volume_gal, measured_abv, recorded_at, notes,
+            COALESCE(liquid_label, '') as liquid_label
      FROM holding_tank_opening_balances
      WHERE tank_equipment_id = ?`,
     [tankId],
   );
 }
+
+/** Below this a tank reading is empty and needs no description. */
+const TANK_LABEL_MIN_GAL = 0.05;
 
 /** Record the gallons and ABV already in a tank, without inventing a distillation or transfer. */
 export function saveHoldingTankOnHand(input: {
@@ -2028,6 +2037,8 @@ export function saveHoldingTankOnHand(input: {
   recordedAt: string;
   notes?: string;
   changedBy: string;
+  /** What the liquid is. Required when the tank holds anything. */
+  liquidLabel?: string;
 }): void {
   const __remote = forwardProductionMutation('saveHoldingTankOnHand', [input]);
   if (__remote.forwarded) return __remote.value as never;
@@ -2045,6 +2056,10 @@ export function saveHoldingTankOnHand(input: {
   }
   const measuredVolume = Math.round(input.volumeGal * 1000) / 1000;
   const measuredAbv = Math.round(input.abv * 1000) / 1000;
+  const liquidLabel = measuredVolume > TANK_LABEL_MIN_GAL ? (input.liquidLabel?.trim() ?? '') : '';
+  if (measuredVolume > TANK_LABEL_MIN_GAL && !liquidLabel) {
+    throw new Error('Enter what is in the tank.');
+  }
   const production = computeHoldingTankContents(input.tankEquipmentId);
   const notes = input.notes?.trim() ?? '';
   if (tankReadingChanged(production.volume_gal, measuredVolume, production.abv, measuredAbv)) {
@@ -2060,6 +2075,7 @@ export function saveHoldingTankOnHand(input: {
     recordedAt: input.recordedAt,
     notes,
     changedBy: input.changedBy.trim() || 'Unknown',
+    liquidLabel,
   });
   const adjustmentVolume = Math.round((measuredVolume - production.production_volume_gal) * 1000) / 1000;
   const adjustmentAlcohol = Math.round((measuredVolume * measuredAbv / 100 - production.production_gpa) * 1000) / 1000;
@@ -2067,23 +2083,32 @@ export function saveHoldingTankOnHand(input: {
     'SELECT id FROM holding_tank_opening_balances WHERE tank_equipment_id = ?',
     [input.tankEquipmentId],
   );
-  if (Math.abs(adjustmentVolume) < 0.001 && Math.abs(adjustmentAlcohol) < 0.001) {
+  const noAdjustment = Math.abs(adjustmentVolume) < 0.001 && Math.abs(adjustmentAlcohol) < 0.001;
+  if (noAdjustment && !liquidLabel) {
     if (existing) {
       runQuery('DELETE FROM holding_tank_opening_balances WHERE id = ?', [existing.id]);
     }
   } else if (existing) {
     runQuery(
       `UPDATE holding_tank_opening_balances
-       SET volume_gal = ?, alcohol_gal = ?, measured_volume_gal = ?, measured_abv = ?, recorded_at = ?, notes = ?
+       SET volume_gal = ?, alcohol_gal = ?, measured_volume_gal = ?, measured_abv = ?, recorded_at = ?, notes = ?,
+           liquid_label = ?, labelled_at = datetime('now')
        WHERE id = ?`,
-      [adjustmentVolume, adjustmentAlcohol, measuredVolume, measuredAbv, input.recordedAt, notes, existing.id],
+      [
+        adjustmentVolume, adjustmentAlcohol, measuredVolume, measuredAbv, input.recordedAt, notes,
+        liquidLabel, existing.id,
+      ],
     );
   } else {
     insertRow(
       `INSERT INTO holding_tank_opening_balances
-        (tank_equipment_id, volume_gal, alcohol_gal, measured_volume_gal, measured_abv, recorded_at, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [input.tankEquipmentId, adjustmentVolume, adjustmentAlcohol, measuredVolume, measuredAbv, input.recordedAt, notes],
+        (tank_equipment_id, volume_gal, alcohol_gal, measured_volume_gal, measured_abv, recorded_at, notes,
+         liquid_label, labelled_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+      [
+        input.tankEquipmentId, adjustmentVolume, adjustmentAlcohol, measuredVolume, measuredAbv,
+        input.recordedAt, notes, liquidLabel,
+      ],
     );
   }
   syncHoldingTankStatuses();
@@ -2728,9 +2753,10 @@ export function getHoldingTankIntakeHistory(
       abv: number;
       alcohol_gal: number;
       notes: string;
+      liquid_label: string;
     }>(`
       SELECT id, recorded_at as occurred_at, measured_volume_gal as volume_gal,
-             measured_abv as abv, alcohol_gal, notes
+             measured_abv as abv, alcohol_gal, notes, COALESCE(liquid_label, '') as liquid_label
       FROM holding_tank_opening_balances
       WHERE tank_equipment_id = ?
     `, [tankId]).map((row) => ({
@@ -2739,7 +2765,9 @@ export function getHoldingTankIntakeHistory(
       occurred_at: row.occurred_at,
       volume_gal: row.volume_gal,
       abv: row.abv,
-      summary: row.volume_gal > 0 ? 'On hand' : 'On hand cleared',
+      summary: row.volume_gal > 0
+        ? (row.liquid_label.trim() ? `On hand · ${row.liquid_label.trim()}` : 'On hand')
+        : 'On hand cleared',
       detail: row.notes?.trim() || 'Recorded when tracking started',
       notes: row.notes?.trim() || undefined,
       alcoholGal: row.alcohol_gal,
@@ -2829,11 +2857,20 @@ function tankLotsOnHand(tankId: number, asOf: string | null): { ins: TankLot[]; 
     });
   }
 
+  const labelledReading = queryOne<{ at: string; measured_volume_gal: number; liquid_label: string }>(`
+    SELECT labelled_at as at, measured_volume_gal, liquid_label
+    FROM holding_tank_opening_balances
+    WHERE tank_equipment_id = ?
+      AND TRIM(COALESCE(liquid_label, '')) != ''
+      AND labelled_at IS NOT NULL
+  `, [tankId]);
+
   for (const row of queryAll<{ at: string; volume_gal: number }>(`
     SELECT recorded_at as at, volume_gal
     FROM holding_tank_opening_balances
     WHERE tank_equipment_id = ? AND ABS(volume_gal) > 0.001
   `, [tankId])) {
+    if (labelledReading) continue;
     if (!within(row.at)) continue;
     // volume_gal is the gauge adjustment, not the measured total.
     // A short gauge removes the oldest liquid; a long gauge is unnamed stock.
@@ -2935,7 +2972,38 @@ function tankLotsOnHand(tankId: number, asOf: string | null): { ins: TankLot[]; 
     outs.push({ at: row.at, volumeGal: row.volume_gal });
   }
 
+  if (labelledReading && within(labelledReading.at)) {
+    return labelledTankLots(ins, outs, labelledReading);
+  }
   return { ins, outs };
+}
+
+/**
+ * A reading that says what is in the tank replaces everything before it:
+ * the measured gallons become one lot with that name, and later ins and outs
+ * apply on top.
+ */
+function labelledTankLots(
+  ins: TankLot[],
+  outs: TankWithdrawal[],
+  reading: { at: string; measured_volume_gal: number; liquid_label: string },
+): { ins: TankLot[]; outs: TankWithdrawal[] } {
+  const after = (at: string) => !intakeAtOrBefore(at, reading.at);
+  const label = reading.liquid_label.trim();
+  const blendName = label.startsWith(`${BLENDED_SPIRIT_TYPE} · `)
+    ? label.slice(BLENDED_SPIRIT_TYPE.length + 3).trim()
+    : '';
+  const readingLot: TankLot = {
+    at: reading.at,
+    volumeGal: reading.measured_volume_gal,
+    kind: 'opening',
+    transferLiquidLabel: label,
+    ...(blendName ? { productName: blendName, transferBlended: true } : { distillationLabel: label }),
+  };
+  return {
+    ins: [readingLot, ...ins.filter((lot) => after(lot.at))],
+    outs: outs.filter((out) => after(out.at)),
+  };
 }
 
 function annotateTransferLots(lots: TankLot[], seen: Set<number>): void {

@@ -1730,6 +1730,7 @@ function migrateAdvancedBlending(): void {
   migrateBottlingRunEquipment();
   migrateInventoryUsageLog();
   migrateHoldingTankTransferLiquidLabel();
+  migrateTankReadingLiquidLabel();
   migrateDistillerySettings();
   migrateBottlingMeasuredAbvColumns();
 }
@@ -1746,6 +1747,21 @@ function migrateDistillerySettings(): void {
   db.run(
     `INSERT OR IGNORE INTO distillery_settings (key, value) VALUES ('fermentation_ready_max_brix', '5')`,
   );
+}
+
+function migrateTankReadingLiquidLabel(): void {
+  if (!db) return;
+  const columns: [string, string, string][] = [
+    ['holding_tank_opening_balances', 'liquid_label', `TEXT NOT NULL DEFAULT ''`],
+    ['holding_tank_opening_balances', 'labelled_at', 'TEXT'],
+    ['holding_tank_volume_variances', 'liquid_label', `TEXT NOT NULL DEFAULT ''`],
+  ];
+  for (const [table, column, type] of columns) {
+    const hasColumn = queryOne<{ name: string }>(
+      `SELECT name FROM pragma_table_info('${table}') WHERE name = '${column}'`,
+    );
+    if (!hasColumn) db.run(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  }
 }
 
 function migrateHoldingTankTransferLiquidLabel(): void {
