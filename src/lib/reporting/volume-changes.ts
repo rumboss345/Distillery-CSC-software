@@ -62,6 +62,17 @@ export interface VolumeChangeGroup {
   totalLabel: string;
 }
 
+function realAbv(value: number | null | undefined): value is number {
+  return value != null && Number.isFinite(value) && value >= 0 && value <= 100;
+}
+
+/** A blend with no real plan (near-zero theoretical gallons or an impossible ABV) has nothing to compare against. */
+export function blendPlanUsable(theoreticalVolumeGal: number | null, theoreticalAbv: number | null): boolean {
+  if (theoreticalVolumeGal != null && theoreticalVolumeGal > 0 && theoreticalVolumeGal < 0.05) return false;
+  if (theoreticalAbv != null && !realAbv(theoreticalAbv)) return false;
+  return true;
+}
+
 function shown(value: string | null | undefined): string {
   const trimmed = value?.trim();
   return trimmed || '—';
@@ -127,10 +138,11 @@ export function buildVolumeChangeRows(range: ReportDateRange): VolumeChangeRow[]
     );
     const cleared = variance.notes.toLowerCase().includes('on-hand reading removed');
     if (!readingChanged && !cleared) continue;
-    const abvMoved = Math.abs(variance.set_abv - variance.book_abv) >= 0.05;
+    const abvReal = realAbv(variance.book_abv) && realAbv(variance.set_abv);
+    const abvMoved = abvReal && Math.abs(variance.set_abv - variance.book_abv) >= 0.05;
     const abvNote = abvMoved
       ? `, ABV ${variance.book_abv.toFixed(1)}% to ${variance.set_abv.toFixed(1)}%`
-      : '';
+      : abvReal ? '' : `, ABV set to ${variance.set_abv.toFixed(1)}% (record had no valid ABV)`;
     rows.push({
       key: `set:${variance.id}`,
       occurred_at: variance.recorded_at,
@@ -201,7 +213,10 @@ export function buildVolumeChangeRows(range: ReportDateRange): VolumeChangeRow[]
 
   const blendNotes = new Map(getBlendProducts().map((product) => [product.id, product.notes]));
   for (const blend of buildBlendReportRows(range)) {
-    const abvDelta = blend.theoretical_abv != null ? blend.final_abv - blend.theoretical_abv : null;
+    if (!blendPlanUsable(blend.theoretical_volume_gal, blend.theoretical_abv)) continue;
+    const abvDelta = blend.theoretical_abv != null && realAbv(blend.final_abv)
+      ? blend.final_abv - blend.theoretical_abv
+      : null;
     const volumeMoved = blend.volume_variance_pct != null && Math.abs(blend.volume_variance_pct) >= 0.1;
     const gallonDelta = blend.theoretical_volume_gal != null
       ? Math.round((blend.final_volume_gal - blend.theoretical_volume_gal) * 1000) / 1000
