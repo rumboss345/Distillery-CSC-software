@@ -1,3 +1,51 @@
+.process-liquid-key {
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+}
+
+.process-liquid-key-title {
+  margin: 0 0 0.55rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.process-liquid-key-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.process-liquid-key-list li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.875rem;
+  color: var(--text);
+}
+
+.process-liquid-key-swatch {
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 3px;
+  border: 1px solid;
+  flex-shrink: 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+.process-liquid-key-note {
+  margin: 0.6rem 0 0;
+  max-width: 52rem;
+}
+
 .process-view {
   width: 100%;
   border: 1px solid #c5ccd6;
