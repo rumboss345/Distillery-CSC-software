@@ -298,8 +298,10 @@ export interface DistillationRun {
   assigned_user_id: number | null;
   assigned_user_name: string | null;
   notes: string;
-  /** Saved gin recipe loaded for this run, if any. */
+  /** Saved gin recipe on this database, when the id still matches. */
   gin_recipe_id: number | null;
+  /** Gin recipe label for this run (always set for gin when a recipe was chosen). */
+  gin_recipe_name: string;
   created_at: string;
 }
 
@@ -307,7 +309,6 @@ export interface DistillationRunView extends DistillationRun {
   source_holding_tank_name?: string;
   dest_holding_tank_name?: string;
   stillage_tank_name?: string;
-  gin_recipe_name?: string | null;
 }
 
 /** Botanicals either steep in the pot or sit in the gin basket. */

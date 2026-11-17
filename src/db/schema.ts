@@ -156,6 +156,8 @@ CREATE TABLE IF NOT EXISTS distillation_runs (
   assigned_user_name TEXT NOT NULL DEFAULT '',
   notes TEXT NOT NULL DEFAULT '',
   gin_recipe_id INTEGER,
+  /** Recipe name when the saved id does not match this database (production vs local). */
+  gin_recipe_name TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

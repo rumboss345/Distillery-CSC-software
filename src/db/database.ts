@@ -1797,6 +1797,7 @@ function migrateInventoryUsageLog(): void {
 function migrateDistillationGinRecipeId(): void {
   if (!db) return;
   addColumnIfMissing('distillation_runs', 'gin_recipe_id', 'INTEGER REFERENCES gin_recipes(id) ON DELETE SET NULL');
+  addColumnIfMissing('distillation_runs', 'gin_recipe_name', "TEXT NOT NULL DEFAULT ''");
 }
 
 function migrateInventoryCostHistory(): void {
