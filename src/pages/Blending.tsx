@@ -3825,6 +3825,7 @@ export function Blending() {
                 <th>Recipe</th>
                 <th className="num">Volume</th>
                 <th className="num">Target proof</th>
+                <th>Output tank</th>
                 <th>Assigned to</th>
                 <th>Progress</th>
                 <th>Status</th>
@@ -3848,6 +3849,7 @@ export function Blending() {
                     {b.scale_factor !== 1 && <div>{b.scale_factor.toFixed(2)}×</div>}
                   </td>
                   <td className="num">{b.target_abv != null ? `${b.target_abv}%` : '—'}</td>
+                  <td>{b.output_tank_name?.trim() || '—'}</td>
                   <td><AssigneeCell name={b.assigned_user_name} /></td>
                   <td>{stepLabel(b.status, b.target_abv)}</td>
                   <td><StatusBadge status={b.status === 'blended' ? 'executed' : b.status} /></td>
