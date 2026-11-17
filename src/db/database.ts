@@ -1729,6 +1729,7 @@ function migrateAdvancedBlending(): void {
   migrateBottlingStatusColumn();
   migrateBottlingRunEquipment();
   migrateInventoryUsageLog();
+  migrateInventoryCostHistory();
   migrateHoldingTankTransferLiquidLabel();
   migrateTankReadingLiquidLabel();
   migrateDistillerySettings();
@@ -1790,6 +1791,21 @@ function migrateInventoryUsageLog(): void {
     )
   `);
   db.run('CREATE INDEX IF NOT EXISTS idx_inventory_usage_item ON inventory_usage_log(inventory_item_id, created_at DESC)');
+}
+
+function migrateInventoryCostHistory(): void {
+  if (!db) return;
+  db.run(`
+    CREATE TABLE IF NOT EXISTS inventory_cost_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      inventory_item_id INTEGER NOT NULL REFERENCES inventory_items(id) ON DELETE CASCADE,
+      previous_cost REAL,
+      new_cost REAL,
+      changed_by TEXT NOT NULL DEFAULT '',
+      changed_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  db.run('CREATE INDEX IF NOT EXISTS idx_inventory_cost_history_item ON inventory_cost_history(inventory_item_id, changed_at)');
 }
 
 /** Equipment used on a bottling run (bottling line, pumps, hoses). */
