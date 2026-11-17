@@ -463,6 +463,16 @@ export async function migrateDatabase(): Promise<void> {
       );
       await client.query(`INSERT INTO schema_migrations (version) VALUES ('026')`);
     }
+    const distillationGinRecipeMigration = await client.query(
+      'SELECT version FROM schema_migrations WHERE version = $1',
+      ['027'],
+    );
+    if (distillationGinRecipeMigration.rowCount === 0) {
+      await client.query(
+        `ALTER TABLE distillation_runs ADD COLUMN IF NOT EXISTS gin_recipe_id INTEGER REFERENCES gin_recipes(id) ON DELETE SET NULL`,
+      );
+      await client.query(`INSERT INTO schema_migrations (version) VALUES ('027')`);
+    }
     await client.query(`
       INSERT INTO inventory_categories (name)
       SELECT 'botanicals'

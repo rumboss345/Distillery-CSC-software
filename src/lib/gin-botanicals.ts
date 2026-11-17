@@ -21,6 +21,17 @@ export function botanicalPlaceLabel(place: BotanicalPlace | null | undefined): s
   return '';
 }
 
+/** Recipe name saved on a gin run, or a short label when the charge was built from scratch. */
+export function ginRunRecipeLabel(
+  recipeName: string | null | undefined,
+  hasBotanicals: boolean,
+): string | null {
+  const name = recipeName?.trim();
+  if (name) return name;
+  if (hasBotanicals) return 'Custom botanical charge';
+  return null;
+}
+
 export function emptyGinBotanical(): GinBotanicalInput {
   return { name: '', amount: 0, weight: 0, weight_unit: 'g', place: null };
 }

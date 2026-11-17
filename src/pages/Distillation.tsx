@@ -85,6 +85,7 @@ import {
   botanicalsFromRecipe,
   emptyGinBotanical,
   ginBotanicalPlaceError,
+  ginRunRecipeLabel,
   linkBotanicalsToInventory,
 } from '../lib/gin-botanicals';
 import { isBrixReadyForDistillation } from '../lib/fermentation';
@@ -145,6 +146,7 @@ const emptyRun = (runType: DistillationRunType = 'wash'): Omit<DistillationRun, 
   assigned_user_id: null,
   assigned_user_name: null,
   notes: '',
+  gin_recipe_id: null,
 });
 
 interface SourceTankLine {
@@ -559,7 +561,7 @@ export function Distillation() {
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
 
-  const openEditRun = (run: DistillationRun) => {
+  const openEditRun = (run: DistillationRunView) => {
     setEditRunId(run.id);
     setPlannedScheduleDate(null);
     const proofed = (run.proof_water_gal ?? 0) > 0 && run.proof_spirit_gal != null;
@@ -594,8 +596,13 @@ export function Distillation() {
       ? getRunBotanicals(run.id)
       : [];
     setBotanicals(savedBotanicals.length > 0 ? botanicalsFromRecipe(savedBotanicals) : [emptyGinBotanical()]);
-    setGinRecipeId('');
-    setGinRecipeName('');
+    const recipeId = run.gin_recipe_id ?? null;
+    setGinRecipeId(recipeId && recipeId > 0 ? recipeId : '');
+    setGinRecipeName(
+      run.gin_recipe_name?.trim()
+        || (recipeId ? ginRecipes.find((item) => item.id === recipeId)?.name : '')
+        || '',
+    );
     if (isTankSourcedRun(run.run_type ?? 'wash')) {
       const savedSources = getDistillationRunTankSources(run.id);
       if (savedSources.length > 0) {
@@ -870,7 +877,10 @@ export function Distillation() {
       if (mixMessage && !confirm(mixMessage)) return;
       try {
         saveDistillationRun(
-          savedRun,
+          {
+            ...savedRun,
+            gin_recipe_id: savedRun.run_type === 'gin' && typeof ginRecipeId === 'number' ? ginRecipeId : null,
+          },
           editRunId,
           savedRun.run_type === 'gin' ? botanicals : undefined,
           tankSources,
@@ -1252,7 +1262,18 @@ export function Distillation() {
                       return (
                         <tr key={r.id}>
                           <td><strong>{r.batch_number}</strong></td>
-                          <td>{runTypeLabel(runType)}</td>
+                          <td>
+                            {runTypeLabel(runType)}
+                            {runType === 'gin' && (() => {
+                              const lines = runBotanicals.filter((line) => line.distillation_run_id === r.id);
+                              const recipeLabel = ginRunRecipeLabel(r.gin_recipe_name, lines.length > 0);
+                              return recipeLabel ? (
+                                <div className="field-hint" data-testid={`gin-run-recipe-${r.id}`}>
+                                  Recipe: <strong>{recipeLabel}</strong>
+                                </div>
+                              ) : null;
+                            })()}
+                          </td>
                           <td>{runSourceSummary(r)}</td>
                           <td>{r.still_name}</td>
                           <td>{formatDateDisplay(r.run_date)}</td>
@@ -1308,7 +1329,13 @@ export function Distillation() {
       {selectedRunId && distillationRunShowsCuts(selectedRun?.status) && (
         <Modal
           wide
-          title={`${selectedRunIsComplete && !canEditCompletedRunCuts ? 'View cuts' : 'Cuts'} — ${runs.find((r) => r.id === selectedRunId)?.batch_number ?? ''}${selectedRun ? ` · ${formatDateDisplay(selectedRun.run_date)}` : ''}`}
+          title={`${selectedRunIsComplete && !canEditCompletedRunCuts ? 'View cuts' : 'Cuts'} — ${runs.find((r) => r.id === selectedRunId)?.batch_number ?? ''}${selectedRun ? ` · ${formatDateDisplay(selectedRun.run_date)}` : ''}${selectedRun?.run_type === 'gin' ? (() => {
+            const label = ginRunRecipeLabel(
+              selectedRun.gin_recipe_name,
+              runBotanicals.some((line) => line.distillation_run_id === selectedRun.id),
+            );
+            return label ? ` · ${label}` : '';
+          })() : ''}`}
           onClose={() => {
             setSelectedRunId(null);
             if (searchParams.has('cutsRun')) {
