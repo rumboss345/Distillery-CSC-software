@@ -176,8 +176,8 @@ export function DashboardCharts({
         <ChartCard
           testId="dashboard-chart-production"
           title={`Hearts collected per month (${unitShort})`}
-          note="Hearts cuts by run month, last six months."
-          empty={hasProduction ? null : 'No hearts collected in the last six months.'}
+          note={`Hearts cuts by run date · ${periodLabel}.`}
+          empty={hasProduction ? null : `No hearts collected in ${periodLabel}.`}
         >
           <GroupedBarChart
             categories={production.map((point) => point.label)}
@@ -211,8 +211,8 @@ export function DashboardCharts({
         <ChartCard
           testId="dashboard-chart-yield"
           title={`Distillation yield: charged vs collected (${unitShort} pure alcohol)`}
-          note="Finished runs that recorded both figures, last six months."
-          empty={hasYield ? null : 'No finished runs with an alcohol balance in the last six months.'}
+          note={`Finished runs that recorded both figures · ${periodLabel}.`}
+          empty={hasYield ? null : `No finished runs with an alcohol balance in ${periodLabel}.`}
         >
           <GroupedBarChart
             categories={yieldPoints.map((point) => (point.yieldPct != null ? `${point.label} ${point.yieldPct.toFixed(0)}%` : point.label))}
