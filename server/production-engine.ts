@@ -138,6 +138,17 @@ function tableNames(db: SqlDatabase): string[] {
   return names;
 }
 
+/** Parent tables before children when PostgreSQL FKs are not deferrable. */
+function persistTableOrder(names: string[]): string[] {
+  const priority: Record<string, number> = {
+    gin_recipes: -40,
+  };
+  return [...names].sort((a, b) => {
+    const delta = (priority[a] ?? 0) - (priority[b] ?? 0);
+    return delta !== 0 ? delta : a.localeCompare(b);
+  });
+}
+
 function columns(db: SqlDatabase, table: string): string[] {
   return columnInfo(db, table).map((column) => column.name);
 }
@@ -222,7 +233,7 @@ async function persistToPostgres(
     await client.query(`DELETE FROM ${table}`);
   }
   await client.query('DELETE FROM production_row_revisions');
-  for (const table of names) {
+  for (const table of persistTableOrder(names)) {
     const cols = columns(memory, table);
     const rows = rowsOf(memory, table);
     for (const row of rows) {
