@@ -68,7 +68,22 @@ import { EquipmentVisual } from '../components/equipment/EquipmentVisual';
 import { buildEquipmentVisualData } from '../components/equipment/equipment-visual-shared';
 import type { FloorEquipmentView } from '../types';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
+import {
+  eventInReportRange,
+  resolveReportPeriod,
+  type ReportPeriodPreset,
+} from '../lib/reporting/period';
 import type { BottlingRunLineInput, BottlingRunReturnInput, BottlingRunView, RunStatus } from '../types';
+
+const BOTTLING_SUMMARY_PERIOD_OPTIONS: { value: ReportPeriodPreset; label: string }[] = [
+  { value: 'today', label: 'Today' },
+  { value: 'yesterday', label: 'Yesterday' },
+  { value: 'week', label: 'This week' },
+  { value: 'month', label: 'This month' },
+  { value: 'lastMonth', label: 'Last month' },
+  { value: 'all', label: 'All time' },
+  { value: 'custom', label: 'Custom' },
+];
 
 type BottlingSourceType = 'none' | 'barrel' | 'tank';
 
@@ -214,6 +229,9 @@ export function Bottling() {
     () => [...labelInventory].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })),
     [labelInventory],
   );
+  const [summaryPeriodPreset, setSummaryPeriodPreset] = useState<ReportPeriodPreset>('month');
+  const [summaryCustomFrom, setSummaryCustomFrom] = useState('');
+  const [summaryCustomTo, setSummaryCustomTo] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<number | undefined>();
   const [form, setForm] = useState<RunHeaderForm>(emptyRun());
@@ -405,9 +423,20 @@ export function Bottling() {
       .filter((entry) => entry.maxCount > 0);
   }, [unbottledInTankGal, isRumBottling, lines]);
 
-  const producedRuns = runs.filter((run) => bottlingCountsTowardProduction(run.status));
-  const totalBottles = producedRuns.reduce((sum, run) => sum + totalBottleCount(run.lines), 0);
-  const totalVolume = producedRuns.reduce((sum, run) => sum + totalVolumeGal(run.lines), 0);
+  const summaryRange = useMemo(
+    () => resolveReportPeriod(summaryPeriodPreset, summaryCustomFrom, summaryCustomTo),
+    [summaryPeriodPreset, summaryCustomFrom, summaryCustomTo],
+  );
+  const runsInSummaryPeriod = useMemo(
+    () => runs.filter((run) => eventInReportRange(run.bottling_date, summaryRange)),
+    [runs, summaryRange],
+  );
+  const producedRunsInPeriod = useMemo(
+    () => runsInSummaryPeriod.filter((run) => bottlingCountsTowardProduction(run.status)),
+    [runsInSummaryPeriod],
+  );
+  const totalBottles = producedRunsInPeriod.reduce((sum, run) => sum + totalBottleCount(run.lines), 0);
+  const totalVolume = producedRunsInPeriod.reduce((sum, run) => sum + totalVolumeGal(run.lines), 0);
   const runsByStatus = useMemo(() => {
     const byStatus = Object.fromEntries(
       BOTTLING_STATUS_LIST_ORDER.map((status) => [status, [] as BottlingRunView[]]),
@@ -866,20 +895,65 @@ export function Bottling() {
         </div>
       </div>
 
-      <div className="card-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
-        <div className="stat-card">
-          <div className="label">Total Bottling Runs</div>
-          <div className="value">{runs.length}</div>
+      <section className="card bottling-summary-section" aria-labelledby="bottling-summary-heading">
+        <div className="bottling-summary-toolbar">
+          <div>
+            <h3 id="bottling-summary-heading" className="bottling-summary-title">Summary</h3>
+            <p className="text-muted bottling-summary-range">{summaryRange.label}</p>
+          </div>
+          <div className="report-filters-panel bottling-summary-filters">
+            <div className="form-group report-period-preset">
+              <label htmlFor="bottling-summary-period">Period</label>
+              <select
+                id="bottling-summary-period"
+                value={summaryPeriodPreset}
+                onChange={(e) => setSummaryPeriodPreset(e.target.value as ReportPeriodPreset)}
+                data-testid="bottling-summary-period"
+              >
+                {BOTTLING_SUMMARY_PERIOD_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </div>
+            {summaryPeriodPreset === 'custom' && (
+              <>
+                <div className="form-group">
+                  <label htmlFor="bottling-summary-from">From</label>
+                  <input
+                    id="bottling-summary-from"
+                    type="date"
+                    value={summaryCustomFrom}
+                    onChange={(e) => setSummaryCustomFrom(e.target.value)}
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="bottling-summary-to">To</label>
+                  <input
+                    id="bottling-summary-to"
+                    type="date"
+                    value={summaryCustomTo}
+                    onChange={(e) => setSummaryCustomTo(e.target.value)}
+                  />
+                </div>
+              </>
+            )}
+          </div>
         </div>
-        <div className="stat-card">
-          <div className="label">Total Bottles</div>
-          <div className="value accent">{totalBottles.toLocaleString()}</div>
+        <div className="card-grid bottling-summary-stats" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+          <div className="stat-card">
+            <div className="label">Total Bottling Runs</div>
+            <div className="value" data-testid="bottling-summary-runs">{runsInSummaryPeriod.length}</div>
+          </div>
+          <div className="stat-card">
+            <div className="label">Total Bottles</div>
+            <div className="value accent" data-testid="bottling-summary-bottles">{totalBottles.toLocaleString()}</div>
+          </div>
+          <div className="stat-card">
+            <div className="label">Total Volume Bottled</div>
+            <div className="value" data-testid="bottling-summary-volume">{totalVolume.toFixed(1)} gal</div>
+          </div>
         </div>
-        <div className="stat-card">
-          <div className="label">Total Volume Bottled</div>
-          <div className="value">{totalVolume.toFixed(1)} gal</div>
-        </div>
-      </div>
+      </section>
 
       {runs.length === 0 ? (
         <div className="empty-state">
