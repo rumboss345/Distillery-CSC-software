@@ -18,6 +18,7 @@ import {
 } from '../db/queries';
 import { FloorCanvas, FloorLegend } from '../components/FloorCanvas';
 import { ProcessEquipmentCanvas } from '../components/equipment/ProcessEquipmentCanvas';
+import { ProcessLiquidColorKey } from '../components/equipment/ProcessLiquidColorKey';
 import { HoldingTankIntakeHistory } from '../components/HoldingTankIntakeHistory';
 import { HoldingTankIntakeDetailModal } from '../components/HoldingTankIntakeDetailModal';
 import { Modal } from '../components/Modal';
@@ -331,6 +332,7 @@ export function FloorPlanPage() {
 
       {viewMode === 'process' && (
         <>
+          <ProcessLiquidColorKey />
           <ProcessEquipmentCanvas
             selectedId={selectedId}
             onSelect={selectEquipment}
