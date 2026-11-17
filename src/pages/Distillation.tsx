@@ -147,6 +147,7 @@ const emptyRun = (runType: DistillationRunType = 'wash'): Omit<DistillationRun, 
   assigned_user_name: null,
   notes: '',
   gin_recipe_id: null,
+  gin_recipe_name: '',
 });
 
 interface SourceTankLine {
@@ -879,7 +880,10 @@ export function Distillation() {
         saveDistillationRun(
           {
             ...savedRun,
-            gin_recipe_id: savedRun.run_type === 'gin' && typeof ginRecipeId === 'number' ? ginRecipeId : null,
+            gin_recipe_id: savedRun.run_type === 'gin' && typeof ginRecipeId === 'number' && ginRecipeId > 0
+              ? ginRecipeId
+              : null,
+            gin_recipe_name: savedRun.run_type === 'gin' ? ginRecipeName.trim() : '',
           },
           editRunId,
           savedRun.run_type === 'gin' ? botanicals : undefined,
