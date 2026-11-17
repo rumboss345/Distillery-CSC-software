@@ -2066,6 +2066,81 @@ describe('PostgreSQL production modules', () => {
     });
   });
 
+  it('still saves a gin run after a linked gin recipe was deleted from another run', async () => {
+    await save('saveInventoryItem', [{
+      name: 'Delete juniper',
+      category: 'botanicals',
+      unit: 'g',
+      quantity: 500,
+      reorder_level: 0,
+      notes: '',
+      package_size_ml: null,
+      density_g_per_ml: null,
+      density_reference: '',
+      abv: null,
+    }]);
+    const recipe = await save('saveGinRecipe', [{
+      name: 'Gone Gin',
+      notes: '',
+    }, undefined, [
+      { name: 'Delete juniper', amount: 0, weight: 50, weight_unit: 'g', place: 'basket' },
+    ]]);
+    const recipeId = Number(recipe.result);
+    const botanicals = engine.readProduction((api) => (
+      api.getGinRecipes().find((row) => row.id === recipeId)?.botanicals ?? []
+    ));
+    const linked = await save('saveDistillationRun', [{
+      batch_number: 'G-LINKED-DELETE',
+      run_type: 'gin',
+      source_mash_batch_id: null,
+      source_fermenter_equipment_id: null,
+      source_holding_tank_equipment_id: null,
+      dest_holding_tank_equipment_id: null,
+      still_name: '',
+      run_date: '2026-10-24',
+      charge_volume_gal: 0,
+      charge_abv: null,
+      status: 'planned',
+      assigned_user_id: null,
+      assigned_user_name: '',
+      notes: '',
+      stillage_volume_gal: null,
+      stillage_discarded: 0,
+      stillage_holding_tank_equipment_id: null,
+      gin_recipe_id: recipeId,
+      gin_recipe_name: 'Gone Gin',
+    }, undefined, botanicals, []]);
+    expect(Number(linked.result)).toBeGreaterThan(0);
+    await save('deleteGinRecipe', [recipeId]);
+    const replacement = await save('saveDistillationRun', [{
+      batch_number: 'G-AFTER-RECIPE-DELETE',
+      run_type: 'gin',
+      source_mash_batch_id: null,
+      source_fermenter_equipment_id: null,
+      source_holding_tank_equipment_id: null,
+      dest_holding_tank_equipment_id: null,
+      still_name: '',
+      run_date: '2026-10-24',
+      charge_volume_gal: 0,
+      charge_abv: null,
+      status: 'planned',
+      assigned_user_id: null,
+      assigned_user_name: '',
+      notes: '',
+      stillage_volume_gal: null,
+      stillage_discarded: 0,
+      stillage_holding_tank_equipment_id: null,
+      gin_recipe_id: recipeId,
+      gin_recipe_name: 'Gone Gin',
+    }, undefined, botanicals, []]);
+    const runId = Number(replacement.result);
+    const row = engine.readProduction((api) => (
+      api.getDistillationRuns().find((item) => item.id === runId)
+    ));
+    expect(row?.gin_recipe_id).toBeNull();
+    expect(row?.gin_recipe_name).toBe('Gone Gin');
+  });
+
   it('lets a planned spirit run wait for a source tank until it is running', async () => {
     const plannedRun = {
       batch_number: 'G-PLAN-TANK',

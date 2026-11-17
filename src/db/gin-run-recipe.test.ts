@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import initSqlJs, { type Database } from 'sql.js';
 import { SCHEMA } from './schema';
 import { bindSqlHandle } from './sql-session';
-import { getDistillationRuns, saveDistillationRun } from './queries';
+import { deleteGinRecipe, getDistillationRuns, saveDistillationRun } from './queries';
 import type { GinBotanicalInput } from '../types';
 
 let db: Database;
@@ -109,5 +109,57 @@ describe('gin run recipe link', () => {
     const saved = getDistillationRuns().find((run) => run.id === runId);
     expect(saved?.gin_recipe_id).toBe(7);
     expect(saved?.gin_recipe_name).toBe('House Gin');
+  });
+
+  it('clears gin_recipe_id on distillation runs when the recipe is deleted', () => {
+    const runId = saveDistillationRun({
+      batch_number: 'G-DEL-REC',
+      run_type: 'gin',
+      source_mash_batch_id: null,
+      source_fermenter_equipment_id: null,
+      source_holding_tank_equipment_id: null,
+      dest_holding_tank_equipment_id: null,
+      still_name: 'Carl',
+      run_date: '2026-11-17',
+      charge_volume_gal: 50,
+      charge_abv: 45,
+      stillage_volume_gal: null,
+      stillage_discarded: 0,
+      stillage_holding_tank_equipment_id: null,
+      status: 'planned',
+      assigned_user_id: null,
+      assigned_user_name: null,
+      notes: '',
+      gin_recipe_id: 7,
+      gin_recipe_name: 'House Gin',
+    }, undefined, botanicals);
+    deleteGinRecipe(7);
+    const afterDelete = getDistillationRuns().find((run) => run.id === runId);
+    expect(afterDelete?.gin_recipe_id).toBeNull();
+    expect(afterDelete?.gin_recipe_name).toBe('House Gin');
+
+    db.run(`INSERT INTO gin_recipes (id, name) VALUES (8, 'New Gin')`);
+    const nextId = saveDistillationRun({
+      batch_number: 'G-AFTER-DEL',
+      run_type: 'gin',
+      source_mash_batch_id: null,
+      source_fermenter_equipment_id: null,
+      source_holding_tank_equipment_id: null,
+      dest_holding_tank_equipment_id: null,
+      still_name: 'Carl',
+      run_date: '2026-11-17',
+      charge_volume_gal: 40,
+      charge_abv: 45,
+      stillage_volume_gal: null,
+      stillage_discarded: 0,
+      stillage_holding_tank_equipment_id: null,
+      status: 'planned',
+      assigned_user_id: null,
+      assigned_user_name: null,
+      notes: '',
+      gin_recipe_id: 8,
+      gin_recipe_name: 'New Gin',
+    }, undefined, botanicals);
+    expect(getDistillationRuns().find((run) => run.id === nextId)?.gin_recipe_id).toBe(8);
   });
 });

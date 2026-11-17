@@ -5159,6 +5159,7 @@ export function saveDistillationRun(
     assertStillageFitsTank(stillage.tankId, stillage.volumeGal, id);
   }
   const runDate = eventDateWhenLeavingPlanned(previousRun?.status, run.status, run.run_date);
+  clearOrphanDistillationGinRecipeIds();
   const ginRecipe = linkedGinRecipeForSave(runType, run.gin_recipe_id, run.gin_recipe_name);
   const primarySourceId = isTankSourcedRun(runType)
     ? (tankSources?.find((source) => source.tankId > 0 && source.volumeGal > 0)?.tankId
@@ -5425,6 +5426,7 @@ export function deleteGinRecipe(id: number): void {
   const __remote = forwardProductionMutation('deleteGinRecipe', [id]);
   if (__remote.forwarded) return __remote.value as never;
 
+  runQuery('UPDATE distillation_runs SET gin_recipe_id = NULL WHERE gin_recipe_id = ?', [id]);
   runQuery('DELETE FROM gin_recipe_botanicals WHERE gin_recipe_id = ?', [id]);
   runQuery('DELETE FROM gin_recipes WHERE id = ?', [id]);
 }

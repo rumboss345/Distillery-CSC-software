@@ -207,6 +207,7 @@ async function reloadFromPostgres(client: import('pg').PoolClient): Promise<void
   memoryRevision = Number(meta.rows[0]?.revision ?? 0);
   if (memory) memory.close();
   attach(db);
+  queries.clearOrphanDistillationGinRecipeIds();
 }
 
 async function persistToPostgres(
@@ -327,6 +328,7 @@ export async function runProductionMutation(
     } finally {
       setMutationActorRole(null);
     }
+    queries.clearOrphanDistillationGinRecipeIds();
     const nextRevision = memoryRevision + 1;
     await persistToPostgres(client, nextRevision, hashesBefore);
     const summary = needsApproval && adminApproval
