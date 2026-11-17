@@ -502,22 +502,6 @@ export async function migrateDatabase(): Promise<void> {
       `);
       await client.query(`INSERT INTO schema_migrations (version) VALUES ('029')`);
     }
-    const distillationGinRecipeFkDefer = await client.query(
-      'SELECT version FROM schema_migrations WHERE version = $1',
-      ['030'],
-    );
-    if (distillationGinRecipeFkDefer.rowCount === 0) {
-      // Migration 027 inlined REFERENCES (not deferrable). Full PG saves rewrite tables in
-      // name order, so distillation_runs is inserted before gin_recipes unless the FK defers.
-      await client.query('ALTER TABLE distillation_runs DROP CONSTRAINT IF EXISTS distillation_runs_gin_recipe_id_fkey');
-      await client.query(`
-        ALTER TABLE distillation_runs
-        ADD CONSTRAINT distillation_runs_gin_recipe_id_fkey
-        FOREIGN KEY (gin_recipe_id) REFERENCES gin_recipes(id) ON DELETE SET NULL
-        DEFERRABLE INITIALLY DEFERRED
-      `);
-      await client.query(`INSERT INTO schema_migrations (version) VALUES ('030')`);
-    }
     await client.query(`
       INSERT INTO inventory_categories (name)
       SELECT 'botanicals'
