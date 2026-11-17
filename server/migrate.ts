@@ -489,6 +489,19 @@ export async function migrateDatabase(): Promise<void> {
       `);
       await client.query(`INSERT INTO schema_migrations (version) VALUES ('028')`);
     }
+    const distillationGinRecipeOrphans = await client.query(
+      'SELECT version FROM schema_migrations WHERE version = $1',
+      ['029'],
+    );
+    if (distillationGinRecipeOrphans.rowCount === 0) {
+      await client.query(`
+        UPDATE distillation_runs
+        SET gin_recipe_id = NULL
+        WHERE gin_recipe_id IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM gin_recipes WHERE gin_recipes.id = distillation_runs.gin_recipe_id)
+      `);
+      await client.query(`INSERT INTO schema_migrations (version) VALUES ('029')`);
+    }
     await client.query(`
       INSERT INTO inventory_categories (name)
       SELECT 'botanicals'

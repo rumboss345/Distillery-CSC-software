@@ -2008,6 +2008,64 @@ describe('PostgreSQL production modules', () => {
     expect(engine.readProduction((api) => api.getGinRecipes().some((row) => row.name === 'House Gin'))).toBe(true);
   });
 
+  it('does not write a gin_recipe_id that is missing from PostgreSQL', async () => {
+    await save('saveInventoryItem', [{
+      name: 'FK juniper',
+      category: 'botanicals',
+      unit: 'g',
+      quantity: 500,
+      reorder_level: 0,
+      notes: '',
+      package_size_ml: null,
+      density_g_per_ml: null,
+      density_reference: '',
+      abv: null,
+    }]);
+    const recipe = await save('saveGinRecipe', [{
+      name: 'Botanical Gin',
+      notes: '',
+    }, undefined, [
+      { name: 'FK juniper', amount: 0, weight: 50, weight_unit: 'g', place: 'basket' },
+    ]]);
+    const recipeId = Number(recipe.result);
+    const planned = {
+      batch_number: 'G-FK-GUARD',
+      run_type: 'gin' as const,
+      source_mash_batch_id: null,
+      source_fermenter_equipment_id: null,
+      source_holding_tank_equipment_id: null,
+      dest_holding_tank_equipment_id: null,
+      still_name: '',
+      run_date: '2026-10-24',
+      charge_volume_gal: 0,
+      charge_abv: null,
+      status: 'planned' as const,
+      assigned_user_id: null,
+      assigned_user_name: '',
+      notes: '',
+      stillage_volume_gal: null,
+      stillage_discarded: 0,
+      stillage_holding_tank_equipment_id: null,
+      gin_recipe_id: 99_999,
+      gin_recipe_name: 'Botanical Gin',
+    };
+    const saved = await save('saveDistillationRun', [planned, undefined, undefined, []]);
+    const runId = Number(saved.result);
+    const row = engine.readProduction((api) => (
+      api.getDistillationRuns().find((item) => item.id === runId)
+    ));
+    expect(row?.gin_recipe_id).toBe(recipeId);
+    expect(row?.gin_recipe_name).toBe('Botanical Gin');
+    const pgRow = await poolQuery(
+      'SELECT gin_recipe_id, gin_recipe_name FROM distillation_runs WHERE id = $1',
+      [runId],
+    );
+    expect(pgRow.rows[0]).toEqual({
+      gin_recipe_id: recipeId,
+      gin_recipe_name: 'Botanical Gin',
+    });
+  });
+
   it('lets a planned spirit run wait for a source tank until it is running', async () => {
     const plannedRun = {
       batch_number: 'G-PLAN-TANK',

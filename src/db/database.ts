@@ -1798,6 +1798,12 @@ function migrateDistillationGinRecipeId(): void {
   if (!db) return;
   addColumnIfMissing('distillation_runs', 'gin_recipe_id', 'INTEGER REFERENCES gin_recipes(id) ON DELETE SET NULL');
   addColumnIfMissing('distillation_runs', 'gin_recipe_name', "TEXT NOT NULL DEFAULT ''");
+  db.run(`
+    UPDATE distillation_runs
+    SET gin_recipe_id = NULL
+    WHERE gin_recipe_id IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM gin_recipes WHERE gin_recipes.id = distillation_runs.gin_recipe_id)
+  `);
 }
 
 function migrateInventoryCostHistory(): void {
