@@ -155,6 +155,7 @@ CREATE TABLE IF NOT EXISTS distillation_runs (
   assigned_user_id INTEGER,
   assigned_user_name TEXT NOT NULL DEFAULT '',
   notes TEXT NOT NULL DEFAULT '',
+  gin_recipe_id INTEGER,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

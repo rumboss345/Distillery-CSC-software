@@ -1730,6 +1730,7 @@ function migrateAdvancedBlending(): void {
   migrateBottlingRunEquipment();
   migrateInventoryUsageLog();
   migrateInventoryCostHistory();
+  migrateDistillationGinRecipeId();
   migrateHoldingTankTransferLiquidLabel();
   migrateTankReadingLiquidLabel();
   migrateDistillerySettings();
@@ -1791,6 +1792,11 @@ function migrateInventoryUsageLog(): void {
     )
   `);
   db.run('CREATE INDEX IF NOT EXISTS idx_inventory_usage_item ON inventory_usage_log(inventory_item_id, created_at DESC)');
+}
+
+function migrateDistillationGinRecipeId(): void {
+  if (!db) return;
+  addColumnIfMissing('distillation_runs', 'gin_recipe_id', 'INTEGER REFERENCES gin_recipes(id) ON DELETE SET NULL');
 }
 
 function migrateInventoryCostHistory(): void {

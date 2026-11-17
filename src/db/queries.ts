@@ -4810,11 +4810,13 @@ export function getDistillationRuns(): DistillationRunView[] {
     `SELECT r.*,
        src.name as source_holding_tank_name,
        dest.name as dest_holding_tank_name,
-       stillage_tank.name as stillage_tank_name
+       stillage_tank.name as stillage_tank_name,
+       gin_recipe.name as gin_recipe_name
      FROM distillation_runs r
      LEFT JOIN floor_equipment src ON src.id = r.source_holding_tank_equipment_id
      LEFT JOIN floor_equipment dest ON dest.id = r.dest_holding_tank_equipment_id
      LEFT JOIN floor_equipment stillage_tank ON stillage_tank.id = r.stillage_holding_tank_equipment_id
+     LEFT JOIN gin_recipes gin_recipe ON gin_recipe.id = r.gin_recipe_id
      ORDER BY r.run_date DESC`,
   );
 }
@@ -5114,7 +5116,7 @@ export function saveDistillationRun(
   let runId = id ?? 0;
   if (id) {
     runQuery(
-      `UPDATE distillation_runs SET batch_number=?, run_type=?, source_mash_batch_id=?, source_fermenter_equipment_id=?, source_holding_tank_equipment_id=?, dest_holding_tank_equipment_id=?, still_name=?, run_date=?, charge_volume_gal=?, charge_abv=?, proof_spirit_gal=?, proof_spirit_abv=?, proof_water_gal=?, proof_place=?, stillage_volume_gal=?, stillage_discarded=?, stillage_holding_tank_equipment_id=?, status=?, assigned_user_id=?, assigned_user_name=?, notes=? WHERE id=?`,
+      `UPDATE distillation_runs SET batch_number=?, run_type=?, source_mash_batch_id=?, source_fermenter_equipment_id=?, source_holding_tank_equipment_id=?, dest_holding_tank_equipment_id=?, still_name=?, run_date=?, charge_volume_gal=?, charge_abv=?, proof_spirit_gal=?, proof_spirit_abv=?, proof_water_gal=?, proof_place=?, stillage_volume_gal=?, stillage_discarded=?, stillage_holding_tank_equipment_id=?, status=?, assigned_user_id=?, assigned_user_name=?, notes=?, gin_recipe_id=? WHERE id=?`,
       [
         run.batch_number,
         runType,
@@ -5137,12 +5139,13 @@ export function saveDistillationRun(
         run.assigned_user_id,
         run.assigned_user_name ?? '',
         run.notes,
+        runType === 'gin' ? run.gin_recipe_id ?? null : null,
         id,
       ],
     );
   } else {
     runId = insertRow(
-      `INSERT INTO distillation_runs (batch_number, run_type, source_mash_batch_id, source_fermenter_equipment_id, source_holding_tank_equipment_id, dest_holding_tank_equipment_id, still_name, run_date, charge_volume_gal, charge_abv, proof_spirit_gal, proof_spirit_abv, proof_water_gal, proof_place, stillage_volume_gal, stillage_discarded, stillage_holding_tank_equipment_id, status, assigned_user_id, assigned_user_name, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO distillation_runs (batch_number, run_type, source_mash_batch_id, source_fermenter_equipment_id, source_holding_tank_equipment_id, dest_holding_tank_equipment_id, still_name, run_date, charge_volume_gal, charge_abv, proof_spirit_gal, proof_spirit_abv, proof_water_gal, proof_place, stillage_volume_gal, stillage_discarded, stillage_holding_tank_equipment_id, status, assigned_user_id, assigned_user_name, notes, gin_recipe_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         run.batch_number,
         runType,
@@ -5165,6 +5168,7 @@ export function saveDistillationRun(
         run.assigned_user_id,
         run.assigned_user_name ?? '',
         run.notes,
+        runType === 'gin' ? run.gin_recipe_id ?? null : null,
       ],
     );
   }
