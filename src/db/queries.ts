@@ -175,6 +175,7 @@ import type {
   FloorPlan,
   InventoryItem,
   InventoryUsageLog,
+  InventoryCostChange,
   MashBatch,
   MashStatus,
   Recipe,
@@ -652,8 +653,12 @@ export function ensureInventoryItem(input: {
   return created;
 }
 
-export function saveInventoryItem(item: Omit<InventoryItem, 'id' | 'created_at' | 'updated_at'>, id?: number): void {
-  const __remote = forwardProductionMutation('saveInventoryItem', [item, id]);
+export function saveInventoryItem(
+  item: Omit<InventoryItem, 'id' | 'created_at' | 'updated_at'>,
+  id?: number,
+  changedBy?: string,
+): void {
+  const __remote = forwardProductionMutation('saveInventoryItem', [item, id, changedBy]);
   if (__remote.forwarded) return __remote.value as never;
 
   const packageSizeMl = item.category === 'packaging' && item.package_size_ml != null && item.package_size_ml > 0
@@ -670,8 +675,8 @@ export function saveInventoryItem(item: Omit<InventoryItem, 'id' | 'created_at' 
   const densityTemp = item.density_temp_c != null && Number.isFinite(item.density_temp_c) ? item.density_temp_c : null;
   const specStatus = item.spec_status === 'verified' || item.spec_status === 'estimated' ? item.spec_status : null;
   if (id) {
-    const previous = queryOne<{ quantity: number }>(
-      'SELECT quantity FROM inventory_items WHERE id = ?',
+    const previous = queryOne<{ quantity: number; cost_per_unit: number | null }>(
+      'SELECT quantity, cost_per_unit FROM inventory_items WHERE id = ?',
       [id],
     );
     runQuery(
@@ -684,12 +689,44 @@ export function saveInventoryItem(item: Omit<InventoryItem, 'id' | 'created_at' 
         summary: 'On-hand count edited',
       });
     }
+    if (previous) recordInventoryCostChange(id, previous.cost_per_unit, costPerUnit, changedBy);
   } else {
-    insertRow(
+    const newId = insertRow(
       `INSERT INTO inventory_items (name, category, unit, quantity, reorder_level, cost_per_unit, notes, package_size_ml, density_g_per_ml, density_reference, abv, sugar_mass_fraction, solids_mass_fraction, density_temp_c, spec_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [item.name, item.category, item.unit, item.quantity, item.reorder_level, costPerUnit, item.notes, packageSizeMl, density, densityReference, abv, sugarFraction, solidsFraction, densityTemp, specStatus],
     );
+    recordInventoryCostChange(newId, null, costPerUnit, changedBy);
   }
+}
+
+function recordInventoryCostChange(
+  itemId: number,
+  previousCost: number | null,
+  newCost: number | null,
+  changedBy?: string,
+): void {
+  if (!itemId) return;
+  const before = previousCost ?? null;
+  if (before === newCost || (before != null && newCost != null && Math.abs(before - newCost) < 1e-9)) return;
+  insertRow(
+    `INSERT INTO inventory_cost_history (inventory_item_id, previous_cost, new_cost, changed_by) VALUES (?, ?, ?, ?)`,
+    [itemId, before, newCost, changedBy?.trim() ?? ''],
+  );
+}
+
+export function getInventoryCostHistory(itemId: number): InventoryCostChange[] {
+  return queryAll<InventoryCostChange>(
+    `SELECT * FROM inventory_cost_history
+     WHERE inventory_item_id = ?
+     ORDER BY datetime(changed_at) DESC, id DESC`,
+    [itemId],
+  );
+}
+
+export function getAllInventoryCostHistory(): InventoryCostChange[] {
+  return queryAll<InventoryCostChange>(
+    `SELECT * FROM inventory_cost_history ORDER BY datetime(changed_at), id`,
+  );
 }
 
 function fractionOrNull(value: number | null | undefined): number | null {

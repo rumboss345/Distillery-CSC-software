@@ -4,13 +4,15 @@ import {
   getBottlingRuns,
   getDistillationRuns,
   getHoldingTankDilutions,
+  getAllInventoryCostHistory,
   getInventoryItems,
   getMashBatchNutrients,
   getMashBatches,
   getProductionCostMonthlyOverhead,
 } from '../../db/queries';
 import { nutrientAmountInUnit } from '../wash-recipe-nutrients';
-import type { ProductionCostSettings } from '../../types';
+import type { InventoryCostChange, ProductionCostSettings } from '../../types';
+import { inventoryCostAt } from '../inventory-cost-at';
 import { bottlingCountsTowardProduction, packagingBottleCountsBySku, packagingLabelCountsBySku } from '../bottling-lines';
 import { ingredientVolumeGal } from '../blending';
 import { laaLitersFromVolumeAbv, volumeLitersAtTargetAbv } from './alcohol-units';
@@ -99,51 +101,82 @@ export interface ProductionCostReport {
   warnings: string[];
 }
 
-type InventoryCostIndex = Map<string, number>;
+interface InventoryCostEntry {
+  id: number;
+  key: string;
+  category: string;
+  currentCost: number | null;
+  changes: InventoryCostChange[];
+}
+
+/** Every inventory item with its cost log, so each event is costed at the price in effect then. */
+type InventoryCostIndex = InventoryCostEntry[];
 
 function inventoryKey(category: string, name: string): string {
   return `${category.trim().toLowerCase()}::${name.trim().toLowerCase()}`;
 }
 
 function buildInventoryCostIndex(): InventoryCostIndex {
-  const map: InventoryCostIndex = new Map();
-  for (const item of getInventoryItems()) {
-    if (item.cost_per_unit == null || !(item.cost_per_unit >= 0)) continue;
-    map.set(inventoryKey(item.category, item.name), item.cost_per_unit);
+  const changesByItem = new Map<number, InventoryCostChange[]>();
+  for (const change of getAllInventoryCostHistory()) {
+    const list = changesByItem.get(change.inventory_item_id) ?? [];
+    list.push(change);
+    changesByItem.set(change.inventory_item_id, list);
   }
-  return map;
+  return getInventoryItems().map((item) => ({
+    id: item.id,
+    key: inventoryKey(item.category, item.name),
+    category: item.category.trim().toLowerCase(),
+    currentCost: item.cost_per_unit != null && item.cost_per_unit >= 0 ? item.cost_per_unit : null,
+    changes: changesByItem.get(item.id) ?? [],
+  }));
+}
+
+function entryCostAt(entry: InventoryCostEntry, at: string): number | null {
+  return inventoryCostAt(entry.currentCost, entry.changes, at);
+}
+
+function indexHasAnyCost(index: InventoryCostIndex): boolean {
+  return index.some((entry) => entry.currentCost != null || entry.changes.some((change) => change.new_cost != null));
 }
 
 function lookupInventoryCost(
   index: InventoryCostIndex,
   category: string,
   name: string,
+  at: string,
 ): number | null {
-  const direct = index.get(inventoryKey(category, name));
-  if (direct != null) return direct;
-  for (const [key, cost] of index) {
-    if (!key.startsWith(`${category.toLowerCase()}::`)) continue;
-    const itemName = key.split('::')[1] ?? '';
-    if (itemName && name.toLowerCase().includes(itemName)) return cost;
-    if (itemName && itemName.includes(name.toLowerCase())) return cost;
+  const key = inventoryKey(category, name);
+  for (let i = index.length - 1; i >= 0; i -= 1) {
+    if (index[i].key !== key) continue;
+    const cost = entryCostAt(index[i], at);
+    if (cost != null) return cost;
+  }
+  const prefix = `${category.toLowerCase()}::`;
+  const wanted = name.toLowerCase();
+  for (const entry of index) {
+    if (!entry.key.startsWith(prefix)) continue;
+    const itemName = entry.key.slice(prefix.length);
+    if (!itemName || !(wanted.includes(itemName) || itemName.includes(wanted))) continue;
+    const cost = entryCostAt(entry, at);
+    if (cost != null) return cost;
   }
   return null;
 }
 
-function sugarCostPerLb(index: InventoryCostIndex): number {
-  for (const item of getInventoryItems()) {
-    if (item.category === 'sugar' && item.cost_per_unit != null && item.cost_per_unit >= 0) {
-      return item.cost_per_unit;
-    }
+function sugarCostPerLb(index: InventoryCostIndex, at: string): number {
+  for (const entry of index) {
+    if (entry.category !== 'sugar') continue;
+    const cost = entryCostAt(entry, at);
+    if (cost != null) return cost;
   }
-  const fromIndex = lookupInventoryCost(index, 'sugar', 'sugar');
-  return fromIndex ?? 0;
+  return lookupInventoryCost(index, 'sugar', 'sugar', at) ?? 0;
 }
 
-function yeastCostPerLb(index: InventoryCostIndex, strain: string): number {
-  const byStrain = strain.trim() ? lookupInventoryCost(index, 'yeast', strain) : null;
+function yeastCostPerLb(index: InventoryCostIndex, strain: string, at: string): number {
+  const byStrain = strain.trim() ? lookupInventoryCost(index, 'yeast', strain, at) : null;
   if (byStrain != null) return byStrain;
-  const generic = lookupInventoryCost(index, 'yeast', 'yeast');
+  const generic = lookupInventoryCost(index, 'yeast', 'yeast', at);
   return generic ?? 0;
 }
 
@@ -154,6 +187,7 @@ function waterCostPerGal(settings: ProductionCostSettings): number {
 
 function mashMaterialCost(
   mashId: number,
+  at: string,
   grainLbs: number,
   yeastLbs: number,
   yeastStrain: string,
@@ -161,9 +195,9 @@ function mashMaterialCost(
   settings: ProductionCostSettings,
   index: InventoryCostIndex,
 ): number {
-  let total = grainLbs * sugarCostPerLb(index);
+  let total = grainLbs * sugarCostPerLb(index, at);
   if (yeastLbs > 0) {
-    total += yeastLbs * yeastCostPerLb(index, yeastStrain);
+    total += yeastLbs * yeastCostPerLb(index, yeastStrain, at);
   }
   if (waterGal > 0) {
     total += roundMoney(waterGal * waterCostPerGal(settings));
@@ -174,11 +208,12 @@ function mashMaterialCost(
     const linked = nutrient.inventory_item_id != null
       ? getInventoryItems().find((item) => item.id === nutrient.inventory_item_id)
       : undefined;
+    const linkedEntry = linked ? index.find((entry) => entry.id === linked.id) : undefined;
     const inventoryUnit = linked?.unit?.trim() || 'lbs';
     const qty = nutrientAmountInUnit(amount, nutrient.unit || 'lbs', inventoryUnit);
-    const unitCost = linked?.cost_per_unit
-      ?? lookupInventoryCost(index, 'nutrients', nutrient.name)
-      ?? lookupInventoryCost(index, 'other', nutrient.name);
+    const unitCost = (linkedEntry ? entryCostAt(linkedEntry, at) : null)
+      ?? lookupInventoryCost(index, 'nutrients', nutrient.name, at)
+      ?? lookupInventoryCost(index, 'other', nutrient.name, at);
     if (unitCost != null) total += qty * unitCost;
   }
   return roundMoney(total);
@@ -251,14 +286,15 @@ function packagingCostForRun(
   run: ReturnType<typeof getBottlingRuns>[0],
   index: InventoryCostIndex,
 ): number {
+  const at = run.bottling_date;
   let total = 0;
   for (const [sku, qty] of Object.entries(packagingBottleCountsBySku(run.lines))) {
-    const unit = lookupInventoryCost(index, 'packaging', sku);
+    const unit = lookupInventoryCost(index, 'packaging', sku, at);
     if (unit != null) total += unit * qty;
   }
   for (const [sku, qty] of Object.entries(packagingLabelCountsBySku(run.lines))) {
-    const unit = lookupInventoryCost(index, 'labels', sku)
-      ?? lookupInventoryCost(index, 'packaging', sku);
+    const unit = lookupInventoryCost(index, 'labels', sku, at)
+      ?? lookupInventoryCost(index, 'packaging', sku, at);
     if (unit != null) total += unit * qty;
   }
   return roundMoney(total);
@@ -295,6 +331,7 @@ export function buildProductionCostReport(
 
     const materialCost = mashMaterialCost(
       mash.id,
+      mash.start_date,
       mash.grain_lbs,
       mash.yeast_lbs,
       mash.yeast_strain,
@@ -456,7 +493,7 @@ export function buildProductionCostReport(
     ? roundMoney(withBrix.reduce((s, row) => s + (row.fermentBrixDrop ?? 0), 0) / withBrix.length)
     : null;
 
-  if (index.size === 0) {
+  if (!indexHasAnyCost(index)) {
     warnings.push('Enter unit costs on Inventory items (especially sugar, yeast, bottles, and labels) for accurate material totals.');
   }
 

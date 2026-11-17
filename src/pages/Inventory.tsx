@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import {
   getInventoryItems,
   getInventoryCategories,
+  getInventoryCostHistory,
   getInventoryUsageLog,
   saveInventoryItem,
   deleteInventoryItem,
@@ -32,7 +33,12 @@ import {
   formatInventoryUsageWhen,
   inventoryUsageDescription,
 } from '../lib/inventory-usage';
+import { formatRecordedAt } from '../lib/date-input';
 import type { InventoryCategory, InventoryItem } from '../types';
+
+function formatUnitCost(cost: number | null, unit: string): string {
+  return cost != null ? `$${cost.toFixed(2)} / ${unit}` : 'Not set';
+}
 
 const emptyItem = (): Omit<InventoryItem, 'id' | 'created_at' | 'updated_at'> => ({
   name: '',
@@ -155,7 +161,7 @@ export function Inventory() {
       solids_mass_fraction: solidsInput.trim() === '' || !Number.isFinite(solidsPercent) ? null : solidsPercent / 100,
       density_temp_c: densityTempInput.trim() === '' || !Number.isFinite(densityTemp) ? null : densityTemp,
       cost_per_unit: costInput.trim() === '' || !Number.isFinite(cost) || cost < 0 ? null : cost,
-    }, editId);
+    }, editId, changedBy);
     setShowForm(false);
     refresh();
   };
@@ -203,6 +209,7 @@ export function Inventory() {
   const adjustItem = items.find((i) => i.id === showAdjust) ?? null;
   const historyItem = items.find((i) => i.id === showHistory) ?? null;
   const historyRows = historyItem ? getInventoryUsageLog(historyItem.id) : [];
+  const costHistoryRows = historyItem ? getInventoryCostHistory(historyItem.id) : [];
   const adjustTyped = parseFloat(adjustAmount);
   const adjustDelta = adjustItem && !isNaN(adjustTyped)
     ? convertInventoryAdjustment(adjustTyped, adjustUnit || adjustItem.unit, adjustItem.unit)
@@ -410,6 +417,12 @@ export function Inventory() {
                 onChange={(e) => setCostInput(e.target.value)}
                 placeholder="Optional — used in the owner's Production costing report"
               />
+              {editId != null && (
+                <span className="field-hint">
+                  A new cost applies from the moment you save. Earlier washes and bottlings keep the cost they had.
+                  Every change is listed in this item's History.
+                </span>
+              )}
             </div>
             <div className="form-group">
               <label>Measure</label>
@@ -570,7 +583,7 @@ export function Inventory() {
       )}
 
       {showHistory !== null && historyItem && (
-        <Modal title={`Usage history — ${historyItem.name}`} onClose={() => setShowHistory(null)}>
+        <Modal title={`History — ${historyItem.name}`} onClose={() => setShowHistory(null)}>
           <p className="field-hint" style={{ marginBottom: '1rem' }}>
             Stock changes from manual adjustments, bottling, blending, wash batches, and direct count edits.
             Only changes made after this feature was added are listed.
@@ -602,6 +615,42 @@ export function Inventory() {
                           : '—'}
                       </td>
                       <td>{inventoryUsageDescription(row)}</td>
+                      <td>{row.changed_by.trim() || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <h4 style={{ marginTop: '1.5rem' }}>Cost changes</h4>
+          <p className="field-hint" style={{ marginBottom: '0.75rem' }}>
+            Costing uses each cost from the moment it was saved. Washes and bottlings before a change keep the earlier cost.
+          </p>
+          {costHistoryRows.length === 0 ? (
+            <div className="empty-state">
+              <p>
+                {historyItem.cost_per_unit != null
+                  ? `No cost changes logged. $${historyItem.cost_per_unit.toFixed(2)} per ${historyItem.unit} applies to all records.`
+                  : 'No cost set for this item.'}
+              </p>
+            </div>
+          ) : (
+            <div className="table-wrap">
+              <table data-testid="inventory-cost-history-table">
+                <thead>
+                  <tr>
+                    <th>Changed</th>
+                    <th className="num">Old cost</th>
+                    <th className="num">New cost</th>
+                    <th>By</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {costHistoryRows.map((row) => (
+                    <tr key={row.id}>
+                      <td>{formatRecordedAt(row.changed_at)}</td>
+                      <td className="num">{formatUnitCost(row.previous_cost, historyItem.unit)}</td>
+                      <td className="num">{formatUnitCost(row.new_cost, historyItem.unit)}</td>
                       <td>{row.changed_by.trim() || '—'}</td>
                     </tr>
                   ))}

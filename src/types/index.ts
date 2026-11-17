@@ -133,6 +133,16 @@ export interface InventoryUsageLog {
   created_at: string;
 }
 
+export interface InventoryCostChange {
+  id: number;
+  inventory_item_id: number;
+  previous_cost: number | null;
+  new_cost: number | null;
+  changed_by: string;
+  /** UTC `YYYY-MM-DD HH:MM:SS`. The new cost applies from this moment. */
+  changed_at: string;
+}
+
 export interface InventoryItem {
   id: number;
   name: string;
