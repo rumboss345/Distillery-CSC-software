@@ -81,6 +81,20 @@ export function distillationSourceSummary(names: readonly string[]): string {
 
 const ABV_CHANGED = 0.15;
 
+/**
+ * One line when ledger ABV differs from the last intake — shown under the tank dropdown
+ * so we do not repeat the dropdown label.
+ */
+export function distillationSourceTankAbvNote(
+  currentAbv: number | null | undefined,
+  previousAbv: number | null | undefined,
+): string | null {
+  if (currentAbv == null || !Number.isFinite(currentAbv)) return null;
+  if (previousAbv == null || !Number.isFinite(previousAbv)) return null;
+  if (Math.abs(previousAbv - currentAbv) <= ABV_CHANGED) return null;
+  return `Tank proof is ${currentAbv.toFixed(1)}% ABV now. It was ${previousAbv.toFixed(1)}% when this spirit last went into the tank.`;
+}
+
 /** Place the charge came from, what the liquid was, and the alcohol percent. */
 export function formatDistillationSourceDetail(input: {
   place?: string | null;

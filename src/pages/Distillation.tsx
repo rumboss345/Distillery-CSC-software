@@ -54,6 +54,7 @@ import {
   blendDistillationTankPulls,
   distillationChargeTypeChoices,
   distillationSourceSummary,
+  distillationSourceTankAbvNote,
   formatDistillationSourceDetail,
   distillationTankPullError,
   fitDistillationTankPulls,
@@ -1559,16 +1560,13 @@ export function Distillation() {
                             )}
                             {selectedTank && (() => {
                               const origin = tankOriginDetail(selectedTank.id);
-                              return (
-                                <p className="field-hint">
-                                  {formatDistillationSourceDetail({
-                                    place: origin.phrase ?? selectedTank.name,
-                                    abv: selectedTank.available_abv,
-                                    previousAbv: origin.previousAbv,
-                                  })}
-                                  {` · ${selectedTank.available_gal.toFixed(1)} gal available`}
-                                </p>
+                              const abvNote = distillationSourceTankAbvNote(
+                                selectedTank.available_abv,
+                                origin.previousAbv,
                               );
+                              return abvNote ? (
+                                <p className="field-hint">{abvNote}</p>
+                              ) : null;
                             })()}
                           </div>
                         )}

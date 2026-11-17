@@ -5,6 +5,7 @@ import {
   distillationChargeTypeChoices,
   distillationSourceSummary,
   distillationSourceTypeChoices,
+  distillationSourceTankAbvNote,
   formatDistillationSourceDetail,
   distillationTankPullError,
   fitDistillationTankPulls,
@@ -83,6 +84,13 @@ describe('distillation source tanks', () => {
 
   it('joins source tank names', () => {
     expect(distillationSourceSummary(['High proof', 'Latina 500L'])).toBe('High proof + Latina 500L');
+  });
+
+  it('explains when tank proof differs from the last intake ABV', () => {
+    expect(distillationSourceTankAbvNote(39.3, 37.5)).toMatch(/39\.3%/);
+    expect(distillationSourceTankAbvNote(39.3, 37.5)).toMatch(/37\.5%/);
+    expect(distillationSourceTankAbvNote(39.3, 39.2)).toBeNull();
+    expect(distillationSourceTankAbvNote(null, 40)).toBeNull();
   });
 
   it('names the place, what the liquid was, and the alcohol percent', () => {
