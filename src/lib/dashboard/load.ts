@@ -33,8 +33,8 @@ import { buildNeedsAttention, type AttentionItem } from './attention';
 import {
   bottlingByProduct,
   inventoryTrend,
-  productionVolumeSeries,
-  yieldSeries,
+  productionVolumeSeriesForRange,
+  yieldSeriesForRange,
   type BottlingProductPoint,
   type InventoryTrendPoint,
   type ProductionVolumePoint,
@@ -393,17 +393,22 @@ export interface DashboardCharts {
 }
 
 export function loadDashboardCharts(range: ReportDateRange, today: string): DashboardCharts {
-  const runs = buildDistillationReportRows(resolveReportPeriod('all'))
-    .filter((row) => row.status === 'complete')
-    .map((row) => ({
-      run_date: row.run_date,
-      charged_laa_gal: row.alcohol_charged_gal,
-      collected_laa_gal: row.alcohol_collected_gal,
-    }));
+  const runsInPeriod = buildDistillationReportRows(range)
+    .filter((row) => row.status === 'complete');
+  const yieldInputs = runsInPeriod.map((row) => ({
+    run_date: row.run_date,
+    charged_laa_gal: row.alcohol_charged_gal,
+    collected_laa_gal: row.alcohol_collected_gal,
+  }));
   return {
-    production: productionVolumeSeries(getMonthlyProduction(), today),
+    production: productionVolumeSeriesForRange(
+      getMonthlyProduction(),
+      range,
+      today,
+      runsInPeriod.map((row) => ({ run_date: row.run_date, hearts_gal: row.hearts_gal })),
+    ),
     bottlingByProduct: bottlingByProduct(buildBottlingReportRows(range)),
-    yield: yieldSeries(runs, today),
+    yield: yieldSeriesForRange(yieldInputs, range, today),
   };
 }
 

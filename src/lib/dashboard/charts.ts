@@ -1,5 +1,6 @@
-import { addMonths, format, parseISO } from 'date-fns';
-import { parseStoredDate } from '../date-input';
+import { addMonths, differenceInCalendarDays, eachDayOfInterval, format, parseISO } from 'date-fns';
+import { localCalendarDayKey, parseStoredDate } from '../date-input';
+import { calendarMonthInReportRange, type ReportDateRange } from '../reporting/period';
 import type { MonthlyProduction } from '../reporting/productivity';
 import type { BottlingReportRow } from '../reporting/bottling-rows';
 import { roundAlcohol, roundVolume } from '../reporting/alcohol-units';
@@ -23,6 +24,107 @@ export interface ProductionVolumePoint extends MonthPoint {
   heartsGal: number;
   pureAlcoholGal: number;
   bottles: number;
+}
+
+/**
+ * Chart columns for the selected dashboard period.
+ * Short ranges use days; longer ranges use months (up to six) that overlap the period.
+ */
+export function chartTimeBuckets(range: ReportDateRange, today: string, maxMonths = 6): MonthPoint[] {
+  const { from, to } = range;
+  if (!from && !to) return recentMonths(today, maxMonths);
+  if (from && to && from === to) {
+    return [{ month: from, label: format(parseISO(from), 'MMM d') }];
+  }
+  if (from && to) {
+    const start = parseISO(from);
+    const end = parseISO(to);
+    const daySpan = differenceInCalendarDays(end, start) + 1;
+    if (daySpan <= 31) {
+      return eachDayOfInterval({ start, end }).map((day) => ({
+        month: format(day, 'yyyy-MM-dd'),
+        label: format(day, 'd MMM'),
+      }));
+    }
+  }
+  const anchor = to ?? today;
+  const months = recentMonths(anchor, maxMonths).filter((point) => calendarMonthInReportRange(point.month, range));
+  if (months.length > 0) return months;
+  if (from) {
+    const ym = from.slice(0, 7);
+    return [{ month: ym, label: format(parseISO(`${ym}-01`), 'MMM yyyy') }];
+  }
+  return recentMonths(today, 1);
+}
+
+function bucketKeyForRun(runDate: string, daily: boolean): string {
+  return daily ? localCalendarDayKey(runDate) : runDate.slice(0, 7);
+}
+
+export interface HeartsByRunDate {
+  run_date: string;
+  hearts_gal: number;
+}
+
+/** Hearts (and monthly bottle totals) for the dashboard period. */
+export function productionVolumeSeriesForRange(
+  monthly: MonthlyProduction[],
+  range: ReportDateRange,
+  today: string,
+  runs: HeartsByRunDate[],
+): ProductionVolumePoint[] {
+  const buckets = chartTimeBuckets(range, today);
+  const daily = buckets[0]?.month.length === 10;
+  const byMonth = new Map(monthly.map((row) => [row.month, row]));
+  return buckets.map((point) => {
+    if (daily) {
+      const heartsGal = runs
+        .filter((run) => bucketKeyForRun(run.run_date, true) === point.month)
+        .reduce((sum, run) => sum + run.hearts_gal, 0);
+      return {
+        ...point,
+        heartsGal: roundVolume(heartsGal),
+        pureAlcoholGal: 0,
+        bottles: 0,
+      };
+    }
+    const ym = point.month.length === 7 ? point.month : point.month.slice(0, 7);
+    const row = byMonth.get(ym);
+    return {
+      ...point,
+      heartsGal: roundVolume(row?.heartsGal ?? 0),
+      pureAlcoholGal: roundAlcohol(row?.pureAlcoholGal ?? 0),
+      bottles: row?.bottles ?? 0,
+    };
+  });
+}
+
+/** Distillation yield for the dashboard period (same buckets as production). */
+export function yieldSeriesForRange(
+  runs: YieldRunInput[],
+  range: ReportDateRange,
+  today: string,
+): YieldPoint[] {
+  const buckets = chartTimeBuckets(range, today);
+  const daily = buckets[0]?.month.length === 10;
+  const totals = new Map(buckets.map((point) => [point.month, { expected: 0, actual: 0 }]));
+  for (const run of runs) {
+    if (run.charged_laa_gal == null || run.collected_laa_gal == null) continue;
+    const key = bucketKeyForRun(run.run_date, daily);
+    const bucket = totals.get(key);
+    if (!bucket) continue;
+    bucket.expected += run.charged_laa_gal;
+    bucket.actual += run.collected_laa_gal;
+  }
+  return buckets.map((point) => {
+    const bucket = totals.get(point.month) ?? { expected: 0, actual: 0 };
+    return {
+      ...point,
+      expectedLaaGal: roundAlcohol(bucket.expected),
+      actualLaaGal: roundAlcohol(bucket.actual),
+      yieldPct: bucket.expected > 0 ? Math.round((bucket.actual / bucket.expected) * 1000) / 10 : null,
+    };
+  });
 }
 
 /** Hearts collected and bottles filled per month. Months with no records are zero. */

@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import type { BottlingReportRow } from '../reporting/bottling-rows';
-import { bottlingByProduct, inventoryTrend, productionVolumeSeries, recentMonths, yieldSeries } from './charts';
+import {
+  bottlingByProduct,
+  chartTimeBuckets,
+  inventoryTrend,
+  productionVolumeSeries,
+  productionVolumeSeriesForRange,
+  recentMonths,
+  yieldSeries,
+  yieldSeriesForRange,
+} from './charts';
+import { resolveReportPeriod } from '../reporting/period';
 
 describe('dashboard chart series', () => {
   it('lists the last months oldest first', () => {
@@ -39,6 +49,44 @@ describe('dashboard chart series', () => {
     );
     expect(series[0].yieldPct).toBeNull();
     expect(series[1]).toMatchObject({ expectedLaaGal: 50, actualLaaGal: 45, yieldPct: 90 });
+  });
+
+  it('uses one column for today and daily buckets for a short week', () => {
+    const today = resolveReportPeriod('today');
+    expect(chartTimeBuckets(today, '2026-11-17')).toEqual([{ month: '2026-11-17', label: 'Nov 17' }]);
+    const week = resolveReportPeriod('week');
+    const days = chartTimeBuckets(week, '2026-11-17');
+    expect(days.length).toBeGreaterThan(0);
+    expect(days[0].month).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('totals hearts for the selected period only', () => {
+    const lastMonth = resolveReportPeriod('lastMonth');
+    const series = productionVolumeSeriesForRange(
+      [{ month: '2026-10', heartsGal: 80, pureAlcoholGal: 40, bottles: 0, runs: 1, fermentations: 0 } as never],
+      lastMonth,
+      '2026-11-17',
+      [
+        { run_date: '2026-10-05', hearts_gal: 80 },
+        { run_date: '2026-11-05', hearts_gal: 200 },
+      ],
+    );
+    const hearts = series.reduce((sum, point) => sum + point.heartsGal, 0);
+    expect(hearts).toBeCloseTo(80);
+  });
+
+  it('limits yield to the selected period', () => {
+    const month = resolveReportPeriod('month');
+    const series = yieldSeriesForRange(
+      [
+        { run_date: '2026-11-02', charged_laa_gal: 50, collected_laa_gal: 45 },
+        { run_date: '2026-10-02', charged_laa_gal: 100, collected_laa_gal: 90 },
+      ],
+      month,
+      '2026-11-17',
+    );
+    const totalActual = series.reduce((sum, point) => sum + point.actualLaaGal, 0);
+    expect(totalActual).toBeCloseTo(45);
   });
 
   it('works inventory back from today’s count', () => {

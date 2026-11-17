@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { format } from 'date-fns';
 import { Link } from 'react-router-dom';
 import {
   getProductionSummary,
@@ -40,6 +39,7 @@ import {
   loadTankStatus,
   loadVariance,
 } from '../lib/dashboard/load';
+import { dashboardPeriodMetrics } from '../lib/dashboard/period-metrics';
 import { resolveReportPeriod, type ReportPeriodPreset } from '../lib/reporting/period';
 import {
   DISPLAY_VOLUME_UNITS,
@@ -107,8 +107,9 @@ export function Dashboard() {
   const isOperator = view === 'operator';
   const operatorName = isOperator ? (user?.name?.trim() || user?.email || null) : null;
 
-  const month = format(new Date(), 'yyyy-MM');
-  const summary = getProductionSummary(month, month);
+  const range = useMemo(() => resolveReportPeriod(preset), [preset]);
+  const summary = getProductionSummary();
+  const periodMetrics = useMemo(() => dashboardPeriodMetrics(range), [sharedKey, range]);
   const today = localIsoDate();
   const mashes = getMashBatches();
   const recentMashes = mashes.slice(0, 3);
@@ -132,7 +133,7 @@ export function Dashboard() {
     return isOperator ? rows.filter((row) => hasProcessAssignment(row.stage)) : rows;
   }, [sharedKey, isOperator, hasProcessAssignment]);
 
-  const periodLabel = resolveReportPeriod(preset).label;
+  const periodLabel = range.label;
 
   const statCards = (
     <div className="card-grid dash-stat-grid">
@@ -158,26 +159,31 @@ export function Dashboard() {
         <div className="value">{summary.barrelsAging}</div>
         <div className="sub">In warehouse</div>
       </div>
-      <div className="stat-card">
+      <div className="stat-card" data-testid="dashboard-hearts-period">
         <div className="label">Total Hearts</div>
-        <div className="value">{formatVolumeInUnit(summary.totalHeartsGal, unit)}</div>
-        <div className="sub">Hearts cuts from runs this month</div>
+        <div className="value" data-testid="dashboard-hearts-value">
+          {formatVolumeInUnit(periodMetrics.totalHeartsGal, unit)}
+        </div>
+        <div className="sub">Hearts cuts · {periodLabel}</div>
       </div>
-      <div className="stat-card" data-testid="dashboard-bottled-month">
-        <div className="label">Bottled This Month</div>
-        {summary.bottlesBySize.length === 0 ? (
+      <div className="stat-card" data-testid="dashboard-bottled-period">
+        <div className="label">Bottled</div>
+        {periodMetrics.bottlesBySize.length === 0 ? (
           <>
             <div className="value">0</div>
-            <div className="sub">No bottles this month</div>
+            <div className="sub">No bottles · {periodLabel}</div>
           </>
         ) : (
-          <div className="dashboard-bottle-sizes" data-testid="dashboard-bottle-sizes">
-            {summary.bottlesBySize.map((size) => (
-              <div key={size.sizeMl} data-testid={`dashboard-bottle-size-${size.sizeMl}`}>
-                {size.count.toLocaleString()} × {size.sizeMl} ml
-              </div>
-            ))}
-          </div>
+          <>
+            <div className="dashboard-bottle-sizes" data-testid="dashboard-bottle-sizes">
+              {periodMetrics.bottlesBySize.map((size) => (
+                <div key={size.sizeMl} data-testid={`dashboard-bottle-size-${size.sizeMl}`}>
+                  {size.count.toLocaleString()} × {size.sizeMl} ml
+                </div>
+              ))}
+            </div>
+            <div className="sub">{periodLabel}</div>
+          </>
         )}
       </div>
       <Link to="/inventory" className="stat-card stat-card-link">
