@@ -1678,6 +1678,62 @@ td.num .gin-botanicals-summary {
   z-index: 1;
 }
 
+/* Recipe rows stack measure toggles and amount fields — avoids squeezed/overlapping boxes */
+.blend-recipe-form .wash-nutrient-row > .form-grid {
+  grid-template-columns: 1fr;
+  gap: 0.85rem;
+}
+
+.blend-recipe-form .wash-nutrient-row > .form-grid > .form-group,
+.blend-recipe-form .wash-nutrient-row > .form-grid > .measure-mode-toggle,
+.blend-recipe-form .wash-nutrient-row > .form-grid > .wizard-spirit-amount-row,
+.blend-recipe-form .wash-nutrient-row > .form-grid > .wizard-additive-amount-row,
+.blend-recipe-form .wash-nutrient-row > .form-grid > .blend-recipe-additive-fields,
+.blend-recipe-form .wash-nutrient-row > .form-grid > .blend-recipe-stored-volume {
+  grid-column: 1 / -1;
+  max-width: 36rem;
+}
+
+.blend-recipe-form .wash-nutrient-row > .form-grid > .blend-recipe-additive-fields {
+  max-width: none;
+}
+
+@media (min-width: 720px) {
+  .blend-recipe-form .blend-recipe-additive-fields {
+    grid-template-columns: minmax(10rem, 1fr) minmax(14rem, 1.4fr);
+  }
+}
+
+@media (min-width: 900px) {
+  .blend-recipe-form .wash-nutrient-row > .form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .blend-recipe-form .wash-nutrient-row > .form-grid > .form-group:first-child {
+    max-width: none;
+  }
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: minmax(7.5rem, max-content) minmax(0, 1fr);
+  gap: 0.45rem 1.25rem;
+  align-items: baseline;
+  margin: 0 0 1rem;
+}
+
+.detail-grid dt {
+  margin: 0;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.detail-grid dd {
+  margin: 0;
+  min-width: 0;
+}
+
 /* Loading */
 .loading-screen {
   display: flex;
@@ -3722,6 +3778,10 @@ td.num .gin-botanicals-summary {
 }
 
 @media (max-width: 768px) {
+  .formulation-grid {
+    grid-template-columns: 1fr;
+  }
+
   .blend-wizard-steps {
     justify-content: center;
   }

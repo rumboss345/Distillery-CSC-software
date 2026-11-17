@@ -846,7 +846,7 @@ export function BlendRecipesTab({
                     ? spiritMeasureAlternate(source.amount, source.unit, source.abv)
                     : null;
                   return (
-                    <div key={index} className="form-group full-width wash-nutrient-row">
+                    <div key={index} className="form-group full-width wash-nutrient-row blend-recipe-spirit-card">
                       <div className="form-grid" style={{ marginBottom: 0 }}>
                       <div className="form-group">
                         <label>{index === 0 ? 'Spirit label' : `Spirit ${index + 1} label`}</label>
@@ -974,7 +974,7 @@ export function BlendRecipesTab({
                       : inventoryCategories;
 
                     return (
-                      <div key={index} className="form-group full-width wash-nutrient-row">
+                      <div key={index} className="form-group full-width wash-nutrient-row blend-recipe-additive-card">
                         <div className="form-grid" style={{ marginBottom: 0 }}>
                         <div className="blend-recipe-additive-fields">
                           <div className="form-group">
