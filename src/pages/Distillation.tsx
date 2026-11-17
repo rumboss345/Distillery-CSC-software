@@ -60,6 +60,7 @@ import {
   tanksOfEquipmentType,
   type DistillationTankPull,
 } from '../lib/distillation-source-tanks';
+import { ginRecipeFieldsForDistillationSave } from '../lib/distillation-gin-recipe-save';
 import { mixedSpiritConfirmMessage } from '../lib/blend-spirit-mix';
 import { equipmentTypeLabel } from '../lib/equipment';
 import { formatTankMenuLabel, tankContentsPhrase, tankDropdownLabel, tankOriginDetail } from '../lib/tank-menu-label';
@@ -880,10 +881,12 @@ export function Distillation() {
         saveDistillationRun(
           {
             ...savedRun,
-            gin_recipe_id: savedRun.run_type === 'gin' && typeof ginRecipeId === 'number' && ginRecipeId > 0
-              ? ginRecipeId
-              : null,
-            gin_recipe_name: savedRun.run_type === 'gin' ? ginRecipeName.trim() : '',
+            ...ginRecipeFieldsForDistillationSave(
+              savedRun.run_type,
+              ginRecipeId,
+              ginRecipeName,
+              ginRecipes,
+            ),
           },
           editRunId,
           savedRun.run_type === 'gin' ? botanicals : undefined,

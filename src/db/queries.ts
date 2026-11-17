@@ -5034,22 +5034,31 @@ function persistDistillationTankSources(
   });
 }
 
+function ginRecipeExists(recipeId: number): boolean {
+  return Boolean(queryOne<{ ok: number }>(
+    'SELECT 1 as ok FROM gin_recipes WHERE id = ?',
+    [recipeId],
+  ));
+}
+
 /** Never store a gin_recipe_id that is missing on this database (avoids PostgreSQL FK errors). */
 function linkedGinRecipeForSave(
   runType: DistillationRunType,
   recipeId: number | null | undefined,
   recipeName: string | null | undefined,
 ): Pick<DistillationRun, 'gin_recipe_id' | 'gin_recipe_name'> {
-  if (runType !== 'gin') {
+  const type = String(runType ?? 'wash').trim().toLowerCase() as DistillationRunType;
+  if (type !== 'gin') {
     return { gin_recipe_id: null, gin_recipe_name: '' };
   }
   const trimmedName = recipeName?.trim() ?? '';
-  if (recipeId != null && recipeId > 0) {
+  const numericId = Number(recipeId);
+  if (Number.isFinite(numericId) && numericId > 0) {
     const byId = queryOne<{ id: number; name: string }>(
       'SELECT id, name FROM gin_recipes WHERE id = ?',
-      [recipeId],
+      [numericId],
     );
-    if (byId) {
+    if (byId && ginRecipeExists(byId.id)) {
       return { gin_recipe_id: byId.id, gin_recipe_name: byId.name };
     }
   }
@@ -5058,12 +5067,21 @@ function linkedGinRecipeForSave(
       'SELECT id, name FROM gin_recipes WHERE name = ? COLLATE NOCASE',
       [trimmedName],
     );
-    if (byName) {
+    if (byName && ginRecipeExists(byName.id)) {
       return { gin_recipe_id: byName.id, gin_recipe_name: byName.name };
     }
     return { gin_recipe_id: null, gin_recipe_name: trimmedName };
   }
   return { gin_recipe_id: null, gin_recipe_name: '' };
+}
+
+export function clearOrphanDistillationGinRecipeIds(): void {
+  runQuery(
+  `UPDATE distillation_runs
+   SET gin_recipe_id = NULL
+   WHERE gin_recipe_id IS NOT NULL
+     AND NOT EXISTS (SELECT 1 FROM gin_recipes WHERE gin_recipes.id = distillation_runs.gin_recipe_id)`,
+  );
 }
 
 export function saveDistillationRun(
@@ -5077,7 +5095,7 @@ export function saveDistillationRun(
 
   assertEnteredAbv(run.charge_abv, 'Charge ABV');
   assertEnteredAbv(run.proof_spirit_abv, 'Charge ABV');
-  const runType = (run.run_type ?? 'wash') as DistillationRunType;
+  const runType = String(run.run_type ?? 'wash').trim().toLowerCase() as DistillationRunType;
   const chargeAbvToStore = isTankSourcedRun(runType) ? run.charge_abv : fermenterChargeAbvForSave(run);
   const planOnly = plannedRecordSkipsEquipmentStatus(run.status);
   const previousRun = id
