@@ -2066,6 +2066,16 @@ describe('PostgreSQL production modules', () => {
     });
   });
 
+  it('makes distillation_runs.gin_recipe_id a deferrable foreign key', async () => {
+    const row = await poolQuery(`
+      SELECT c.condeferrable, c.condeferred
+      FROM pg_constraint c
+      JOIN pg_class rel ON rel.oid = c.conrelid
+      WHERE rel.relname = 'distillation_runs' AND c.conname = 'distillation_runs_gin_recipe_id_fkey'
+    `);
+    expect(row.rows[0]).toEqual({ condeferrable: true, condeferred: true });
+  });
+
   it('still saves a gin run after a linked gin recipe was deleted from another run', async () => {
     await save('saveInventoryItem', [{
       name: 'Delete juniper',
