@@ -156,6 +156,7 @@ import type {
   HoldingTankContents,
   HoldingTankIntakeEntry,
   DiscardedFermentation,
+  FermenterWashTransferView,
   HoldingTankTransfer,
   HoldingTankTransferView,
   HoldingTankDilutionView,
@@ -3466,6 +3467,18 @@ export function getDiscardedFermentations(): DiscardedFermentation[] {
   );
 }
 
+export function getFermenterWashTransfers(): FermenterWashTransferView[] {
+  return queryAll(
+    `SELECT t.*,
+            src.name AS source_fermenter_name,
+            dest.name AS dest_fermenter_name
+     FROM fermenter_wash_transfers t
+     JOIN floor_equipment src ON src.id = t.source_fermenter_equipment_id
+     JOIN floor_equipment dest ON dest.id = t.dest_fermenter_equipment_id
+     ORDER BY t.transfer_date DESC, t.id DESC`,
+  );
+}
+
 function moveFermentationLogsBetweenFermenters(
   mashBatchId: number,
   fromEquipmentId: number,
@@ -3618,6 +3631,22 @@ export function saveFermenterWashTransfer(input: {
       source.mash_batch_id,
       input.sourceEquipmentId,
       dest.id,
+    );
+    insertRow(
+      `INSERT INTO fermenter_wash_transfers
+        (mash_batch_id, batch_number, source_fermenter_equipment_id, dest_fermenter_equipment_id,
+         volume_gal, transfer_date, notes, changed_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        source.mash_batch_id,
+        source.batch_number,
+        input.sourceEquipmentId,
+        dest.id,
+        input.volumeGal,
+        input.transferDate,
+        input.notes.trim(),
+        input.changedBy.trim() || 'Unknown',
+      ],
     );
   }
 
@@ -8274,6 +8303,10 @@ function detachFloorEquipment(id: number): void {
   runQuery('DELETE FROM holding_tank_volume_variances WHERE tank_equipment_id = ?', [id]);
   runQuery('DELETE FROM holding_tank_dilutions WHERE tank_equipment_id = ?', [id]);
   runQuery('DELETE FROM discarded_fermentations WHERE source_fermenter_equipment_id = ?', [id]);
+  runQuery(
+    'DELETE FROM fermenter_wash_transfers WHERE source_fermenter_equipment_id = ? OR dest_fermenter_equipment_id = ?',
+    [id, id],
+  );
 }
 
 export function deleteFloorEquipment(id: number): void {

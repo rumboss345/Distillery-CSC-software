@@ -17,6 +17,7 @@ import {
   getBlendProducts,
   getCollectionVesselStoredCutType,
   getDiscardedFermentations,
+  getFermenterWashTransfers,
   getFermentersWithWash,
   getFermenterTransferDestinations,
   getFloorEquipment,
@@ -124,6 +125,7 @@ export function TankTransfer() {
   const emptyTankCount = tanksWithContents.length - tanksHoldingSpirit.length;
   const visibleTanks = showEmptyTanks ? tanksWithContents : tanksHoldingSpirit;
   const tankTransfers = getHoldingTankTransfers();
+  const fermenterWashTransfers = getFermenterWashTransfers();
   const tankDilutions = getHoldingTankDilutions();
   const volumeVariances = getHoldingTankVolumeVariances();
   const recentVariances = latestCompleted(
@@ -153,6 +155,11 @@ export function TankTransfer() {
     : recentTransfers.shown;
   const fermentersWithWash = getFermentersWithWash();
   const discardedFermentations = getDiscardedFermentations();
+  const recentFermenterTransfers = latestCompleted(
+    fermenterWashTransfers,
+    (row) => row.transfer_date,
+    (row) => row.id,
+  );
   const recentLeftovers = latestCompleted(
     discardedFermentations,
     (row) => row.discarded_date,
@@ -730,6 +737,56 @@ export function TankTransfer() {
                         Transfer
                       </button>
                     </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        className="detail-panel"
+        headingLevel="h4"
+        title="Fermenter transfers"
+        summary={recentFermenterTransfers.total}
+        defaultOpen={false}
+        storageKey="tank-transfer-fermenter-transfers"
+      >
+        <p className="field-hint" style={{ marginTop: '-0.5rem' }}>
+          Wash moved from one fermenter to another. Fermentation logs move with the wash to the destination fermenter.
+        </p>
+        <RecentCompletedNote
+          hiddenCount={recentFermenterTransfers.hiddenCount}
+          to="/reports/volume-changes"
+          label="fermenter transfers"
+        />
+        {recentFermenterTransfers.total === 0 ? (
+          <p style={{ color: 'var(--text-muted)' }}>No fermenter-to-fermenter transfers recorded yet.</p>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>From</th>
+                  <th>To</th>
+                  <th>Wash</th>
+                  <th className="num">Volume</th>
+                  <th>Notes</th>
+                  <th>Who</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentFermenterTransfers.shown.map((row) => (
+                  <tr key={row.id}>
+                    <td>{formatDateDisplay(row.transfer_date)}</td>
+                    <td>{row.source_fermenter_name}</td>
+                    <td>{row.dest_fermenter_name}</td>
+                    <td>{row.batch_number || '—'}</td>
+                    <td className="num">{row.volume_gal.toFixed(1)} gal</td>
+                    <td>{row.notes || '—'}</td>
+                    <td>{row.changed_by || '—'}</td>
                   </tr>
                 ))}
               </tbody>
