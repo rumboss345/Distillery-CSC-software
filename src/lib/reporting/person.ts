@@ -142,6 +142,8 @@ export function listRecordedReportNames(): string[] {
         UNION ALL
         SELECT TRIM(changed_by) FROM discarded_fermentations
         UNION ALL
+        SELECT TRIM(changed_by) FROM fermenter_wash_transfers
+        UNION ALL
         SELECT TRIM(changed_by) FROM holding_tank_volume_variances
         UNION ALL
         SELECT TRIM(changed_by) FROM holding_tank_dilutions

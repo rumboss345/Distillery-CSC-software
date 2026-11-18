@@ -144,6 +144,23 @@ const WAREHOUSE_LOCATIONS_MIGRATION = [
    GROUP BY warehouse_location COLLATE NOCASE`,
 ];
 
+const FERMENTER_WASH_TRANSFERS_MIGRATION = [
+  `CREATE TABLE IF NOT EXISTS fermenter_wash_transfers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    mash_batch_id INTEGER NOT NULL REFERENCES mash_batches(id) ON DELETE CASCADE,
+    batch_number TEXT NOT NULL DEFAULT '',
+    source_fermenter_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
+    dest_fermenter_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
+    volume_gal REAL NOT NULL,
+    transfer_date TEXT NOT NULL,
+    notes TEXT NOT NULL DEFAULT '',
+    changed_by TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_fermenter_wash_transfers_date ON fermenter_wash_transfers(transfer_date DESC)',
+  'CREATE INDEX IF NOT EXISTS idx_fermenter_wash_transfers_mash ON fermenter_wash_transfers(mash_batch_id)',
+];
+
 const DISCARDED_FERMENTATIONS_MIGRATION = [
   `CREATE TABLE IF NOT EXISTS discarded_fermentations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -398,6 +415,14 @@ function runMigrations(): void {
   );
   if (!hasDiscardedFermentations) {
     for (const statement of DISCARDED_FERMENTATIONS_MIGRATION) db.run(statement);
+    persistDb();
+  }
+
+  const hasFermenterWashTransfers = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='fermenter_wash_transfers'",
+  );
+  if (!hasFermenterWashTransfers) {
+    for (const statement of FERMENTER_WASH_TRANSFERS_MIGRATION) db.run(statement);
     persistDb();
   }
 

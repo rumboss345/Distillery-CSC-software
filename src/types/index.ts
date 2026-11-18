@@ -421,6 +421,24 @@ export interface HoldingTankTransferView extends HoldingTankTransfer {
   dest_tank_name?: string;
 }
 
+export interface FermenterWashTransfer {
+  id: number;
+  mash_batch_id: number;
+  batch_number: string;
+  source_fermenter_equipment_id: number;
+  dest_fermenter_equipment_id: number;
+  volume_gal: number;
+  transfer_date: string;
+  notes: string;
+  changed_by: string;
+  created_at: string;
+}
+
+export interface FermenterWashTransferView extends FermenterWashTransfer {
+  source_fermenter_name: string;
+  dest_fermenter_name: string;
+}
+
 /** Proofing water mixed into alcohol that stays in the same tank. */
 export interface HoldingTankDilution {
   id: number;

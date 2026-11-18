@@ -490,6 +490,22 @@ CREATE TABLE IF NOT EXISTS holding_tank_transfers (
 CREATE INDEX IF NOT EXISTS idx_tank_transfers_source ON holding_tank_transfers(source_tank_equipment_id);
 CREATE INDEX IF NOT EXISTS idx_tank_transfers_dest ON holding_tank_transfers(dest_tank_equipment_id);
 
+CREATE TABLE IF NOT EXISTS fermenter_wash_transfers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  mash_batch_id INTEGER NOT NULL REFERENCES mash_batches(id) ON DELETE CASCADE,
+  batch_number TEXT NOT NULL DEFAULT '',
+  source_fermenter_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
+  dest_fermenter_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
+  volume_gal REAL NOT NULL,
+  transfer_date TEXT NOT NULL,
+  notes TEXT NOT NULL DEFAULT '',
+  changed_by TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_fermenter_wash_transfers_date ON fermenter_wash_transfers(transfer_date DESC);
+CREATE INDEX IF NOT EXISTS idx_fermenter_wash_transfers_mash ON fermenter_wash_transfers(mash_batch_id);
+
 CREATE TABLE IF NOT EXISTS holding_tank_opening_balances (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   tank_equipment_id INTEGER NOT NULL UNIQUE REFERENCES floor_equipment(id),

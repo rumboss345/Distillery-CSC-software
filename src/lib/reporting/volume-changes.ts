@@ -11,6 +11,7 @@ import { eventInReportRange, type ReportDateRange } from './period';
 
 export const VOLUME_CHANGE_KINDS = {
   leftovers: 'Fermenter leftovers',
+  fermenterTransfer: 'Fermenter transfer',
   setVolume: 'Set volume',
   wateredDown: 'Watered down',
   bottlingVariance: 'Bottling variance',
@@ -21,6 +22,7 @@ export const VOLUME_CHANGE_KINDS = {
 
 const KIND_ORDER: readonly string[] = [
   VOLUME_CHANGE_KINDS.leftovers,
+  VOLUME_CHANGE_KINDS.fermenterTransfer,
   VOLUME_CHANGE_KINDS.setVolume,
   VOLUME_CHANGE_KINDS.wateredDown,
   VOLUME_CHANGE_KINDS.bottlingVariance,
@@ -122,6 +124,38 @@ export function buildVolumeChangeRows(range: ReportDateRange): VolumeChangeRow[]
       place: row.fermenter_name || 'Fermenter',
       change: `${row.volume_gal.toFixed(1)} gal from ${row.batch_number || 'wash'}`,
       why: shown(row.notes),
+      who: shown(row.changed_by),
+      gallons: row.volume_gal,
+      abvPoints: null,
+    });
+  }
+
+  const fermenterTransfers = queryAll<{
+    id: number;
+    batch_number: string;
+    source_fermenter_name: string;
+    dest_fermenter_name: string;
+    volume_gal: number;
+    transfer_date: string;
+    notes: string;
+    changed_by: string | null;
+  }>(`
+    SELECT t.id, t.batch_number, t.volume_gal, t.transfer_date, t.notes, t.changed_by,
+           src.name AS source_fermenter_name,
+           dest.name AS dest_fermenter_name
+    FROM fermenter_wash_transfers t
+    JOIN floor_equipment src ON src.id = t.source_fermenter_equipment_id
+    JOIN floor_equipment dest ON dest.id = t.dest_fermenter_equipment_id
+  `);
+  for (const row of fermenterTransfers) {
+    if (!eventInReportRange(row.transfer_date, range)) continue;
+    rows.push({
+      key: `fermenter-transfer:${row.id}`,
+      occurred_at: row.transfer_date,
+      kind: VOLUME_CHANGE_KINDS.fermenterTransfer,
+      place: row.source_fermenter_name,
+      change: `${row.volume_gal.toFixed(1)} gal → ${row.dest_fermenter_name} (${row.batch_number || 'wash'})`,
+      why: shown(row.notes) || 'Fermenter wash transfer',
       who: shown(row.changed_by),
       gallons: row.volume_gal,
       abvPoints: null,
