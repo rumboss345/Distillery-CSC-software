@@ -292,7 +292,8 @@ export async function migrateDatabase(): Promise<void> {
           recipient_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
           body TEXT NOT NULL,
           created_at TEXT NOT NULL DEFAULT to_char(CURRENT_TIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS'),
-          read_at TEXT
+          read_at TEXT,
+          parent_id INTEGER REFERENCES staff_messages(id) ON DELETE SET NULL
         )
       `);
       await client.query(
@@ -300,6 +301,9 @@ export async function migrateDatabase(): Promise<void> {
       );
       await client.query(
         'CREATE INDEX IF NOT EXISTS idx_staff_messages_sender ON staff_messages (sender_id, created_at DESC)',
+      );
+      await client.query(
+        'CREATE INDEX IF NOT EXISTS idx_staff_messages_parent ON staff_messages (parent_id)',
       );
       await client.query(`INSERT INTO schema_migrations (version) VALUES ('015')`);
     }
@@ -506,7 +510,11 @@ export async function migrateDatabase(): Promise<void> {
       'SELECT version FROM schema_migrations WHERE version = $1',
       ['030'],
     );
-    if (staffMessageReplyMigration.rowCount === 0) {
+    const staffMessagesTable = await client.query(
+      `SELECT 1 FROM information_schema.tables
+       WHERE table_schema = 'public' AND table_name = 'staff_messages'`,
+    );
+    if ((staffMessagesTable.rowCount ?? 0) > 0) {
       await client.query(`
         ALTER TABLE staff_messages
         ADD COLUMN IF NOT EXISTS parent_id INTEGER REFERENCES staff_messages(id) ON DELETE SET NULL
@@ -514,6 +522,8 @@ export async function migrateDatabase(): Promise<void> {
       await client.query(
         'CREATE INDEX IF NOT EXISTS idx_staff_messages_parent ON staff_messages (parent_id)',
       );
+    }
+    if (staffMessageReplyMigration.rowCount === 0) {
       await client.query(`INSERT INTO schema_migrations (version) VALUES ('030')`);
     }
     await client.query(`

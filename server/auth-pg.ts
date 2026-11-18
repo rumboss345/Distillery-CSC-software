@@ -47,8 +47,36 @@ function mapUser(row: Record<string, unknown> | undefined): User | undefined {
   };
 }
 
+export async function ensureStaffMessageParentColumn(): Promise<void> {
+  const pool = getPool();
+  const table = await pool.query(
+    `SELECT 1
+     FROM information_schema.tables
+     WHERE table_schema = 'public' AND table_name = 'staff_messages'`,
+  );
+  if (table.rowCount === 0) return;
+
+  const column = await pool.query(
+    `SELECT 1
+     FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND table_name = 'staff_messages'
+       AND column_name = 'parent_id'`,
+  );
+  if ((column.rowCount ?? 0) > 0) return;
+
+  await pool.query(`
+    ALTER TABLE staff_messages
+    ADD COLUMN parent_id INTEGER REFERENCES staff_messages(id) ON DELETE SET NULL
+  `);
+  await pool.query(
+    'CREATE INDEX IF NOT EXISTS idx_staff_messages_parent ON staff_messages (parent_id)',
+  );
+}
+
 export async function initializeAuthDatabase(): Promise<void> {
   await getPool().query('SELECT 1');
+  await ensureStaffMessageParentColumn();
 }
 
 export async function getUserByEmail(email: string): Promise<User | undefined> {
