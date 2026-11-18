@@ -53,6 +53,7 @@ import {
   countStaffMessagesUnread,
   createStaffMessage,
   createStaffMessageBroadcast,
+  getStaffMessageById,
   listStaffMessagesIncomingAfter,
   listStaffMessagesBetween,
   listStaffMessagesInbox,
@@ -64,6 +65,7 @@ import {
   type User,
 } from './db.js';
 import { sanitizePermissions, sanitizeProcessStages } from './permissions.js';
+import { staffMessageParentAllowed } from './staff-messages.js';
 import {
   OWNER_CREATE_ERROR,
   OWNER_RESET_ADMIN_ERROR,
@@ -611,7 +613,27 @@ app.post('/api/messages', authMiddleware, async (req, res) => {
     res.status(400).json({ error: 'That staff member cannot receive messages.' });
     return;
   }
-  const message = await createStaffMessage(senderId, recipientId, body);
+
+  let parentId: number | null = null;
+  if (req.body.parentId != null && req.body.parentId !== '') {
+    const parsedParentId = Number(req.body.parentId);
+    if (!Number.isInteger(parsedParentId) || parsedParentId <= 0) {
+      res.status(400).json({ error: 'That original message is not valid.' });
+      return;
+    }
+    const parent = await getStaffMessageById(parsedParentId, senderId);
+    if (!parent) {
+      res.status(400).json({ error: 'That original message was not found or you cannot reply to it.' });
+      return;
+    }
+    if (!staffMessageParentAllowed(senderId, recipientId, parent)) {
+      res.status(400).json({ error: 'This reply must go to the other person on that conversation.' });
+      return;
+    }
+    parentId = parsedParentId;
+  }
+
+  const message = await createStaffMessage(senderId, recipientId, body, parentId);
   if (!message) {
     res.status(500).json({ error: 'Could not send the message.' });
     return;

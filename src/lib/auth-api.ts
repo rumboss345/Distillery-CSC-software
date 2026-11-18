@@ -194,6 +194,11 @@ export interface StaffMessage {
   body: string;
   created_at: string;
   read_at: string | null;
+  parent_id: number | null;
+  parent_body: string | null;
+  parent_created_at: string | null;
+  parent_sender_name: string | null;
+  parent_sender_email: string | null;
   sender_email: string;
   sender_name: string | null;
   recipient_email: string;
@@ -220,10 +225,14 @@ export async function fetchIncomingStaffMessages(afterId: number) {
   return apiFetch<{ messages: StaffMessage[] }>(`/api/messages/incoming?afterId=${afterId}`);
 }
 
-export async function sendStaffMessage(recipientId: number, body: string) {
+export async function sendStaffMessage(recipientId: number, body: string, parentId?: number | null) {
   return apiFetch<{ message: StaffMessage }>('/api/messages', {
     method: 'POST',
-    body: JSON.stringify({ recipientId, body }),
+    body: JSON.stringify({
+      recipientId,
+      body,
+      ...(parentId != null && parentId > 0 ? { parentId } : {}),
+    }),
   });
 }
 

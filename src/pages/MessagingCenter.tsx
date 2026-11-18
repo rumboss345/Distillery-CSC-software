@@ -14,6 +14,7 @@ import {
 } from '../lib/auth-api';
 import { isAdminRole } from '../lib/roles';
 import { useStaffMessageContext } from '../context/StaffMessageContext';
+import { StaffMessageParentQuote } from '../components/StaffMessageParentQuote';
 
 type Folder = 'inbox' | 'sent' | 'staff-threads';
 
@@ -48,6 +49,7 @@ export function MessagingCenter() {
   const [threadStaffA, setThreadStaffA] = useState('');
   const [threadStaffB, setThreadStaffB] = useState('');
   const [threadError, setThreadError] = useState<string | null>(null);
+  const [replyTo, setReplyTo] = useState<StaffMessage | null>(null);
 
   const composeTo = searchParams.get('to');
   useEffect(() => {
@@ -113,11 +115,25 @@ export function MessagingCenter() {
 
   const selected = messages.find((m) => m.id === selectedId) ?? null;
 
+  const clearReply = () => setReplyTo(null);
+
   const openReply = (msg: StaffMessage) => {
-    setFolder('inbox');
-    setRecipientId(String(msg.sender_id));
-    setSearchParams({ to: String(msg.sender_id) });
+    if (!user) return;
+    setReplyTo(msg);
+    const peerId = user.id === msg.sender_id ? msg.recipient_id : msg.sender_id;
+    setRecipientId(String(peerId));
+    setSearchParams({ to: String(peerId) });
     setBody('');
+  };
+
+  const openParentMessage = (parentId: number) => {
+    const parent = messages.find((row) => row.id === parentId);
+    if (parent) {
+      setSelectedId(parentId);
+      return;
+    }
+    setSendSuccess(null);
+    setSendError('That original message is not in this folder. Check Inbox, Sent, or Staff threads.');
   };
 
   const handleSend = async () => {
@@ -137,6 +153,7 @@ export function MessagingCenter() {
         const result = await sendStaffBroadcast(body);
         setBody('');
         setRecipientId('');
+        setReplyTo(null);
         setSearchParams({});
         await loadMessages('sent');
         setFolder('sent');
@@ -149,8 +166,9 @@ export function MessagingCenter() {
           setSendError('Choose who should receive this message.');
           return;
         }
-        await sendStaffMessage(id, body);
+        await sendStaffMessage(id, body, replyTo?.id);
         setBody('');
+        setReplyTo(null);
         setSearchParams({});
         await loadMessages('sent');
         setFolder('sent');
@@ -197,7 +215,25 @@ export function MessagingCenter() {
 
       <div className="messaging-center-layout">
         <section className="card messaging-compose">
-          <h2 className="card-title">New message</h2>
+          <h2 className="card-title">{replyTo ? 'Reply' : 'New message'}</h2>
+          {replyTo && (
+            <div className="staff-message-reply-compose" data-testid="reply-compose-context">
+              <div className="staff-message-parent-quote compact">
+                <div className="staff-message-parent-quote-label">Replying to</div>
+                <p className="staff-message-parent-quote-meta">
+                  <strong>{staffDisplayName(replyTo.sender_name, replyTo.sender_email)}</strong>
+                  {' · '}
+                  {formatWhen(replyTo.created_at)}
+                </p>
+                <p className="staff-message-parent-quote-body">
+                  {replyTo.body.length > 120 ? `${replyTo.body.slice(0, 120)}…` : replyTo.body}
+                </p>
+              </div>
+              <button type="button" className="btn btn-sm btn-ghost" onClick={clearReply}>
+                Cancel reply
+              </button>
+            </div>
+          )}
           <div className="form-group">
             <label htmlFor="msg-recipient">To</label>
             <select
@@ -341,6 +377,7 @@ export function MessagingCenter() {
                     >
                       <span className="messaging-thread-peer">{peer}</span>
                       <span className="messaging-thread-preview">
+                        {msg.parent_id ? '↩ ' : ''}
                         {msg.body.length > 80 ? `${msg.body.slice(0, 80)}…` : msg.body}
                       </span>
                       <span className="messaging-thread-when">{formatWhen(msg.created_at)}</span>
@@ -363,8 +400,9 @@ export function MessagingCenter() {
                     : `To ${staffDisplayName(selected.recipient_name, selected.recipient_email)}`}
               </h2>
               <p className="field-hint">{formatWhen(selected.created_at)}</p>
+              <StaffMessageParentQuote message={selected} onViewOriginal={openParentMessage} />
               <div className="staff-message-detail-body">{selected.body}</div>
-              {folder === 'inbox' && (
+              {user && (selected.sender_id === user.id || selected.recipient_id === user.id) && (
                 <button type="button" className="btn btn-secondary" onClick={() => openReply(selected)}>
                   Reply
                 </button>

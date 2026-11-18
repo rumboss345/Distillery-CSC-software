@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { Modal } from './Modal';
 import type { StaffMessage } from '../lib/auth-api';
 import { staffDisplayName } from '../hooks/useStaffMessageNotifications';
+import { StaffMessageParentQuote } from './StaffMessageParentQuote';
 
 interface StaffMessagePopupProps {
   message: StaffMessage;
@@ -16,6 +17,7 @@ export function StaffMessagePopup({ message, onDismiss, onMarkRead }: StaffMessa
       <p className="field-hint" style={{ marginTop: 0 }}>
         From <strong>{from}</strong>
       </p>
+      <StaffMessageParentQuote message={message} compact />
       <div className="staff-message-popup-body">{message.body}</div>
       <div className="form-actions" style={{ marginTop: '1rem' }}>
         <button type="button" className="btn btn-secondary" onClick={onDismiss}>

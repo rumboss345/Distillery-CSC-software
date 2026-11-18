@@ -112,15 +112,30 @@ function ensureDb() {
       recipient_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       body TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      read_at TEXT
+      read_at TEXT,
+      parent_id INTEGER REFERENCES staff_messages(id) ON DELETE SET NULL
     );
     CREATE INDEX IF NOT EXISTS idx_staff_messages_recipient ON staff_messages(recipient_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_staff_messages_sender ON staff_messages(sender_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_staff_messages_parent ON staff_messages(parent_id);
   `);
+  migrateStaffMessageReplies();
   migrateUserRoles();
   migrateExistingUserPermissions();
   promoteSiteOwner();
   return db;
+}
+
+function migrateStaffMessageReplies() {
+  const columns = db
+    .prepare(`PRAGMA table_info(staff_messages)`)
+    .all() as { name: string }[];
+  if (columns.some((column) => column.name === 'parent_id')) return;
+  db.exec(`
+    ALTER TABLE staff_messages
+    ADD COLUMN parent_id INTEGER REFERENCES staff_messages(id) ON DELETE SET NULL;
+    CREATE INDEX IF NOT EXISTS idx_staff_messages_parent ON staff_messages(parent_id);
+  `);
 }
 
 function migrateUserRoles() {
@@ -588,12 +603,18 @@ export function changePassword(
 }
 
 const STAFF_MESSAGE_SELECT = `
-  SELECT m.id, m.sender_id, m.recipient_id, m.body, m.created_at, m.read_at,
+  SELECT m.id, m.sender_id, m.recipient_id, m.body, m.created_at, m.read_at, m.parent_id,
     s.email AS sender_email, s.name AS sender_name,
-    r.email AS recipient_email, r.name AS recipient_name
+    r.email AS recipient_email, r.name AS recipient_name,
+    p.body AS parent_body,
+    p.created_at AS parent_created_at,
+    ps.email AS parent_sender_email,
+    ps.name AS parent_sender_name
   FROM staff_messages m
   JOIN users s ON s.id = m.sender_id
   JOIN users r ON r.id = m.recipient_id
+  LEFT JOIN staff_messages p ON p.id = m.parent_id
+  LEFT JOIN users ps ON ps.id = p.sender_id
 `;
 
 function mapStaffMessageRow(row: Record<string, unknown>): StaffMessageRow {
@@ -604,6 +625,11 @@ function mapStaffMessageRow(row: Record<string, unknown>): StaffMessageRow {
     body: String(row.body),
     created_at: String(row.created_at),
     read_at: row.read_at == null ? null : String(row.read_at),
+    parent_id: row.parent_id == null ? null : Number(row.parent_id),
+    parent_body: row.parent_body == null ? null : String(row.parent_body),
+    parent_created_at: row.parent_created_at == null ? null : String(row.parent_created_at),
+    parent_sender_name: row.parent_sender_name == null ? null : String(row.parent_sender_name),
+    parent_sender_email: row.parent_sender_email == null ? null : String(row.parent_sender_email),
     sender_email: String(row.sender_email),
     sender_name: row.sender_name == null ? null : String(row.sender_name),
     recipient_email: String(row.recipient_email),
@@ -652,14 +678,15 @@ export function createStaffMessage(
   senderId: number,
   recipientId: number,
   body: string,
+  parentId: number | null = null,
 ): StaffMessageRow | null {
   const database = ensureDb();
   const info = database
     .prepare(
-      `INSERT INTO staff_messages (sender_id, recipient_id, body)
-       VALUES (?, ?, ?)`,
+      `INSERT INTO staff_messages (sender_id, recipient_id, body, parent_id)
+       VALUES (?, ?, ?, ?)`,
     )
-    .run(senderId, recipientId, body);
+    .run(senderId, recipientId, body, parentId);
   const id = Number(info.lastInsertRowid);
   return getStaffMessageById(id, senderId);
 }
