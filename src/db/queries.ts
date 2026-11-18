@@ -3466,6 +3466,19 @@ export function getDiscardedFermentations(): DiscardedFermentation[] {
   );
 }
 
+function moveFermentationLogsBetweenFermenters(
+  mashBatchId: number,
+  fromEquipmentId: number,
+  toEquipmentId: number,
+): void {
+  if (fromEquipmentId === toEquipmentId) return;
+  runQuery(
+    `UPDATE fermentation_logs SET floor_equipment_id = ?
+     WHERE mash_batch_id = ? AND floor_equipment_id = ?`,
+    [toEquipmentId, mashBatchId, fromEquipmentId],
+  );
+}
+
 /** Move wash to another fermenter, or record unusable gallons as leftovers. */
 export function saveFermenterWashTransfer(input: {
   sourceEquipmentId: number;
@@ -3601,6 +3614,11 @@ export function saveFermenterWashTransfer(input: {
         [source.mash_batch_id, dest.id, input.volumeGal],
       );
     }
+    moveFermentationLogsBetweenFermenters(
+      source.mash_batch_id,
+      input.sourceEquipmentId,
+      dest.id,
+    );
   }
 
   syncFermenterAndStillStatuses();
@@ -4191,10 +4209,10 @@ export function saveFermentationSet(
   );
 
   if (moveLogs && moveLogs.fromEquipmentId !== moveLogs.toEquipmentId) {
-    runQuery(
-      `UPDATE fermentation_logs SET floor_equipment_id = ?
-       WHERE mash_batch_id = ? AND floor_equipment_id = ?`,
-      [moveLogs.toEquipmentId, mashBatchId, moveLogs.fromEquipmentId],
+    moveFermentationLogsBetweenFermenters(
+      mashBatchId,
+      moveLogs.fromEquipmentId,
+      moveLogs.toEquipmentId,
     );
   }
 
