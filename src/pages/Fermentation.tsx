@@ -603,6 +603,7 @@ export function Fermentation() {
                   <thead>
                     <tr>
                       <th>Wash batch</th>
+                      <th>Recipe</th>
                       <th>Fermenter</th>
                       <th className="num">Current volume</th>
                       <th className="num">Start → Current Brix</th>
@@ -624,6 +625,7 @@ export function Fermentation() {
                       return (
                         <tr key={row.key} className={daysOverdue > 0 ? 'row-overdue' : undefined}>
                           <td><strong>{row.batch.batch_number}</strong></td>
+                          <td>{row.batch.recipe_name?.trim() || '—'}</td>
                           <td>
                             {row.label ? (
                               <span className={row.distilled ? 'fermenter-tag fermenter-tag--distilled' : 'fermenter-tag'}>
