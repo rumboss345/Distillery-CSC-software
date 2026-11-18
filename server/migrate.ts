@@ -502,6 +502,20 @@ export async function migrateDatabase(): Promise<void> {
       `);
       await client.query(`INSERT INTO schema_migrations (version) VALUES ('029')`);
     }
+    const staffMessageReplyMigration = await client.query(
+      'SELECT version FROM schema_migrations WHERE version = $1',
+      ['030'],
+    );
+    if (staffMessageReplyMigration.rowCount === 0) {
+      await client.query(`
+        ALTER TABLE staff_messages
+        ADD COLUMN IF NOT EXISTS parent_id INTEGER REFERENCES staff_messages(id) ON DELETE SET NULL
+      `);
+      await client.query(
+        'CREATE INDEX IF NOT EXISTS idx_staff_messages_parent ON staff_messages (parent_id)',
+      );
+      await client.query(`INSERT INTO schema_migrations (version) VALUES ('030')`);
+    }
     await client.query(`
       INSERT INTO inventory_categories (name)
       SELECT 'botanicals'

@@ -91,4 +91,21 @@ describe('staff messages (sqlite auth)', () => {
     expect(auth.listStaffMessagesBetween(alice.id, carol.id, 20)).toHaveLength(1);
     expect(auth.listStaffMessagesBetween(bob.id, carol.id, 20)).toHaveLength(0);
   });
+
+  it('links a reply to the original message', () => {
+    const alice = auth.createUserByAdmin('reply-alice@csc.test', 'AlicePass1', 'Alice', [], []);
+    const bob = auth.createUserByAdmin('reply-bob@csc.test', 'BobPass1', 'Bob', [], []);
+
+    const original = auth.createStaffMessage(alice.id, bob.id, 'Can you pull a sample?');
+    expect(original).not.toBeNull();
+
+    const reply = auth.createStaffMessage(bob.id, alice.id, 'Done — Brix is 8.2.', original!.id);
+    expect(reply?.parent_id).toBe(original!.id);
+    expect(reply?.parent_body).toContain('Can you pull a sample?');
+    expect(reply?.parent_sender_email).toBe('reply-alice@csc.test');
+
+    const inbox = auth.listStaffMessagesInbox(alice.id, 10);
+    const linked = inbox.find((row) => row.id === reply!.id);
+    expect(linked?.parent_id).toBe(original!.id);
+  });
 });

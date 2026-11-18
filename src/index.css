@@ -188,6 +188,51 @@ body.nav-open {
   padding: 0.75rem 0;
 }
 
+.staff-message-parent-quote {
+  margin: 0.75rem 0 1rem;
+  padding: 0.65rem 0.75rem;
+  border-left: 3px solid var(--accent, #2563eb);
+  background: color-mix(in srgb, var(--bg-elevated, #f8fafc) 88%, var(--accent, #2563eb) 12%);
+  border-radius: 0 var(--radius-sm, 6px) var(--radius-sm, 6px) 0;
+}
+
+.staff-message-parent-quote.compact {
+  margin: 0 0 0.5rem;
+  padding: 0.5rem 0.65rem;
+}
+
+.staff-message-parent-quote-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-muted, #64748b);
+}
+
+.staff-message-parent-quote-meta {
+  margin: 0.25rem 0 0.35rem;
+  font-size: 0.82rem;
+  color: var(--text-muted, #64748b);
+}
+
+.staff-message-parent-quote-body {
+  margin: 0;
+  font-size: 0.9rem;
+  white-space: pre-wrap;
+}
+
+.staff-message-parent-quote-link {
+  margin-top: 0.35rem;
+}
+
+.staff-message-reply-compose {
+  margin-bottom: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+
 .messaging-staff-thread-pickers {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
