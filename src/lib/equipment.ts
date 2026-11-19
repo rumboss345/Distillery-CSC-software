@@ -19,6 +19,7 @@ export const EQUIPMENT_TYPES: { value: EquipmentType; label: string }[] = [
 /** Pictures you can assign when adding or editing equipment. The picture does not have to match the type. */
 export type ExtraEquipmentIcon =
   | 'jug'
+  | 'milk_can'
   | 'bottling_line'
   | 'labeler'
   | 'gin_basket'
@@ -33,6 +34,7 @@ export type EquipmentIcon = EquipmentType | ExtraEquipmentIcon;
 export const EQUIPMENT_ICONS: { value: EquipmentIcon; label: string }[] = [
   ...EQUIPMENT_TYPES,
   { value: 'jug', label: 'Jug' },
+  { value: 'milk_can', label: 'Milk can' },
   { value: 'bottling_line', label: 'Bottling line' },
   { value: 'labeler', label: 'Labeler' },
   { value: 'gin_basket', label: 'Gin basket' },
@@ -133,6 +135,7 @@ export function equipmentIconShowsVolume(icon: string): boolean {
     || icon === 'mash_tun'
     || icon === 'holding_tank'
     || icon === 'jug'
+    || icon === 'milk_can'
     || icon === 'stillage_tank'
     || icon === 'collection_vessel'
     || icon === 'pot_still'

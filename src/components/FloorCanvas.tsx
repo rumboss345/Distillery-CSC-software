@@ -187,6 +187,7 @@ export function FloorCanvas({
                 {icon === 'pump' && <div className="eq-shape eq-pump" />}
                 {icon === 'hose' && <div className="eq-shape eq-hose" />}
                 {icon === 'jug' && <div className="eq-shape eq-jug" />}
+                {icon === 'milk_can' && <div className="eq-shape eq-milk-can" />}
                 {icon === 'bottling_line' && <div className="eq-shape eq-bottling-line" />}
                 {icon === 'labeler' && <div className="eq-shape eq-labeler" />}
                 {icon === 'gin_basket' && <div className="eq-shape eq-gin-basket" />}

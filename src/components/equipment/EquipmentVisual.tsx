@@ -1,6 +1,7 @@
 import type { EquipmentVisualProps } from './equipment-visual.types';
 import { TankVisual } from './TankVisual';
 import { JugVisual } from './JugVisual';
+import { MilkCanVisual } from './MilkCanVisual';
 import { tankVisualDataFromVisualData } from './tank-visual-data';
 import { FermenterVisual } from './FermenterVisual';
 import { StillVisual } from './StillVisual';
@@ -34,6 +35,19 @@ export function EquipmentVisual(props: EquipmentVisualProps) {
     case 'jug':
       return (
         <JugVisual
+          tank={tankVisualDataFromVisualData(view.data)}
+          selected={view.selected}
+          size={view.size}
+          scaleMultiplier={view.scaleMultiplier}
+          labelStyle={view.labelStyle}
+          onClick={view.onClick}
+          className={view.className}
+          preview={view.preview}
+        />
+      );
+    case 'milk_can':
+      return (
+        <MilkCanVisual
           tank={tankVisualDataFromVisualData(view.data)}
           selected={view.selected}
           size={view.size}
