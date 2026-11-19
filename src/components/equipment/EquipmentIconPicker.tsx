@@ -3,7 +3,7 @@ import { EquipmentVisual } from './EquipmentVisual';
 import type { EquipmentVisualData } from './equipment-visual.types';
 
 function previewData(icon: EquipmentIcon, label: string): EquipmentVisualData {
-  const tank = icon === 'holding_tank' || icon === 'jug' || icon === 'stillage_tank' || icon === 'collection_vessel';
+  const tank = icon === 'holding_tank' || icon === 'jug' || icon === 'milk_can' || icon === 'stillage_tank' || icon === 'collection_vessel';
   const fermenter = icon === 'fermenter';
   const wash = icon === 'mash_tun';
   const still = icon === 'pot_still' || icon === 'column_still';

@@ -524,7 +524,7 @@ export function FloorPlanPage() {
               <label>Icon</label>
               <EquipmentIconPicker value={resolveEquipmentIcon(form.icon, form.equipment_type)} onChange={handleIconPick} />
               <p className="form-hint">
-                The picture does not have to match the equipment type. Tanks, jugs, fermenters, wash tanks, and stills show how full they are and the liquid inside.
+                The picture does not have to match the equipment type. Tanks, jugs, milk cans, fermenters, wash tanks, and stills show how full they are and the liquid inside.
               </p>
             </div>
             <div className="form-group">
@@ -618,7 +618,7 @@ export function FloorPlanPage() {
           {typeError && <div className="auth-error">{typeError}</div>}
           <p className="form-hint">
             The new type is available when you add equipment and gets its own section on the process view.
-            Pick the picture it should use. Tank and jug pictures show how full they are. A jug acts as a holding tank.
+            Pick the picture it should use. Tank, jug, and milk can pictures show how full they are. Those shapes act like a holding tank.
           </p>
           <h4 className="equipment-type-list-title">Added types</h4>
           {customEquipmentTypes.length === 0 ? (
