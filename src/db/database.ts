@@ -918,7 +918,7 @@ function migrateTankSetVolumeRequests(): void {
   db.run(`
     CREATE TABLE tank_set_volume_requests (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      tank_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
+      tank_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id) ON DELETE CASCADE,
       action TEXT NOT NULL CHECK (action IN ('set', 'clear')),
       volume_gal REAL,
       abv REAL,

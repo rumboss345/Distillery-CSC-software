@@ -542,7 +542,7 @@ CREATE INDEX IF NOT EXISTS idx_tank_volume_variances_date ON holding_tank_volume
 
 CREATE TABLE IF NOT EXISTS tank_set_volume_requests (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  tank_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
+  tank_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id) ON DELETE CASCADE,
   action TEXT NOT NULL CHECK (action IN ('set', 'clear')),
   volume_gal REAL,
   abv REAL,
