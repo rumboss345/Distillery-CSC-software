@@ -711,6 +711,7 @@ function runMigrations(): void {
   migrateStillageDiscardTransfers();
   migrateHoldingTankVolumeVariances();
   migrateTankSetVolumeRequests();
+  migrateFloorEquipmentNameUnique();
   migrateHoldingTankDilutions();
   migrateGinRuns();
   migrateDistillationTankSources();
@@ -934,6 +935,13 @@ function migrateTankSetVolumeRequests(): void {
   `);
   db.run(
     'CREATE INDEX IF NOT EXISTS idx_tank_set_volume_requests_pending ON tank_set_volume_requests(tank_equipment_id, status)',
+  );
+}
+
+function migrateFloorEquipmentNameUnique(): void {
+  if (!db) return;
+  db.run(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_floor_equipment_name_lower ON floor_equipment(lower(trim(name)))',
   );
 }
 
