@@ -309,7 +309,7 @@ export function Barrels() {
     <div>
       <div className="page-header">
         <h2>Barrel Aging</h2>
-        <p>Locations group the barrels. A barrel with liquid starts light gold and darkens each month, reaching dark brown at about two years. Empty barrels stay pale.</p>
+        <p>Locations group the barrels. A barrel with liquid starts light gold and darkens each month, reaching dark brown at about two years. Empty barrels show green.</p>
       </div>
 
       <div className="process-view warehouse-view">
