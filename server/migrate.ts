@@ -606,17 +606,6 @@ export async function migrateDatabase(): Promise<void> {
       );
       await client.query(`INSERT INTO schema_migrations (version) VALUES ('034')`);
     }
-    const floorEquipmentNameCaseMigration = await client.query(
-      'SELECT version FROM schema_migrations WHERE version = $1',
-      ['035'],
-    );
-    if (floorEquipmentNameCaseMigration.rowCount === 0) {
-      await client.query('DROP INDEX IF EXISTS floor_equipment_name_lower');
-      await client.query(
-        'CREATE UNIQUE INDEX IF NOT EXISTS floor_equipment_name_trim ON floor_equipment (trim(name))',
-      );
-      await client.query(`INSERT INTO schema_migrations (version) VALUES ('035')`);
-    }
     await client.query(`
       INSERT INTO inventory_categories (name)
       SELECT 'botanicals'

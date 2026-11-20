@@ -262,8 +262,8 @@ function seedCscFloorEquipment(options: {
   rows.forEach((row, index) => {
     if (options.onlyMissing) {
       const exists = queryOne<{ id: number }>(
-        'SELECT id FROM floor_equipment WHERE trim(name) = ?',
-        [row.name.trim()],
+        'SELECT id FROM floor_equipment WHERE name = ? COLLATE NOCASE',
+        [row.name],
       );
       if (exists) return;
     }
@@ -940,9 +940,8 @@ function migrateTankSetVolumeRequests(): void {
 
 function migrateFloorEquipmentNameUnique(): void {
   if (!db) return;
-  db.run('DROP INDEX IF EXISTS idx_floor_equipment_name_lower');
   db.run(
-    'CREATE UNIQUE INDEX IF NOT EXISTS idx_floor_equipment_name_trim ON floor_equipment(trim(name))',
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_floor_equipment_name_lower ON floor_equipment(lower(trim(name)))',
   );
 }
 

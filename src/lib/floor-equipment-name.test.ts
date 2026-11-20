@@ -6,7 +6,7 @@ describe('floor equipment names', () => {
     expect(normalizeFloorEquipmentName('  Tank 1  ')).toBe('Tank 1');
   });
 
-  it('describes a name conflict', () => {
-    expect(floorEquipmentNameConflictMessage('HEARTS')).toContain('already exists');
+  it('describes case-insensitive duplicates', () => {
+    expect(floorEquipmentNameConflictMessage('HEARTS')).toContain('not case-sensitive');
   });
 });
