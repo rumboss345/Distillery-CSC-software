@@ -6,7 +6,8 @@ import type { BarrelStatus } from '../types';
 export const BARREL_HEAD_YOUNG = '#e4c48a';
 /** About two years old, the head is this dark brown-gold. */
 export const BARREL_HEAD_AGED = '#3f2612';
-export const BARREL_HEAD_EMPTY = '#efe4d0';
+/** Empty barrel heads — distinct from aging gold and dumped grey. */
+export const BARREL_HEAD_EMPTY = '#6b9e78';
 export const BARREL_HEAD_DUMPED = '#b7b1a8';
 /** Colour steps once a month until the barrel is two years old. */
 export const BARREL_AGE_COLOR_MONTHS = 24;
@@ -45,7 +46,7 @@ export function parseHexColor(hex: string): [number, number, number] {
   ];
 }
 
-/** Head colour for a barrel that still holds liquid. Empty and dumped heads stay pale. */
+/** Head colour for a barrel that still holds liquid. Empty heads are green; dumped heads stay grey. */
 export function barrelHeadFill(options: {
   status: BarrelStatus;
   volumeGal: number;
