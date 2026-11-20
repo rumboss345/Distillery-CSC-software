@@ -69,6 +69,10 @@ import { planTankProofDown } from '../lib/tank-proof-down';
 import { roundThousandths, tankReadingChanged, tankVolumeVarianceGal, volumeChangeReasonError } from '../lib/tank-volume-variance';
 import { EQUIPMENT_TYPES, isSpiritLedgerEquipmentType, resolveEquipmentIcon } from '../lib/equipment';
 import { equipmentTypeDeleteError, equipmentTypeNameError, normalizeEquipmentTypeName } from '../lib/equipment-type';
+import {
+  floorEquipmentNameConflictMessage,
+  normalizeFloorEquipmentName,
+} from '../lib/floor-equipment-name';
 import { countActiveFermentations, fermenterShowsAssignedWash } from '../lib/mash-fermenter-fill';
 import { compareStoredDatesDesc } from '../lib/date-input';
 import {
@@ -8415,6 +8419,17 @@ export function deleteEquipmentType(name: string): void {
   runQuery('DELETE FROM equipment_types WHERE id = ?', [row.id]);
 }
 
+function assertUniqueFloorEquipmentName(name: string, excludeId?: number): string {
+  const normalized = normalizeFloorEquipmentName(name);
+  if (!normalized) throw new Error(floorEquipmentNameConflictMessage(''));
+  const duplicate = queryOne<{ id: number }>(
+    `SELECT id FROM floor_equipment WHERE lower(trim(name)) = lower(?) AND id != ?`,
+    [normalized, excludeId ?? 0],
+  );
+  if (duplicate) throw new Error(floorEquipmentNameConflictMessage(normalized));
+  return normalized;
+}
+
 export function saveFloorEquipment(
   item: Omit<FloorEquipment, 'id' | 'created_at'>,
   id?: number,
@@ -8422,6 +8437,7 @@ export function saveFloorEquipment(
   const __remote = forwardProductionMutation('saveFloorEquipment', [item, id]);
   if (__remote.forwarded) return __remote.value as never;
 
+  const equipmentName = assertUniqueFloorEquipmentName(item.name, id);
   const maintenanceStatus = item.maintenance_status ?? null;
   const maintenanceNotes = item.maintenance_notes ?? '';
   const icon = resolveEquipmentIcon(item.icon, item.equipment_type);
@@ -8432,13 +8448,13 @@ export function saveFloorEquipment(
   if (id) {
     runQuery(
       `UPDATE floor_equipment SET floor_plan_id=?, name=?, equipment_type=?, icon=?, pos_x_ft=?, pos_y_ft=?, width_ft=?, depth_ft=?, capacity_gal=?, status=?, linked_mash_batch_id=?, notes=?, maintenance_status=?, maintenance_notes=? WHERE id=?`,
-      [item.floor_plan_id, item.name, item.equipment_type, icon, item.pos_x_ft, item.pos_y_ft, item.width_ft, item.depth_ft, item.capacity_gal, item.status, item.linked_mash_batch_id, item.notes, maintenanceStatus, maintenanceNotes, id],
+      [item.floor_plan_id, equipmentName, item.equipment_type, icon, item.pos_x_ft, item.pos_y_ft, item.width_ft, item.depth_ft, item.capacity_gal, item.status, item.linked_mash_batch_id, item.notes, maintenanceStatus, maintenanceNotes, id],
     );
     savedId = id;
   } else {
     savedId = insertRow(
       `INSERT INTO floor_equipment (floor_plan_id, name, equipment_type, icon, pos_x_ft, pos_y_ft, width_ft, depth_ft, capacity_gal, status, linked_mash_batch_id, notes, maintenance_status, maintenance_notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [item.floor_plan_id, item.name, item.equipment_type, icon, item.pos_x_ft, item.pos_y_ft, item.width_ft, item.depth_ft, item.capacity_gal, item.status, item.linked_mash_batch_id, item.notes, maintenanceStatus, maintenanceNotes],
+      [item.floor_plan_id, equipmentName, item.equipment_type, icon, item.pos_x_ft, item.pos_y_ft, item.width_ft, item.depth_ft, item.capacity_gal, item.status, item.linked_mash_batch_id, item.notes, maintenanceStatus, maintenanceNotes],
     );
   }
   recordStatusDateLog({
