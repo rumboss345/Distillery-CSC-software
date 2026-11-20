@@ -146,7 +146,12 @@ export function changePassword(userId: number, currentPassword: string, nextPass
 }
 
 export type { StaffMessageRow } from './staff-messages.js';
-export { STAFF_MESSAGE_BODY_MAX, normalizeStaffMessageBody } from './staff-messages.js';
+export {
+  STAFF_MESSAGE_BODY_MAX,
+  STAFF_MESSAGE_SUBJECT_MAX,
+  normalizeStaffMessageBody,
+  normalizeStaffMessageSubject,
+} from './staff-messages.js';
 
 export function listApprovedOwnerUserIds() {
   return postgres()
