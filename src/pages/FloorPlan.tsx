@@ -182,9 +182,13 @@ export function FloorPlanPage() {
 
   const handleSave = () => {
     if (editId != null && !isAdmin) return;
-    saveFloorEquipment(form, editId);
-    setShowForm(false);
-    refresh();
+    try {
+      saveFloorEquipment(form, editId);
+      setShowForm(false);
+      refresh();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Could not save equipment.');
+    }
   };
 
   const handleDeleteType = (name: string, equipmentCount: number) => {
