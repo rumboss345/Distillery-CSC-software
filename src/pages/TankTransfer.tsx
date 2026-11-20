@@ -44,7 +44,7 @@ import {
 } from '../db/queries';
 import { isSpiritLedgerEquipmentType } from '../lib/equipment';
 import { mixedSpiritConfirmMessage } from '../lib/blend-spirit-mix';
-import { tankContentsPhrase, tankDropdownLabel } from '../lib/tank-menu-label';
+import { tankContentsPhrase, tankCurrentVolumeLine, tankDropdownLabel } from '../lib/tank-menu-label';
 import { isStillageTankType, STILLAGE_DISCARD_DESTINATION } from '../lib/stillage';
 import { tankLiquidOptionGroups, tankLiquidOptionListed } from '../lib/tank-liquid-options';
 import { limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
@@ -233,14 +233,6 @@ export function TankTransfer() {
       onHandEnteredAbv,
     );
   const sourceTanksForTransfer = tanksWithContents.filter((t) => t.volume_gal > 0);
-  const transferSourceInTankLine = (t: { id: number; volume_gal: number; abv: number }) => {
-    const currentLabel = holdingTankProductName(t.id, t.volume_gal)
-      ?? getHoldingTankIntakeHistory(t.id, 1)[0]?.summary;
-    const cutType = getCollectionVesselStoredCutType(t.id);
-    const quantity = `${t.volume_gal.toFixed(1)} gal @ ${t.abv.toFixed(1)}% ABV`;
-    const product = currentLabel ?? cutType ?? null;
-    return product ? `In tank: ${quantity} — ${product}` : `In tank: ${quantity}`;
-  };
   const transferSourceTankOptionLabel = (t: { id: number; name: string }) =>
     tankDropdownLabel(t.name, t.id, { volume: true });
   const selectedTransferSourceTank = sourceTanksForTransfer.find(
@@ -720,7 +712,7 @@ export function TankTransfer() {
                 <tr>
                   <th>Fermenter</th>
                   <th>Wash</th>
-                  <th className="num">Volume</th>
+                  <th className="num">Current volume</th>
                   <th className="num">Brix</th>
                   <th className="num">Capacity</th>
                   <th>Status</th>
@@ -970,7 +962,7 @@ export function TankTransfer() {
               <thead>
                 <tr>
                   <th>Tank</th>
-                  <th className="num">Volume</th>
+                  <th className="num">Current volume</th>
                   <th className="num">ABV</th>
                   <th className="num">Capacity</th>
                   <th>Contents</th>
@@ -992,7 +984,7 @@ export function TankTransfer() {
                     >
                       <td><strong>{tank.name}</strong></td>
                       <td className="num">
-                        {canTransfer ? `${tank.volume_gal.toFixed(1)} gal` : '—'}
+                        {`${tank.volume_gal.toFixed(1)} gal`}
                         {pendingSetVolumeByTank.has(tank.id) && (
                           <div className="field-hint" style={{ margin: 0 }}>
                             Pending owner approval
@@ -1261,7 +1253,9 @@ export function TankTransfer() {
                 <p className="field-hint">No holding tanks or collection vessels with spirit — add distillation cuts first.</p>
               )}
               {selectedTransferSourceTank && (
-                <p className="field-hint">{transferSourceInTankLine(selectedTransferSourceTank)}</p>
+                <p className="field-hint">
+                  {tankCurrentVolumeLine(selectedTransferSourceTank.id, selectedTransferSourceTank)}
+                </p>
               )}
             </div>
             <div className="form-group full-width">
@@ -1278,9 +1272,16 @@ export function TankTransfer() {
                   <option value={String(STILLAGE_DISCARD_DESTINATION)}>Discarded</option>
                 )}
                 {destTanksForTransfer.map((t) => (
-                  <option key={t.id} value={t.id}>{tankDropdownLabel(t.name, t.id)}</option>
+                  <option key={t.id} value={t.id}>
+                    {tankDropdownLabel(t.name, t.id, { volume: true })}
+                  </option>
                 ))}
               </select>
+              {transferForm.dest_tank_equipment_id > 0 && transferDestContents && (
+                <p className="field-hint">
+                  {tankCurrentVolumeLine(transferForm.dest_tank_equipment_id, transferDestContents)}
+                </p>
+              )}
               <p className="field-hint">
                 {sourceSendsStillage
                   ? 'Stillage can be sent to a stillage tank, or discarded.'
