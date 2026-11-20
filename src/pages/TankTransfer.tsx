@@ -959,7 +959,7 @@ export function TankTransfer() {
       >
         <p className="field-hint" style={{ marginTop: '-0.5rem' }}>
           {canSetTankVolume
-            ? 'Water down lowers the proof of alcohol already in a tank. Set volume records the gallons and ABV actually in the tank (owners apply at once; staff submit for owner approval). If a transfer or a recording error left the tank off from the record, the difference is saved as a variance.'
+            ? 'Water down lowers the proof of alcohol already in a tank. Set volume records the gallons and ABV in the tank. Only owners apply at once; everyone else submits for owner approval. If a transfer or a recording error left the tank off from the record, the difference is saved as a variance.'
             : 'Select a tank with spirit to transfer it, or water it down in the tank. Distillation staff can request a set volume for owner approval.'}
         </p>
         {tanksWithContents.length === 0 ? (

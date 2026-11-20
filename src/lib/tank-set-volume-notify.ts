@@ -1,4 +1,4 @@
-import { isAdminRole, isOwnerRole } from './roles';
+import { isOwnerRole } from './roles';
 
 export type TankSetVolumeAction = 'set' | 'clear';
 
@@ -14,10 +14,9 @@ export interface TankSetVolumeNotice {
   notes?: string;
 }
 
-/** Set volume applies only after owner approval for roles below owner/admin. */
+/** Only owners apply set volume immediately; everyone else queues for approval. */
 export function tankSetVolumeRequiresOwnerAck(role: string | null | undefined): boolean {
-  if (isOwnerRole(role) || isAdminRole(role)) return false;
-  return true;
+  return !isOwnerRole(role);
 }
 
 export function formatTankSetVolumeOwnerApprovalMessage(

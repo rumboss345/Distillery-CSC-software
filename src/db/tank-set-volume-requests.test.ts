@@ -45,6 +45,24 @@ describe('tank set volume owner approval', () => {
     setMutationActorRole(null);
   });
 
+  it('queues administrator set volume the same as staff', () => {
+    db.run('DELETE FROM holding_tank_opening_balances');
+    db.run('DELETE FROM tank_set_volume_requests');
+    setMutationActorRole('admin');
+    const queued = queueTankSetVolumeRequest('saveHoldingTankOnHand', [{
+      tankEquipmentId: 1,
+      volumeGal: 77,
+      abv: 50,
+      recordedAt: '2026-11-22',
+      notes: 'Admin dip',
+      changedBy: 'Admin',
+      liquidLabel: 'Hearts',
+    }], 'admin@csc.test');
+    expect(queued.pending).toBe(true);
+    expect(getHoldingTankOnHand(1)).toBeNull();
+    setMutationActorRole(null);
+  });
+
   it('lets owners save tank volume directly', () => {
     db.run('DELETE FROM holding_tank_opening_balances');
     db.run('DELETE FROM tank_set_volume_requests');

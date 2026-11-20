@@ -7,7 +7,7 @@ import {
 describe('tank set volume owner notice', () => {
   it('requires owner acknowledgement for staff roles only', () => {
     expect(tankSetVolumeRequiresOwnerAck('owner')).toBe(false);
-    expect(tankSetVolumeRequiresOwnerAck('admin')).toBe(false);
+    expect(tankSetVolumeRequiresOwnerAck('admin')).toBe(true);
     expect(tankSetVolumeRequiresOwnerAck('manager')).toBe(true);
     expect(tankSetVolumeRequiresOwnerAck('user')).toBe(true);
   });
