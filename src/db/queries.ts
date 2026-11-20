@@ -4536,7 +4536,8 @@ function chargeHeavyRumFromFermenter(
   mashBatchId: number,
   equipmentId: number,
   chargeVolumeGal: number,
-  runId?: number,
+  runId: number | undefined,
+  previousChargeGal: number,
 ): void {
   if (!(chargeVolumeGal > 0)) {
     throw new Error('Charge volume must be greater than zero for heavy rum runs.');
@@ -4572,16 +4573,7 @@ function chargeHeavyRumFromFermenter(
     );
   }
 
-  let previousCharge = 0;
-  if (runId) {
-    const prev = queryOne<{ charge_volume_gal: number; run_type: string }>(
-      'SELECT charge_volume_gal, run_type FROM distillation_runs WHERE id = ?',
-      [runId],
-    );
-    if (prev?.run_type === 'heavy_rum') {
-      previousCharge = prev.charge_volume_gal ?? 0;
-    }
-  }
+  const previousCharge = Math.max(0, previousChargeGal);
 
   const delta = chargeVolumeGal - previousCharge;
   if (Math.abs(delta) < 0.001) return;
@@ -4670,11 +4662,17 @@ function applyFermenterChargeChanges(
   if (!nowCharging || !run.source_mash_batch_id || !run.source_fermenter_equipment_id) return;
 
   if (runType === 'heavy_rum') {
+    const previousChargeGal = prev != null
+      && distillationRunActivelyChargesFermenter(prev.status)
+      && prev.run_type === 'heavy_rum'
+      ? (prev.charge_volume_gal ?? 0)
+      : 0;
     chargeHeavyRumFromFermenter(
       run.source_mash_batch_id,
       run.source_fermenter_equipment_id,
       run.charge_volume_gal,
       runId,
+      previousChargeGal,
     );
     maybeCompleteMashAfterCharge(run.source_mash_batch_id);
     return;
@@ -4718,10 +4716,13 @@ export function completeFermentationsSelectedForDistillation(): void {
   const mashIds = new Set<number>();
   for (const row of selected) {
     if (!runConsumesSource(row.status)) continue;
+    let fermenterId = row.floor_equipment_id;
+    const resolved = findFermenterAssignmentForMashCharge(row.mash_batch_id, fermenterId);
+    if (resolved) fermenterId = resolved.floor_equipment_id;
     const assignment = queryOne<{ id: number; status: string | null }>(
       `SELECT id, status FROM mash_fermenter_assignments
        WHERE mash_batch_id = ? AND floor_equipment_id = ?`,
-      [row.mash_batch_id, row.floor_equipment_id],
+      [row.mash_batch_id, fermenterId],
     );
     if (!assignment || assignmentStatus(assignment.status) !== 'fermenting') continue;
     const batch = getMashBatch(row.mash_batch_id);
@@ -4733,7 +4734,7 @@ export function completeFermentationsSelectedForDistillation(): void {
     recordStatusDateLog({
       recordKind: 'fermentation',
       recordId: row.mash_batch_id,
-      floorEquipmentId: row.floor_equipment_id,
+      floorEquipmentId: fermenterId,
       previousStatus: 'fermenting',
       status: 'complete',
       changedBy: batch.assigned_user_name,
@@ -5382,18 +5383,28 @@ export function saveDistillationRun(
   const previousRun = id
     ? queryOne<DistillationRun>('SELECT * FROM distillation_runs WHERE id = ?', [id])
     : null;
+  const fermenterSourceForCharge = (() => {
+    if (!isFermenterSourcedRun(runType) || !run.source_mash_batch_id || !run.source_fermenter_equipment_id) {
+      return run.source_fermenter_equipment_id ?? null;
+    }
+    const resolved = findFermenterAssignmentForMashCharge(
+      run.source_mash_batch_id,
+      run.source_fermenter_equipment_id,
+    );
+    return resolved?.floor_equipment_id ?? run.source_fermenter_equipment_id;
+  })();
   if (!planOnly) {
     assertStillUsableByName(run.still_name);
     if (
       isFermenterSourcedRun(runType)
-      && run.source_fermenter_equipment_id
+      && fermenterSourceForCharge
       && !fermenterChargeSkipsCleaningGate(
         previousRun?.status,
         previousRun?.source_fermenter_equipment_id,
-        run.source_fermenter_equipment_id,
+        fermenterSourceForCharge,
       )
     ) {
-      assertEquipmentUsableForProduction(run.source_fermenter_equipment_id, 'Fermenter');
+      assertEquipmentUsableForProduction(fermenterSourceForCharge, 'Fermenter');
     }
     if (isTankSourcedRun(runType)) {
       const tankIds = tankSources && tankSources.length > 0
@@ -5446,6 +5457,10 @@ export function saveDistillationRun(
     ? (tankSources?.find((source) => source.tankId > 0 && source.volumeGal > 0)?.tankId
       ?? run.source_holding_tank_equipment_id)
     : null;
+  const runForFermenterCharge = isFermenterSourcedRun(runType) && fermenterSourceForCharge
+    ? { ...run, source_fermenter_equipment_id: fermenterSourceForCharge }
+    : run;
+  const fermenterSourceId = isFermenterSourcedRun(runType) ? fermenterSourceForCharge : null;
   let runId = id ?? 0;
   if (id) {
     runQuery(
@@ -5454,7 +5469,7 @@ export function saveDistillationRun(
         run.batch_number,
         runType,
         isFermenterSourcedRun(runType) ? run.source_mash_batch_id : null,
-        isFermenterSourcedRun(runType) ? run.source_fermenter_equipment_id : null,
+        fermenterSourceId,
         primarySourceId,
         null,
         run.still_name,
@@ -5484,7 +5499,7 @@ export function saveDistillationRun(
         run.batch_number,
         runType,
         isFermenterSourcedRun(runType) ? run.source_mash_batch_id : null,
-        isFermenterSourcedRun(runType) ? run.source_fermenter_equipment_id : null,
+        fermenterSourceId,
         primarySourceId,
         null,
         run.still_name,
@@ -5508,14 +5523,14 @@ export function saveDistillationRun(
     );
   }
 
+  applyFermenterChargeChanges(runForFermenterCharge, runType, runId, previousRun);
   if (
     isFermenterSourcedRun(runType)
-    && run.source_mash_batch_id
-    && run.source_fermenter_equipment_id
+    && runForFermenterCharge.source_mash_batch_id
+    && runForFermenterCharge.source_fermenter_equipment_id
   ) {
     completeFermentationsSelectedForDistillation();
   }
-  applyFermenterChargeChanges(run, runType, id, previousRun);
   if (
     id
     && previousRun
