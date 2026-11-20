@@ -5,6 +5,6 @@ export function normalizeFloorEquipmentName(name: string): string {
 export function floorEquipmentNameConflictMessage(name: string): string {
   const trimmed = normalizeFloorEquipmentName(name);
   return trimmed
-    ? `Equipment named "${trimmed}" already exists. Names are not case-sensitive.`
+    ? `Equipment named "${trimmed}" already exists.`
     : 'Enter an equipment name.';
 }
