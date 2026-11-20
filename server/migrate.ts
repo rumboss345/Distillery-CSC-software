@@ -580,6 +580,22 @@ export async function migrateDatabase(): Promise<void> {
       );
       await client.query(`INSERT INTO schema_migrations (version) VALUES ('032')`);
     }
+    const tankSetVolumeFkMigration = await client.query(
+      'SELECT version FROM schema_migrations WHERE version = $1',
+      ['033'],
+    );
+    if (tankSetVolumeFkMigration.rowCount === 0) {
+      await client.query(`
+        ALTER TABLE tank_set_volume_requests
+        DROP CONSTRAINT IF EXISTS tank_set_volume_requests_tank_equipment_id_fkey
+      `);
+      await client.query(`
+        ALTER TABLE tank_set_volume_requests
+        ADD CONSTRAINT tank_set_volume_requests_tank_equipment_id_fkey
+        FOREIGN KEY (tank_equipment_id) REFERENCES floor_equipment(id) ON DELETE CASCADE
+      `);
+      await client.query(`INSERT INTO schema_migrations (version) VALUES ('033')`);
+    }
     await client.query(`
       INSERT INTO inventory_categories (name)
       SELECT 'botanicals'

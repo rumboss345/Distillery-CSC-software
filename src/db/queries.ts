@@ -8532,6 +8532,7 @@ function detachFloorEquipment(id: number): void {
   runQuery('DELETE FROM holding_tank_opening_balances WHERE tank_equipment_id = ?', [id]);
   runQuery('DELETE FROM holding_tank_volume_variances WHERE tank_equipment_id = ?', [id]);
   runQuery('DELETE FROM holding_tank_dilutions WHERE tank_equipment_id = ?', [id]);
+  runQuery('DELETE FROM tank_set_volume_requests WHERE tank_equipment_id = ?', [id]);
   runQuery('DELETE FROM discarded_fermentations WHERE source_fermenter_equipment_id = ?', [id]);
   runQuery(
     'DELETE FROM fermenter_wash_transfers WHERE source_fermenter_equipment_id = ? OR dest_fermenter_equipment_id = ?',
