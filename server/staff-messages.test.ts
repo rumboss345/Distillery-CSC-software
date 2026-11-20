@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { normalizeStaffMessageSubject } from './staff-messages.ts';
 
 describe('staff messages (sqlite auth)', () => {
   const dir = mkdtempSync(join(tmpdir(), 'csc-staff-msg-'));
@@ -35,8 +36,15 @@ describe('staff messages (sqlite auth)', () => {
     );
 
     expect(auth.isApprovedStaffUser(recipient.id)).toBe(true);
-    const created = auth.createStaffMessage(sender.id, recipient.id, 'Tank 4 needs a sample.');
+    const created = auth.createStaffMessage(
+      sender.id,
+      recipient.id,
+      'Tank 4 needs a sample.',
+      null,
+      'Line 3 sample',
+    );
     expect(created?.body).toContain('Tank 4');
+    expect(created?.subject).toBe('Line 3 sample');
 
     expect(auth.countStaffMessagesUnread(recipient.id)).toBe(1);
     const incoming = auth.listStaffMessagesIncomingAfter(recipient.id, 0, 10);
@@ -65,7 +73,7 @@ describe('staff messages (sqlite auth)', () => {
     const b = auth.createUserByAdmin('staff-b@csc.test', 'StaffPass2', 'Staff B', [], []);
 
     const expectedCount = auth.listStaffMessageRecipientIds(sender.id).length;
-    const result = auth.createStaffMessageBroadcast(sender.id, 'Line 3 is down for cleaning.');
+    const result = auth.createStaffMessageBroadcast(sender.id, 'Line 3 is down for cleaning.', 'Line 3 cleaning');
     expect(result.recipientCount).toBe(expectedCount);
     expect(auth.countStaffMessagesUnread(a.id)).toBe(1);
     expect(auth.countStaffMessagesUnread(b.id)).toBe(1);
@@ -77,9 +85,9 @@ describe('staff messages (sqlite auth)', () => {
     const bob = auth.createUserByAdmin('bob@csc.test', 'BobPass1', 'Bob', [], []);
     const carol = auth.createUserByAdmin('carol@csc.test', 'CarolPass1', 'Carol', [], []);
 
-    auth.createStaffMessage(alice.id, bob.id, 'Can you pull a sample?');
-    auth.createStaffMessage(bob.id, alice.id, 'Done — Brix is 8.2.');
-    auth.createStaffMessage(alice.id, carol.id, 'Unrelated note');
+    auth.createStaffMessage(alice.id, bob.id, 'Can you pull a sample?', null, 'Brix check');
+    auth.createStaffMessage(bob.id, alice.id, 'Done — Brix is 8.2.', null, 'Brix check');
+    auth.createStaffMessage(alice.id, carol.id, 'Unrelated note', null, 'Other');
 
     const thread = auth.listStaffMessagesBetween(alice.id, bob.id, 20);
     expect(thread).toHaveLength(2);
@@ -92,20 +100,28 @@ describe('staff messages (sqlite auth)', () => {
     expect(auth.listStaffMessagesBetween(bob.id, carol.id, 20)).toHaveLength(0);
   });
 
-  it('links a reply to the original message', () => {
+  it('links a reply to the original message and keeps the subject', () => {
     const alice = auth.createUserByAdmin('reply-alice@csc.test', 'AlicePass1', 'Alice', [], []);
     const bob = auth.createUserByAdmin('reply-bob@csc.test', 'BobPass1', 'Bob', [], []);
 
-    const original = auth.createStaffMessage(alice.id, bob.id, 'Can you pull a sample?');
+    const original = auth.createStaffMessage(alice.id, bob.id, 'Can you pull a sample?', null, 'Tank 4 Brix');
     expect(original).not.toBeNull();
 
     const reply = auth.createStaffMessage(bob.id, alice.id, 'Done — Brix is 8.2.', original!.id);
     expect(reply?.parent_id).toBe(original!.id);
+    expect(reply?.subject).toBe('Tank 4 Brix');
     expect(reply?.parent_body).toContain('Can you pull a sample?');
     expect(reply?.parent_sender_email).toBe('reply-alice@csc.test');
 
     const inbox = auth.listStaffMessagesInbox(alice.id, 10);
     const linked = inbox.find((row) => row.id === reply!.id);
     expect(linked?.parent_id).toBe(original!.id);
+  });
+});
+
+describe('normalizeStaffMessageSubject', () => {
+  it('trims and caps length', () => {
+    expect(normalizeStaffMessageSubject('  Shift handoff  ')).toBe('Shift handoff');
+    expect(normalizeStaffMessageSubject('')).toBeNull();
   });
 });

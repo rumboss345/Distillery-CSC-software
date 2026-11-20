@@ -110,6 +110,7 @@ function ensureDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       sender_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       recipient_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      subject TEXT,
       body TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       read_at TEXT,
@@ -120,6 +121,7 @@ function ensureDb() {
     CREATE INDEX IF NOT EXISTS idx_staff_messages_parent ON staff_messages(parent_id);
   `);
   migrateStaffMessageReplies();
+  migrateStaffMessageSubject();
   migrateUserRoles();
   migrateExistingUserPermissions();
   promoteSiteOwner();
@@ -136,6 +138,15 @@ function migrateStaffMessageReplies() {
     ADD COLUMN parent_id INTEGER REFERENCES staff_messages(id) ON DELETE SET NULL;
     CREATE INDEX IF NOT EXISTS idx_staff_messages_parent ON staff_messages(parent_id);
   `);
+}
+
+function migrateStaffMessageSubject() {
+  const columns = db
+    .prepare(`PRAGMA table_info(staff_messages)`)
+    .all() as { name: string }[];
+  if (columns.some((column) => column.name === 'subject')) return;
+  db.exec(`ALTER TABLE staff_messages ADD COLUMN subject TEXT`);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_staff_messages_subject ON staff_messages(subject)');
 }
 
 function migrateUserRoles() {
@@ -603,7 +614,7 @@ export function changePassword(
 }
 
 const STAFF_MESSAGE_SELECT = `
-  SELECT m.id, m.sender_id, m.recipient_id, m.body, m.created_at, m.read_at, m.parent_id,
+  SELECT m.id, m.sender_id, m.recipient_id, m.subject, m.body, m.created_at, m.read_at, m.parent_id,
     s.email AS sender_email, s.name AS sender_name,
     r.email AS recipient_email, r.name AS recipient_name,
     p.body AS parent_body,
@@ -622,6 +633,7 @@ function mapStaffMessageRow(row: Record<string, unknown>): StaffMessageRow {
     id: Number(row.id),
     sender_id: Number(row.sender_id),
     recipient_id: Number(row.recipient_id),
+    subject: row.subject == null ? null : String(row.subject),
     body: String(row.body),
     created_at: String(row.created_at),
     read_at: row.read_at == null ? null : String(row.read_at),
@@ -655,9 +667,25 @@ export function listStaffMessageRecipientIds(excludeUserId: number): number[] {
   return rows.map((row) => row.id);
 }
 
+function resolveStaffMessageSubject(
+  database: ReturnType<typeof ensureDb>,
+  parentId: number | null,
+  subjectInput: string | null,
+): string | null {
+  if (parentId != null) {
+    const parent = database
+      .prepare(`SELECT subject FROM staff_messages WHERE id = ?`)
+      .get(parentId) as { subject: string | null } | undefined;
+    const inherited = parent?.subject?.trim();
+    return inherited || 'Conversation';
+  }
+  return subjectInput;
+}
+
 export function createStaffMessageBroadcast(
   senderId: number,
   body: string,
+  subject: string,
 ): { recipientCount: number; messages: StaffMessageRow[] } {
   const recipientIds = listStaffMessageRecipientIds(senderId);
   if (recipientIds.length === 0) {
@@ -665,12 +693,12 @@ export function createStaffMessageBroadcast(
   }
   const database = ensureDb();
   const insert = database.prepare(
-    `INSERT INTO staff_messages (sender_id, recipient_id, body) VALUES (?, ?, ?)`,
+    `INSERT INTO staff_messages (sender_id, recipient_id, subject, body) VALUES (?, ?, ?, ?)`,
   );
   const createdIds = database.transaction(() => {
     const ids: number[] = [];
     for (const recipientId of recipientIds) {
-      const info = insert.run(senderId, recipientId, body);
+      const info = insert.run(senderId, recipientId, subject, body);
       ids.push(Number(info.lastInsertRowid));
     }
     return ids;
@@ -686,14 +714,17 @@ export function createStaffMessage(
   recipientId: number,
   body: string,
   parentId: number | null = null,
+  subjectInput: string | null = null,
 ): StaffMessageRow | null {
   const database = ensureDb();
+  const subject = resolveStaffMessageSubject(database, parentId, subjectInput);
+  if (!subject) return null;
   const info = database
     .prepare(
-      `INSERT INTO staff_messages (sender_id, recipient_id, body, parent_id)
-       VALUES (?, ?, ?, ?)`,
+      `INSERT INTO staff_messages (sender_id, recipient_id, subject, body, parent_id)
+       VALUES (?, ?, ?, ?, ?)`,
     )
-    .run(senderId, recipientId, body, parentId);
+    .run(senderId, recipientId, subject, body, parentId);
   const id = Number(info.lastInsertRowid);
   return getStaffMessageById(id, senderId);
 }

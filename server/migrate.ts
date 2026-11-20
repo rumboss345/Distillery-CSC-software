@@ -606,6 +606,17 @@ export async function migrateDatabase(): Promise<void> {
       );
       await client.query(`INSERT INTO schema_migrations (version) VALUES ('034')`);
     }
+    const staffMessageSubjectMigration = await client.query(
+      'SELECT version FROM schema_migrations WHERE version = $1',
+      ['036'],
+    );
+    if (staffMessageSubjectMigration.rowCount === 0) {
+      await client.query(`ALTER TABLE staff_messages ADD COLUMN IF NOT EXISTS subject TEXT`);
+      await client.query(
+        'CREATE INDEX IF NOT EXISTS idx_staff_messages_subject ON staff_messages (subject)',
+      );
+      await client.query(`INSERT INTO schema_migrations (version) VALUES ('036')`);
+    }
     await client.query(`
       INSERT INTO inventory_categories (name)
       SELECT 'botanicals'

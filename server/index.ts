@@ -61,6 +61,7 @@ import {
   markAllStaffMessagesRead,
   markStaffMessageRead,
   normalizeStaffMessageBody,
+  normalizeStaffMessageSubject,
   isApprovedStaffUser,
   type User,
 } from './db.js';
@@ -590,7 +591,12 @@ app.post('/api/messages', authMiddleware, async (req, res) => {
   }
 
   if (req.body.broadcast === true) {
-    const result = await createStaffMessageBroadcast(senderId, body);
+    const subject = normalizeStaffMessageSubject(String(req.body.subject ?? ''));
+    if (!subject) {
+      res.status(400).json({ error: 'Enter a subject (up to 160 characters).' });
+      return;
+    }
+    const result = await createStaffMessageBroadcast(senderId, body, subject);
     if (result.recipientCount === 0) {
       res.status(400).json({ error: 'No other staff members are available to message.' });
       return;
@@ -633,7 +639,15 @@ app.post('/api/messages', authMiddleware, async (req, res) => {
     parentId = parsedParentId;
   }
 
-  const message = await createStaffMessage(senderId, recipientId, body, parentId);
+  const subject = parentId != null
+    ? null
+  : normalizeStaffMessageSubject(String(req.body.subject ?? ''));
+  if (parentId == null && !subject) {
+    res.status(400).json({ error: 'Enter a subject (up to 160 characters).' });
+    return;
+  }
+
+  const message = await createStaffMessage(senderId, recipientId, body, parentId, subject);
   if (!message) {
     res.status(500).json({ error: 'Could not send the message.' });
     return;

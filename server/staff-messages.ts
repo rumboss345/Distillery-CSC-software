@@ -6,6 +6,7 @@ export interface StaffMessageRow {
   id: number;
   sender_id: number;
   recipient_id: number;
+  subject: string | null;
   body: string;
   created_at: string;
   read_at: string | null;
@@ -31,6 +32,14 @@ export function staffMessageParentAllowed(
 }
 
 export const STAFF_MESSAGE_BODY_MAX = 2000;
+export const STAFF_MESSAGE_SUBJECT_MAX = 160;
+
+export function normalizeStaffMessageSubject(raw: string): string | null {
+  const subject = raw.trim();
+  if (!subject) return null;
+  if (subject.length > STAFF_MESSAGE_SUBJECT_MAX) return null;
+  return subject;
+}
 
 export function normalizeStaffMessageBody(raw: string): string | null {
   const body = raw.trim();

@@ -47,6 +47,30 @@ function mapUser(row: Record<string, unknown> | undefined): User | undefined {
   };
 }
 
+export async function ensureStaffMessageSubjectColumn(): Promise<void> {
+  const pool = getPool();
+  const table = await pool.query(
+    `SELECT 1
+     FROM information_schema.tables
+     WHERE table_schema = 'public' AND table_name = 'staff_messages'`,
+  );
+  if (table.rowCount === 0) return;
+
+  const column = await pool.query(
+    `SELECT 1
+     FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND table_name = 'staff_messages'
+       AND column_name = 'subject'`,
+  );
+  if ((column.rowCount ?? 0) > 0) return;
+
+  await pool.query(`ALTER TABLE staff_messages ADD COLUMN subject TEXT`);
+  await pool.query(
+    'CREATE INDEX IF NOT EXISTS idx_staff_messages_subject ON staff_messages (subject)',
+  );
+}
+
 export async function ensureStaffMessageParentColumn(): Promise<void> {
   const pool = getPool();
   const table = await pool.query(
@@ -77,6 +101,7 @@ export async function ensureStaffMessageParentColumn(): Promise<void> {
 export async function initializeAuthDatabase(): Promise<void> {
   await getPool().query('SELECT 1');
   await ensureStaffMessageParentColumn();
+  await ensureStaffMessageSubjectColumn();
 }
 
 export async function getUserByEmail(email: string): Promise<User | undefined> {
@@ -477,7 +502,7 @@ export async function changePassword(
 }
 
 const STAFF_MESSAGE_SELECT = `
-  SELECT m.id, m.sender_id, m.recipient_id, m.body, m.created_at, m.read_at, m.parent_id,
+  SELECT m.id, m.sender_id, m.recipient_id, m.subject, m.body, m.created_at, m.read_at, m.parent_id,
     s.email AS sender_email, s.name AS sender_name,
     r.email AS recipient_email, r.name AS recipient_name,
     p.body AS parent_body,
@@ -496,6 +521,7 @@ function mapStaffMessageRow(row: Record<string, unknown>): StaffMessageRow {
     id: Number(row.id),
     sender_id: Number(row.sender_id),
     recipient_id: Number(row.recipient_id),
+    subject: row.subject == null ? null : String(row.subject),
     body: String(row.body),
     created_at: String(row.created_at),
     read_at: row.read_at == null ? null : String(row.read_at),
@@ -528,9 +554,25 @@ export async function listStaffMessageRecipientIds(excludeUserId: number): Promi
   return result.rows.map((row) => Number((row as { id: number }).id));
 }
 
+async function resolveStaffMessageSubject(
+  parentId: number | null,
+  subjectInput: string | null,
+): Promise<string | null> {
+  if (parentId != null) {
+    const parent = await getPool().query(
+      `SELECT subject FROM staff_messages WHERE id = $1`,
+      [parentId],
+    );
+    const inherited = String(parent.rows[0]?.subject ?? '').trim();
+    return inherited || 'Conversation';
+  }
+  return subjectInput;
+}
+
 export async function createStaffMessageBroadcast(
   senderId: number,
   body: string,
+  subject: string,
 ): Promise<{ recipientCount: number; messages: StaffMessageRow[] }> {
   const recipientIds = await listStaffMessageRecipientIds(senderId);
   if (recipientIds.length === 0) {
@@ -542,10 +584,10 @@ export async function createStaffMessageBroadcast(
     const ids: number[] = [];
     for (const recipientId of recipientIds) {
       const inserted = await client.query(
-        `INSERT INTO staff_messages (sender_id, recipient_id, body)
-         VALUES ($1, $2, $3)
+        `INSERT INTO staff_messages (sender_id, recipient_id, subject, body)
+         VALUES ($1, $2, $3, $4)
          RETURNING id`,
-        [senderId, recipientId, body],
+        [senderId, recipientId, subject, body],
       );
       ids.push(Number(inserted.rows[0]?.id));
     }
@@ -569,12 +611,15 @@ export async function createStaffMessage(
   recipientId: number,
   body: string,
   parentId: number | null = null,
+  subjectInput: string | null = null,
 ): Promise<StaffMessageRow | null> {
+  const subject = await resolveStaffMessageSubject(parentId, subjectInput);
+  if (!subject) return null;
   const inserted = await getPool().query(
-    `INSERT INTO staff_messages (sender_id, recipient_id, body, parent_id)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO staff_messages (sender_id, recipient_id, subject, body, parent_id)
+     VALUES ($1, $2, $3, $4, $5)
      RETURNING id`,
-    [senderId, recipientId, body, parentId],
+    [senderId, recipientId, subject, body, parentId],
   );
   const id = Number(inserted.rows[0]?.id);
   return getStaffMessageById(id, senderId);
