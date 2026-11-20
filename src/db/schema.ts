@@ -621,7 +621,7 @@ CREATE TABLE IF NOT EXISTS floor_equipment (
 );
 
 CREATE INDEX IF NOT EXISTS idx_floor_equipment_plan ON floor_equipment(floor_plan_id);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_floor_equipment_name_lower ON floor_equipment(lower(trim(name)));
+CREATE UNIQUE INDEX IF NOT EXISTS idx_floor_equipment_name_trim ON floor_equipment(trim(name));
 
 CREATE TABLE IF NOT EXISTS equipment_types (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

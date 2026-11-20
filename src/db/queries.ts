@@ -8423,7 +8423,7 @@ function assertUniqueFloorEquipmentName(name: string, excludeId?: number): strin
   const normalized = normalizeFloorEquipmentName(name);
   if (!normalized) throw new Error(floorEquipmentNameConflictMessage(''));
   const duplicate = queryOne<{ id: number }>(
-    `SELECT id FROM floor_equipment WHERE lower(trim(name)) = lower(?) AND id != ?`,
+    `SELECT id FROM floor_equipment WHERE trim(name) = ? AND id != ?`,
     [normalized, excludeId ?? 0],
   );
   if (duplicate) throw new Error(floorEquipmentNameConflictMessage(normalized));
