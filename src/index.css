@@ -298,6 +298,16 @@ body.nav-open {
   font-size: 0.9rem;
 }
 
+.messaging-thread-subject {
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.messaging-detail-subject {
+  margin: 0.25rem 0 0;
+  font-size: 0.95rem;
+}
+
 .messaging-thread-preview {
   font-size: 0.82rem;
   color: var(--text-muted);

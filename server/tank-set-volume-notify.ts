@@ -18,7 +18,13 @@ export async function notifyOwnersOfTankSetVolume(
   let sent = 0;
   for (const ownerId of ownerIds) {
     if (ownerId === senderId) continue;
-    const message = await createStaffMessage(senderId, ownerId, body);
+    const message = await createStaffMessage(
+      senderId,
+      ownerId,
+      body,
+      null,
+      'Tank set volume',
+    );
     if (message) sent += 1;
   }
   return sent;

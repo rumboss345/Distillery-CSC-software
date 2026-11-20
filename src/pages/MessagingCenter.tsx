@@ -41,6 +41,7 @@ export function MessagingCenter() {
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [recipientId, setRecipientId] = useState('');
+  const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [sendError, setSendError] = useState<string | null>(null);
   const [sendSuccess, setSendSuccess] = useState<string | null>(null);
@@ -124,6 +125,7 @@ export function MessagingCenter() {
     setRecipientId(String(peerId));
     setSearchParams({ to: String(peerId) });
     setBody('');
+    setSubject(msg.subject?.trim() ?? '');
   };
 
   const openParentMessage = (parentId: number) => {
@@ -143,6 +145,10 @@ export function MessagingCenter() {
       setSendError('Choose who should receive this message.');
       return;
     }
+    if (!replyTo && !subject.trim()) {
+      setSendError('Enter a subject (up to 160 characters).');
+      return;
+    }
     if (!body.trim()) {
       setSendError('Enter a message (up to 2000 characters).');
       return;
@@ -150,8 +156,9 @@ export function MessagingCenter() {
     setSending(true);
     try {
       if (recipientId === BROADCAST_RECIPIENT) {
-        const result = await sendStaffBroadcast(body);
+        const result = await sendStaffBroadcast(body, subject);
         setBody('');
+        setSubject('');
         setRecipientId('');
         setReplyTo(null);
         setSearchParams({});
@@ -166,8 +173,12 @@ export function MessagingCenter() {
           setSendError('Choose who should receive this message.');
           return;
         }
-        await sendStaffMessage(id, body, replyTo?.id);
+        await sendStaffMessage(id, body, {
+          parentId: replyTo?.id,
+          subject: replyTo ? undefined : subject,
+        });
         setBody('');
+        setSubject('');
         setReplyTo(null);
         setSearchParams({});
         await loadMessages('sent');
@@ -233,6 +244,26 @@ export function MessagingCenter() {
                 Cancel reply
               </button>
             </div>
+          )}
+          {!replyTo && (
+            <div className="form-group">
+              <label htmlFor="msg-subject">Subject</label>
+              <input
+                id="msg-subject"
+                type="text"
+                maxLength={160}
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                placeholder="What is this conversation about?"
+                data-testid="message-subject"
+              />
+              <p className="field-hint">Use the same subject when you follow up so threads stay easy to find.</p>
+            </div>
+          )}
+          {replyTo && (
+            <p className="field-hint" data-testid="reply-subject">
+              Subject: <strong>{replyTo.subject?.trim() || 'Conversation'}</strong>
+            </p>
           )}
           <div className="form-group">
             <label htmlFor="msg-recipient">To</label>
@@ -376,6 +407,9 @@ export function MessagingCenter() {
                       onClick={() => void handleSelect(msg)}
                     >
                       <span className="messaging-thread-peer">{peer}</span>
+                      <span className="messaging-thread-subject">
+                        {msg.subject?.trim() || 'Conversation'}
+                      </span>
                       <span className="messaging-thread-preview">
                         {msg.parent_id ? '↩ ' : ''}
                         {msg.body.length > 80 ? `${msg.body.slice(0, 80)}…` : msg.body}
@@ -399,6 +433,9 @@ export function MessagingCenter() {
                     ? `From ${staffDisplayName(selected.sender_name, selected.sender_email)}`
                     : `To ${staffDisplayName(selected.recipient_name, selected.recipient_email)}`}
               </h2>
+              <p className="messaging-detail-subject">
+                Subject: <strong>{selected.subject?.trim() || 'Conversation'}</strong>
+              </p>
               <p className="field-hint">{formatWhen(selected.created_at)}</p>
               <StaffMessageParentQuote message={selected} onViewOriginal={openParentMessage} />
               <div className="staff-message-detail-body">{selected.body}</div>

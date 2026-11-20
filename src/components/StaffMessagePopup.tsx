@@ -17,6 +17,9 @@ export function StaffMessagePopup({ message, onDismiss, onMarkRead }: StaffMessa
       <p className="field-hint" style={{ marginTop: 0 }}>
         From <strong>{from}</strong>
       </p>
+      <p className="messaging-detail-subject" style={{ marginTop: '0.35rem' }}>
+        Subject: <strong>{message.subject?.trim() || 'Conversation'}</strong>
+      </p>
       <StaffMessageParentQuote message={message} compact />
       <div className="staff-message-popup-body">{message.body}</div>
       <div className="form-actions" style={{ marginTop: '1rem' }}>
