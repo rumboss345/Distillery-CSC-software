@@ -4,9 +4,15 @@ import { useAuth } from '../context/AuthContext';
 import { StaffMessageProvider, useStaffMessageContext } from '../context/StaffMessageContext';
 import { dismissSharedNotice, getSharedNotice, subscribeSharedNotice } from '../db/database';
 import type { PermissionKey } from '../lib/permissions';
-import { isAdminRole, roleLabel } from '../lib/roles';
+import { isAdminRole, isOwnerRole, roleLabel } from '../lib/roles';
 
-type NavItem = { to: string; label: string; icon: string; permission: PermissionKey };
+type NavItem = {
+  to: string;
+  label: string;
+  icon: string;
+  permission: PermissionKey;
+  ownerOnly?: boolean;
+};
 
 const navGroups: { id: string; label: string; items: NavItem[] }[] = [
   {
@@ -46,11 +52,17 @@ const navGroups: { id: string; label: string; items: NavItem[] }[] = [
       { to: '/recipes', label: 'Recipes', icon: '◎', permission: 'wash' },
       { to: '/equipment-maintenance', label: 'Equipment Maintenance', icon: '🔧', permission: 'equipment' },
       { to: '/reports', label: 'Reports', icon: '▤', permission: 'reports' },
+      { to: '/tools/batch-cost', label: 'Batch cost planner', icon: '◫', permission: 'reports', ownerOnly: true },
     ],
   },
 ];
 
-function navItemVisible(item: NavItem, hasPermission: (key: PermissionKey) => boolean): boolean {
+function navItemVisible(
+  item: NavItem,
+  hasPermission: (key: PermissionKey) => boolean,
+  isOwner: boolean,
+): boolean {
+  if (item.ownerOnly && !isOwner) return false;
   if (item.to === '/recipes') {
     return hasPermission('wash') || hasPermission('blending');
   }
@@ -87,10 +99,11 @@ function LayoutShell() {
   const sharedNotice = useSyncExternalStore(subscribeSharedNotice, getSharedNotice, () => null);
   const mainRef = useRef<HTMLElement>(null);
 
+  const isOwner = isOwnerRole(user?.role);
   const visibleGroups = navGroups
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => navItemVisible(item, hasPermission)),
+      items: group.items.filter((item) => navItemVisible(item, hasPermission, isOwner)),
     }))
     .filter((group) => group.items.length > 0);
 

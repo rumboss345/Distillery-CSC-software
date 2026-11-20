@@ -11,7 +11,12 @@ function reportGroups(showOwnerCosting: boolean) {
       label: 'Overview',
       tabs: [
         { to: '/reports', end: true as const, label: 'Summary' },
-        ...(showOwnerCosting ? [{ to: '/reports/costing' as const, label: 'Production costing' }] : []),
+        ...(showOwnerCosting
+          ? [
+              { to: '/reports/costing' as const, label: 'Production costing' },
+              { to: '/tools/batch-cost' as const, label: 'Home batch cost' },
+            ]
+          : []),
       ],
     },
     {

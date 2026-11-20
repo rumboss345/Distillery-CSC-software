@@ -38,6 +38,7 @@ export const ROUTE_PERMISSIONS: Record<string, PermissionKey> = {
   '/tank-transfer': 'distillation',
   '/blending': 'blending',
   '/tools/spirit-calculator': 'blending',
+  '/tools/batch-cost': 'reports',
   '/barrels': 'barrels',
   '/bottling': 'bottling',
   '/floor-plan': 'equipment',
@@ -86,6 +87,9 @@ export function canAccessPath(
 ): boolean {
   if (pathname.startsWith('/recipes')) {
     return hasPermission('wash') || hasPermission('blending');
+  }
+  if (pathname.startsWith('/tools/batch-cost')) {
+    return hasPermission('reports');
   }
   const required = permissionForPath(pathname);
   if (!required) return true;
