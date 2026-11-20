@@ -710,6 +710,7 @@ function runMigrations(): void {
   clearAllBlendRecipesOnce();
   migrateStillageDiscardTransfers();
   migrateHoldingTankVolumeVariances();
+  migrateTankSetVolumeRequests();
   migrateHoldingTankDilutions();
   migrateGinRuns();
   migrateDistillationTankSources();
@@ -906,6 +907,34 @@ function migrateHoldingTankVolumeVariances(): void {
   `);
   db.run('CREATE INDEX IF NOT EXISTS idx_tank_volume_variances_tank ON holding_tank_volume_variances(tank_equipment_id)');
   db.run('CREATE INDEX IF NOT EXISTS idx_tank_volume_variances_date ON holding_tank_volume_variances(recorded_at)');
+}
+
+function migrateTankSetVolumeRequests(): void {
+  if (!db) return;
+  const exists = queryOne<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'tank_set_volume_requests'",
+  );
+  if (exists) return;
+  db.run(`
+    CREATE TABLE tank_set_volume_requests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tank_equipment_id INTEGER NOT NULL REFERENCES floor_equipment(id),
+      action TEXT NOT NULL CHECK (action IN ('set', 'clear')),
+      volume_gal REAL,
+      abv REAL,
+      liquid_label TEXT NOT NULL DEFAULT '',
+      recorded_at TEXT NOT NULL,
+      notes TEXT NOT NULL DEFAULT '',
+      requested_by TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+      decided_at TEXT,
+      decided_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  db.run(
+    'CREATE INDEX IF NOT EXISTS idx_tank_set_volume_requests_pending ON tank_set_volume_requests(tank_equipment_id, status)',
+  );
 }
 
 function migrateStillageDiscardTransfers(): void {

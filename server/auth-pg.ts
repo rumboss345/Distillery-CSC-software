@@ -511,6 +511,13 @@ function mapStaffMessageRow(row: Record<string, unknown>): StaffMessageRow {
   };
 }
 
+export async function listApprovedOwnerUserIds(): Promise<number[]> {
+  const result = await getPool().query(
+    `SELECT id FROM users WHERE role = 'owner' AND status = 'approved'`,
+  );
+  return result.rows.map((row) => Number((row as { id: number }).id));
+}
+
 export async function listStaffMessageRecipientIds(excludeUserId: number): Promise<number[]> {
   const result = await getPool().query(
     `SELECT id FROM users

@@ -2064,6 +2064,169 @@ export function getHoldingTankOnHand(tankId: number): HoldingTankOnHand | null {
 /** Below this a tank reading is empty and needs no description. */
 const TANK_LABEL_MIN_GAL = 0.05;
 
+export function getPendingTankSetVolumeRequests(): import('../types').TankSetVolumeRequestView[] {
+  return queryAll<import('../types').TankSetVolumeRequestView>(`
+    SELECT r.*, fe.name AS tank_name
+    FROM tank_set_volume_requests r
+    JOIN floor_equipment fe ON fe.id = r.tank_equipment_id
+    WHERE r.status = 'pending'
+    ORDER BY r.created_at DESC
+  `).map((row) => {
+    const book = getHoldingTankContents(row.tank_equipment_id);
+    return {
+      ...row,
+      tank_name: row.tank_name,
+      book_volume_gal: book.volume_gal,
+      book_abv: book.abv,
+    };
+  });
+}
+
+export function queueTankSetVolumeRequest(
+  mutationName: 'saveHoldingTankOnHand' | 'clearHoldingTankOnHand',
+  mutationArgs: unknown[],
+  requestedBy: string,
+): { pending: true; requestId: number; tankEquipmentId: number } {
+  const __remote = forwardProductionMutation('queueTankSetVolumeRequest', [mutationName, mutationArgs, requestedBy]);
+  if (__remote.forwarded) return __remote.value as never;
+
+  if (mutationName === 'saveHoldingTankOnHand' && mutationArgs[0] && typeof mutationArgs[0] === 'object') {
+    const input = mutationArgs[0] as {
+      tankEquipmentId: number;
+      volumeGal: number;
+      abv: number;
+      recordedAt: string;
+      notes?: string;
+      changedBy?: string;
+      liquidLabel?: string;
+    };
+    assertSpiritTransferVessel(input.tankEquipmentId, 'destination');
+    if (!Number.isFinite(input.volumeGal) || input.volumeGal < 0) {
+      throw new Error('Enter the gallons on hand.');
+    }
+    if (!Number.isFinite(input.abv) || input.abv < 0) {
+      throw new Error('Enter an ABV from 0 to 99.');
+    }
+    assertEnteredAbv(input.abv, 'ABV');
+    if (!input.recordedAt?.trim()) {
+      throw new Error('Enter the date of this reading.');
+    }
+    const measuredVolume = Math.round(input.volumeGal * 1000) / 1000;
+    const liquidLabel = measuredVolume > TANK_LABEL_MIN_GAL ? (input.liquidLabel?.trim() ?? '') : '';
+    if (measuredVolume > TANK_LABEL_MIN_GAL && !liquidLabel) {
+      throw new Error('Enter what is in the tank.');
+    }
+    const production = computeHoldingTankContents(input.tankEquipmentId);
+    const notes = input.notes?.trim() ?? '';
+    if (tankReadingChanged(production.volume_gal, measuredVolume, production.abv, input.abv)) {
+      const reasonError = volumeChangeReasonError(notes);
+      if (reasonError) throw new Error(reasonError);
+    }
+    runQuery(
+      `UPDATE tank_set_volume_requests SET status = 'rejected', decided_at = datetime('now'),
+         decided_by = 'Superseded by newer request'
+       WHERE tank_equipment_id = ? AND status = 'pending'`,
+      [input.tankEquipmentId],
+    );
+    const requestId = insertRow(
+      `INSERT INTO tank_set_volume_requests
+        (tank_equipment_id, action, volume_gal, abv, liquid_label, recorded_at, notes, requested_by)
+       VALUES (?, 'set', ?, ?, ?, ?, ?, ?)`,
+      [
+        input.tankEquipmentId,
+        measuredVolume,
+        Math.round(input.abv * 1000) / 1000,
+        liquidLabel,
+        input.recordedAt,
+        input.notes?.trim() ?? '',
+        requestedBy.trim() || input.changedBy?.trim() || 'Unknown',
+      ],
+    );
+    return { pending: true, requestId, tankEquipmentId: input.tankEquipmentId };
+  }
+  if (mutationName === 'clearHoldingTankOnHand') {
+    const tankId = Number(mutationArgs[0]);
+    const reason = typeof mutationArgs[1] === 'string' ? mutationArgs[1] : '';
+    const reasonError = volumeChangeReasonError(reason);
+    if (reasonError) throw new Error(reasonError);
+    if (!Number.isInteger(tankId) || tankId <= 0) {
+      throw new Error('Tank not found.');
+    }
+    runQuery(
+      `UPDATE tank_set_volume_requests SET status = 'rejected', decided_at = datetime('now'),
+         decided_by = 'Superseded by newer request'
+       WHERE tank_equipment_id = ? AND status = 'pending'`,
+      [tankId],
+    );
+    const requestId = insertRow(
+      `INSERT INTO tank_set_volume_requests
+        (tank_equipment_id, action, recorded_at, notes, requested_by)
+       VALUES (?, 'clear', ?, ?, ?)`,
+      [tankId, localIsoDate(), reason.trim(), requestedBy.trim() || String(mutationArgs[2] ?? 'Unknown')],
+    );
+    return { pending: true, requestId, tankEquipmentId: tankId };
+  }
+  throw new Error('Invalid tank set volume request.');
+}
+
+export function approveTankSetVolumeRequest(requestId: number, decidedBy: string): void {
+  const __remote = forwardProductionMutation('approveTankSetVolumeRequest', [requestId, decidedBy]);
+  if (__remote.forwarded) return __remote.value as never;
+
+  const row = queryOne<import('../types').TankSetVolumeRequest>(
+    'SELECT * FROM tank_set_volume_requests WHERE id = ?',
+    [requestId],
+  );
+  if (!row || row.status !== 'pending') {
+    throw new Error('This request is no longer pending.');
+  }
+  if (row.action === 'set') {
+    if (row.volume_gal == null || row.abv == null) {
+      throw new Error('This request is missing volume or ABV.');
+    }
+    saveHoldingTankOnHand({
+      tankEquipmentId: row.tank_equipment_id,
+      volumeGal: row.volume_gal,
+      abv: row.abv,
+      recordedAt: row.recorded_at,
+      notes: row.notes,
+      changedBy: row.requested_by,
+      liquidLabel: row.liquid_label,
+    });
+  } else {
+    clearHoldingTankOnHand(row.tank_equipment_id, row.notes, row.requested_by);
+  }
+  runQuery(
+    `UPDATE tank_set_volume_requests
+     SET status = 'approved', decided_at = datetime('now'), decided_by = ?
+     WHERE id = ?`,
+    [decidedBy.trim() || 'Owner', requestId],
+  );
+}
+
+export function rejectTankSetVolumeRequest(requestId: number, decidedBy: string, reason?: string): void {
+  const __remote = forwardProductionMutation('rejectTankSetVolumeRequest', [requestId, decidedBy, reason]);
+  if (__remote.forwarded) return __remote.value as never;
+
+  const row = queryOne<{ status: string }>(
+    'SELECT status FROM tank_set_volume_requests WHERE id = ?',
+    [requestId],
+  );
+  if (!row || row.status !== 'pending') {
+    throw new Error('This request is no longer pending.');
+  }
+  const note = reason?.trim() ? reason.trim() : '';
+  runQuery(
+    `UPDATE tank_set_volume_requests
+     SET status = 'rejected',
+         decided_at = datetime('now'),
+         decided_by = ?,
+         notes = CASE WHEN ? != '' THEN trim(notes || ' Rejected: ' || ?) ELSE notes END
+     WHERE id = ?`,
+    [decidedBy.trim() || 'Owner', note, note, requestId],
+  );
+}
+
 /** Record the gallons and ABV already in a tank, without inventing a distillation or transfer. */
 export function saveHoldingTankOnHand(input: {
   tankEquipmentId: number;
