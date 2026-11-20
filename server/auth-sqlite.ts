@@ -637,6 +637,13 @@ function mapStaffMessageRow(row: Record<string, unknown>): StaffMessageRow {
   };
 }
 
+export function listApprovedOwnerUserIds(): number[] {
+  const rows = ensureDb()
+    .prepare(`SELECT id FROM users WHERE role = 'owner' AND status = 'approved'`)
+    .all() as { id: number }[];
+  return rows.map((row) => row.id);
+}
+
 export function listStaffMessageRecipientIds(excludeUserId: number): number[] {
   const rows = ensureDb()
     .prepare(

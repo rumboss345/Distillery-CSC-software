@@ -3,6 +3,9 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useEquipmentReturn } from '../lib/equipment-return';
 import { CollapsibleSection } from '../components/CollapsibleSection';
 import { useAuth } from '../context/AuthContext';
+import { userHasPermission } from '../lib/permissions';
+import { isAdminRole, isOwnerRole } from '../lib/roles';
+import { tankSetVolumeRequiresOwnerAck } from '../lib/tank-set-volume-notify';
 import { DatePicker } from '../components/DatePicker';
 import { AbvVolumeTemperatureFields } from '../components/AbvVolumeTemperatureFields';
 import { correctedAbvFromInputs } from '../components/AbvTemperatureInput';
@@ -103,7 +106,9 @@ const OTHER_LIQUID = '__other__';
 
 export function TankTransfer() {
   const { user } = useAuth();
-  const isAdmin = user?.role === 'admin' || user?.role === 'owner';
+  const isAdmin = isAdminRole(user?.role) || isOwnerRole(user?.role);
+  const canSetTankVolume = userHasPermission(user?.role ?? 'user', user?.permissions, 'distillation');
+  const setVolumeNeedsOwnerAck = tankSetVolumeRequiresOwnerAck(user?.role);
   const changedBy = user?.name?.trim() || user?.email || 'Unknown';
   const [searchParams, setSearchParams] = useSearchParams();
   const { returnToEquipment } = useEquipmentReturn();
@@ -568,7 +573,7 @@ export function TankTransfer() {
   };
 
   const openOnHand = (tankId: number) => {
-    if (!isAdmin) return;
+    if (!canSetTankVolume) return;
     const contents = getHoldingTankContents(tankId);
     const existing = getHoldingTankOnHand(tankId);
     const current = (existing?.liquid_label?.trim() || tankContentsPhrase(tankId) || '').trim();
@@ -584,7 +589,7 @@ export function TankTransfer() {
   };
 
   const handleSaveOnHand = () => {
-    if (!isAdmin || !onHandTankId) return;
+    if (!canSetTankVolume || !onHandTankId) return;
     const volumeGal = onHandForm.volume_gal.trim() === '' ? NaN : parseFloat(onHandForm.volume_gal);
     const abv = onHandForm.abv.trim() === '' ? (volumeGal === 0 ? 0 : NaN) : parseFloat(onHandForm.abv);
     if (!Number.isFinite(volumeGal) || volumeGal < 0) {
@@ -629,13 +634,16 @@ export function TankTransfer() {
       });
       setOnHandTankId(null);
       refresh();
+      if (setVolumeNeedsOwnerAck) {
+        alert('Owners were sent a message in Staff Messaging to review this tank volume.');
+      }
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Could not save the tank volume.');
     }
   };
 
   const handleClearOnHand = () => {
-    if (!isAdmin || !onHandTankId) return;
+    if (!canSetTankVolume || !onHandTankId) return;
     const reasonError = volumeChangeReasonError(onHandForm.notes);
     if (reasonError) {
       alert(reasonError);
@@ -648,6 +656,9 @@ export function TankTransfer() {
       clearHoldingTankOnHand(onHandTankId, onHandForm.notes, changedBy);
       setOnHandTankId(null);
       refresh();
+      if (setVolumeNeedsOwnerAck) {
+        alert('Owners were sent a message in Staff Messaging to review clearing this tank reading.');
+      }
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Could not clear the on-hand reading.');
     }
@@ -906,7 +917,7 @@ export function TankTransfer() {
                         />
                       </td>
                       <td className="td-actions">
-                        {isAdmin && (
+                        {canSetTankVolume && (
                           <button
                             type="button"
                             className="btn btn-sm btn-secondary"
@@ -1458,11 +1469,18 @@ export function TankTransfer() {
         </Modal>
       )}
 
-      {isAdmin && onHandTankId != null && (
+      {canSetTankVolume && onHandTankId != null && (
         <Modal title="Set tank volume" onClose={() => setOnHandTankId(null)}>
           <p className="field-hint" style={{ marginTop: 0 }}>
             Enter what is in {tanksWithContents.find((tank) => tank.id === onHandTankId)?.name} today.
             This sets the gallons already in the tank.
+            {setVolumeNeedsOwnerAck && (
+              <>
+                {' '}
+                Tank set volume is an owner-level check: your save goes through, and every owner gets an automatic Staff
+                Messaging note to approve or correct it.
+              </>
+            )}
             {onHandBook && (
               <>
                 {' '}Records show {onHandBook.volume_gal.toFixed(1)} gal

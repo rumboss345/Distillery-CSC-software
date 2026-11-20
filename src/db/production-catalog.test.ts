@@ -21,10 +21,11 @@ describe('admin equipment removal', () => {
   });
 });
 
-describe('admin-only tank volume and equipment edits', () => {
-  it('keeps setting or clearing a tank on-hand reading to administrators', () => {
-    expect(userMayMutate('user', ['distillation'], PRODUCTION_MUTATIONS.saveHoldingTankOnHand.access)).toBe(false);
-    expect(userMayMutate('user', ['distillation'], PRODUCTION_MUTATIONS.clearHoldingTankOnHand.access)).toBe(false);
+describe('tank set volume and equipment edits', () => {
+  it('lets distillation staff set or clear tank on-hand readings; owners are notified on save', () => {
+    expect(userMayMutate('user', ['distillation'], PRODUCTION_MUTATIONS.saveHoldingTankOnHand.access)).toBe(true);
+    expect(userMayMutate('user', ['distillation'], PRODUCTION_MUTATIONS.clearHoldingTankOnHand.access)).toBe(true);
+    expect(userMayMutate('user', ['wash'], PRODUCTION_MUTATIONS.saveHoldingTankOnHand.access)).toBe(false);
     expect(userMayMutate('admin', [], PRODUCTION_MUTATIONS.saveHoldingTankOnHand.access)).toBe(true);
   });
 

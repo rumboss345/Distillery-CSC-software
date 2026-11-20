@@ -148,6 +148,12 @@ export function changePassword(userId: number, currentPassword: string, nextPass
 export type { StaffMessageRow } from './staff-messages.js';
 export { STAFF_MESSAGE_BODY_MAX, normalizeStaffMessageBody } from './staff-messages.js';
 
+export function listApprovedOwnerUserIds() {
+  return postgres()
+    ? pgAuth.listApprovedOwnerUserIds()
+    : Promise.resolve(sqliteAuth.listApprovedOwnerUserIds());
+}
+
 export function createStaffMessage(...args: Parameters<typeof sqliteAuth.createStaffMessage>) {
   return postgres() ? pgAuth.createStaffMessage(...args) : Promise.resolve(sqliteAuth.createStaffMessage(...args));
 }

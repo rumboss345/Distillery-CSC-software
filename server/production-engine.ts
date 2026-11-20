@@ -21,6 +21,10 @@ import {
   auditArchiveCutoff,
 } from '../src/lib/audit-archive.ts';
 import { getPool, redactDatabaseUrl } from './pg.ts';
+import {
+  notifyOwnersOfTankSetVolume,
+  tankSetVolumeNoticeFromMutation,
+} from './tank-set-volume-notify.js';
 
 export interface AuditEventRow {
   id: number;
@@ -320,6 +324,14 @@ export async function runProductionMutation(
     }
     const needsApproval = !isAdminRole(actor.role) && mutationNeedsAdminApproval(name, args);
     if (needsApproval && !adminApproval) throw new AdminApprovalRequired();
+    let tankSetBook: { volume_gal: number; abv: number } | null = null;
+    if (name === 'saveHoldingTankOnHand' && args[0] && typeof args[0] === 'object') {
+      const tankId = Number((args[0] as { tankEquipmentId?: number }).tankEquipmentId);
+      if (Number.isInteger(tankId) && tankId > 0) {
+        const book = queries.getHoldingTankContents(tankId);
+        tankSetBook = { volume_gal: book.volume_gal, abv: book.abv };
+      }
+    }
     snapshotBefore = memory!.export();
     setMutationActorRole(actor.role ?? null);
     let result: unknown;
@@ -339,6 +351,23 @@ export async function runProductionMutation(
       [actor.id, actor.email, name, summary.slice(0, 500)],
     );
     await client.query('COMMIT');
+    if (name === 'saveHoldingTankOnHand' || name === 'clearHoldingTankOnHand') {
+      try {
+        const tankNameFor = (tankId: number) => (
+          queries.getFloorEquipment().find((row) => row.id === tankId)?.name ?? `Tank #${tankId}`
+        );
+        const notice = tankSetVolumeNoticeFromMutation(name, args, tankNameFor);
+        if (notice) {
+          if (tankSetBook) {
+            notice.bookVolumeGal = tankSetBook.volume_gal;
+            notice.bookAbv = tankSetBook.abv;
+          }
+          await notifyOwnersOfTankSetVolume(actor.id, actor.role ?? 'user', notice);
+        }
+      } catch {
+        // Messaging failure must not undo a saved tank reading.
+      }
+    }
     return { result: result ?? null, revision: memoryRevision, snapshot: productionSnapshot() };
   } catch (error) {
     await client.query('ROLLBACK');
