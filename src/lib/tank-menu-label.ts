@@ -110,11 +110,30 @@ export function tankDropdownLabel(
   options?: { volume?: boolean },
 ): string {
   const ledger = getHoldingTankContents(tankId);
-  if (!(ledger.volume_gal > 0.001)) return formatTankMenuLabel(name, null);
+  if (!(ledger.volume_gal > 0.001)) {
+    if (options?.volume) return `${name} — 0.0 gal (empty)`;
+    return formatTankMenuLabel(name, null);
+  }
   return formatTankMenuLabel(
     name,
     tankContentsPhrase(tankId),
     ledger.abv,
     options?.volume ? ledger.volume_gal : undefined,
   );
+}
+
+/** Hint line under tank pickers on Tank Transfer and similar screens. */
+export function tankCurrentVolumeLine(
+  tankId: number,
+  contents?: { volume_gal: number; abv: number },
+): string {
+  const ledger = contents ?? getHoldingTankContents(tankId);
+  if (!(ledger.volume_gal > 0.001)) {
+    return 'Current volume: 0.0 gal (empty)';
+  }
+  const phrase = tankContentsPhrase(tankId);
+  const quantity = `${ledger.volume_gal.toFixed(1)} gal @ ${ledger.abv.toFixed(1)}% ABV`;
+  return phrase
+    ? `Current volume: ${quantity} — ${phrase}`
+    : `Current volume: ${quantity}`;
 }
