@@ -4,7 +4,7 @@ import { useEquipmentReturn } from '../lib/equipment-return';
 import { CollapsibleSection } from '../components/CollapsibleSection';
 import { useAuth } from '../context/AuthContext';
 import { userHasPermission } from '../lib/permissions';
-import { isAdminRole, isOwnerRole } from '../lib/roles';
+import { isOwnerRole } from '../lib/roles';
 import { tankSetVolumeRequiresOwnerAck } from '../lib/tank-set-volume-notify';
 import { DatePicker } from '../components/DatePicker';
 import { AbvVolumeTemperatureFields } from '../components/AbvVolumeTemperatureFields';
@@ -34,6 +34,9 @@ import {
   getSpiritTransferVessels,
   saveFermenterWashTransfer,
   saveHoldingTankDilution,
+  approveTankSetVolumeRequest,
+  getPendingTankSetVolumeRequests,
+  rejectTankSetVolumeRequest,
   saveHoldingTankOnHand,
   saveHoldingTankTransfer,
   transferSourceIsStillage,
@@ -106,8 +109,8 @@ const OTHER_LIQUID = '__other__';
 
 export function TankTransfer() {
   const { user } = useAuth();
-  const isAdmin = isAdminRole(user?.role) || isOwnerRole(user?.role);
   const canSetTankVolume = userHasPermission(user?.role ?? 'user', user?.permissions, 'distillation');
+  const isOwner = isOwnerRole(user?.role);
   const setVolumeNeedsOwnerAck = tankSetVolumeRequiresOwnerAck(user?.role);
   const changedBy = user?.name?.trim() || user?.email || 'Unknown';
   const [searchParams, setSearchParams] = useSearchParams();
@@ -133,6 +136,10 @@ export function TankTransfer() {
   const fermenterWashTransfers = getFermenterWashTransfers();
   const tankDilutions = getHoldingTankDilutions();
   const volumeVariances = getHoldingTankVolumeVariances();
+  const pendingSetVolumeRequests = getPendingTankSetVolumeRequests();
+  const pendingSetVolumeByTank = new Map(
+    pendingSetVolumeRequests.map((row) => [row.tank_equipment_id, row]),
+  );
   const recentVariances = latestCompleted(
     volumeVariances,
     (row) => row.recorded_at,
@@ -623,7 +630,7 @@ export function TankTransfer() {
       }
     }
     try {
-      saveHoldingTankOnHand({
+      const queued = saveHoldingTankOnHand({
         tankEquipmentId: onHandTankId,
         volumeGal,
         abv,
@@ -631,11 +638,11 @@ export function TankTransfer() {
         notes: onHandForm.notes,
         changedBy,
         liquidLabel: volumeGal > 0.05 ? onHandLiquid : '',
-      });
+      }) as { pending?: boolean; requestId?: number } | void;
       setOnHandTankId(null);
       refresh();
-      if (setVolumeNeedsOwnerAck) {
-        alert('Owners were sent a message in Staff Messaging to review this tank volume.');
+      if (queued && typeof queued === 'object' && queued.pending) {
+        alert('Submitted for owner approval. The tank volume stays as-is until an owner approves on Tank Transfer.');
       }
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Could not save the tank volume.');
@@ -653,11 +660,15 @@ export function TankTransfer() {
       return;
     }
     try {
-      clearHoldingTankOnHand(onHandTankId, onHandForm.notes, changedBy);
+      const queued = clearHoldingTankOnHand(
+        onHandTankId,
+        onHandForm.notes,
+        changedBy,
+      ) as { pending?: boolean; requestId?: number } | void;
       setOnHandTankId(null);
       refresh();
-      if (setVolumeNeedsOwnerAck) {
-        alert('Owners were sent a message in Staff Messaging to review clearing this tank reading.');
+      if (queued && typeof queued === 'object' && queued.pending) {
+        alert('Submitted for owner approval. The on-hand reading stays until an owner approves.');
       }
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Could not clear the on-hand reading.');
@@ -857,6 +868,88 @@ export function TankTransfer() {
         )}
       </CollapsibleSection>
 
+      {isOwner && pendingSetVolumeRequests.length > 0 && (
+        <CollapsibleSection
+          className="detail-panel"
+          headingLevel="h4"
+          title="Pending set volume"
+          summary={`${pendingSetVolumeRequests.length} awaiting approval`}
+          storageKey="tank-transfer-set-volume-pending"
+          defaultOpen
+        >
+          <p className="field-hint" style={{ marginTop: '-0.5rem' }}>
+            Staff requests do not change tank volumes until you approve them here (or reject).
+          </p>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Requested</th>
+                  <th>Tank</th>
+                  <th>Action</th>
+                  <th className="num">Records now</th>
+                  <th className="num">Requested</th>
+                  <th>By</th>
+                  <th>Notes</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {pendingSetVolumeRequests.map((row) => (
+                  <tr key={row.id}>
+                    <td>{formatDateDisplay(row.created_at.slice(0, 10))}</td>
+                    <td>{row.tank_name}</td>
+                    <td>{row.action === 'clear' ? 'Clear reading' : 'Set volume'}</td>
+                    <td className="num">
+                      {row.book_volume_gal.toFixed(1)} gal @ {row.book_abv.toFixed(1)}%
+                    </td>
+                    <td className="num">
+                      {row.action === 'clear'
+                        ? '—'
+                        : `${row.volume_gal?.toFixed(1) ?? '—'} gal @ ${row.abv?.toFixed(1) ?? '—'}%`}
+                    </td>
+                    <td>{row.requested_by}</td>
+                    <td>{row.notes || '—'}</td>
+                    <td className="td-actions">
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-primary"
+                        onClick={() => {
+                          if (!confirm('Apply this volume to the tank records?')) return;
+                          try {
+                            approveTankSetVolumeRequest(row.id, changedBy);
+                            refresh();
+                          } catch (err) {
+                            alert(err instanceof Error ? err.message : 'Could not approve.');
+                          }
+                        }}
+                      >
+                        Approve
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-secondary"
+                        onClick={() => {
+                          const reason = window.prompt('Optional reason for rejection:', '') ?? '';
+                          try {
+                            rejectTankSetVolumeRequest(row.id, changedBy, reason);
+                            refresh();
+                          } catch (err) {
+                            alert(err instanceof Error ? err.message : 'Could not reject.');
+                          }
+                        }}
+                      >
+                        Reject
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CollapsibleSection>
+      )}
+
       <CollapsibleSection
         className="detail-panel"
         headingLevel="h4"
@@ -865,9 +958,9 @@ export function TankTransfer() {
         storageKey="tank-transfer-tanks"
       >
         <p className="field-hint" style={{ marginTop: '-0.5rem' }}>
-          {isAdmin
-            ? 'Water down lowers the proof of alcohol already in a tank. Set volume records the gallons and ABV actually in the tank. If a transfer or a recording error left the tank off from the record, the difference is saved as a variance. Later transfers and production add to or take from the volume you set.'
-            : 'Select a tank with spirit to transfer it, or water it down in the tank. An administrator sets the gallons already in a tank.'}
+          {canSetTankVolume
+            ? 'Water down lowers the proof of alcohol already in a tank. Set volume records the gallons and ABV actually in the tank (owners apply at once; staff submit for owner approval). If a transfer or a recording error left the tank off from the record, the difference is saved as a variance.'
+            : 'Select a tank with spirit to transfer it, or water it down in the tank. Distillation staff can request a set volume for owner approval.'}
         </p>
         {tanksWithContents.length === 0 ? (
           <p style={{ color: 'var(--text-muted)' }}>No holding tanks or collection vessels on the floor plan.</p>
@@ -900,6 +993,11 @@ export function TankTransfer() {
                       <td><strong>{tank.name}</strong></td>
                       <td className="num">
                         {canTransfer ? `${tank.volume_gal.toFixed(1)} gal` : '—'}
+                        {pendingSetVolumeByTank.has(tank.id) && (
+                          <div className="field-hint" style={{ margin: 0 }}>
+                            Pending owner approval
+                          </div>
+                        )}
                         {latestVariance && !tankVolumeMatchesRecord(latestVariance.variance_gal) && (
                           <div className="field-hint" style={{ margin: 0 }}>
                             Variance {formatTankVolumeVariance(latestVariance.variance_gal)}
@@ -1477,8 +1575,8 @@ export function TankTransfer() {
             {setVolumeNeedsOwnerAck && (
               <>
                 {' '}
-                Tank set volume is an owner-level check: your save goes through, and every owner gets an automatic Staff
-                Messaging note to approve or correct it.
+                Tank set volume needs owner approval: your request is queued, the tank does not change yet, and every
+                owner gets a Staff Messaging note to approve or reject on this page.
               </>
             )}
             {onHandBook && (

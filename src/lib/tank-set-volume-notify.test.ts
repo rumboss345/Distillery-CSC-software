@@ -23,10 +23,11 @@ describe('tank set volume owner notice', () => {
       bookAbv: 64,
       recordedAt: '2026-11-20',
       notes: 'Dip after transfer',
-    });
+    }, 42);
     expect(body).toContain('Maria');
     expect(body).toContain('Hearts 1');
     expect(body).toContain('120.5 gal');
-    expect(body).toContain('Please approve');
+    expect(body).toContain('Nothing has changed');
+    expect(body).toContain('Request #42');
   });
 });

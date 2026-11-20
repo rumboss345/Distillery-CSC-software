@@ -439,6 +439,31 @@ export interface FermenterWashTransferView extends FermenterWashTransfer {
   dest_fermenter_name: string;
 }
 
+export type TankSetVolumeRequestAction = 'set' | 'clear';
+export type TankSetVolumeRequestStatus = 'pending' | 'approved' | 'rejected';
+
+export interface TankSetVolumeRequest {
+  id: number;
+  tank_equipment_id: number;
+  action: TankSetVolumeRequestAction;
+  volume_gal: number | null;
+  abv: number | null;
+  liquid_label: string;
+  recorded_at: string;
+  notes: string;
+  requested_by: string;
+  status: TankSetVolumeRequestStatus;
+  decided_at: string | null;
+  decided_by: string | null;
+  created_at: string;
+}
+
+export interface TankSetVolumeRequestView extends TankSetVolumeRequest {
+  tank_name: string;
+  book_volume_gal: number;
+  book_abv: number;
+}
+
 /** Proofing water mixed into alcohol that stays in the same tank. */
 export interface HoldingTankDilution {
   id: number;

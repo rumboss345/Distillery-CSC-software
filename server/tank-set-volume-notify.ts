@@ -9,11 +9,12 @@ export async function notifyOwnersOfTankSetVolume(
   senderId: number,
   senderRole: string,
   notice: TankSetVolumeNotice,
+  requestId?: number,
 ): Promise<number> {
   if (!tankSetVolumeRequiresOwnerAck(senderRole)) return 0;
   const ownerIds = await listApprovedOwnerUserIds();
   if (ownerIds.length === 0) return 0;
-  const body = formatTankSetVolumeOwnerApprovalMessage(notice);
+  const body = formatTankSetVolumeOwnerApprovalMessage(notice, requestId);
   let sent = 0;
   for (const ownerId of ownerIds) {
     if (ownerId === senderId) continue;
