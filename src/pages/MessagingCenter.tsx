@@ -15,6 +15,7 @@ import {
 import { isAdminRole } from '../lib/roles';
 import { useStaffMessageContext } from '../context/StaffMessageContext';
 import { StaffMessageParentQuote } from '../components/StaffMessageParentQuote';
+import { StaffMessageReadReceipt } from '../components/StaffMessageReadReceipt';
 
 type Folder = 'inbox' | 'sent' | 'staff-threads';
 
@@ -62,8 +63,8 @@ export function MessagingCenter() {
     [staff, user?.id],
   );
 
-  const loadMessages = useCallback(async (nextFolder: Folder) => {
-    setLoading(true);
+  const loadMessages = useCallback(async (nextFolder: Folder, options?: { silent?: boolean }) => {
+    if (!options?.silent) setLoading(true);
     setThreadError(null);
     try {
       if (nextFolder === 'staff-threads') {
@@ -100,9 +101,17 @@ export function MessagingCenter() {
         setSelectedId(null);
       }
     } finally {
-      setLoading(false);
+      if (!options?.silent) setLoading(false);
     }
   }, [threadStaffA, threadStaffB]);
+
+  useEffect(() => {
+    if (folder !== 'sent') return;
+    const timer = window.setInterval(() => {
+      void loadMessages('sent', { silent: true });
+    }, 8000);
+    return () => window.clearInterval(timer);
+  }, [folder, loadMessages]);
 
   useEffect(() => {
     void loadMessages(folder);
@@ -221,7 +230,10 @@ export function MessagingCenter() {
     <div className="page messaging-center-page">
       <header className="page-header">
         <h1>Messaging Center</h1>
-        <p>Send notes to other staff. New messages pop up while you work and when you sign in.</p>
+        <p>
+          Send notes to other staff. New messages pop up while you work. In Sent, ✓ means delivered and ✓✓
+          means the recipient opened it (like read receipts).
+        </p>
       </header>
 
       <div className="messaging-center-layout">
@@ -414,7 +426,12 @@ export function MessagingCenter() {
                         {msg.parent_id ? '↩ ' : ''}
                         {msg.body.length > 80 ? `${msg.body.slice(0, 80)}…` : msg.body}
                       </span>
-                      <span className="messaging-thread-when">{formatWhen(msg.created_at)}</span>
+                      <span className="messaging-thread-when">
+                        {formatWhen(msg.created_at)}
+                        {folder === 'sent' && user?.id === msg.sender_id && (
+                          <StaffMessageReadReceipt readAt={msg.read_at} compact />
+                        )}
+                      </span>
                     </button>
                   </li>
                 );
@@ -437,6 +454,12 @@ export function MessagingCenter() {
                 Subject: <strong>{selected.subject?.trim() || 'Conversation'}</strong>
               </p>
               <p className="field-hint">{formatWhen(selected.created_at)}</p>
+              {folder === 'sent' && user?.id === selected.sender_id && (
+                <StaffMessageReadReceipt readAt={selected.read_at} />
+              )}
+              {folder === 'staff-threads' && (
+                <StaffMessageReadReceipt readAt={selected.read_at} />
+              )}
               <StaffMessageParentQuote message={selected} onViewOriginal={openParentMessage} />
               <div className="staff-message-detail-body">{selected.body}</div>
               {user && (selected.sender_id === user.id || selected.recipient_id === user.id) && (
