@@ -151,19 +151,23 @@ export function Inventory() {
     const solidsPercent = parseFloat(solidsInput);
     const densityTemp = parseFloat(densityTempInput);
     const cost = parseFloat(costInput);
-    saveInventoryItem({
-      ...form,
-      quantity: Number.isFinite(quantity) ? quantity : 0,
-      package_size_ml,
-      density_g_per_ml: Number.isFinite(density) && density > 0 ? density : null,
-      abv: abvInput.trim() === '' || !Number.isFinite(abv) ? null : abv,
-      sugar_mass_fraction: sugarInput.trim() === '' || !Number.isFinite(sugarPercent) ? null : sugarPercent / 100,
-      solids_mass_fraction: solidsInput.trim() === '' || !Number.isFinite(solidsPercent) ? null : solidsPercent / 100,
-      density_temp_c: densityTempInput.trim() === '' || !Number.isFinite(densityTemp) ? null : densityTemp,
-      cost_per_unit: costInput.trim() === '' || !Number.isFinite(cost) || cost < 0 ? null : cost,
-    }, editId, changedBy);
-    setShowForm(false);
-    refresh();
+    try {
+      saveInventoryItem({
+        ...form,
+        quantity: Number.isFinite(quantity) ? quantity : 0,
+        package_size_ml,
+        density_g_per_ml: Number.isFinite(density) && density > 0 ? density : null,
+        abv: abvInput.trim() === '' || !Number.isFinite(abv) ? null : abv,
+        sugar_mass_fraction: sugarInput.trim() === '' || !Number.isFinite(sugarPercent) ? null : sugarPercent / 100,
+        solids_mass_fraction: solidsInput.trim() === '' || !Number.isFinite(solidsPercent) ? null : solidsPercent / 100,
+        density_temp_c: densityTempInput.trim() === '' || !Number.isFinite(densityTemp) ? null : densityTemp,
+        cost_per_unit: costInput.trim() === '' || !Number.isFinite(cost) || cost < 0 ? null : cost,
+      }, editId, changedBy);
+      setShowForm(false);
+      refresh();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Could not save that item.');
+    }
   };
 
   const handleSaveCategory = () => {
