@@ -59,6 +59,7 @@ describe('staff messages (sqlite auth)', () => {
 
     const sent = auth.listStaffMessagesSent(sender.id, 10);
     expect(sent).toHaveLength(1);
+    expect(sent[0]?.read_at).toBeTruthy();
   });
 
   it('broadcasts one message to every other approved staff member', () => {

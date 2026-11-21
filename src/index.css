@@ -316,6 +316,37 @@ body.nav-open {
 .messaging-thread-when {
   font-size: 0.75rem;
   color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.staff-message-receipt {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+
+.staff-message-receipt--read {
+  color: var(--accent, #3b82f6);
+}
+
+.staff-message-receipt-check {
+  font-size: 0.85rem;
+  letter-spacing: -0.12em;
+  line-height: 1;
+  font-weight: 600;
+}
+
+.staff-message-receipt--read .staff-message-receipt-check {
+  color: var(--accent, #3b82f6);
+}
+
+.staff-message-receipt-label {
+  font-size: 0.82rem;
 }
 
 @media (max-width: 960px) {
