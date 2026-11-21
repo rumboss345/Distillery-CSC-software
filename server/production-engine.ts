@@ -213,6 +213,7 @@ async function reloadFromPostgres(client: import('pg').PoolClient): Promise<void
   if (memory) memory.close();
   attach(db);
   queries.clearOrphanDistillationGinRecipeIds();
+  queries.clearOrphanFermenterWashTransfers();
 }
 
 async function persistToPostgres(
