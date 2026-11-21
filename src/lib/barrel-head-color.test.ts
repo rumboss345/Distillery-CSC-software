@@ -57,7 +57,7 @@ describe('barrel aging colour', () => {
     expect(barrelHeadInk(twoYears).number).toBe('#f4e6c8');
   });
 
-  it('keeps empty and dumped heads out of the age ramp', () => {
+  it('uses green empty heads and grey dumped heads outside the age ramp', () => {
     expect(barrelHeadFill({
       status: 'empty',
       volumeGal: 0,
@@ -76,5 +76,6 @@ describe('barrel aging colour', () => {
       fillDate: '2020-01-01',
       today: TODAY,
     })).toBe(BARREL_HEAD_DUMPED);
+    expect(barrelHeadInk(BARREL_HEAD_EMPTY).number).toBe('#2a1c12');
   });
 });
