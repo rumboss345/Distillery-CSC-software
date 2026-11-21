@@ -3796,6 +3796,13 @@ export function saveFermenterWashTransfer(input: {
       input.sourceEquipmentId,
       dest.id,
     );
+    const mashExists = queryOne<{ id: number }>(
+      'SELECT id FROM mash_batches WHERE id = ?',
+      [source.mash_batch_id],
+    );
+    if (!mashExists) {
+      throw new Error('This wash batch no longer exists. Refresh the screen and try again.');
+    }
     insertRow(
       `INSERT INTO fermenter_wash_transfers
         (mash_batch_id, batch_number, source_fermenter_equipment_id, dest_fermenter_equipment_id,
@@ -4820,6 +4827,7 @@ export function deleteMashBatch(id: number): void {
   runQuery('DELETE FROM mash_batch_nutrients WHERE mash_batch_id = ?', [id]);
   runQuery('DELETE FROM fermentation_logs WHERE mash_batch_id = ?', [id]);
   runQuery('DELETE FROM mash_fermenter_assignments WHERE mash_batch_id = ?', [id]);
+  runQuery('DELETE FROM fermenter_wash_transfers WHERE mash_batch_id = ?', [id]);
   runQuery('UPDATE distillation_runs SET source_mash_batch_id = NULL WHERE source_mash_batch_id = ?', [id]);
   runQuery('UPDATE discarded_fermentations SET mash_batch_id = NULL WHERE mash_batch_id = ?', [id]);
   runQuery('UPDATE floor_equipment SET linked_mash_batch_id = NULL WHERE linked_mash_batch_id = ?', [id]);
@@ -5355,6 +5363,16 @@ function linkedGinRecipeForSave(
     return { gin_recipe_id: null, gin_recipe_name: trimmedName };
   }
   return { gin_recipe_id: null, gin_recipe_name: '' };
+}
+
+/** Postgres rejects snapshots that still reference deleted wash batches. */
+export function clearOrphanFermenterWashTransfers(): void {
+  runQuery(
+    `DELETE FROM fermenter_wash_transfers
+     WHERE NOT EXISTS (
+       SELECT 1 FROM mash_batches WHERE mash_batches.id = fermenter_wash_transfers.mash_batch_id
+     )`,
+  );
 }
 
 export function clearOrphanDistillationGinRecipeIds(): void {
