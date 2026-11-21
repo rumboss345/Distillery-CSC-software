@@ -617,6 +617,39 @@ export async function migrateDatabase(): Promise<void> {
       );
       await client.query(`INSERT INTO schema_migrations (version) VALUES ('036')`);
     }
+    const fermenterWashTransferFkDeferMigration = await client.query(
+      'SELECT version FROM schema_migrations WHERE version = $1',
+      ['037'],
+    );
+    if (fermenterWashTransferFkDeferMigration.rowCount === 0) {
+      // Migration 031 inlined REFERENCES (not deferrable). Full PG saves rewrite tables in
+      // name order, so child rows can be inserted before mash_batches unless the FK defers.
+      for (const spec of [
+        {
+          column: 'mash_batch_id',
+          ref: 'mash_batches(id) ON DELETE CASCADE',
+        },
+        {
+          column: 'source_fermenter_equipment_id',
+          ref: 'floor_equipment(id)',
+        },
+        {
+          column: 'dest_fermenter_equipment_id',
+          ref: 'floor_equipment(id)',
+        },
+      ]) {
+        await client.query(
+          `ALTER TABLE fermenter_wash_transfers DROP CONSTRAINT IF EXISTS fermenter_wash_transfers_${spec.column}_fkey`,
+        );
+        await client.query(`
+          ALTER TABLE fermenter_wash_transfers
+          ADD CONSTRAINT fermenter_wash_transfers_${spec.column}_fkey
+          FOREIGN KEY (${spec.column}) REFERENCES ${spec.ref}
+          DEFERRABLE INITIALLY DEFERRED
+        `);
+      }
+      await client.query(`INSERT INTO schema_migrations (version) VALUES ('037')`);
+    }
     await client.query(`
       INSERT INTO inventory_categories (name)
       SELECT 'botanicals'
