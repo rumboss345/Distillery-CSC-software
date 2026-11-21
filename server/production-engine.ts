@@ -348,6 +348,7 @@ export async function runProductionMutation(
       setMutationActorRole(null);
     }
     queries.clearOrphanDistillationGinRecipeIds();
+    queries.clearOrphanFermenterWashTransfers();
     const nextRevision = memoryRevision + 1;
     await persistToPostgres(client, nextRevision, hashesBefore);
     const summary = needsApproval && adminApproval
