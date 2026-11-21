@@ -650,6 +650,24 @@ export async function migrateDatabase(): Promise<void> {
       }
       await client.query(`INSERT INTO schema_migrations (version) VALUES ('037')`);
     }
+    const inventoryCostHistoryFkDeferMigration = await client.query(
+      'SELECT version FROM schema_migrations WHERE version = $1',
+      ['038'],
+    );
+    if (inventoryCostHistoryFkDeferMigration.rowCount === 0) {
+      // Migration 026 inlined REFERENCES (not deferrable). Full PG saves rewrite tables in
+      // name order, so cost history rows can be inserted before inventory_items unless the FK defers.
+      await client.query(
+        'ALTER TABLE inventory_cost_history DROP CONSTRAINT IF EXISTS inventory_cost_history_inventory_item_id_fkey',
+      );
+      await client.query(`
+        ALTER TABLE inventory_cost_history
+        ADD CONSTRAINT inventory_cost_history_inventory_item_id_fkey
+        FOREIGN KEY (inventory_item_id) REFERENCES inventory_items(id) ON DELETE CASCADE
+        DEFERRABLE INITIALLY DEFERRED
+      `);
+      await client.query(`INSERT INTO schema_migrations (version) VALUES ('038')`);
+    }
     await client.query(`
       INSERT INTO inventory_categories (name)
       SELECT 'botanicals'
