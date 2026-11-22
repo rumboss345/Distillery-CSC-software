@@ -1,6 +1,29 @@
 import { equipmentCleaningStatusLabel } from './equipment-cleaning';
 import { maintenanceStatusLabel } from './equipment-maintenance';
+import { eventInReportRange } from './reporting/period';
 import type { EquipmentMaintenanceLogEventType, EquipmentMaintenanceStatus } from '../types';
+
+export interface MaintenanceLogFilterCriteria {
+  from?: string | null;
+  to?: string | null;
+  /** When set and not `all`, only rows matching this report status key. */
+  eventKey?: string | null;
+}
+
+export function filterMaintenanceLogEntries<T extends {
+  created_at: string;
+  event_type: EquipmentMaintenanceLogEventType;
+  maintenance_status: EquipmentMaintenanceStatus | null;
+}>(entries: readonly T[], filter: MaintenanceLogFilterCriteria): T[] {
+  const from = filter.from?.trim() || null;
+  const to = filter.to?.trim() || null;
+  const eventKey = filter.eventKey?.trim() || 'all';
+  return entries.filter((entry) => {
+    if (!eventInReportRange(entry.created_at, { from, to })) return false;
+    if (eventKey !== 'all' && maintenanceReportStatusKey(entry) !== eventKey) return false;
+    return true;
+  });
+}
 
 export const EQUIPMENT_MAINTENANCE_LOG_EVENT_LABELS: Record<EquipmentMaintenanceLogEventType, string> = {
   needs_cleaning: 'Needs cleaning (after use)',
