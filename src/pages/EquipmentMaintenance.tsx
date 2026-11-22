@@ -7,6 +7,7 @@ import {
   getAllFloorEquipment,
   getCleaningFlaggedAtByEquipmentId,
   getEquipmentMaintenanceLog,
+  getEquipmentMaintenanceReportLog,
   getFloorPlans,
   markEquipmentCleaned,
   updateEquipmentMaintenance,
@@ -16,6 +17,13 @@ import { Modal } from '../components/Modal';
 import { AssigneeSelect } from '../components/AssigneeSelect';
 import { RecentCompletedNote } from '../components/RecentCompletedNote';
 import { EquipmentMaintenanceLogTable } from '../components/equipment/EquipmentMaintenanceLogTable';
+import {
+  EMPTY_MAINTENANCE_LOG_FILTER,
+  MaintenanceLogFilterBar,
+  maintenanceLogFilterActive,
+  type MaintenanceLogFilterState,
+} from '../components/equipment/MaintenanceLogFilterBar';
+import { filterMaintenanceLogEntries } from '../lib/equipment-maintenance-log';
 import { latestCompleted, RECENT_COMPLETED_LIMIT } from '../lib/recent-completed';
 import { equipmentTypeLabel } from '../lib/equipment';
 import {
@@ -58,14 +66,30 @@ export function EquipmentMaintenance() {
     if (!focusEquipmentId) return;
     document.getElementById(`equipment-row-${focusEquipmentId}`)?.scrollIntoView({ block: 'center' });
   }, [focusEquipmentId, groups]);
-  const recentLog = useMemo(
-    () => latestCompleted(
+  const fullMaintenanceLog = useMemo(() => getEquipmentMaintenanceReportLog(), [key]);
+  const [logFilter, setLogFilter] = useState<MaintenanceLogFilterState>(EMPTY_MAINTENANCE_LOG_FILTER);
+  const filteredSiteLog = useMemo(
+    () => filterMaintenanceLogEntries(fullMaintenanceLog, {
+      from: logFilter.from || null,
+      to: logFilter.to || null,
+      eventKey: logFilter.eventKey,
+    }),
+    [fullMaintenanceLog, logFilter],
+  );
+  const recentLog = useMemo(() => {
+    if (maintenanceLogFilterActive(logFilter)) {
+      return {
+        shown: filteredSiteLog,
+        hiddenCount: 0,
+        total: filteredSiteLog.length,
+      };
+    }
+    return latestCompleted(
       getAllEquipmentMaintenanceLog(RECENT_COMPLETED_LIMIT + 1),
       (entry) => entry.created_at,
       (entry) => entry.id,
-    ),
-    [key],
-  );
+    );
+  }, [key, logFilter, filteredSiteLog]);
 
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set());
   const [editItem, setEditItem] = useState<FloorEquipment | null>(null);
@@ -80,7 +104,24 @@ export function EquipmentMaintenance() {
   const [cleanedBy, setCleanedBy] = useState<AssignedEmployee>(emptyAssignee());
 
   const [historyItem, setHistoryItem] = useState<FloorEquipment | null>(null);
-  const historyEntries = historyItem ? getEquipmentMaintenanceLog(historyItem.id, 200) : [];
+  const [historyFilter, setHistoryFilter] = useState<MaintenanceLogFilterState>(EMPTY_MAINTENANCE_LOG_FILTER);
+  const historySource = useMemo(
+    () => (historyItem ? getEquipmentMaintenanceLog(historyItem.id, 500) : []),
+    [historyItem, key],
+  );
+  const historyEntries = useMemo(
+    () => filterMaintenanceLogEntries(historySource, {
+      from: historyFilter.from || null,
+      to: historyFilter.to || null,
+      eventKey: historyFilter.eventKey,
+    }),
+    [historySource, historyFilter],
+  );
+
+  const openHistory = (item: FloorEquipment) => {
+    setHistoryItem(item);
+    setHistoryFilter(EMPTY_MAINTENANCE_LOG_FILTER);
+  };
 
   const openEdit = (item: FloorEquipment) => {
     setEditItem(item);
@@ -236,7 +277,7 @@ export function EquipmentMaintenance() {
                     <button
                       type="button"
                       className="btn btn-sm btn-ghost"
-                      onClick={() => setHistoryItem(item)}
+                      onClick={() => openHistory(item)}
                     >
                       History
                     </button>
@@ -306,12 +347,28 @@ export function EquipmentMaintenance() {
         <p className="field-hint" style={{ marginTop: 0 }}>
           Newest first — includes automatic “needs cleaning” after production use and manual clean / repair entries.
         </p>
-        <RecentCompletedNote
-          hiddenCount={recentLog.hiddenCount}
-          to="/reports/maintenance"
-          label="events"
+        <MaintenanceLogFilterBar
+          idPrefix="site-maintenance-log"
+          filter={logFilter}
+          onChange={setLogFilter}
+          onClear={() => setLogFilter(EMPTY_MAINTENANCE_LOG_FILTER)}
         />
-        <EquipmentMaintenanceLogTable entries={recentLog.shown} showEquipment />
+        {!maintenanceLogFilterActive(logFilter) && (
+          <RecentCompletedNote
+            hiddenCount={recentLog.hiddenCount}
+            to="/reports/maintenance"
+            label="events"
+          />
+        )}
+        <EquipmentMaintenanceLogTable
+          entries={recentLog.shown}
+          showEquipment
+          emptyMessage={
+            maintenanceLogFilterActive(logFilter)
+              ? 'No events match these filters.'
+              : undefined
+          }
+        />
       </CollapsibleSection>
 
       {editItem && (
@@ -400,8 +457,29 @@ export function EquipmentMaintenance() {
       )}
 
       {historyItem && (
-        <Modal wide title={`Maintenance history — ${historyItem.name}`} onClose={() => setHistoryItem(null)}>
-          <EquipmentMaintenanceLogTable entries={historyEntries} />
+        <Modal
+          wide
+          title={`Maintenance history — ${historyItem.name}`}
+          onClose={() => {
+            setHistoryItem(null);
+            setHistoryFilter(EMPTY_MAINTENANCE_LOG_FILTER);
+          }}
+        >
+          <MaintenanceLogFilterBar
+            idPrefix="equipment-maintenance-history"
+            filter={historyFilter}
+            onChange={setHistoryFilter}
+            onClear={() => setHistoryFilter(EMPTY_MAINTENANCE_LOG_FILTER)}
+          />
+          <p className="field-hint">
+            {historyEntries.length} of {historySource.length}{' '}
+            {historySource.length === 1 ? 'event' : 'events'}
+            {maintenanceLogFilterActive(historyFilter) ? ' match filters' : ' (newest first)'}.
+          </p>
+          <EquipmentMaintenanceLogTable
+            entries={historyEntries}
+            emptyMessage="No events match these filters."
+          />
         </Modal>
       )}
     </div>

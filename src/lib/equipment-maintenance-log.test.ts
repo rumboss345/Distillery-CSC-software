@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   describeEquipmentMaintenanceLogEntry,
+  filterMaintenanceLogEntries,
   groupMaintenanceReportRows,
 } from './equipment-maintenance-log';
 
@@ -54,6 +55,42 @@ describe('groupMaintenanceReportRows', () => {
       'Other',
     ]);
     expect(groups[6].rows.map((item) => item.id)).toEqual(['plain']);
+  });
+});
+
+describe('filterMaintenanceLogEntries', () => {
+  const entries = [
+  {
+    id: 1,
+    created_at: '2026-11-15 10:00:00',
+    event_type: 'marked_cleaned' as const,
+    maintenance_status: null,
+  },
+  {
+    id: 2,
+    created_at: '2026-11-20 10:00:00',
+    event_type: 'maintenance_set' as const,
+    maintenance_status: 'broken' as const,
+  },
+  {
+    id: 3,
+    created_at: '2026-10-01 10:00:00',
+    event_type: 'needs_cleaning' as const,
+    maintenance_status: null,
+  },
+  ];
+
+  it('filters by inclusive date range', () => {
+    const filtered = filterMaintenanceLogEntries(entries, {
+      from: '2026-11-01',
+      to: '2026-11-30',
+    });
+    expect(filtered.map((row) => row.id)).toEqual([1, 2]);
+  });
+
+  it('filters by event status key', () => {
+    const filtered = filterMaintenanceLogEntries(entries, { eventKey: 'broken' });
+    expect(filtered.map((row) => row.id)).toEqual([2]);
   });
 });
 
