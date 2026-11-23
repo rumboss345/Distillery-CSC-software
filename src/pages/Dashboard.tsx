@@ -20,6 +20,7 @@ import { ReconciliationPanel } from '../components/dashboard/ReconciliationPanel
 import { DashboardCharts } from '../components/dashboard/DashboardCharts';
 import { useDisplayUnit } from '../components/dashboard/useDisplayUnit';
 import { useAuth } from '../context/AuthContext';
+import { formatBarrelAge } from '../lib/barrel-age';
 import { formatDateDisplay } from '../lib/date-input';
 import { fermentationDaysOverdue, formatDaysOverdue, listOverdueFermentations } from '../lib/fermentation';
 import { localIsoDate } from '../lib/planned-event-date';
@@ -423,6 +424,7 @@ export function Dashboard() {
                     <th>Barrel</th>
                     <th>Spirit</th>
                     <th>Fill Date</th>
+                    <th>Age</th>
                     <th className="num">Volume</th>
                     <th>Location</th>
                   </tr>
@@ -433,6 +435,7 @@ export function Dashboard() {
                       <td><strong>{b.barrel_number}</strong></td>
                       <td>{barrelBlendProductName(b.id) || b.spirit_type} @ {b.initial_abv}%</td>
                       <td>{formatDateDisplay(b.fill_date)}</td>
+                      <td>{formatBarrelAge(b.fill_date) ?? '—'}</td>
                       <td className="num">{formatVolumeInUnit(b.current_volume_gal, unit)}</td>
                       <td>{b.warehouse_location}</td>
                     </tr>
