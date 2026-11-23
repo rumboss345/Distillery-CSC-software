@@ -213,6 +213,11 @@ function waterCostPerGal(settings: ProductionCostSettings): number {
   return rate != null && rate >= 0 ? rate : 0;
 }
 
+function mashWashWaterCost(waterGal: number, settings: ProductionCostSettings): number {
+  if (!(waterGal > 0)) return 0;
+  return roundMoney(waterGal * waterCostPerGal(settings));
+}
+
 function mashMaterialCost(
   mashId: number,
   at: string,
@@ -222,13 +227,15 @@ function mashMaterialCost(
   waterGal: number,
   settings: ProductionCostSettings,
   index: InventoryCostIndex,
+  options?: { includeWashWater?: boolean },
 ): number {
+  const includeWashWater = options?.includeWashWater !== false;
   let total = grainLbs * sugarCostPerLb(index, at);
   if (yeastLbs > 0) {
     total += yeastLbs * yeastCostPerLb(index, yeastStrain, at);
   }
-  if (waterGal > 0) {
-    total += roundMoney(waterGal * waterCostPerGal(settings));
+  if (includeWashWater && waterGal > 0) {
+    total += mashWashWaterCost(waterGal, settings);
   }
   for (const nutrient of getMashBatchNutrients(mashId)) {
     const amount = nutrient.amount;
@@ -269,6 +276,18 @@ interface ProcessWaterEvent {
 
 function processWaterEventsInRange(range: ReportDateRange): ProcessWaterEvent[] {
   const events: ProcessWaterEvent[] = [];
+  for (const mash of getMashBatches()) {
+    if (!eventInReportRange(mash.start_date, range)) continue;
+    const gallons = mash.water_gal ?? 0;
+    if (!(gallons > 0.001)) continue;
+    events.push({
+      group: 'wash',
+      label: mash.batch_number,
+      detail: 'Wash charge water',
+      date: mash.start_date,
+      gallons,
+    });
+  }
   for (const run of getDistillationRuns()) {
     if (run.status !== 'complete') continue;
     if (!eventInReportRange(run.run_date, range)) continue;
@@ -345,14 +364,12 @@ function mashMaterialDetail(
   grainLbs: number,
   yeastLbs: number,
   yeastStrain: string,
-  waterGal: number,
   settings: ProductionCostSettings,
   index: InventoryCostIndex,
 ): string {
   const parts: string[] = [];
   if (grainLbs > 0) parts.push('sugar');
   if (yeastLbs > 0) parts.push('yeast');
-  if (waterGal > 0) parts.push('wash water');
   const nutrients = getMashBatchNutrients(mashId).filter((n) => n.amount > 0);
   if (nutrients.length > 0) parts.push('nutrients');
   if (parts.length === 0) {
@@ -362,9 +379,10 @@ function mashMaterialDetail(
       grainLbs,
       yeastLbs,
       yeastStrain,
-      waterGal,
+      0,
       settings,
       index,
+      { includeWashWater: false },
     ) > 0 ? 'Materials' : 'No quantities recorded';
   }
   return parts.join(', ');
@@ -392,7 +410,6 @@ function buildMaterialSpendBreakdown(
           mash.grain_lbs,
           mash.yeast_lbs,
           mash.yeast_strain,
-          mash.water_gal,
           settings,
           index,
         )
@@ -522,7 +539,8 @@ export function buildProductionCostReport(
   }
 
   const washBatches: WashBatchCostRow[] = [];
-  let totalMaterial = 0;
+  let totalWashDryMaterial = 0;
+  let totalWashChargeWaterCost = 0;
   let totalGpa = 0;
 
   for (const mash of mashes) {
@@ -541,17 +559,20 @@ export function buildProductionCostReport(
       mash.water_gal,
       settings,
       index,
+      { includeWashWater: false },
     );
+    const washWaterCost = mashWashWaterCost(mash.water_gal ?? 0, settings);
 
     const labourCost = 0;
 
-    const totalCost = roundMoney(materialCost + labourCost);
+    const totalCost = roundMoney(materialCost + washWaterCost + labourCost);
     const drops = brixDropByMash.get(mash.id);
     const fermentBrixDrop = drops && drops.length > 0
       ? roundMoney(drops.reduce((a, b) => a + b, 0) / drops.length)
       : null;
 
-    totalMaterial += materialCost;
+    totalWashDryMaterial += materialCost;
+    totalWashChargeWaterCost += washWaterCost;
     totalGpa += heartsGpa;
 
     washBatches.push({
@@ -578,7 +599,9 @@ export function buildProductionCostReport(
   const monthlyUtilities = monthlyUtilitiesTotal(range);
   const monthlyProcessWaterOverhead = monthlyProcessWaterOverheadTotal(range);
 
-  const washCostSubtotal = roundMoney(totalMaterial);
+  const totalMaterial = roundMoney(totalWashDryMaterial);
+  const totalWashCost = roundMoney(totalWashDryMaterial + totalWashChargeWaterCost);
+  const washCostSubtotal = totalWashCost;
   const avgCostPerLaaLiter = totalGpa > 0 && washCostSubtotal > 0
     ? washCostSubtotal / laaLitersFromGpa(totalGpa)
     : null;
@@ -624,7 +647,6 @@ export function buildProductionCostReport(
 
   bottlingRuns.sort((a, b) => b.bottlingDate.localeCompare(a.bottlingDate));
 
-  const totalWashCost = washCostSubtotal;
   const grandMaterial = roundMoney(totalMaterial + bottlingMaterial);
   const waterRate = waterCostPerGal(settings);
   const processWaterBreakdown = processWaterBreakdownInRange(range, waterRate);
@@ -638,7 +660,7 @@ export function buildProductionCostReport(
   const overheadBreakdowns = buildOverheadSpendBreakdowns(range);
   /** Wash pipeline + bottling packaging (spirit on bottles is an allocation of wash cost, not additive). */
   const grandTotal = roundMoney(
-    totalWashCost
+    totalWashDryMaterial
     + bottlingMaterial
     + processWaterCost
     + monthlyLabour
@@ -732,7 +754,7 @@ export function buildProductionCostReport(
       costPerLaaLiterFullOnCharged,
       costPerLaaLiterFullOnCollected,
       alcoholCollectedLaaLiters: roundMoney(alcoholCollectedLaaLiters),
-      totalWashPipelineCost: roundMoney(totalWashCost + processWaterCost),
+      totalWashPipelineCost: roundMoney(totalWashDryMaterial + processWaterCost),
       avgDistillationYieldPct,
       avgFermentBrixDrop,
     },
