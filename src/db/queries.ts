@@ -6736,6 +6736,51 @@ export function saveBottlingRun(
     status,
     changedBy: run.variance_changed_by,
   });
+
+  if (status === 'complete' && sourceTankId) {
+    markBlendBottledFromBottlingRun(sourceTankId, header.lot_number, header.product_name);
+  }
+}
+
+function markBlendBottledFromBottlingRun(
+  sourceTankId: number,
+  lotNumber: string,
+  productName: string,
+): void {
+  const lot = lotNumber.trim();
+  const product = productName.trim();
+  let blendId: number | null = null;
+
+  if (lot) {
+    blendId = queryOne<{ id: number }>(
+      `SELECT id FROM blend_products
+       WHERE output_holding_tank_equipment_id = ?
+         AND status = 'executed'
+         AND batch_number = ?
+       ORDER BY datetime(executed_at) DESC, id DESC
+       LIMIT 1`,
+      [sourceTankId, lot],
+    )?.id ?? null;
+  }
+
+  if (blendId == null && product) {
+    blendId = queryOne<{ id: number }>(
+      `SELECT id FROM blend_products
+       WHERE output_holding_tank_equipment_id = ?
+         AND status = 'executed'
+         AND lower(trim(product_name)) = lower(trim(?))
+       ORDER BY datetime(executed_at) DESC, id DESC
+       LIMIT 1`,
+      [sourceTankId, product],
+    )?.id ?? null;
+  }
+
+  if (blendId != null) {
+    runQuery(
+      `UPDATE blend_products SET status = 'bottled' WHERE id = ? AND status = 'executed'`,
+      [blendId],
+    );
+  }
 }
 
 export function deleteBottlingRun(id: number): void {

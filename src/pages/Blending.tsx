@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { inputValueUpToDecimals, limitDecimalPlaces } from '../lib/decimal-places';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useEquipmentReturn } from '../lib/equipment-return';
 import { RecentCompletedNote } from '../components/RecentCompletedNote';
 import {
@@ -13,6 +13,7 @@ import {
   getBarrelsForBlend,
   getBlendIngredients,
   getBlendProducts,
+  getBottlingRuns,
   getBlendRecipe,
   getBlendRecipeVersion,
   getBlendRecipes,
@@ -80,6 +81,7 @@ import { localIsoDate } from '../lib/planned-event-date';
 import { latestCompleted } from '../lib/recent-completed';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
 import { downloadWorksheetPdf, worksheetPdfFilename } from '../lib/download-worksheet-pdf';
+import { primaryBottlingRunIdForBlend } from '../lib/blend-bottling-link';
 import { printWorksheet } from '../lib/print-worksheet';
 import { StatusBadge } from '../components/StatusBadge';
 import {
@@ -3785,6 +3787,15 @@ export function Blending() {
     (blend) => blend.id,
   );
   const listedBlends = [...inProgressBlends, ...completedBlends.shown];
+  const bottlingRunByBlendId = useMemo(() => {
+    const runs = getBottlingRuns();
+    const map = new Map<number, number>();
+    for (const blend of listedBlends) {
+      const runId = primaryBottlingRunIdForBlend(blend, runs);
+      if (runId != null) map.set(blend.id, runId);
+    }
+    return map;
+  }, [listedBlends, key]);
   const currentStep = WIZARD_STEPS[wizardStep - 1];
   const closeWizard = () => {
     setShowWizard(false);
@@ -3865,6 +3876,14 @@ export function Blending() {
                       >
                         Undo produce
                       </button>
+                    )}
+                    {bottlingRunByBlendId.has(b.id) && (
+                      <Link
+                        to={`/bottling?record=${bottlingRunByBlendId.get(b.id)}`}
+                        className="btn btn-sm btn-secondary"
+                      >
+                        View bottling
+                      </Link>
                     )}
                     {b.status !== 'executed' && b.status !== 'bottled' && b.status !== 'blended' && (
                       <button className="btn btn-sm btn-ghost" onClick={() => handleDelete(b.id)}>Delete</button>
