@@ -211,6 +211,8 @@
   box-sizing: border-box;
   width: var(--process-item-width, 150px);
   height: var(--process-node-height, 280px);
+  content-visibility: auto;
+  contain-intrinsic-size: var(--process-item-width, 150px) var(--process-node-height, 280px);
   display: flex;
   flex-direction: column;
   justify-content: flex-start;

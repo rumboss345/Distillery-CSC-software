@@ -1983,6 +1983,11 @@ let initPromise: Promise<Database> | null = null;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let pushTimer: ReturnType<typeof setTimeout> | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
+let pollIntervalMs = 0;
+let pollVisibilityBound = false;
+
+const SHARED_POLL_MS_ACTIVE = 4000;
+const SHARED_POLL_MS_BACKGROUND = 20000;
 let serverRevision = 0;
 
 export function productionBaseRevision(): number {
@@ -2116,11 +2121,23 @@ async function pullOrSeedSharedDatabase(options?: { notify?: boolean }): Promise
   }
 }
 
-function startSharedPolling(): void {
-  if (pollTimer) return;
+function applySharedPollInterval(): void {
+  const hidden = typeof document !== 'undefined' && document.hidden;
+  const ms = hidden ? SHARED_POLL_MS_BACKGROUND : SHARED_POLL_MS_ACTIVE;
+  if (pollTimer && pollIntervalMs === ms) return;
+  pollIntervalMs = ms;
+  if (pollTimer) clearInterval(pollTimer);
   pollTimer = setInterval(() => {
     void pollSharedDatabase();
-  }, 4000);
+  }, ms);
+}
+
+function startSharedPolling(): void {
+  if (typeof document !== 'undefined' && !pollVisibilityBound) {
+    document.addEventListener('visibilitychange', applySharedPollInterval);
+    pollVisibilityBound = true;
+  }
+  applySharedPollInterval();
 }
 
 async function adoptServerRevisionIfUnchanged(): Promise<boolean> {

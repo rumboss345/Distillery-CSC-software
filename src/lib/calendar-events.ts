@@ -12,6 +12,7 @@ import {
   getBlendProducts,
   getAllFermentationLogs,
 } from '../db/queries';
+import { subscribeSharedRefresh } from '../db/refresh';
 import { formatLinesSummary, normalizeBottlingStatus } from './bottling-lines';
 import type {
   Barrel,
@@ -428,8 +429,19 @@ export function buildCalendarEventsFromData(
   return sortCalendarEvents(events);
 }
 
+let cachedCalendarEvents: CalendarEvent[] | null = null;
+
+subscribeSharedRefresh(() => {
+  cachedCalendarEvents = null;
+});
+
+export function clearCalendarEventsCache(): void {
+  cachedCalendarEvents = null;
+}
+
 export function buildCalendarEvents(): CalendarEvent[] {
-  return buildCalendarEventsFromData({
+  if (cachedCalendarEvents) return cachedCalendarEvents;
+  cachedCalendarEvents = buildCalendarEventsFromData({
     mashes: getMashBatches(),
     fermentationLogs: getAllFermentationLogs(),
     runs: getDistillationRuns(),
@@ -438,6 +450,7 @@ export function buildCalendarEvents(): CalendarEvent[] {
     blends: getBlendProducts(),
     transfers: [],
   });
+  return cachedCalendarEvents;
 }
 
 export function sortCalendarEvents(events: CalendarEvent[]): CalendarEvent[] {

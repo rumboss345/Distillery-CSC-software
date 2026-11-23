@@ -120,6 +120,7 @@ export function ProcessEquipmentCanvas({
     const el = viewportRef.current;
     if (!el) return undefined;
 
+    let frame = 0;
     const updateSize = () => {
       const rect = el.getBoundingClientRect();
       setViewportSize({
@@ -127,9 +128,13 @@ export function ProcessEquipmentCanvas({
         height: Math.max(1, Math.round(rect.height)),
       });
     };
+    const scheduleUpdate = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(updateSize);
+    };
 
     updateSize();
-    const observer = new ResizeObserver(updateSize);
+    const observer = new ResizeObserver(scheduleUpdate);
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
@@ -140,7 +145,7 @@ export function ProcessEquipmentCanvas({
       .catch(() => setAssignmentsByStage({}));
   }, [refreshKey]);
 
-  const plans = getFloorPlans();
+  const plans = useMemo(() => getFloorPlans(), [refreshKey]);
   const volumeById = useMemo(() => {
     const map = new Map<number, ReturnType<typeof getEquipmentVolumeReport>[0]>();
     for (const row of getEquipmentVolumeReport()) map.set(row.id, row);
