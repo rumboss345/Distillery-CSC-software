@@ -29,7 +29,7 @@ import { buildBottlingReportRows } from '../reporting/bottling-rows';
 import { buildDistillationReportRows } from '../reporting/distillation-rows';
 import { eventInReportRange, resolveReportPeriod, type ReportDateRange } from '../reporting/period';
 import { tankCleaningCalendarEvents } from '../tank-cleaning-staff';
-import { buildNeedsAttention, type AttentionItem } from './attention';
+import { buildNeedsAttention, type AttentionItem, type AttentionRun } from './attention';
 import {
   bottlingByProduct,
   inventoryTrend,
@@ -51,6 +51,40 @@ function lookbackRange(today: string, days: number): ReportDateRange {
   from.setDate(from.getDate() - days);
   const fromKey = `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, '0')}-${String(from.getDate()).padStart(2, '0')}`;
   return resolveReportPeriod('custom', fromKey, today);
+}
+
+/** Distillation runs for alerts without building the full report (cuts, source labels, etc.). */
+function loadAttentionDistillationRuns(window: ReportDateRange): AttentionRun[] {
+  const from = window.from ?? '0000-01-01';
+  const to = window.to ?? '9999-12-31';
+  return queryAll<{
+    id: number;
+    batch_number: string;
+    status: string;
+    run_date: string;
+    charge_volume_gal: number;
+    hearts_gal: number;
+  }>(`
+    SELECT r.id, r.batch_number, r.status, r.run_date, r.charge_volume_gal,
+           COALESCE(h.hearts_gal, 0) as hearts_gal
+    FROM distillation_runs r
+    LEFT JOIN (
+      SELECT distillation_run_id, SUM(volume_gal) AS hearts_gal
+      FROM distillation_cuts
+      WHERE cut_type = 'hearts'
+      GROUP BY distillation_run_id
+    ) h ON h.distillation_run_id = r.id
+    WHERE r.status = 'running'
+       OR (r.status = 'complete' AND r.run_date >= ? AND r.run_date <= ?)
+    ORDER BY r.run_date DESC, r.id DESC
+  `, [from, to]).map((row) => ({
+    id: row.id,
+    batch_number: row.batch_number,
+    status: row.status,
+    run_date: row.run_date,
+    charge_volume_gal: row.charge_volume_gal,
+    hearts_gal: row.hearts_gal,
+  }));
 }
 
 function latestNeedsCleaningByEquipment(): Map<number, string> {
@@ -99,16 +133,7 @@ export function loadNeedsAttention(now: Date, today: string): AttentionItem[] {
     });
 
   const window = lookbackRange(today, ATTENTION_LOOKBACK_DAYS);
-  const runs = buildDistillationReportRows(resolveReportPeriod('all'))
-    .filter((row) => row.status === 'running' || (row.status === 'complete' && eventInReportRange(row.run_date, window)))
-    .map((row) => ({
-      id: row.run_id,
-      batch_number: row.batch_number,
-      status: row.status,
-      run_date: row.run_date,
-      charge_volume_gal: row.charge_volume_gal,
-      hearts_gal: row.hearts_gal,
-    }));
+  const runs = loadAttentionDistillationRuns(window);
 
   const lastLogDay = new Map<number, string>();
   for (const log of logs) {
