@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type DragEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { differenceInDays, parseISO } from 'date-fns';
 import {
   barrelBlendProductName,
   createBarrelFromHoldingTank,
@@ -21,9 +20,10 @@ import { StatusBadge } from '../components/StatusBadge';
 import { StatusDateLog } from '../components/StatusDateLog';
 import { BarrelVisual } from '../components/barrels/BarrelVisual';
 import { limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
+import { formatBarrelAge } from '../lib/barrel-age';
 import { BARREL_STOCK_ITEM_NAME } from '../lib/barrel-inventory';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
-import { formatDateDisplay, isIsoDate } from '../lib/date-input';
+import { formatDateDisplay } from '../lib/date-input';
 import { localIsoDate } from '../lib/planned-event-date';
 import { formatGal } from '../components/equipment/equipment-visual-shared';
 import { tankDropdownLabel } from '../lib/tank-menu-label';
@@ -57,11 +57,6 @@ const emptyBarrel = (): Omit<Barrel, 'id' | 'created_at'> => ({
   status: 'aging',
   notes: '',
 });
-
-function barrelAgeDays(fillDate: string): number | null {
-  if (!isIsoDate(fillDate)) return null;
-  return differenceInDays(new Date(), parseISO(fillDate));
-}
 
 function barrelContents(barrel: Barrel): string {
   return barrelBlendProductName(barrel.id) || barrel.spirit_type;
@@ -299,7 +294,7 @@ export function Barrels() {
     setDraggingBarrelId(null);
   };
 
-  const selectedAge = selected ? barrelAgeDays(selected.fill_date) : null;
+  const selectedAge = selected ? formatBarrelAge(selected.fill_date) : null;
   const selectedRun = selected ? runs.find((run) => run.id === selected.source_run_id) : undefined;
   const selectedTank = selected?.source_holding_tank_equipment_id
     ? holdingTanks.find((tank) => tank.id === selected.source_holding_tank_equipment_id)
@@ -408,7 +403,7 @@ export function Barrels() {
                     ) : (
                       group.barrels.map((barrel) => {
                         const contents = barrelContents(barrel) || barrel.wood_type;
-                        const age = barrelAgeDays(barrel.fill_date);
+                        const age = formatBarrelAge(barrel.fill_date);
                         const dragging = draggingBarrelId === barrel.id;
                         return (
                           <button
@@ -425,7 +420,7 @@ export function Barrels() {
                               barrel.initial_abv > 0 && barrel.current_volume_gal > 0
                                 ? `${barrel.initial_abv.toFixed(1)}% ABV`
                                 : null,
-                              age == null ? null : `${age} days`,
+                              age,
                               barrelQuery ? null : 'Drag to another location',
                             ].filter(Boolean).join(' · ')}
                             onClick={() => setSelectedId(barrel.id)}
@@ -501,7 +496,7 @@ export function Barrels() {
                       <dt>Filled</dt>
                       <dd>{formatDateDisplay(selected.fill_date)}</dd>
                       <dt>Age</dt>
-                      <dd>{selectedAge == null ? '—' : `${selectedAge} days`}</dd>
+                      <dd>{selectedAge ?? '—'}</dd>
                       {(selectedTank || selectedRun) && (
                         <>
                           <dt>Source</dt>
