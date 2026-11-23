@@ -273,7 +273,7 @@ export function CostingReport() {
   const openSpendDrillDown = (key: CostSpendDrillDownKey) => setSpendDrillDown(key);
 
   const spendDrillDownFootnote = spendDrillDown === 'processWater' && report.waterCostPerGal >= 0
-    ? `Amounts use ${money(report.waterCostPerGal)} per gallon from costing assumptions. Wash makeup water is listed under Materials.`
+    ? `Amounts use ${money(report.waterCostPerGal)} per gallon from costing assumptions (wash charge, still proofing, tank dilution, and blend proofing).`
     : spendDrillDown === 'labour' || spendDrillDown === 'utilities' || spendDrillDown === 'facilityProcessWater'
       ? 'Monthly rates from costing assumptions, prorated by calendar days in this report period.'
       : undefined;
