@@ -90,6 +90,9 @@ const DRILL_DOWN_TITLES: Record<CostSpendDrillDownKey, string> = {
   labour: 'Labour in this period',
   utilities: 'Electric & gas in this period',
   facilityProcessWater: 'Facility process water in this period',
+  washPipeline: 'Wash & proofing in this period',
+  packaging: 'Packaging (bottles & labels) in this period',
+  facilityOverhead: 'Facility overhead in this period',
 };
 
 function CostingSpendBreakdownModal({
@@ -274,9 +277,16 @@ export function CostingReport() {
 
   const spendDrillDownFootnote = spendDrillDown === 'processWater' && report.waterCostPerGal >= 0
     ? `Amounts use ${money(report.waterCostPerGal)} per gallon from costing assumptions (wash charge, still proofing, tank dilution, and blend proofing).`
-    : spendDrillDown === 'labour' || spendDrillDown === 'utilities' || spendDrillDown === 'facilityProcessWater'
-      ? 'Monthly rates from costing assumptions, prorated by calendar days in this report period.'
-      : undefined;
+    : spendDrillDown === 'washPipeline' && report.waterCostPerGal >= 0
+      ? `Wash materials use inventory unit costs. Process water uses ${money(report.waterCostPerGal)} per gallon from costing assumptions.`
+      : spendDrillDown === 'packaging'
+        ? 'Bottle and label amounts use unit costs from matching packaging inventory items.'
+        : spendDrillDown === 'labour'
+          || spendDrillDown === 'utilities'
+          || spendDrillDown === 'facilityProcessWater'
+          || spendDrillDown === 'facilityOverhead'
+          ? 'Monthly rates from costing assumptions, prorated by calendar days in this report period.'
+          : undefined;
 
   return (
     <div data-testid="production-costing-report">
@@ -625,13 +635,26 @@ export function CostingReport() {
           <div>
             <h4 className="costing-block-title">Spend breakdown</h4>
             <CostingSpendLines
+              onDrillDown={openSpendDrillDown}
               lines={[
-                { label: 'Wash & proofing', amount: money(summary.totalWashPipelineCost) },
-                { label: 'Packaging (bottles & labels)', amount: money(summary.totalBottlingPackagingCost) },
+                {
+                  label: 'Wash & proofing',
+                  amount: money(summary.totalWashPipelineCost),
+                  drillDown: 'washPipeline',
+                },
+                {
+                  label: 'Packaging (bottles & labels)',
+                  amount: money(summary.totalBottlingPackagingCost),
+                  drillDown: 'packaging',
+                },
                 ...(summary.periodMonthlyOverheadTotal > 0
-                  ? [{ label: 'Facility overhead', amount: money(summary.periodMonthlyOverheadTotal) }]
+                  ? [{
+                    label: 'Facility overhead',
+                    amount: money(summary.periodMonthlyOverheadTotal),
+                    drillDown: 'facilityOverhead' as const,
+                  }]
                   : []),
-                { label: 'All-in total', amount: money(summary.totalCost) },
+                { label: 'All-in total', amount: money(summary.totalCost), isTotal: true },
               ]}
             />
           </div>

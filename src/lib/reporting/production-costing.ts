@@ -118,6 +118,12 @@ export interface ProductionCostSpendBreakdowns {
   labour: CostSpendDetailRow[];
   utilities: CostSpendDetailRow[];
   facilityProcessWater: CostSpendDetailRow[];
+  /** Wash dry goods plus process water (matches full-production “Wash & proofing” line). */
+  washPipeline: CostSpendDetailRow[];
+  /** Bottles and labels only (matches full-production packaging line). */
+  packaging: CostSpendDetailRow[];
+  /** Labour, utilities, and facility process water combined. */
+  facilityOverhead: CostSpendDetailRow[];
 }
 
 export interface ProductionCostReport {
@@ -479,6 +485,40 @@ function buildOverheadSpendBreakdowns(range: ReportDateRange): Pick<
   return { labour, utilities, facilityProcessWater };
 }
 
+function sortSpendBreakdownRows(rows: CostSpendDetailRow[]): CostSpendDetailRow[] {
+  return [...rows].sort((a, b) => {
+    const byDate = (b.date ?? '').localeCompare(a.date ?? '');
+    if (byDate !== 0) return byDate;
+    return a.label.localeCompare(b.label, undefined, { numeric: true });
+  });
+}
+
+function buildWashPipelineSpendBreakdown(
+  materials: CostSpendDetailRow[],
+  processWater: CostSpendDetailRow[],
+): CostSpendDetailRow[] {
+  return sortSpendBreakdownRows([
+    ...materials.filter((row) => row.group === 'wash'),
+    ...processWater,
+  ]);
+}
+
+function buildPackagingSpendBreakdown(materials: CostSpendDetailRow[]): CostSpendDetailRow[] {
+  return sortSpendBreakdownRows(materials.filter((row) => row.group === 'bottling'));
+}
+
+function buildFacilityOverheadSpendBreakdown(
+  labour: CostSpendDetailRow[],
+  utilities: CostSpendDetailRow[],
+  facilityProcessWater: CostSpendDetailRow[],
+): CostSpendDetailRow[] {
+  return [...labour, ...utilities, ...facilityProcessWater].sort((a, b) => {
+    const byMonth = b.label.localeCompare(a.label);
+    if (byMonth !== 0) return byMonth;
+    return (a.detail ?? '').localeCompare(b.detail ?? '');
+  });
+}
+
 function roundMoney(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
@@ -766,6 +806,13 @@ export function buildProductionCostReport(
       labour: overheadBreakdowns.labour,
       utilities: overheadBreakdowns.utilities,
       facilityProcessWater: overheadBreakdowns.facilityProcessWater,
+      washPipeline: buildWashPipelineSpendBreakdown(materialBreakdown, processWaterBreakdown),
+      packaging: buildPackagingSpendBreakdown(materialBreakdown),
+      facilityOverhead: buildFacilityOverheadSpendBreakdown(
+        overheadBreakdowns.labour,
+        overheadBreakdowns.utilities,
+        overheadBreakdowns.facilityProcessWater,
+      ),
     },
     waterCostPerGal: waterRate,
     warnings,

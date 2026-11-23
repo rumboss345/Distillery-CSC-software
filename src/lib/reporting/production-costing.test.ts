@@ -18,6 +18,9 @@ describe('buildProductionCostReport', () => {
     expect(report.bottlingRuns).toEqual([]);
     expect(report.spendBreakdowns.materials).toEqual([]);
     expect(report.spendBreakdowns.processWater).toEqual([]);
+    expect(report.spendBreakdowns.washPipeline).toEqual([]);
+    expect(report.spendBreakdowns.packaging).toEqual([]);
+    expect(report.spendBreakdowns.facilityOverhead).toEqual([]);
     expect(report.waterCostPerGal).toBe(DEFAULT_PRODUCTION_COST_SETTINGS.water_cost_per_gal ?? 0);
   });
 });
