@@ -6738,7 +6738,12 @@ export function saveBottlingRun(
   });
 
   if (status === 'complete' && sourceTankId) {
-    markBlendBottledFromBottlingRun(sourceTankId, header.lot_number, header.product_name);
+    markBlendBottledFromBottlingRun(
+      sourceTankId,
+      header.lot_number,
+      header.product_name,
+      run.notes ?? '',
+    );
   }
 }
 
@@ -6746,20 +6751,21 @@ function markBlendBottledFromBottlingRun(
   sourceTankId: number,
   lotNumber: string,
   productName: string,
+  notes: string,
 ): void {
   const lot = lotNumber.trim();
   const product = productName.trim();
+  const noteText = notes.trim();
   let blendId: number | null = null;
 
   if (lot) {
     blendId = queryOne<{ id: number }>(
       `SELECT id FROM blend_products
-       WHERE output_holding_tank_equipment_id = ?
-         AND status = 'executed'
+       WHERE status = 'executed'
          AND batch_number = ?
-       ORDER BY datetime(executed_at) DESC, id DESC
+       ORDER BY datetime(COALESCE(executed_at, blend_date)) DESC, id DESC
        LIMIT 1`,
-      [sourceTankId, lot],
+      [lot],
     )?.id ?? null;
   }
 
@@ -6768,11 +6774,36 @@ function markBlendBottledFromBottlingRun(
       `SELECT id FROM blend_products
        WHERE output_holding_tank_equipment_id = ?
          AND status = 'executed'
-         AND lower(trim(product_name)) = lower(trim(?))
-       ORDER BY datetime(executed_at) DESC, id DESC
+         AND (
+           lower(trim(product_name)) = lower(trim(?))
+           OR lower(trim(?)) LIKE '%' || lower(trim(product_name)) || '%'
+           OR lower(trim(product_name)) LIKE '%' || lower(trim(?)) || '%'
+         )
+       ORDER BY datetime(COALESCE(executed_at, blend_date)) DESC, id DESC
        LIMIT 1`,
-      [sourceTankId, product],
+      [sourceTankId, product, product, product],
     )?.id ?? null;
+  }
+
+  if (blendId == null && (product || noteText)) {
+    const haystacks = [product, noteText].filter((value) => value.length > 0);
+    for (const haystack of haystacks) {
+      const row = queryOne<{ id: number }>(
+        `SELECT id FROM blend_products
+         WHERE status = 'executed'
+           AND (
+             ? LIKE '%' || batch_number || '%' COLLATE NOCASE
+             OR batch_number = ?
+           )
+         ORDER BY datetime(COALESCE(executed_at, blend_date)) DESC, id DESC
+         LIMIT 1`,
+        [haystack, lot],
+      );
+      if (row) {
+        blendId = row.id;
+        break;
+      }
+    }
   }
 
   if (blendId != null) {

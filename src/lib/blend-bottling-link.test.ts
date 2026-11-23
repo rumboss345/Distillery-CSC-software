@@ -59,12 +59,42 @@ describe('blend-bottling-link', () => {
     expect(primaryBottlingRunIdForBlend(blend, runs)).toBe(7);
   });
 
-  it('ignores runs from other tanks or before blend production', () => {
+  it('ignores runs before blend production or still planned', () => {
     const runs = [
-      run({ id: 1, source_holding_tank_equipment_id: 99, lot_number: 'BL-2026-010' }),
       run({ id: 2, lot_number: 'BL-2026-010', bottling_date: '2026-10-30' }),
       run({ id: 3, lot_number: 'BL-2026-010', status: 'planned' }),
     ];
     expect(matchingBottlingRunsForBlend(blend, runs)).toEqual([]);
+  });
+
+  it('matches when the blend batch appears on the bottling product name even from another tank', () => {
+    const banana = {
+      ...blend,
+      batch_number: 'BL-2026-012',
+      product_name: 'GR Banana Rum',
+      output_holding_tank_equipment_id: 3,
+    };
+    const runs = [
+      run({
+        id: 12,
+        source_holding_tank_equipment_id: 8,
+        product_name: 'GR Banana Rum · BL-2026-012',
+        lot_number: '',
+        bottling_date: '2026-11-20',
+      }),
+    ];
+    expect(primaryBottlingRunIdForBlend(banana, runs)).toBe(12);
+  });
+
+  it('matches related product names from the blend output tank', () => {
+    const runs = [
+      run({
+        id: 4,
+        product_name: 'Spiced Gold Rum',
+        lot_number: '',
+        bottling_date: '2026-11-05',
+      }),
+    ];
+    expect(primaryBottlingRunIdForBlend(blend, runs)).toBe(4);
   });
 });
