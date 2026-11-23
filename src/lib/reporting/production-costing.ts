@@ -23,6 +23,7 @@ import {
   computeMonthlyLabourTotal,
   computeMonthlyProcessWaterOverheadTotal,
   computeMonthlyUtilitiesTotal,
+  monthlyOverheadProrateLines,
 } from './monthly-overhead';
 import {
   laaLitersFromPureAlcoholGal,
@@ -94,10 +95,37 @@ export interface BottlingCostRow {
   bottledLaaLiters: number;
 }
 
+export type CostSpendDetailGroup =
+  | 'wash'
+  | 'bottling'
+  | 'still'
+  | 'tank'
+  | 'blend'
+  | 'overhead';
+
+export interface CostSpendDetailRow {
+  group: CostSpendDetailGroup;
+  label: string;
+  detail?: string;
+  date?: string;
+  meta?: string;
+  amount: number;
+}
+
+export interface ProductionCostSpendBreakdowns {
+  materials: CostSpendDetailRow[];
+  processWater: CostSpendDetailRow[];
+  labour: CostSpendDetailRow[];
+  utilities: CostSpendDetailRow[];
+  facilityProcessWater: CostSpendDetailRow[];
+}
+
 export interface ProductionCostReport {
   summary: ProductionCostSummary;
   washBatches: WashBatchCostRow[];
   bottlingRuns: BottlingCostRow[];
+  spendBreakdowns: ProductionCostSpendBreakdowns;
+  waterCostPerGal: number;
   warnings: string[];
 }
 
@@ -231,32 +259,207 @@ function monthlyProcessWaterOverheadTotal(range: ReportDateRange): number {
   return computeMonthlyProcessWaterOverheadTotal(range, getProductionCostMonthlyOverhead());
 }
 
-function processWaterGallonsInRange(range: ReportDateRange): number {
-  let gallons = 0;
+interface ProcessWaterEvent {
+  group: CostSpendDetailGroup;
+  label: string;
+  detail?: string;
+  date?: string;
+  gallons: number;
+}
+
+function processWaterEventsInRange(range: ReportDateRange): ProcessWaterEvent[] {
+  const events: ProcessWaterEvent[] = [];
   for (const run of getDistillationRuns()) {
     if (run.status !== 'complete') continue;
     if (!eventInReportRange(run.run_date, range)) continue;
-    gallons += run.proof_water_gal ?? 0;
+    const gallons = run.proof_water_gal ?? 0;
+    if (!(gallons > 0.001)) continue;
+    events.push({
+      group: 'still',
+      label: run.batch_number,
+      detail: run.still_name ? `Still proofing · ${run.still_name}` : 'Still proofing water',
+      date: run.run_date,
+      gallons,
+    });
   }
   for (const row of getHoldingTankDilutions()) {
     if (!eventInReportRange(row.recorded_at, range)) continue;
-    gallons += row.water_gal ?? 0;
+    const gallons = row.water_gal ?? 0;
+    if (!(gallons > 0.001)) continue;
+    events.push({
+      group: 'tank',
+      label: row.tank_name,
+      detail: 'Holding tank dilution',
+      date: row.recorded_at,
+      gallons,
+    });
   }
   for (const blend of getBlendProducts()) {
     const finished = blend.status === 'executed' || blend.status === 'bottled' || blend.status === 'blended';
     if (!finished && !blend.executed_at) continue;
     const occurred = blend.executed_at ?? blend.blend_date;
     if (!eventInReportRange(occurred, range)) continue;
+    let blendGal = 0;
     for (const ingredient of getBlendIngredients(blend.id)) {
       if (ingredient.ingredient_type !== 'water' || !(ingredient.amount > 0)) continue;
-      gallons += ingredientVolumeGal({
+      blendGal += ingredientVolumeGal({
         amount: ingredient.amount,
         unit: ingredient.unit,
         ingredient_type: 'water',
       });
     }
+    if (!(blendGal > 0.001)) continue;
+    events.push({
+      group: 'blend',
+      label: blend.batch_number,
+      detail: blend.product_name ?? 'Blend proofing water',
+      date: occurred,
+      gallons: blendGal,
+    });
   }
-  return gallons;
+  events.sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
+  return events;
+}
+
+function processWaterGallonsInRange(range: ReportDateRange): number {
+  return processWaterEventsInRange(range).reduce((sum, row) => sum + row.gallons, 0);
+}
+
+function processWaterBreakdownInRange(
+  range: ReportDateRange,
+  ratePerGal: number,
+): CostSpendDetailRow[] {
+  return processWaterEventsInRange(range).map((event) => ({
+    group: event.group,
+    label: event.label,
+    detail: event.detail,
+    date: event.date,
+    meta: `${roundMoney(event.gallons)} gal`,
+    amount: ratePerGal >= 0 ? roundMoney(event.gallons * ratePerGal) : 0,
+  }));
+}
+
+function mashMaterialDetail(
+  mashId: number,
+  at: string,
+  grainLbs: number,
+  yeastLbs: number,
+  yeastStrain: string,
+  waterGal: number,
+  settings: ProductionCostSettings,
+  index: InventoryCostIndex,
+): string {
+  const parts: string[] = [];
+  if (grainLbs > 0) parts.push('sugar');
+  if (yeastLbs > 0) parts.push('yeast');
+  if (waterGal > 0) parts.push('wash water');
+  const nutrients = getMashBatchNutrients(mashId).filter((n) => n.amount > 0);
+  if (nutrients.length > 0) parts.push('nutrients');
+  if (parts.length === 0) {
+    return mashMaterialCost(
+      mashId,
+      at,
+      grainLbs,
+      yeastLbs,
+      yeastStrain,
+      waterGal,
+      settings,
+      index,
+    ) > 0 ? 'Materials' : 'No quantities recorded';
+  }
+  return parts.join(', ');
+}
+
+function buildMaterialSpendBreakdown(
+  washBatches: WashBatchCostRow[],
+  bottlingRuns: BottlingCostRow[],
+  mashes: ReturnType<typeof getMashBatches>,
+  settings: ProductionCostSettings,
+  index: InventoryCostIndex,
+): CostSpendDetailRow[] {
+  const mashById = new Map(mashes.map((m) => [m.id, m]));
+  const rows: CostSpendDetailRow[] = [];
+
+  for (const wash of washBatches) {
+    const mash = mashById.get(wash.mashBatchId);
+    rows.push({
+      group: 'wash',
+      label: wash.mashBatchNumber,
+      detail: mash
+        ? mashMaterialDetail(
+          mash.id,
+          mash.start_date,
+          mash.grain_lbs,
+          mash.yeast_lbs,
+          mash.yeast_strain,
+          mash.water_gal,
+          settings,
+          index,
+        )
+        : 'Wash batch materials',
+      date: wash.startDate,
+      meta: wash.sugarLbs > 0 ? `${wash.sugarLbs} lbs sugar` : undefined,
+      amount: wash.materialCost,
+    });
+  }
+
+  for (const run of bottlingRuns) {
+    rows.push({
+      group: 'bottling',
+      label: run.batchNumber,
+      detail: run.productName ? `Packaging · ${run.productName}` : 'Bottles & labels',
+      date: run.bottlingDate,
+      meta: run.bottleCount > 0 ? `${run.bottleCount.toLocaleString()} bottles` : undefined,
+      amount: run.packagingCost,
+    });
+  }
+
+  rows.sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
+  return rows;
+}
+
+function buildOverheadSpendBreakdowns(range: ReportDateRange): Pick<
+  ProductionCostSpendBreakdowns,
+  'labour' | 'utilities' | 'facilityProcessWater'
+> {
+  const prorate = monthlyOverheadProrateLines(range, getProductionCostMonthlyOverhead());
+  const labour: CostSpendDetailRow[] = [];
+  const utilities: CostSpendDetailRow[] = [];
+  const facilityProcessWater: CostSpendDetailRow[] = [];
+
+  for (const row of prorate) {
+    const meta = `${row.overlapDays} of ${row.daysInMonth} days in period`;
+    const ymLabel = row.yearMonth;
+    if (row.labour > 0) {
+      labour.push({
+        group: 'overhead',
+        label: ymLabel,
+        detail: 'Labour (monthly rate, prorated)',
+        meta,
+        amount: row.labour,
+      });
+    }
+    if (row.utilities > 0) {
+      utilities.push({
+        group: 'overhead',
+        label: ymLabel,
+        detail: 'Electric & gas (monthly rate, prorated)',
+        meta,
+        amount: row.utilities,
+      });
+    }
+    if (row.facilityProcessWater > 0) {
+      facilityProcessWater.push({
+        group: 'overhead',
+        label: ymLabel,
+        detail: 'Facility process water (monthly rate, prorated)',
+        meta,
+        amount: row.facilityProcessWater,
+      });
+    }
+  }
+
+  return { labour, utilities, facilityProcessWater };
 }
 
 function roundMoney(value: number): number {
@@ -422,7 +625,17 @@ export function buildProductionCostReport(
   bottlingRuns.sort((a, b) => b.bottlingDate.localeCompare(a.bottlingDate));
 
   const totalWashCost = washCostSubtotal;
-  const grandMaterial = roundMoney(totalMaterial + bottlingMaterial + processWaterCost);
+  const grandMaterial = roundMoney(totalMaterial + bottlingMaterial);
+  const waterRate = waterCostPerGal(settings);
+  const processWaterBreakdown = processWaterBreakdownInRange(range, waterRate);
+  const materialBreakdown = buildMaterialSpendBreakdown(
+    washBatches,
+    bottlingRuns,
+    mashes,
+    settings,
+    index,
+  );
+  const overheadBreakdowns = buildOverheadSpendBreakdowns(range);
   /** Wash pipeline + bottling packaging (spirit on bottles is an allocation of wash cost, not additive). */
   const grandTotal = roundMoney(
     totalWashCost
@@ -525,6 +738,14 @@ export function buildProductionCostReport(
     },
     washBatches,
     bottlingRuns,
+    spendBreakdowns: {
+      materials: materialBreakdown,
+      processWater: processWaterBreakdown,
+      labour: overheadBreakdowns.labour,
+      utilities: overheadBreakdowns.utilities,
+      facilityProcessWater: overheadBreakdowns.facilityProcessWater,
+    },
+    waterCostPerGal: waterRate,
     warnings,
   };
 }

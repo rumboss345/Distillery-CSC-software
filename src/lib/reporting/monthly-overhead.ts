@@ -205,3 +205,48 @@ export function computeMonthlyOverheadTotal(
 ): number {
   return computeMonthlyAmountTotal(range, entries, monthlyOverheadAmount, now);
 }
+
+export interface MonthlyOverheadProrateLine {
+  yearMonth: string;
+  overlapDays: number;
+  daysInMonth: number;
+  labour: number;
+  utilities: number;
+  facilityProcessWater: number;
+}
+
+/** Prorated facility overhead by calendar month for the report range. */
+export function monthlyOverheadProrateLines(
+  range: ReportDateRange,
+  entries: ProductionCostMonthlyOverhead[],
+  now = new Date(),
+): MonthlyOverheadProrateLine[] {
+  if (entries.length === 0) return [];
+
+  const bounds = resolveOverheadRangeBounds(range, entries, now);
+  const lines: MonthlyOverheadProrateLine[] = [];
+  for (const ym of calendarMonthsInRange(bounds)) {
+    const effective = effectiveMonthlyOverheadForMonth(ym, entries);
+    if (!effective) continue;
+
+    const overlapDays = overlapDaysInMonth(ym, bounds);
+    if (overlapDays <= 0) continue;
+
+    const dim = daysInCalendarMonth(ym);
+    const factor = overlapDays / dim;
+    const labour = roundMoney(monthlyLabourAmount(effective) * factor);
+    const utilities = roundMoney(monthlyUtilitiesAmount(effective) * factor);
+    const facilityProcessWater = roundMoney(monthlyProcessWaterOverheadAmount(effective) * factor);
+    if (labour <= 0 && utilities <= 0 && facilityProcessWater <= 0) continue;
+
+    lines.push({
+      yearMonth: ym,
+      overlapDays,
+      daysInMonth: dim,
+      labour,
+      utilities,
+      facilityProcessWater,
+    });
+  }
+  return lines;
+}
