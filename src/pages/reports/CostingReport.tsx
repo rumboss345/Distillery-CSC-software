@@ -18,7 +18,9 @@ import {
 } from '../../lib/reporting/production-alcohol-balance';
 import { useReportContext } from './report-context';
 import { CollapsibleSection } from '../../components/CollapsibleSection';
+import { Modal } from '../../components/Modal';
 import type { ProductionCostMonthlyOverhead, ProductionCostSettings } from '../../types';
+import type { CostSpendDetailRow, ProductionCostSpendBreakdowns } from '../../lib/reporting/production-costing';
 
 function money(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return '—';
@@ -37,20 +39,112 @@ function laaLiters(value: number, digits = 2): string {
   return `${num(value, digits)} L LAA`;
 }
 
+type CostSpendDrillDownKey = keyof ProductionCostSpendBreakdowns;
+
 function CostingSpendLines({
   lines,
+  onDrillDown,
 }: {
-  lines: { label: string; amount: string }[];
+  lines: {
+    label: string;
+    amount: string;
+    drillDown?: CostSpendDrillDownKey;
+    isTotal?: boolean;
+  }[];
+  onDrillDown?: (key: CostSpendDrillDownKey) => void;
 }) {
   return (
     <ul className="costing-spend-lines">
-      {lines.map((line) => (
-        <li key={line.label}>
-          <span>{line.label}</span>
-          <span className="num">{line.amount}</span>
-        </li>
-      ))}
+      {lines.map((line) => {
+        const clickable = Boolean(line.drillDown && onDrillDown && !line.isTotal);
+        return (
+          <li
+            key={line.label}
+            className={clickable ? 'costing-spend-lines--clickable' : undefined}
+          >
+            {clickable ? (
+              <button
+                type="button"
+                className="costing-spend-line-btn"
+                onClick={() => onDrillDown?.(line.drillDown!)}
+              >
+                <span>{line.label}</span>
+                <span className="num">{line.amount}</span>
+              </button>
+            ) : (
+              <>
+                <span>{line.label}</span>
+                <span className="num">{line.amount}</span>
+              </>
+            )}
+          </li>
+        );
+      })}
     </ul>
+  );
+}
+
+const DRILL_DOWN_TITLES: Record<CostSpendDrillDownKey, string> = {
+  materials: 'Materials in this period',
+  processWater: 'Process water (washes & proofing)',
+  labour: 'Labour in this period',
+  utilities: 'Electric & gas in this period',
+  facilityProcessWater: 'Facility process water in this period',
+};
+
+function CostingSpendBreakdownModal({
+  title,
+  rows,
+  footnote,
+  onClose,
+}: {
+  title: string;
+  rows: CostSpendDetailRow[];
+  footnote?: string;
+  onClose: () => void;
+}) {
+  const total = rows.reduce((sum, row) => sum + row.amount, 0);
+  return (
+    <Modal title={title} onClose={onClose} wide>
+      {rows.length === 0 ? (
+        <p className="text-muted">No line items in this period for this category.</p>
+      ) : (
+        <div className="table-wrap">
+          <table className="costing-spend-detail-table">
+            <thead>
+              <tr>
+                <th>Source</th>
+                <th>What</th>
+                <th>Date</th>
+                <th className="num">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, index) => (
+                <tr key={`${row.group}-${row.label}-${row.date ?? index}`}>
+                  <td><strong>{row.label}</strong></td>
+                  <td>
+                    {row.detail ?? '—'}
+                    {row.meta ? (
+                      <div className="field-hint">{row.meta}</div>
+                    ) : null}
+                  </td>
+                  <td>{row.date ? formatDateDisplay(row.date) : '—'}</td>
+                  <td className="num">{money(row.amount)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colSpan={3}><strong>Subtotal</strong></td>
+                <td className="num"><strong>{money(total)}</strong></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+      {footnote ? <p className="field-hint" style={{ marginTop: '0.75rem' }}>{footnote}</p> : null}
+    </Modal>
   );
 }
 
@@ -126,6 +220,7 @@ export function CostingReport() {
   const [overheadDraft, setOverheadDraft] = useState<ProductionCostMonthlyOverhead[]>(() => getProductionCostMonthlyOverhead());
   const [newOverhead, setNewOverhead] = useState<ProductionCostMonthlyOverhead>(emptyOverheadRow);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
+  const [spendDrillDown, setSpendDrillDown] = useState<CostSpendDrillDownKey | null>(null);
 
   useEffect(() => {
     setSettingsDraft(getProductionCostSettings());
@@ -175,6 +270,13 @@ export function CostingReport() {
   };
 
   const { summary } = report;
+  const openSpendDrillDown = (key: CostSpendDrillDownKey) => setSpendDrillDown(key);
+
+  const spendDrillDownFootnote = spendDrillDown === 'processWater' && report.waterCostPerGal >= 0
+    ? `Amounts use ${money(report.waterCostPerGal)} per gallon from costing assumptions. Wash makeup water is listed under Materials.`
+    : spendDrillDown === 'labour' || spendDrillDown === 'utilities' || spendDrillDown === 'facilityProcessWater'
+      ? 'Monthly rates from costing assumptions, prorated by calendar days in this report period.'
+      : undefined;
 
   return (
     <div data-testid="production-costing-report">
@@ -407,19 +509,30 @@ export function CostingReport() {
           <div>
             <h4 className="costing-block-title">All spend in period</h4>
             <CostingSpendLines
+              onDrillDown={openSpendDrillDown}
               lines={[
-                { label: 'Materials', amount: money(summary.totalMaterialCost) },
-                ...(summary.totalWaterCost > 0
-                  ? [{ label: 'Process water (washes & proofing)', amount: money(summary.totalWaterCost) }]
-                  : []),
-                { label: 'Labour', amount: money(summary.totalLabourCost) },
+                { label: 'Materials', amount: money(summary.totalMaterialCost), drillDown: 'materials' },
+                {
+                  label: 'Process water (washes & proofing)',
+                  amount: money(summary.totalWaterCost),
+                  drillDown: 'processWater',
+                },
+                { label: 'Labour', amount: money(summary.totalLabourCost), drillDown: 'labour' },
                 ...(summary.totalMonthlyOverheadCost > 0
-                  ? [{ label: 'Electric & gas', amount: money(summary.totalMonthlyOverheadCost) }]
+                  ? [{
+                    label: 'Electric & gas',
+                    amount: money(summary.totalMonthlyOverheadCost),
+                    drillDown: 'utilities' as const,
+                  }]
                   : []),
                 ...(summary.totalMonthlyProcessWaterOverheadCost > 0
-                  ? [{ label: 'Facility process water', amount: money(summary.totalMonthlyProcessWaterOverheadCost) }]
+                  ? [{
+                    label: 'Facility process water',
+                    amount: money(summary.totalMonthlyProcessWaterOverheadCost),
+                    drillDown: 'facilityProcessWater' as const,
+                  }]
                   : []),
-                { label: 'Total', amount: money(summary.totalCost) },
+                { label: 'Total', amount: money(summary.totalCost), isTotal: true },
               ]}
             />
           </div>
@@ -455,11 +568,16 @@ export function CostingReport() {
         />
         {summary.periodMonthlyOverheadTotal > 0 && (
           <CostingSpendLines
+            onDrillDown={openSpendDrillDown}
             lines={[
-              { label: 'Labour', amount: money(summary.totalLabourCost) },
-              { label: 'Electric & gas', amount: money(summary.totalMonthlyOverheadCost) },
-              { label: 'Facility process water', amount: money(summary.totalMonthlyProcessWaterOverheadCost) },
-              { label: 'Overhead subtotal', amount: money(summary.periodMonthlyOverheadTotal) },
+              { label: 'Labour', amount: money(summary.totalLabourCost), drillDown: 'labour' },
+              { label: 'Electric & gas', amount: money(summary.totalMonthlyOverheadCost), drillDown: 'utilities' },
+              {
+                label: 'Facility process water',
+                amount: money(summary.totalMonthlyProcessWaterOverheadCost),
+                drillDown: 'facilityProcessWater',
+              },
+              { label: 'Overhead subtotal', amount: money(summary.periodMonthlyOverheadTotal), isTotal: true },
             ]}
           />
         )}
@@ -628,6 +746,15 @@ export function CostingReport() {
           Packaging uses inventory unit costs on matching bottle and label SKUs.
         </p>
       </CollapsibleSection>
+
+      {spendDrillDown ? (
+        <CostingSpendBreakdownModal
+          title={DRILL_DOWN_TITLES[spendDrillDown]}
+          rows={report.spendBreakdowns[spendDrillDown]}
+          footnote={spendDrillDownFootnote}
+          onClose={() => setSpendDrillDown(null)}
+        />
+      ) : null}
     </div>
   );
 }

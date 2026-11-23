@@ -942,6 +942,36 @@ body.nav-open {
   white-space: nowrap;
 }
 
+.costing-spend-lines--clickable {
+  padding: 0;
+}
+
+.costing-spend-line-btn {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  width: 100%;
+  padding: 0.35rem 0;
+  border: none;
+  background: transparent;
+  font: inherit;
+  color: var(--accent);
+  text-align: left;
+  cursor: pointer;
+}
+
+.costing-spend-line-btn:hover,
+.costing-spend-line-btn:focus-visible {
+  color: var(--text);
+  text-decoration: underline;
+}
+
+.costing-spend-detail-table tfoot td {
+  border-top: 2px solid var(--border-subtle);
+  padding-top: 0.5rem;
+}
+
 .costing-yield-stat {
   margin: 0 0 0.65rem;
   display: flex;

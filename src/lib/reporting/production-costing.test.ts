@@ -16,5 +16,8 @@ describe('buildProductionCostReport', () => {
     expect(report.summary.alcoholCollectedLaaLiters).toBe(0);
     expect(report.washBatches).toEqual([]);
     expect(report.bottlingRuns).toEqual([]);
+    expect(report.spendBreakdowns.materials).toEqual([]);
+    expect(report.spendBreakdowns.processWater).toEqual([]);
+    expect(report.waterCostPerGal).toBe(DEFAULT_PRODUCTION_COST_SETTINGS.water_cost_per_gal ?? 0);
   });
 });
