@@ -42,7 +42,12 @@ import {
   transferSourceIsStillage,
   useRefreshKey,
 } from '../db/queries';
-import { isSpiritLedgerEquipmentType } from '../lib/equipment';
+import { equipmentTypeLabel, isSpiritLedgerEquipmentType } from '../lib/equipment';
+import {
+  distillationSourceTypeChoices,
+  tankTransferDestTypeChoices,
+  tanksOfEquipmentType,
+} from '../lib/distillation-source-tanks';
 import { mixedSpiritConfirmMessage } from '../lib/blend-spirit-mix';
 import { tankContentsPhrase, tankCurrentVolumeLine, tankDropdownLabel } from '../lib/tank-menu-label';
 import { isStillageTankType, STILLAGE_DISCARD_DESTINATION } from '../lib/stillage';
@@ -88,6 +93,8 @@ const tankContentsSummary = (tankId: number, volumeGal: number): string => {
 };
 
 const emptyTransferForm = () => ({
+  source_equipment_type: '',
+  dest_equipment_type: '',
   source_tank_equipment_id: 0,
   dest_tank_equipment_id: 0,
   volume_gal: 0,
@@ -106,6 +113,7 @@ const emptyFermenterForm = () => ({
 });
 
 const OTHER_LIQUID = '__other__';
+const DEST_DISCARD_CHOICE = '__discard__';
 
 export function TankTransfer() {
   const { user } = useAuth();
@@ -239,13 +247,26 @@ export function TankTransfer() {
     (t) => t.id === transferForm.source_tank_equipment_id,
   );
   const sourceSendsStillage = transferForm.source_tank_equipment_id > 0
-    && transferSourceIsStillage(transferForm.source_tank_equipment_id);
+    ? transferSourceIsStillage(transferForm.source_tank_equipment_id)
+  : transferForm.source_equipment_type === 'stillage_tank';
+  const sourceTransferTypeOptions = distillationSourceTypeChoices(
+    sourceTanksForTransfer.map((tank) => tank.equipment_type),
+  );
   const destTanksForTransfer = spiritTransferVessels.filter((t) => (
     t.id !== transferForm.source_tank_equipment_id
     && (sourceSendsStillage
       ? isStillageTankType(t.equipment_type)
       : !isStillageTankType(t.equipment_type))
   ));
+  const destTransferTypeOptions = tankTransferDestTypeChoices(destTanksForTransfer, sourceSendsStillage);
+  const sourceTanksInSelectedType = tanksOfEquipmentType(
+    sourceTanksForTransfer,
+    transferForm.source_equipment_type,
+  );
+  const destTanksInSelectedType = tanksOfEquipmentType(
+    destTanksForTransfer,
+    transferForm.dest_equipment_type,
+  );
   const transferSourceContents = transferForm.source_tank_equipment_id
     ? getHoldingTankContents(transferForm.source_tank_equipment_id)
     : null;
@@ -258,14 +279,19 @@ export function TankTransfer() {
     prev: ReturnType<typeof emptyTransferForm>,
     tankId: number,
   ) => {
+    const tank = tankId ? tanksWithContents.find((item) => item.id === tankId) : undefined;
     const contents = tankId ? getHoldingTankContents(tankId) : null;
     const fullVolumeGal = sourceTankVolumeGal(tankId);
+    const destStillValid = destAcceptsTransferFrom(tankId, prev.dest_tank_equipment_id);
+    const destTank = destStillValid
+      ? spiritTransferVessels.find((item) => item.id === prev.dest_tank_equipment_id)
+      : undefined;
     return {
       ...prev,
+      source_equipment_type: tank?.equipment_type ?? prev.source_equipment_type,
       source_tank_equipment_id: tankId,
-      dest_tank_equipment_id: destAcceptsTransferFrom(tankId, prev.dest_tank_equipment_id)
-        ? prev.dest_tank_equipment_id
-        : 0,
+      dest_equipment_type: destStillValid ? (destTank?.equipment_type ?? prev.dest_equipment_type) : '',
+      dest_tank_equipment_id: destStillValid ? prev.dest_tank_equipment_id : 0,
       volume_gal: fullVolumeGal,
       observed_abv: contents ? (Math.round(contents.abv * 10) / 10).toString() : '',
       sample_temp_f: '60',
@@ -368,8 +394,46 @@ export function TankTransfer() {
     document.getElementById(`transfer-${focusTransferId}`)?.scrollIntoView({ block: 'center' });
   }, [focusTransferId]);
 
+  const handleSourceTypeChange = (equipmentType: string) => {
+    setTransferForm((prev) => ({
+      ...prev,
+      source_equipment_type: equipmentType,
+      source_tank_equipment_id: 0,
+      volume_gal: 0,
+      observed_abv: '',
+      sample_temp_f: '60',
+      dest_equipment_type: '',
+      dest_tank_equipment_id: 0,
+    }));
+  };
+
   const handleSourceTankChange = (tankId: number) => {
     setTransferForm((prev) => applySourceTankToForm(prev, tankId));
+  };
+
+  const handleDestTypeChange = (value: string) => {
+    if (value === DEST_DISCARD_CHOICE) {
+      setTransferForm((prev) => ({
+        ...prev,
+        dest_equipment_type: '',
+        dest_tank_equipment_id: STILLAGE_DISCARD_DESTINATION,
+      }));
+      return;
+    }
+    setTransferForm((prev) => ({
+      ...prev,
+      dest_equipment_type: value,
+      dest_tank_equipment_id: 0,
+    }));
+  };
+
+  const handleDestTankChange = (tankId: number) => {
+    const tank = spiritTransferVessels.find((item) => item.id === tankId);
+    setTransferForm((prev) => ({
+      ...prev,
+      dest_equipment_type: tank?.equipment_type ?? prev.dest_equipment_type,
+      dest_tank_equipment_id: tankId,
+    }));
   };
 
   const transferCorrectedAbv = correctedAbvFromInputs(
@@ -1237,20 +1301,41 @@ export function TankTransfer() {
               />
             </div>
             <div className="form-group full-width">
-              <label>From Tank</label>
+              <label htmlFor="transfer-source-type">From — equipment type</label>
               <select
-                value={transferForm.source_tank_equipment_id || ''}
-                onChange={(e) => handleSourceTankChange(e.target.value ? parseInt(e.target.value, 10) : 0)}
+                id="transfer-source-type"
+                data-testid="transfer-source-type"
+                value={transferForm.source_equipment_type}
+                onChange={(e) => handleSourceTypeChange(e.target.value)}
               >
-                <option value="">— Select source tank —</option>
-                {sourceTanksForTransfer.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {transferSourceTankOptionLabel(t)}
-                  </option>
+                <option value="">— Select equipment type —</option>
+                {sourceTransferTypeOptions.map((type) => (
+                  <option key={type} value={type}>{equipmentTypeLabel(type)}</option>
                 ))}
               </select>
               {sourceTanksForTransfer.length === 0 && (
                 <p className="field-hint">No holding tanks or collection vessels with spirit — add distillation cuts first.</p>
+              )}
+              {transferForm.source_equipment_type && (
+                <>
+                  <label htmlFor="transfer-source-tank" style={{ marginTop: '0.65rem' }}>From — tank</label>
+                  <select
+                    id="transfer-source-tank"
+                    data-testid="transfer-source-tank"
+                    value={transferForm.source_tank_equipment_id || ''}
+                    onChange={(e) => handleSourceTankChange(e.target.value ? parseInt(e.target.value, 10) : 0)}
+                  >
+                    <option value="">— Select tank —</option>
+                    {sourceTanksInSelectedType.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {transferSourceTankOptionLabel(t)}
+                      </option>
+                    ))}
+                  </select>
+                  {sourceTanksInSelectedType.length === 0 && (
+                    <p className="field-hint">No tanks of this type have spirit to move.</p>
+                  )}
+                </>
               )}
               {selectedTransferSourceTank && (
                 <p className="field-hint">
@@ -1259,25 +1344,49 @@ export function TankTransfer() {
               )}
             </div>
             <div className="form-group full-width">
-              <label>To Tank</label>
+              <label htmlFor="transfer-dest-type">To — equipment type</label>
               <select
-                value={transferForm.dest_tank_equipment_id ? String(transferForm.dest_tank_equipment_id) : ''}
-                onChange={(e) => setTransferForm({
-                  ...transferForm,
-                  dest_tank_equipment_id: e.target.value ? parseInt(e.target.value, 10) : 0,
-                })}
+                id="transfer-dest-type"
+                data-testid="transfer-dest-type"
+                value={
+                  transferForm.dest_tank_equipment_id === STILLAGE_DISCARD_DESTINATION
+                    ? DEST_DISCARD_CHOICE
+                    : transferForm.dest_equipment_type
+                }
+                onChange={(e) => handleDestTypeChange(e.target.value)}
               >
-                <option value="">— Select destination tank —</option>
+                <option value="">— Select equipment type —</option>
                 {sourceSendsStillage && (
-                  <option value={String(STILLAGE_DISCARD_DESTINATION)}>Discarded</option>
+                  <option value={DEST_DISCARD_CHOICE}>Discarded</option>
                 )}
-                {destTanksForTransfer.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {tankDropdownLabel(t.name, t.id, { volume: true })}
-                  </option>
+                {destTransferTypeOptions.map((type) => (
+                  <option key={type} value={type}>{equipmentTypeLabel(type)}</option>
                 ))}
               </select>
-              {transferForm.dest_tank_equipment_id > 0 && transferDestContents && (
+              {transferForm.dest_equipment_type && (
+                <>
+                  <label htmlFor="transfer-dest-tank" style={{ marginTop: '0.65rem' }}>To — tank</label>
+                  <select
+                    id="transfer-dest-tank"
+                    data-testid="transfer-dest-tank"
+                    value={transferForm.dest_tank_equipment_id ? String(transferForm.dest_tank_equipment_id) : ''}
+                    onChange={(e) => handleDestTankChange(e.target.value ? parseInt(e.target.value, 10) : 0)}
+                  >
+                    <option value="">— Select tank —</option>
+                    {destTanksInSelectedType.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {tankDropdownLabel(t.name, t.id, { volume: true })}
+                      </option>
+                    ))}
+                  </select>
+                  {destTanksInSelectedType.length === 0 && (
+                    <p className="field-hint">No tanks of this type are available.</p>
+                  )}
+                </>
+              )}
+              {transferForm.dest_tank_equipment_id > 0
+                && transferForm.dest_tank_equipment_id !== STILLAGE_DISCARD_DESTINATION
+                && transferDestContents && (
                 <p className="field-hint">
                   {tankCurrentVolumeLine(transferForm.dest_tank_equipment_id, transferDestContents)}
                 </p>
