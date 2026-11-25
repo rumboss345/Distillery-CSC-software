@@ -20,7 +20,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import { StatusDateLog } from '../components/StatusDateLog';
 import { BarrelVisual } from '../components/barrels/BarrelVisual';
 import { limitAbvInput, MAX_ENTERED_ABV } from '../lib/abv-limits';
-import { formatBarrelAge } from '../lib/barrel-age';
+import { formatBarrelAgeForBarrel } from '../lib/barrel-age';
 import { BARREL_STOCK_ITEM_NAME } from '../lib/barrel-inventory';
 import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-planning';
 import { formatDateDisplay } from '../lib/date-input';
@@ -294,7 +294,7 @@ export function Barrels() {
     setDraggingBarrelId(null);
   };
 
-  const selectedAge = selected ? formatBarrelAge(selected.fill_date) : null;
+  const selectedAge = selected ? formatBarrelAgeForBarrel(selected) : null;
   const selectedRun = selected ? runs.find((run) => run.id === selected.source_run_id) : undefined;
   const selectedTank = selected?.source_holding_tank_equipment_id
     ? holdingTanks.find((tank) => tank.id === selected.source_holding_tank_equipment_id)
@@ -403,7 +403,7 @@ export function Barrels() {
                     ) : (
                       group.barrels.map((barrel) => {
                         const contents = barrelContents(barrel) || barrel.wood_type;
-                        const age = formatBarrelAge(barrel.fill_date);
+                        const age = formatBarrelAgeForBarrel(barrel);
                         const dragging = draggingBarrelId === barrel.id;
                         return (
                           <button

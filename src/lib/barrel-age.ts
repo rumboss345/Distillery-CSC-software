@@ -38,3 +38,20 @@ export function formatBarrelAge(fillDate: string, today?: Date): string | null {
   if (parts.days > 0 || bits.length === 0) bits.push(agePart(parts.days, 'day', 'days'));
   return bits.join(', ');
 }
+
+export type BarrelAgeBarrel = {
+  fill_date: string;
+  status: string;
+  current_volume_gal: number;
+};
+
+/** Empty, dumped, or zero-volume cooperage is not aging — show zero until filled again. */
+export function barrelIsAgingForAge(barrel: BarrelAgeBarrel): boolean {
+  if (barrel.status === 'empty' || barrel.status === 'dumped') return false;
+  return barrel.current_volume_gal > 0.01;
+}
+
+export function formatBarrelAgeForBarrel(barrel: BarrelAgeBarrel, today?: Date): string {
+  if (!barrelIsAgingForAge(barrel)) return '0 days';
+  return formatBarrelAge(barrel.fill_date, today) ?? '0 days';
+}
