@@ -511,7 +511,7 @@ export function Barrels() {
                       ) : null}
                     </dl>
                     <div className="process-next-actions-row" style={{ marginTop: '0.85rem' }}>
-                      <button type="button" className="btn btn-sm btn-secondary" onClick={() => openEdit(selected)}>Edit</button>
+                      <button type="button" className="btn btn-sm btn-secondary" onClick={() => openEdit(selected)}>Fill/edit</button>
                       <button type="button" className="btn btn-sm btn-ghost" onClick={() => handleDelete(selected.id)}>Delete</button>
                     </div>
                   </>
