@@ -8,6 +8,7 @@ import {
   formatDistillationSourceDetail,
   distillationTankPullError,
   fitDistillationTankPulls,
+  tankTransferDestTypeChoices,
   tanksOfEquipmentType,
 } from './distillation-source-tanks';
 
@@ -29,6 +30,16 @@ describe('distillation source tanks', () => {
       'collection_vessel',
       'fermenter',
     ])).toEqual(['holding_tank', 'collection_vessel']);
+  });
+
+  it('limits transfer destinations by whether the source is stillage', () => {
+    const dests = [
+      { equipment_type: 'holding_tank' },
+      { equipment_type: 'stillage_tank' },
+      { equipment_type: 'collection_vessel' },
+    ];
+    expect(tankTransferDestTypeChoices(dests, false)).toEqual(['holding_tank', 'collection_vessel']);
+    expect(tankTransferDestTypeChoices(dests, true)).toEqual(['stillage_tank']);
   });
 
   it('omits types that are not on the spirit ledger', () => {

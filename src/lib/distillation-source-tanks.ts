@@ -15,6 +15,17 @@ export function distillationChargeTypeChoices(equipmentTypes: readonly string[])
   return distillationSourceTypeChoices(equipmentTypes).filter((type) => type !== 'stillage_tank');
 }
 
+/** Destination tank types allowed for a holding-tank transfer, given the source liquid. */
+export function tankTransferDestTypeChoices(
+  destTanks: readonly { equipment_type: string }[],
+  sourceSendsStillage: boolean,
+): string[] {
+  const choices = distillationSourceTypeChoices(destTanks.map((tank) => tank.equipment_type));
+  return sourceSendsStillage
+    ? choices.filter((type) => type === 'stillage_tank')
+    : choices.filter((type) => type !== 'stillage_tank');
+}
+
 export function tanksOfEquipmentType<T extends { equipment_type: string }>(
   tanks: readonly T[],
   equipmentType: string,
