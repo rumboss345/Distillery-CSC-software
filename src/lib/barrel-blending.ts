@@ -1,5 +1,5 @@
 import type { Barrel } from '../types';
-import { formatBarrelAge } from './barrel-age';
+import { formatBarrelAgeForBarrel } from './barrel-age';
 import { formatDateDisplay } from './date-input';
 
 /** Sort aging barrels oldest fill first, then by barrel number. */
@@ -78,8 +78,8 @@ export function formatBarrelInventoryOption(barrel: Barrel, blendProductName?: s
   const abv = barrel.initial_abv;
   const contents = barrelShownContents(barrel, blendProductName);
   const filled = formatDateDisplay(barrel.fill_date);
-  const age = formatBarrelAge(barrel.fill_date);
-  const ageSuffix = age ? ` · ${age}` : '';
+  const age = formatBarrelAgeForBarrel(barrel);
+  const ageSuffix = ` · ${age}`;
   return `${barrel.barrel_number} — ${contents} — filled ${filled}${ageSuffix} (${barrel.current_volume_gal.toFixed(1)} gal @ ${abv.toFixed(1)}%)`;
 }
 

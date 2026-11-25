@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { barrelAgeParts, formatBarrelAge } from './barrel-age';
+import { barrelAgeParts, formatBarrelAge, formatBarrelAgeForBarrel } from './barrel-age';
 
 const TODAY = new Date('2026-11-23T12:00:00');
 
@@ -22,5 +22,27 @@ describe('barrelAgeParts', () => {
   it('omits zero year and month units when young', () => {
     expect(formatBarrelAge('2026-10-01', TODAY)).toBe('1 month, 22 days');
     expect(formatBarrelAge('2026-11-10', TODAY)).toBe('13 days');
+  });
+});
+
+describe('formatBarrelAgeForBarrel', () => {
+  it('shows zero age when empty or dumped even if fill_date is old', () => {
+    const oldFill = { fill_date: '2020-01-01', status: 'empty' as const, current_volume_gal: 0 };
+    expect(formatBarrelAgeForBarrel(oldFill, TODAY)).toBe('0 days');
+    expect(formatBarrelAgeForBarrel({ ...oldFill, status: 'dumped' }, TODAY)).toBe('0 days');
+  });
+
+  it('shows zero when status is aging but volume is gone', () => {
+    expect(formatBarrelAgeForBarrel(
+      { fill_date: '2020-01-01', status: 'aging', current_volume_gal: 0 },
+      TODAY,
+    )).toBe('0 days');
+  });
+
+  it('uses fill date when spirit is in the barrel', () => {
+    expect(formatBarrelAgeForBarrel(
+      { fill_date: '2024-03-15', status: 'aging', current_volume_gal: 40 },
+      TODAY,
+    )).toBe('2 years, 8 months, 8 days');
   });
 });
