@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { equipmentReturnState } from '../../lib/equipment-return';
-import { HoldingTankIntakeHistory } from '../HoldingTankIntakeHistory';
-import { HoldingTankIntakeDetailModal } from '../HoldingTankIntakeDetailModal';
+import { HoldingTankInOutDetailModal } from '../HoldingTankInOutDetailModal';
+import { HoldingTankInOutHistory } from '../HoldingTankInOutHistory';
 import { StatusBadge } from '../StatusBadge';
 import { AssigneeSelect } from '../AssigneeSelect';
 import {
@@ -11,7 +11,7 @@ import {
   getDistillationRunForCuts,
   getDistillationRuns,
   getHoldingTankVolumeVariances,
-  holdingTankIntakeKey,
+  holdingTankInOutKey,
   getFermentationReadyMaxBrix,
   markEquipmentCleaned,
   saveDistillationRun,
@@ -22,7 +22,7 @@ import { buildProcessEquipmentContextMenu } from './process-equipment-menu';
 import { formatTankVolumeVariance, tankVolumeMatchesRecord } from '../../lib/tank-volume-variance';
 import { STATUS_LABELS, formatGal } from './equipment-visual-shared';
 import type { EquipmentVisualData } from './equipment-visual.types';
-import type { FloorEquipmentView, HoldingTankIntakeEntry } from '../../types';
+import type { FloorEquipmentView, HoldingTankInOutEntry } from '../../types';
 import {
   equipmentCleaningDaysDirty,
   equipmentCleaningOverdueFlash,
@@ -60,16 +60,16 @@ export function ProcessEquipmentDetailPanel({
   const { key: productionRefreshKey } = useRefreshKey();
   void productionRefreshKey;
   const readyMaxBrix = getFermentationReadyMaxBrix();
-  const [selectedIntakeKey, setSelectedIntakeKey] = useState<string | null>(null);
-  const [viewedIntake, setViewedIntake] = useState<HoldingTankIntakeEntry | null>(null);
+  const [selectedMovementKey, setSelectedMovementKey] = useState<string | null>(null);
+  const [viewedMovement, setViewedMovement] = useState<HoldingTankInOutEntry | null>(null);
   const [cleanedBy, setCleanedBy] = useState<AssignedEmployee>({
     assigned_user_id: null,
     assigned_user_name: null,
   });
 
   useEffect(() => {
-    setSelectedIntakeKey(null);
-    setViewedIntake(null);
+    setSelectedMovementKey(null);
+    setViewedMovement(null);
     setCleanedBy({ assigned_user_id: null, assigned_user_name: null });
   }, [equipment?.id]);
 
@@ -395,26 +395,26 @@ export function ProcessEquipmentDetailPanel({
       )}
 
       {(equipment.equipment_type === 'holding_tank' || equipment.equipment_type === 'stillage_tank' || equipment.equipment_type === 'collection_vessel') && (
-        <HoldingTankIntakeHistory
+        <HoldingTankInOutHistory
           tankId={equipment.id}
           limit={12}
-          selectedKey={selectedIntakeKey}
-          title="Intake history"
-          hint="Click an entry for batch, cut, proof gallons, and links."
-          emptyMessage="No cuts or transfers into this tank yet."
+          selectedKey={selectedMovementKey}
+          title="In and out history"
+          hint="Click an entry for batch, counterpart, proof gallons, and links."
+          emptyMessage="Nothing has moved into or out of this tank yet."
           onSelect={(entry) => {
-            setSelectedIntakeKey(holdingTankIntakeKey(entry));
-            setViewedIntake(entry);
+            setSelectedMovementKey(holdingTankInOutKey(entry));
+            setViewedMovement(entry);
           }}
         />
       )}
 
-      {viewedIntake && (
-        <HoldingTankIntakeDetailModal
-          entry={viewedIntake}
+      {viewedMovement && (
+        <HoldingTankInOutDetailModal
+          entry={viewedMovement}
           tankName={equipment.name}
           returnEquipmentId={equipment.id}
-          onClose={() => setViewedIntake(null)}
+          onClose={() => setViewedMovement(null)}
         />
       )}
 

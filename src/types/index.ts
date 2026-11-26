@@ -372,6 +372,29 @@ export interface HoldingTankContents {
 
 export type HoldingTankIntakeKind = 'cut' | 'transfer' | 'blend' | 'stillage' | 'opening';
 
+export type HoldingTankInOutDirection = 'in' | 'out';
+
+/** In or out liquid movement on a holding / collection vessel (process sidebar). */
+export interface HoldingTankInOutEntry {
+  key: string;
+  row_key: string;
+  direction: HoldingTankInOutDirection;
+  movement_type: string;
+  movement_label: string;
+  occurred_at: string;
+  volume_gal: number;
+  abv: number;
+  laa_gal: number;
+  summary: string;
+  detail?: string;
+  notes?: string;
+  counterpart: string;
+  batch_ref?: string;
+  product_liquid?: string;
+  user_label?: string;
+  reference?: string;
+}
+
 /** A single distillation cut, transfer, or blend that added spirit to a holding tank. */
 export interface HoldingTankIntakeEntry {
   kind: HoldingTankIntakeKind;
