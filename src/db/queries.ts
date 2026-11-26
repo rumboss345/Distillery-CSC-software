@@ -2992,12 +2992,20 @@ const HOLDING_TANK_IN_OUT_ALL: ReportDateRange = {
   label: 'All',
 };
 
+function floorLiquidVesselsForHistory(): { id: number; name: string }[] {
+  return getFloorEquipment()
+    .filter((e) => e.equipment_type === 'holding_tank'
+      || e.equipment_type === 'stillage_tank'
+      || e.equipment_type === 'collection_vessel')
+    .map((t) => ({ id: t.id, name: t.name }));
+}
+
 /** Combined liquid in/out ledger for a holding or collection vessel (process sidebar). */
 export function getHoldingTankInOutHistory(
   tankId: number,
   limit = 12,
 ) {
-  const tankList = getHoldingTanks().map((t) => ({ id: t.id, name: t.name }));
+  const tankList = floorLiquidVesselsForHistory();
   const movements = buildLiquidMovements(HOLDING_TANK_IN_OUT_ALL, { includePlannedBottlings: true });
   const history = buildTankHistory(movements, tankList, tankId);
   history.sort((a, b) => compareStoredDatesDesc(a.occurred_at, b.occurred_at));
