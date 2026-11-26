@@ -35,7 +35,11 @@ import {
   type VesselInflow,
 } from '../lib/collection-vessel-cuts';
 import { distillationAlcoholBalance, distillationRecordsLoss, washChargeAbvFromBrix, type AlcoholChargeBasis, type DistillationAlcoholBalance } from '../lib/distillation-loss';
+import { mapTankHistoryToInOutEntry } from '../lib/holding-tank-in-out-history';
+import { buildLiquidMovements } from '../lib/reporting/movements';
+import type { ReportDateRange } from '../lib/reporting/period';
 import type { MonthlyProduction } from '../lib/reporting/productivity';
+import { buildTankHistory } from '../lib/reporting/tank-history';
 import { isFermenterSourcedRun, isSpiritStyleRun, isTankSourcedRun, runTypeLabel, stillChargeSourcePhrase } from '../lib/distillation-run-types';
 import { DISTILLATION_SOURCE_TANK_REQUIRED } from '../lib/distillation-source-tanks';
 import { activeGinBotanicals, ginBotanicalPlaceError, normalizeBotanicalWeightUnit } from '../lib/gin-botanicals';
@@ -2980,6 +2984,27 @@ export function getHoldingTankIntakeHistory(
   entries.sort((a, b) => compareStoredDatesDesc(a.occurred_at, b.occurred_at));
   return entries.slice(0, limit);
 }
+
+const HOLDING_TANK_IN_OUT_ALL: ReportDateRange = {
+  preset: 'all',
+  from: null,
+  to: null,
+  label: 'All',
+};
+
+/** Combined liquid in/out ledger for a holding or collection vessel (process sidebar). */
+export function getHoldingTankInOutHistory(
+  tankId: number,
+  limit = 12,
+) {
+  const tankList = getHoldingTanks().map((t) => ({ id: t.id, name: t.name }));
+  const movements = buildLiquidMovements(HOLDING_TANK_IN_OUT_ALL, { includePlannedBottlings: true });
+  const history = buildTankHistory(movements, tankList, tankId);
+  history.sort((a, b) => compareStoredDatesDesc(a.occurred_at, b.occurred_at));
+  return history.slice(0, limit).map(mapTankHistoryToInOutEntry);
+}
+
+export { holdingTankInOutKey } from '../lib/holding-tank-in-out-history';
 
 function tankLotsOnHand(tankId: number, asOf: string | null): { ins: TankLot[]; outs: TankWithdrawal[] } {
   const within = (at: string) => asOf == null || intakeAtOrBefore(at, asOf);

@@ -1189,9 +1189,31 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Intake history embedded in process sidebar (light surface) */
+/* In/out history embedded in process sidebar (light surface) */
 .process-sidebar .tank-intake-history-title {
   color: #334155;
+}
+
+.process-sidebar .tank-in-out-badge {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  vertical-align: 0.05em;
+  margin-right: 0.15rem;
+}
+
+.process-sidebar .tank-in-out-badge--in {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.process-sidebar .tank-in-out-badge--out {
+  background: #ffedd5;
+  color: #9a3412;
 }
 
 .process-sidebar .tank-intake-history-item {
