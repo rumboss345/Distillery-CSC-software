@@ -1,4 +1,4 @@
-import { queryOne } from '../db/database';
+import { queryOne } from '../db/sql-session';
 import { formatCalendarDay, formatRecordedAt } from './date-input';
 import { proofFromAbv } from '../services/spirit-gauging';
 import type { HoldingTankInOutEntry } from '../types';

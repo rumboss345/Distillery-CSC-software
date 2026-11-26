@@ -1,4 +1,4 @@
-import { queryAll } from '../../db/database';
+import { queryAll } from '../../db/sql-session';
 import { compareStoredDatesDesc } from '../date-input';
 import { runTypeLabel } from '../distillation-run-types';
 import { laaGalFromVolumeAbv } from './alcohol-units';
