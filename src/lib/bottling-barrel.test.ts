@@ -34,8 +34,9 @@ describe('barrel bottling volume', () => {
     expect(barrelStatusAfterVolume(0.5)).toBe('aging');
   });
 
-  it('resets fill date after solera only when the barrel was empty', () => {
-    expect(barrelFillDateAfterSoleraTop(0, '2020-01-01')).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-    expect(barrelFillDateAfterSoleraTop(10, '2020-01-01')).toBe('2020-01-01');
+  it('uses pulled spirit average fill date when the barrel was empty', () => {
+    const asOf = new Date('2026-06-01T12:00:00');
+    expect(barrelFillDateAfterSoleraTop(0, '2020-01-01', 8, '2019-06-01', asOf)).toBe('2019-06-01');
+    expect(barrelFillDateAfterSoleraTop(10, '2020-01-01', 8, '2019-06-01', asOf)).toBe('2019-09-28');
   });
 });

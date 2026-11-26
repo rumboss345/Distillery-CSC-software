@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { volumeWeightedAverageFillDate } from '../lib/barrel-age';
 import { gallonsRestoredToEmptiedBarrel, sortBarrelsForBlendPicker } from '../lib/barrel-blending';
 import {
   barrelBlendSpiritChargeForExecution,
@@ -5966,7 +5967,11 @@ export function getBarrelsForSoleraRefill(): Barrel[] {
   );
 }
 
-function applyBarrelSoleraReturns(returns: readonly BarrelSoleraReturn[], batchNumber: string): void {
+function applyBarrelSoleraReturns(
+  returns: readonly BarrelSoleraReturn[],
+  batchNumber: string,
+  pulledSpiritAverageFillDate: string | null,
+): void {
   for (const row of returns) {
     if (!(row.barrel_id > 0) || !(row.volume_gal > 0)) continue;
     const barrel = queryOne<{
@@ -5995,7 +6000,12 @@ function applyBarrelSoleraReturns(returns: readonly BarrelSoleraReturn[], batchN
       : (
         (barrel.current_volume_gal * barrel.initial_abv + row.volume_gal * row.abv) / nextVol
       );
-    const nextFillDate = barrelFillDateAfterSoleraTop(barrel.current_volume_gal, barrel.fill_date);
+    const nextFillDate = barrelFillDateAfterSoleraTop(
+      barrel.current_volume_gal,
+      barrel.fill_date,
+      row.volume_gal,
+      pulledSpiritAverageFillDate,
+    );
     runQuery(
       'UPDATE barrels SET current_volume_gal = ?, initial_abv = ?, status = ?, fill_date = ? WHERE id = ?',
       [nextVol, nextAbv, 'aging', nextFillDate, row.barrel_id],
@@ -7613,6 +7623,19 @@ export function executeBlendProduct(id: number, outputTankId: number): void {
     throw new Error('Finished batch cannot go into a tank you are pulling spirit from.');
   }
 
+  const pullFillSources: { volume_gal: number; fill_date: string }[] = [];
+  for (const source of sources) {
+    if (!source.barrel_id || source.volume_gal <= 0) continue;
+    const pullBarrel = queryOne<{ fill_date: string }>(
+      'SELECT fill_date FROM barrels WHERE id = ?',
+      [source.barrel_id],
+    );
+    if (pullBarrel?.fill_date) {
+      pullFillSources.push({ volume_gal: source.volume_gal, fill_date: pullBarrel.fill_date });
+    }
+  }
+  const pulledSpiritAverageFillDate = volumeWeightedAverageFillDate(pullFillSources);
+
   const emptiedBarrels = new Set<number>();
   for (const source of sources) {
     if (!source.barrel_id || source.volume_gal <= 0 || emptiedBarrels.has(source.barrel_id)) continue;
@@ -7636,7 +7659,7 @@ export function executeBlendProduct(id: number, outputTankId: number): void {
   }
 
   if (solera?.returns?.length) {
-    applyBarrelSoleraReturns(solera.returns, product.batch_number);
+    applyBarrelSoleraReturns(solera.returns, product.batch_number, pulledSpiritAverageFillDate);
   }
 
   for (const deduction of inventoryDeductionsForBlend(ingredients)) {
