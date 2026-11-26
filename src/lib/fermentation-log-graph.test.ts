@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   availableFermentationMeasures,
+  fermentationGraphBrixValue,
   fermentationGraphPoints,
   fermentationGraphSummary,
   fermentationMeasureAxis,
+  graphAxis,
   graphLabelIndexes,
 } from './fermentation-log-graph';
 
@@ -43,12 +45,20 @@ describe('fermentation log graph', () => {
     expect(fermentationGraphSummary(points, 'temperature')).toMatch(/^One reading: 72°F on /);
   });
 
-  it('keeps the Brix axis at zero and includes the ready line', () => {
-    const axis = fermentationMeasureAxis('brix', [16.8, 14.2, 11.6]);
-    expect(axis.min).toBe(0);
-    expect(axis.max).toBeGreaterThanOrEqual(16.8);
-    expect(axis.min).toBeLessThanOrEqual(10);
-    expect(axis.max).toBeGreaterThanOrEqual(10);
+  it('allows negative Brix on the axis and includes the ready line', () => {
+    const axis = fermentationMeasureAxis('brix', [-1.2, 2, 11.6]);
+    expect(axis.min).toBeLessThan(0);
+    expect(axis.max).toBeGreaterThanOrEqual(11.6);
+    expect(axis.ticks.some((tick) => tick < 0)).toBe(true);
+  });
+
+  it('plots specific gravity from stored Brix', () => {
+    const sg = fermentationGraphBrixValue(-1.2, 'gravity');
+    expect(sg).toBeGreaterThan(0.98);
+    expect(sg).toBeLessThan(1);
+    const axis = graphAxis([-1.2, 2].map((brix) => fermentationGraphBrixValue(brix, 'gravity')), { include: [1] });
+    expect(axis.min).toBeLessThan(1);
+    expect(axis.max).toBeGreaterThan(1);
   });
 
   it('zooms temperature instead of starting at zero', () => {

@@ -1,6 +1,14 @@
 import { format } from 'date-fns';
 import { formatRecordedAt, parseStoredDate } from './date-input';
-import { estimateAbvFromBrix, FERMENTATION_READY_MAX_BRIX_DEFAULT } from './fermentation';
+import {
+  brixToSg,
+  estimateAbvFromBrix,
+  FERMENTATION_READY_MAX_BRIX_DEFAULT,
+  formatFermentationReading,
+  type FermentationSugarScale,
+} from './fermentation';
+
+export type FermentationGraphSugarScale = FermentationSugarScale;
 
 export type FermentationGraphMeasure = 'brix' | 'temperature' | 'abv' | 'ph';
 
@@ -83,13 +91,30 @@ export function fermentationGraphSummary(
   return `${startValue} on ${startWhen} to ${endValue} on ${endWhen}.`;
 }
 
-export function formatFermentationGraphValue(measure: FermentationGraphMeasure, value: number): string {
-  const text = trimReading(value);
+export function fermentationGraphBrixValue(
+  brix: number,
+  scale: FermentationGraphSugarScale = 'brix',
+): number {
+  return scale === 'gravity' ? brixToSg(brix) : brix;
+}
+
+export function formatFermentationGraphValue(
+  measure: FermentationGraphMeasure,
+  value: number,
+  options?: { brixScale?: FermentationGraphSugarScale; storedBrix?: number },
+): string {
   switch (measure) {
-    case 'brix': return `${text}° Brix`;
-    case 'temperature': return `${text}°F`;
+    case 'brix': {
+      const brix = options?.storedBrix ?? value;
+      if (options?.brixScale === 'gravity') {
+        return formatFermentationReading('gravity', brix);
+      }
+      const text = trimReading(brix);
+      return `${text}° Brix`;
+    }
+    case 'temperature': return `${trimReading(value)}°F`;
     case 'abv': return `${value.toFixed(1)}% ABV`;
-    case 'ph': return `pH ${text}`;
+    case 'ph': return `pH ${trimReading(value)}`;
   }
 }
 
@@ -99,7 +124,7 @@ export function fermentationMeasureAxis(
   readyMaxBrix: number = FERMENTATION_READY_MAX_BRIX_DEFAULT,
 ): GraphAxis {
   if (measure === 'brix') {
-    return graphAxis(values, { include: [0, readyMaxBrix], floor: 0 });
+    return graphAxis(values, { include: [0, readyMaxBrix] });
   }
   if (measure === 'abv') return graphAxis(values, { include: [0], floor: 0 });
   return graphAxis(values);
