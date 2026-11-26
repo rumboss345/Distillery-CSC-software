@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { barrelAgeParts, formatBarrelAge, formatBarrelAgeForBarrel } from './barrel-age';
+import {
+  barrelAgeParts,
+  barrelFillDateAfterSoleraTop,
+  formatBarrelAge,
+  formatBarrelAgeForBarrel,
+  volumeWeightedAverageFillDate,
+} from './barrel-age';
 
 const TODAY = new Date('2026-11-23T12:00:00');
 
@@ -44,5 +50,31 @@ describe('formatBarrelAgeForBarrel', () => {
       { fill_date: '2024-03-15', status: 'aging', current_volume_gal: 40 },
       TODAY,
     )).toBe('2 years, 8 months, 8 days');
+  });
+});
+
+describe('volumeWeightedAverageFillDate', () => {
+  const asOf = new Date('2026-06-01T12:00:00');
+
+  it('volume-weights calendar age from fill dates', () => {
+    const avg = volumeWeightedAverageFillDate([
+      { volume_gal: 10, fill_date: '2020-06-01' },
+      { volume_gal: 20, fill_date: '2024-06-01' },
+    ], asOf);
+    expect(avg).toBe('2023-01-31');
+  });
+});
+
+describe('barrelFillDateAfterSoleraTop', () => {
+  const asOf = new Date('2026-06-01T12:00:00');
+  const pulledAverage = '2023-01-31';
+
+  it('sets an empty solera barrel to the pulled spirit average age', () => {
+    expect(barrelFillDateAfterSoleraTop(0, '2010-01-01', 12, pulledAverage, asOf)).toBe(pulledAverage);
+  });
+
+  it('blends age when topping a barrel that still has volume', () => {
+    const blended = barrelFillDateAfterSoleraTop(40, '2020-06-01', 20, pulledAverage, asOf);
+    expect(blended).toBe('2021-04-22');
   });
 });

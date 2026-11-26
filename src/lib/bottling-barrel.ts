@@ -43,9 +43,4 @@ export function barrelFillDateWhenEmptied(): string {
   return localIsoDate();
 }
 
-export function barrelFillDateAfterSoleraTop(
-  volumeBeforeGal: number,
-  existingFillDate: string,
-): string {
-  return volumeBeforeGal <= 0.01 ? barrelFillDateWhenEmptied() : existingFillDate;
-}
+export { barrelFillDateAfterSoleraTop } from './barrel-age';

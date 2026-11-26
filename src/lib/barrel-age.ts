@@ -1,5 +1,6 @@
-import { intervalToDuration, parseISO } from 'date-fns';
+import { differenceInCalendarDays, format, intervalToDuration, parseISO, subDays } from 'date-fns';
 import { isIsoDate } from './date-input';
+import { localIsoDate } from './planned-event-date';
 
 export type BarrelAgeParts = {
   years: number;
@@ -54,4 +55,63 @@ export function barrelIsAgingForAge(barrel: BarrelAgeBarrel): boolean {
 export function formatBarrelAgeForBarrel(barrel: BarrelAgeBarrel, today?: Date): string {
   if (!barrelIsAgingForAge(barrel)) return '0 days';
   return formatBarrelAge(barrel.fill_date, today) ?? '0 days';
+}
+
+export type VolumeWeightedFillSource = {
+  volume_gal: number;
+  fill_date: string;
+};
+
+function calendarAgeDays(fillDate: string, asOfIso: string): number {
+  if (!isIsoDate(fillDate) || !isIsoDate(asOfIso)) return 0;
+  return Math.max(0, differenceInCalendarDays(parseISO(asOfIso), parseISO(fillDate)));
+}
+
+function fillDateFromAgeDays(ageDays: number, asOfIso: string): string {
+  if (!isIsoDate(asOfIso)) return asOfIso;
+  return format(subDays(parseISO(asOfIso), Math.round(ageDays)), 'yyyy-MM-dd');
+}
+
+/** Volume-weighted average aging time expressed as a synthetic fill date. */
+export function volumeWeightedAverageFillDate(
+  sources: readonly VolumeWeightedFillSource[],
+  asOf: Date = new Date(),
+): string | null {
+  const asOfIso = localIsoDate(asOf);
+  let totalVol = 0;
+  let weightedAgeDays = 0;
+  for (const row of sources) {
+    if (!(row.volume_gal > 0) || !isIsoDate(row.fill_date)) continue;
+    weightedAgeDays += row.volume_gal * calendarAgeDays(row.fill_date, asOfIso);
+    totalVol += row.volume_gal;
+  }
+  if (!(totalVol > 0)) return null;
+  return fillDateFromAgeDays(weightedAgeDays / totalVol, asOfIso);
+}
+
+/** After a solera top, carry volume-weighted spirit age (pull barrels) into the receiving barrel. */
+export function barrelFillDateAfterSoleraTop(
+  volumeBeforeGal: number,
+  existingFillDate: string,
+  topVolumeGal: number,
+  pulledSpiritAverageFillDate: string | null,
+  asOf: Date = new Date(),
+): string {
+  const asOfIso = localIsoDate(asOf);
+  const incomingFill = pulledSpiritAverageFillDate && isIsoDate(pulledSpiritAverageFillDate)
+    ? pulledSpiritAverageFillDate
+    : asOfIso;
+
+  if (volumeBeforeGal <= 0.01) {
+    return incomingFill;
+  }
+  if (!(topVolumeGal > 0)) {
+    return isIsoDate(existingFillDate) ? existingFillDate : asOfIso;
+  }
+
+  const nextVol = volumeBeforeGal + topVolumeGal;
+  const existingAge = calendarAgeDays(existingFillDate, asOfIso);
+  const incomingAge = calendarAgeDays(incomingFill, asOfIso);
+  const blendedAgeDays = (volumeBeforeGal * existingAge + topVolumeGal * incomingAge) / nextVol;
+  return fillDateFromAgeDays(blendedAgeDays, asOfIso);
 }
