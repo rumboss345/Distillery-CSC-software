@@ -27,7 +27,8 @@ import {
   getDashboardThresholds,
   saveDashboardThresholds,
 } from '../db/queries';
-import { parseFermentationReadyMaxBrix } from '../lib/fermentation';
+import { formatFermentationReading, parseFermentationReadyMaxBrix } from '../lib/fermentation';
+import { SugarScaleField } from '../components/SugarScaleField';
 import { useAuth } from '../context/AuthContext';
 import { formatRecordedAt } from '../lib/date-input';
 import {
@@ -95,7 +96,8 @@ export function AdminUsers() {
   const [editName, setEditName] = useState('');
   const [editPassword, setEditPassword] = useState('');
   const [editRole, setEditRole] = useState<'manager' | 'user'>('user');
-  const [fermentationReadyBrixInput, setFermentationReadyBrixInput] = useState('');
+  const [fermentationReadyBrix, setFermentationReadyBrix] = useState<number | null>(null);
+  const [fermentationReadyBrixError, setFermentationReadyBrixError] = useState<string | null>(null);
   const [productionSettingsNote, setProductionSettingsNote] = useState('');
   const [thresholdInputs, setThresholdInputs] = useState<Record<keyof DashboardThresholds, string>>(
     () => thresholdsToInputs(DEFAULT_DASHBOARD_THRESHOLDS),
@@ -109,7 +111,7 @@ export function AdminUsers() {
       const [usersRes, pendingRes] = await Promise.all([fetchAllUsers(), fetchPendingUsers()]);
       setAllUsers(usersRes.users);
       setPending(pendingRes.users);
-      setFermentationReadyBrixInput(String(getFermentationReadyMaxBrix()));
+      setFermentationReadyBrix(getFermentationReadyMaxBrix());
       setThresholdInputs(thresholdsToInputs(getDashboardThresholds()));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load users');
@@ -397,17 +399,18 @@ export function AdminUsers() {
 
   function handleSaveFermentationReadyBrix() {
     setProductionSettingsNote('');
-    const trimmed = fermentationReadyBrixInput.trim();
-    const parsed = Number(trimmed);
-    if (!trimmed || !Number.isFinite(parsed) || parsed <= 0 || parsed > 30) {
-      window.alert('Enter a Brix value between 0.1 and 30.');
+    if (fermentationReadyBrix == null || fermentationReadyBrixError) {
+      window.alert(fermentationReadyBrixError ?? 'Enter Brix or specific gravity before still charge.');
       return;
     }
-    const saved = parseFermentationReadyMaxBrix(parsed);
+    const saved = parseFermentationReadyMaxBrix(fermentationReadyBrix);
     try {
       saveFermentationReadyMaxBrix(saved);
-      setFermentationReadyBrixInput(String(saved));
-      setProductionSettingsNote(`Recommended ending fermentation Brix set to ${saved}° for everyone signed in.`);
+      setFermentationReadyBrix(saved);
+      setProductionSettingsNote(
+        `Ready to charge when the latest fermentation log is below ${saved.toFixed(1)}° Brix `
+        + `(SG ${formatFermentationReading('gravity', saved)}).`,
+      );
     } catch (err) {
       window.alert(err instanceof Error ? err.message : 'Could not save the fermentation Brix setting.');
     }
@@ -580,9 +583,10 @@ export function AdminUsers() {
 
       <div className="card admin-section" data-testid="admin-production-settings">
         <h2 className="admin-section-title">Production settings</h2>
-        <h3 className="admin-subtitle">Recommended ending fermentation Brix</h3>
+        <h3 className="admin-subtitle">Before still charge</h3>
         <p className="admin-hint">
-          Distillation and the process view treat fermentations as ready to charge when the latest log is below this Brix. The fermentation graph uses the same line.
+          Distillation and the process view treat fermentations as ready to charge when the latest log is below this
+          reading (including negative Brix or finished gravities below 1.000). The fermentation graph uses the same line.
         </p>
         <form
           className="admin-form"
@@ -591,26 +595,20 @@ export function AdminUsers() {
             handleSaveFermentationReadyBrix();
           }}
         >
-          <div className="form-row">
-            <label htmlFor="fermentation-ready-max-brix">
-              Brix before still charge
-              <input
-                id="fermentation-ready-max-brix"
-                type="number"
-                min={0.1}
-                max={30}
-                step={0.1}
-                required
-                value={fermentationReadyBrixInput}
-                onChange={(e) => setFermentationReadyBrixInput(e.target.value)}
-                data-testid="fermentation-ready-max-brix"
-              />
-            </label>
-          </div>
+          <SugarScaleField
+            inputId="fermentation-ready-max-brix"
+            label="Brix or specific gravity before still charge"
+            brix={fermentationReadyBrix}
+            onBrix={setFermentationReadyBrix}
+            onError={setFermentationReadyBrixError}
+            required
+            hint="Enter Brix or switch to Specific Gravity. Saved as Brix for charge-ready checks."
+          />
           <button
             type="submit"
             className="btn btn-primary"
             data-testid="save-fermentation-ready-brix"
+            disabled={fermentationReadyBrix == null || !!fermentationReadyBrixError}
           >
             Save
           </button>

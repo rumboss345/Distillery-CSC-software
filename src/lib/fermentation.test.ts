@@ -89,7 +89,9 @@ describe('fermentation readiness', () => {
   it('parses admin Brix settings with bounds', () => {
     expect(parseFermentationReadyMaxBrix('4.25')).toBe(4.3);
     expect(parseFermentationReadyMaxBrix(99)).toBe(5);
-    expect(parseFermentationReadyMaxBrix(-1)).toBe(5);
+    expect(parseFermentationReadyMaxBrix(-1)).toBe(-1);
+    expect(parseFermentationReadyMaxBrix(-6)).toBe(-6);
+    expect(isBrixReadyForDistillation(-1.2, -1)).toBe(true);
   });
 });
 
