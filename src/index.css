@@ -2829,8 +2829,13 @@ td.num .gin-botanicals-summary {
 .fermentation-graph-measures {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 0.4rem;
   margin-bottom: 0.5rem;
+}
+
+.fermentation-graph-sugar-scale {
+  margin-left: auto;
 }
 
 .fermentation-graph-summary {

@@ -3,14 +3,18 @@ import {
   FERMENTATION_GRAPH_MEASURES,
   availableFermentationMeasures,
   fermentationAxisLabel,
+  fermentationGraphBrixValue,
   fermentationGraphPoints,
   fermentationGraphSummary,
   fermentationMeasureAxis,
   formatFermentationGraphValue,
+  graphAxis,
   graphLabelIndexes,
   type FermentationGraphMeasure,
+  type FermentationGraphSugarScale,
   type FermentationLogReading,
 } from '../lib/fermentation-log-graph';
+import { brixToSg } from '../lib/fermentation';
 import { formatRecordedAt } from '../lib/date-input';
 import { getFermentationReadyMaxBrix, useRefreshKey } from '../db/queries';
 
@@ -34,13 +38,26 @@ export function FermentationLogGraph({
   const points = fermentationGraphPoints(logs, startBrix);
   const measures = availableFermentationMeasures(points);
   const [measure, setMeasure] = useState<FermentationGraphMeasure>('brix');
+  const [brixScale, setBrixScale] = useState<FermentationGraphSugarScale>('brix');
   const selected = measures.includes(measure) ? measure : measures[0];
 
   if (!selected) return null;
 
   const summary = fermentationGraphSummary(points, selected);
-  const values = points.flatMap((point) => (point[selected] != null ? [point[selected] as number] : []));
-  const axis = fermentationMeasureAxis(selected, values, readyMaxBrix);
+  const plotValue = (point: (typeof points)[number]): number | null => {
+    if (selected !== 'brix') return point[selected] as number | null;
+    return point.brix != null ? fermentationGraphBrixValue(point.brix, brixScale) : null;
+  };
+  const values = points.flatMap((point) => {
+    const value = plotValue(point);
+    return value != null ? [value] : [];
+  });
+  const axisInclude = selected === 'brix'
+    ? (brixScale === 'gravity' ? [brixToSg(readyMaxBrix), 1] : [readyMaxBrix, 0])
+    : undefined;
+  const axis = selected === 'brix'
+    ? graphAxis(values, { include: axisInclude })
+    : fermentationMeasureAxis(selected, values, readyMaxBrix);
   const span = values.length > 0
     ? Math.max(...points.map((point) => point.timeMs)) - Math.min(...points.map((point) => point.timeMs))
     : 0;
@@ -67,7 +84,7 @@ export function FermentationLogGraph({
   const positioned = points.map((point, index) => ({
     ...point,
     x: xFor(index),
-    value: point[selected],
+    value: plotValue(point),
   }));
   const labelIndexes = new Set(graphLabelIndexes(positioned.length));
   const segments: string[] = [];
@@ -82,10 +99,19 @@ export function FermentationLogGraph({
   }
   if (segment.length > 0) segments.push(segment.join(' '));
 
+  const readyPlotValue = selected === 'brix'
+    ? (brixScale === 'gravity' ? brixToSg(readyMaxBrix) : readyMaxBrix)
+    : null;
   const showReady = selected === 'brix'
-    && readyMaxBrix >= axis.min
-    && readyMaxBrix <= axis.max;
-  const readyY = showReady ? yFor(readyMaxBrix) : 0;
+    && readyPlotValue != null
+    && readyPlotValue >= axis.min
+    && readyPlotValue <= axis.max;
+  const readyY = showReady && readyPlotValue != null ? yFor(readyPlotValue) : 0;
+  const readyLabel = selected === 'brix'
+    ? (brixScale === 'gravity'
+      ? `Below SG ${brixToSg(readyMaxBrix).toFixed(3)}`
+      : `Below ${readyMaxBrix}°`)
+    : '';
 
   return (
     <div className="fermentation-log-graph" data-testid="fermentation-log-graph">
@@ -101,6 +127,26 @@ export function FermentationLogGraph({
             {item.label}
           </button>
         ))}
+        {selected === 'brix' && (
+          <div className="measure-mode-buttons sugar-scale-buttons fermentation-graph-sugar-scale">
+            <button
+              type="button"
+              className={`btn btn-sm ${brixScale === 'brix' ? 'btn-primary' : 'btn-secondary'}`}
+              aria-pressed={brixScale === 'brix'}
+              onClick={() => setBrixScale('brix')}
+            >
+              Brix
+            </button>
+            <button
+              type="button"
+              className={`btn btn-sm ${brixScale === 'gravity' ? 'btn-primary' : 'btn-secondary'}`}
+              aria-pressed={brixScale === 'gravity'}
+              onClick={() => setBrixScale('gravity')}
+            >
+              Specific Gravity
+            </button>
+          </div>
+        )}
       </div>
       <p className="fermentation-graph-summary">{summary}</p>
       <svg
@@ -127,7 +173,7 @@ export function FermentationLogGraph({
                 dominantBaseline="middle"
                 className="fermentation-graph-axis"
               >
-                {formatTick(tick)}
+                {formatTick(tick, selected, brixScale)}
               </text>
             </g>
           );
@@ -147,7 +193,7 @@ export function FermentationLogGraph({
               textAnchor="start"
               className="fermentation-graph-ready-label"
             >
-              {`Below ${readyMaxBrix}°`}
+              {readyLabel}
             </text>
           </g>
         )}
@@ -163,7 +209,7 @@ export function FermentationLogGraph({
               r={4.5}
               className="fermentation-graph-point"
             >
-              <title>{`${formatRecordedAt(point.loggedAt)} · ${formatFermentationGraphValue(selected, point.value)}`}</title>
+              <title>{`${formatRecordedAt(point.loggedAt)} · ${formatFermentationGraphValue(selected, point.value, { brixScale, storedBrix: point.brix ?? undefined })}`}</title>
             </circle>
           )
         ))}
@@ -185,7 +231,14 @@ export function FermentationLogGraph({
   );
 }
 
-function formatTick(value: number): string {
+function formatTick(
+  value: number,
+  measure: FermentationGraphMeasure,
+  brixScale: FermentationGraphSugarScale,
+): string {
+  if (measure === 'brix' && brixScale === 'gravity') {
+    return value.toFixed(3);
+  }
   const rounded = Math.round(value * 10) / 10;
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 }
