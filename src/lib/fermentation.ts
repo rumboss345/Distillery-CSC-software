@@ -87,7 +87,9 @@ export const FERMENTER_LIQUID_GREEN_BELOW_BRIX = FERMENTATION_READY_MAX_BRIX_DEF
 
 export function parseFermentationReadyMaxBrix(value: unknown): number {
   const n = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(n) || n <= 0 || n > 30) return FERMENTATION_READY_MAX_BRIX_DEFAULT;
+  if (!Number.isFinite(n) || n < FERMENTATION_BRIX_MIN || n > FERMENTATION_BRIX_MAX) {
+    return FERMENTATION_READY_MAX_BRIX_DEFAULT;
+  }
   return Math.round(n * 10) / 10;
 }
 

@@ -59,6 +59,7 @@ export function SugarScaleField({
       <label htmlFor={inputId}>{label}{required ? ' *' : ''}</label>
       <input
         id={inputId}
+        data-testid={inputId}
         value={text}
         inputMode="decimal"
         placeholder={scale === 'gravity' ? '1.050' : '12.0'}
