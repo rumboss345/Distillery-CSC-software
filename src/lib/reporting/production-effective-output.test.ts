@@ -14,9 +14,6 @@ const emptyPipeline: PipelineAlcoholAdjustmentsSummary = {
   bottlingAlcoholVarianceGal: 0,
   bottlingAlcoholLossGal: 0,
   bottlingAlcoholGainGal: 0,
-  stillChargeSourceAlcoholVarianceGal: 0,
-  stillChargeSourceAlcoholLossGal: 0,
-  stillChargeSourceAlcoholGainGal: 0,
 };
 
 function delivered(laaGal: number, volumeGal = 25): DeliveredBottlingOutputSummary {

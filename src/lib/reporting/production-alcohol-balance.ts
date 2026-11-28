@@ -12,9 +12,6 @@ export interface ProductionAlcoholBalanceSummary {
   /** Signed pure-alcohol gallons from bottling variance. */
   bottlingAlcoholVarianceGal: number;
   bottlingRunsWithVariance: number;
-  /** Tank book vs measured spirit at still charge (positive = gain). */
-  stillChargeSourceAlcoholVarianceGal: number;
-  stillChargeRunsWithVariance: number;
 }
 
 export function summarizeProductionAlcoholBalance(
@@ -46,15 +43,6 @@ export function summarizeProductionAlcoholBalance(
     bottlingRunsWithVariance += 1;
   }
 
-  let stillChargeSourceAlcoholVarianceGal = 0;
-  let stillChargeRunsWithVariance = 0;
-  for (const row of buildDistillationReportRows(range)) {
-    if (row.charge_source_alcohol_variance_gal == null) continue;
-    if (Math.abs(row.charge_source_alcohol_variance_gal) < 0.005) continue;
-    stillChargeSourceAlcoholVarianceGal += row.charge_source_alcohol_variance_gal;
-    stillChargeRunsWithVariance += 1;
-  }
-
   return {
     distillationNetAlcoholGal: roundAlcohol(distillationNetAlcoholGal),
     distillationChargedGal: roundAlcohol(distillationChargedGal),
@@ -62,8 +50,6 @@ export function summarizeProductionAlcoholBalance(
     distillationRunsWithBalance,
     bottlingAlcoholVarianceGal: roundAlcohol(bottlingAlcoholVarianceGal),
     bottlingRunsWithVariance,
-    stillChargeSourceAlcoholVarianceGal: roundAlcohol(stillChargeSourceAlcoholVarianceGal),
-    stillChargeRunsWithVariance,
   };
 }
 
@@ -87,11 +73,4 @@ export function formatBottlingAlcoholVariance(gal: number): string {
   if (!(abs >= 0.005)) return '';
   if (gal > 0) return `Bottling alcohol loss ${abs.toFixed(2)} gal LAA`;
   return `Bottling alcohol gain ${abs.toFixed(2)} gal LAA`;
-}
-
-export function formatStillChargeSourceAlcoholVariance(gal: number): string {
-  const abs = Math.abs(gal);
-  if (!(abs >= 0.005)) return '';
-  if (gal > 0) return `Still charge vs tank book: gain ${abs.toFixed(2)} gal LAA`;
-  return `Still charge vs tank book: loss ${abs.toFixed(2)} gal LAA`;
 }

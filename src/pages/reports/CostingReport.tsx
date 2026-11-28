@@ -14,7 +14,6 @@ import { isOwnerRole } from '../../lib/roles';
 import { buildProductionCostReport } from '../../lib/reporting/production-costing';
 import {
   formatBottlingAlcoholVariance,
-  formatStillChargeSourceAlcoholVariance,
   formatNetAlcoholLossGain,
 } from '../../lib/reporting/production-alcohol-balance';
 import { useReportContext } from './report-context';
@@ -681,19 +680,6 @@ export function CostingReport() {
                 <dd>{formatNetAlcoholLossGain(summary.productionAlcoholBalance.distillationNetAlcoholGal)}</dd>
               </div>
               <div>
-                <dt>Still charge vs tank</dt>
-                <dd>
-                  {formatStillChargeSourceAlcoholVariance(
-                    summary.productionAlcoholBalance.stillChargeSourceAlcoholVarianceGal,
-                  ) || 'No variance in period'}
-                  {summary.productionAlcoholBalance.stillChargeRunsWithVariance > 0
-                    ? ` (${summary.productionAlcoholBalance.stillChargeRunsWithVariance} run${
-                      summary.productionAlcoholBalance.stillChargeRunsWithVariance === 1 ? '' : 's'
-                    })`
-                    : ''}
-                </dd>
-              </div>
-              <div>
                 <dt>Bottling</dt>
                 <dd>
                   {formatBottlingAlcoholVariance(summary.productionAlcoholBalance.bottlingAlcoholVarianceGal)
@@ -797,14 +783,6 @@ export function CostingReport() {
                         : null,
                     ].filter(Boolean).join(' · ')
                     : 'No measurable spirit change'}
-                </dd>
-              </div>
-              <div>
-                <dt>Still charge vs tank</dt>
-                <dd>
-                  {formatStillChargeSourceAlcoholVariance(
-                    summary.deliveredOutput.pipeline.stillChargeSourceAlcoholVarianceGal,
-                  ) || 'No variance in period'}
                 </dd>
               </div>
               <div>
