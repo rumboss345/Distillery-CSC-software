@@ -55,7 +55,6 @@ function roundMoney(value: number): number {
 }
 
 function blendIngredientCategory(ingredient: BlendIngredient): string {
-  if (ingredient.inventory_category?.trim()) return ingredient.inventory_category.trim();
   if (ingredient.ingredient_type === 'sugar') return 'sugar';
   if (ingredient.ingredient_type === 'color') return 'color';
   if (ingredient.ingredient_type === 'syrup') return 'syrup';
