@@ -39,6 +39,10 @@ function laaLiters(value: number, digits = 2): string {
   return `${num(value, digits)} L LAA`;
 }
 
+function liquidLiters(value: number, digits = 1): string {
+  return `${num(value, digits)} L`;
+}
+
 type CostSpendDrillDownKey = keyof ProductionCostSpendBreakdowns;
 
 function CostingSpendLines({
@@ -675,6 +679,107 @@ export function CostingReport() {
                       summary.productionAlcoholBalance.bottlingRunsWithVariance === 1 ? '' : 's'
                     })`
                     : ''}
+                </dd>
+              </div>
+            </dl>
+          </div>
+        </div>
+      </section>
+
+      <section
+        className="costing-report-section costing-report-section--full"
+        data-testid="costing-delivered-after-losses"
+      >
+        <h3 className="section-title costing-section-title">True cost on delivered bottling</h3>
+        <p className="field-hint costing-section-lead">
+          Same all-in period spend as full production cost, divided by liquid and pure alcohol that actually shipped in
+          finished bottles. Accountable LAA starts from hearts in the period and subtracts distillation, blending, and
+          bottling loss (and adds recorded gain) so the rate reflects alcohol that actually made it through the pipeline.
+        </p>
+        <div className="costing-full-rates">
+          <div className="costing-rate-block">
+            <div className="costing-rate-label">Per litre shipped (liquid)</div>
+            <div className="costing-rate-value accent">{money(summary.costPerDeliveredLiquidLiter)}</div>
+            <p className="field-hint">
+              {summary.deliveredOutput.delivered.shippedVolumeLiters > 0
+                ? liquidLiters(summary.deliveredOutput.delivered.shippedVolumeLiters)
+                : 'No finished bottling in period'}
+            </p>
+          </div>
+          <div className="costing-rate-block">
+            <div className="costing-rate-label">Per LAA in bottles</div>
+            <div className="costing-rate-value">{money(summary.costPerShippedLaaLiter)}</div>
+            <p className="field-hint">
+              {summary.deliveredOutput.delivered.shippedLaaLiters > 0
+                ? laaLiters(summary.deliveredOutput.delivered.shippedLaaLiters)
+                : '—'}
+            </p>
+          </div>
+          <div className="costing-rate-block">
+            <div className="costing-rate-label">Per LAA after losses &amp; gains</div>
+            <div className="costing-rate-value">{money(summary.costPerAccountableLaaLiter)}</div>
+            <p className="field-hint">
+              {summary.deliveredOutput.accountableLaaLiters > 0
+                ? laaLiters(summary.deliveredOutput.accountableLaaLiters)
+                : '—'}
+            </p>
+          </div>
+          <div className="costing-rate-block">
+            <div className="costing-rate-label">Per litre at 40% ABV (accountable)</div>
+            <div className="costing-rate-value">{money(summary.costPerAccountableLiterAt40Abv)}</div>
+            <p className="field-hint">
+              {summary.deliveredOutput.proofedLitersAt40Abv > 0
+                ? liquidLiters(summary.deliveredOutput.proofedLitersAt40Abv)
+                : '—'}
+            </p>
+          </div>
+        </div>
+        <div className="costing-summary-columns">
+          <div>
+            <h4 className="costing-block-title">Shipped in period</h4>
+            <dl className="costing-balance-lines">
+              <div>
+                <dt>Finished bottling runs</dt>
+                <dd>{summary.deliveredOutput.delivered.bottledRunCount}</dd>
+              </div>
+              <div>
+                <dt>Bottled liquid</dt>
+                <dd>{liquidLiters(summary.deliveredOutput.delivered.shippedVolumeLiters)}</dd>
+              </div>
+              <div>
+                <dt>Alcohol in bottles</dt>
+                <dd>{laaLiters(summary.deliveredOutput.delivered.shippedLaaLiters)}</dd>
+              </div>
+            </dl>
+          </div>
+          <div>
+            <h4 className="costing-block-title">Pipeline adjustments (gal LAA)</h4>
+            <dl className="costing-balance-lines">
+              <div>
+                <dt>Distillation</dt>
+                <dd>{formatNetAlcoholLossGain(summary.deliveredOutput.pipeline.distillationNetAlcoholGal)}</dd>
+              </div>
+              <div>
+                <dt>Blending</dt>
+                <dd>
+                  {summary.deliveredOutput.pipeline.blendAlcoholLossGal > 0
+                    || summary.deliveredOutput.pipeline.blendAlcoholGainGal > 0
+                    ? [
+                      summary.deliveredOutput.pipeline.blendAlcoholLossGal > 0
+                        ? `Loss ${num(summary.deliveredOutput.pipeline.blendAlcoholLossGal, 2)}`
+                        : null,
+                      summary.deliveredOutput.pipeline.blendAlcoholGainGal > 0
+                        ? `Gain ${num(summary.deliveredOutput.pipeline.blendAlcoholGainGal, 2)}`
+                        : null,
+                    ].filter(Boolean).join(' · ')
+                    : 'No measurable spirit change'}
+                </dd>
+              </div>
+              <div>
+                <dt>Bottling</dt>
+                <dd>
+                  {formatBottlingAlcoholVariance(summary.deliveredOutput.pipeline.bottlingAlcoholVarianceGal)
+                    || 'No variance in period'}
                 </dd>
               </div>
             </dl>

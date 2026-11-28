@@ -30,6 +30,10 @@ import {
   summarizeProductionAlcoholBalance,
   type ProductionAlcoholBalanceSummary,
 } from './production-alcohol-balance';
+import {
+  summarizeEffectiveDeliveredOutput,
+  type EffectiveDeliveredOutputSummary,
+} from './production-effective-output';
 import { eventInReportRange, type ReportDateRange } from './period';
 
 const STANDARD_BOTTLE_ABV = 40;
@@ -64,6 +68,19 @@ export interface ProductionCostSummary {
   totalWashPipelineCost: number;
   avgDistillationYieldPct: number | null;
   avgFermentBrixDrop: number | null;
+  /** Finished bottling in the period (liquid in packages). */
+  deliveredOutput: EffectiveDeliveredOutputSummary;
+  /** All-in spend per litre in shipped bottles (liquid volume at fill ABV). */
+  costPerDeliveredLiquidLiter: number | null;
+  /** All-in spend per LAA in shipped bottles (no pipeline loss add-back). */
+  costPerShippedLaaLiter: number | null;
+  /**
+   * All-in spend per LAA after distillation, blending, and bottling loss/gain
+   * are folded into the accountable alcohol base (phase-one true cost).
+   */
+  costPerAccountableLaaLiter: number | null;
+  /** Same accountable base expressed as proof litres at 40% ABV. */
+  costPerAccountableLiterAt40Abv: number | null;
 }
 
 export interface WashBatchCostRow {
@@ -758,6 +775,25 @@ export function buildProductionCostReport(
     );
   }
 
+  const deliveredOutput = summarizeEffectiveDeliveredOutput(range, totalGpa);
+  const costPerDeliveredLiquidLiter = deliveredOutput.delivered.shippedVolumeLiters > 0 && fullProductionSpend > 0
+    ? roundMoney(fullProductionSpend / deliveredOutput.delivered.shippedVolumeLiters)
+    : null;
+  const costPerShippedLaaLiter = deliveredOutput.delivered.shippedLaaLiters > 0 && fullProductionSpend > 0
+    ? roundMoney(fullProductionSpend / deliveredOutput.delivered.shippedLaaLiters)
+    : null;
+  const costPerAccountableLaaLiter = deliveredOutput.accountableLaaLiters > 0 && fullProductionSpend > 0
+    ? roundMoney(fullProductionSpend / deliveredOutput.accountableLaaLiters)
+    : null;
+  const costPerAccountableLiterAt40Abv = deliveredOutput.proofedLitersAt40Abv > 0 && fullProductionSpend > 0
+    ? roundMoney(fullProductionSpend / deliveredOutput.proofedLitersAt40Abv)
+    : null;
+  if (fullProductionSpend > 0 && deliveredOutput.delivered.bottledRunCount === 0) {
+    warnings.push(
+      'Record finished bottling runs in this period to calculate true cost per litre on delivered product.',
+    );
+  }
+
   const withYield = washBatches.filter((row) => row.yieldPercent > 0);
   const avgDistillationYieldPct = withYield.length > 0
     ? roundMoney(withYield.reduce((s, row) => s + row.yieldPercent, 0) / withYield.length)
@@ -797,6 +833,11 @@ export function buildProductionCostReport(
       totalWashPipelineCost: roundMoney(totalWashDryMaterial + processWaterCost),
       avgDistillationYieldPct,
       avgFermentBrixDrop,
+      deliveredOutput,
+      costPerDeliveredLiquidLiter,
+      costPerShippedLaaLiter,
+      costPerAccountableLaaLiter,
+      costPerAccountableLiterAt40Abv,
     },
     washBatches,
     bottlingRuns,

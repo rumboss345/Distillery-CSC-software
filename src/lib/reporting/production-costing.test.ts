@@ -13,7 +13,10 @@ describe('buildProductionCostReport', () => {
     expect(report.summary.totalMonthlyOverheadCost).toBe(0);
     expect(report.summary.totalWashPipelineCost).toBe(0);
     expect(report.summary.costPerLaaLiterFullProduction).toBeNull();
+    expect(report.summary.costPerDeliveredLiquidLiter).toBeNull();
+    expect(report.summary.costPerAccountableLaaLiter).toBeNull();
     expect(report.summary.alcoholCollectedLaaLiters).toBe(0);
+    expect(report.summary.deliveredOutput.delivered.bottledRunCount).toBe(0);
     expect(report.washBatches).toEqual([]);
     expect(report.bottlingRuns).toEqual([]);
     expect(report.spendBreakdowns.materials).toEqual([]);
