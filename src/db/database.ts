@@ -1951,6 +1951,7 @@ function migrateDistillationAlcoholLossColumns(): void {
   addColumnIfMissing('distillation_runs', 'alcohol_collected_gal', 'REAL');
   addColumnIfMissing('distillation_runs', 'alcohol_loss_gal', 'REAL');
   addColumnIfMissing('distillation_runs', 'alcohol_charge_basis', 'TEXT');
+  addColumnIfMissing('distillation_runs', 'charge_source_alcohol_variance_gal', 'REAL');
 }
 
 /** Bottled-product ABV check and the operator on the run. Existing runs stay blank. */

@@ -25,6 +25,9 @@ export interface PipelineAlcoholAdjustmentsSummary {
   bottlingAlcoholVarianceGal: number;
   bottlingAlcoholLossGal: number;
   bottlingAlcoholGainGal: number;
+  stillChargeSourceAlcoholVarianceGal: number;
+  stillChargeSourceAlcoholLossGal: number;
+  stillChargeSourceAlcoholGainGal: number;
 }
 
 export interface EffectiveDeliveredOutputSummary {
@@ -83,6 +86,14 @@ export function summarizePipelineAlcoholAdjustments(range: ReportDateRange): Pip
   const bottlingAlcoholLossGal = bottlingAlcoholVarianceGal < 0 ? roundAlcohol(-bottlingAlcoholVarianceGal) : 0;
   const bottlingAlcoholGainGal = bottlingAlcoholVarianceGal > 0 ? roundAlcohol(bottlingAlcoholVarianceGal) : 0;
 
+  const stillChargeSourceAlcoholVarianceGal = balance.stillChargeSourceAlcoholVarianceGal;
+  const stillChargeSourceAlcoholLossGal = stillChargeSourceAlcoholVarianceGal < 0
+    ? roundAlcohol(-stillChargeSourceAlcoholVarianceGal)
+    : 0;
+  const stillChargeSourceAlcoholGainGal = stillChargeSourceAlcoholVarianceGal > 0
+    ? roundAlcohol(stillChargeSourceAlcoholVarianceGal)
+    : 0;
+
   return {
     distillationNetAlcoholGal,
     distillationLossGal,
@@ -92,6 +103,9 @@ export function summarizePipelineAlcoholAdjustments(range: ReportDateRange): Pip
     bottlingAlcoholVarianceGal,
     bottlingAlcoholLossGal,
     bottlingAlcoholGainGal,
+    stillChargeSourceAlcoholVarianceGal,
+    stillChargeSourceAlcoholLossGal,
+    stillChargeSourceAlcoholGainGal,
   };
 }
 
@@ -109,12 +123,16 @@ export function netAlcoholOutputAfterPipelineLosses(
     - pipeline.blendAlcoholLossGal
     + pipeline.blendAlcoholGainGal
     - pipeline.bottlingAlcoholLossGal
-    + pipeline.bottlingAlcoholGainGal;
+    + pipeline.bottlingAlcoholGainGal
+  - pipeline.stillChargeSourceAlcoholLossGal
+  + pipeline.stillChargeSourceAlcoholGainGal;
   const accountable = heartsGpaGal > 0
     ? fromHearts
     : delivered.shippedLaaGal
       - pipeline.bottlingAlcoholGainGal
-      + pipeline.bottlingAlcoholLossGal;
+      + pipeline.bottlingAlcoholLossGal
+      - pipeline.stillChargeSourceAlcoholGainGal
+      + pipeline.stillChargeSourceAlcoholLossGal;
   return roundAlcohol(Math.max(0, accountable));
 }
 

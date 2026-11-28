@@ -10,6 +10,7 @@ import { readCalendarPlanQuery, stripCalendarPlanQuery } from '../lib/calendar-p
 import { formatDateDisplay, formatRecordedAt } from '../lib/date-input';
 import { useEquipmentReturn } from '../lib/equipment-return';
 import { roundAbv, roundVolume } from '../lib/reporting/alcohol-units';
+import { stillChargeSourceAlcoholVarianceGal } from '../lib/distillation-charge-variance';
 import { formatDistillationAlcoholResult, formatDistillationLossSummary } from '../lib/distillation-loss';
 import { latestCompleted } from '../lib/recent-completed';
 import {
@@ -296,6 +297,34 @@ export function Distillation() {
     }];
   });
   const blendedPull = blendDistillationTankPulls(tankPulls);
+  const chargeSourceVariancePreview = useMemo(() => {
+    if (!isTankSourcedRun(runForm.run_type) || !runConsumesSource(runForm.status)) return null;
+    const pulls = tankPulls.filter((pull) => pull.volumeGal > 0 && pull.tankId > 0);
+    if (pulls.length === 0) return null;
+    const measured = runForm.charge_abv != null && runForm.charge_abv > 0 ? runForm.charge_abv : null;
+    if (measured == null) return null;
+    const proofed = (runForm.proof_water_gal ?? 0) > 0.001
+      && runForm.proof_spirit_gal != null
+      && runForm.proof_spirit_gal > 0;
+    const spiritVol = proofed
+      ? (runForm.proof_spirit_gal ?? blendedPull.volumeGal)
+      : blendedPull.volumeGal;
+    const measuredAbv = proofed ? (runForm.proof_spirit_abv ?? measured) : measured;
+    return stillChargeSourceAlcoholVarianceGal({
+      tankSources: pulls.map((pull) => ({ volumeGal: pull.volumeGal, bookAbv: pull.abv })),
+      spiritVolumeGal: spiritVol,
+      measuredSpiritAbv: measuredAbv,
+    });
+  }, [
+    runForm.run_type,
+    runForm.status,
+    runForm.charge_abv,
+    runForm.proof_water_gal,
+    runForm.proof_spirit_gal,
+    runForm.proof_spirit_abv,
+    tankPulls,
+    blendedPull.volumeGal,
+  ]);
   const sourceTankNames = tankPulls
     .filter((pull) => pull.volumeGal > 0)
     .map((pull) => pull.tankName ?? '')
@@ -836,7 +865,11 @@ export function Distillation() {
         return;
       }
       const savedBlend = blendDistillationTankPulls(pullsToSave);
-      const chargeAbv = savedBlend.abv ?? blendedPull.abv ?? runForm.charge_abv ?? 0;
+      const measuredSpiritAbv = runForm.charge_abv != null && runForm.charge_abv > 0
+        ? roundAbv(runForm.charge_abv)
+        : null;
+      const bookSpiritAbv = savedBlend.abv ?? blendedPull.abv;
+      const chargeAbv = measuredSpiritAbv ?? bookSpiritAbv ?? 0;
       const tankSources: DistillationTankSourceInput[] = pullsToSave
         .filter((pull) => pull.volumeGal > 0)
         .map((pull) => ({
@@ -850,7 +883,7 @@ export function Distillation() {
           charge_volume_gal: spiritProofPlan.stillGal,
           charge_abv: spiritProofPlan.targetAbvPercent,
           proof_spirit_gal: spiritProofPlan.spiritGal,
-          proof_spirit_abv: savedBlend.abv ?? spiritProofPlan.spiritAbvPercent,
+          proof_spirit_abv: measuredSpiritAbv ?? savedBlend.abv ?? spiritProofPlan.spiritAbvPercent,
           proof_water_gal: spiritProofPlan.waterGal,
           proof_place: spiritProofPlan.place,
         }
@@ -1290,6 +1323,12 @@ export function Distillation() {
                             {r.charge_abv != null ? ` @ ${r.charge_abv.toFixed(1)}%${r.alcohol_charge_basis === 'estimated_brix' ? ' est.' : ''}` : ''}
                             {r.alcohol_loss_gal != null && r.status === 'complete' && (
                               <div className="field-hint">{formatDistillationAlcoholResult(r.alcohol_loss_gal)} alcohol</div>
+                            )}
+                            {r.charge_source_alcohol_variance_gal != null
+                              && Math.abs(r.charge_source_alcohol_variance_gal) >= 0.01 && (
+                              <div className="field-hint">
+                                Tank vs gauge: {formatDistillationAlcoholResult(-r.charge_source_alcohol_variance_gal)} alcohol
+                              </div>
                             )}
                             {spiritChargeDetail(r) && (
                               <div className="field-hint">{spiritChargeDetail(r)}</div>
@@ -1745,6 +1784,12 @@ export function Distillation() {
                     ?? undefined
                   }
                 />
+                {chargeSourceVariancePreview != null && Math.abs(chargeSourceVariancePreview) >= 0.01 && (
+                  <p className="field-hint" data-testid="charge-source-alcohol-variance">
+                    Tank book vs gauge on this charge:{' '}
+                    {formatDistillationAlcoholResult(-chargeSourceVariancePreview)} alcohol (recorded with the run).
+                  </p>
+                )}
               </div>
             )}
             {isTankSourcedRun(runForm.run_type) && (

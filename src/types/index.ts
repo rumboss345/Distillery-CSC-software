@@ -282,6 +282,8 @@ export interface DistillationRun {
   /** Charged alcohol minus collected alcohol. */
   alcohol_loss_gal?: number | null;
   alcohol_charge_basis?: 'charge' | 'proofed_spirit' | 'estimated_brix' | null;
+  /** Measured spirit alcohol minus tank book alcohol on a tank draw (gain when positive). */
+  charge_source_alcohol_variance_gal?: number | null;
   /** Gallons of tails drawn when this charge was proofed. Null when charged as-is. */
   proof_spirit_gal?: number | null;
   /** ABV of the tails before proofing water. */

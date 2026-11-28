@@ -668,6 +668,16 @@ export async function migrateDatabase(): Promise<void> {
       `);
       await client.query(`INSERT INTO schema_migrations (version) VALUES ('038')`);
     }
+    const chargeSourceAlcoholVarianceMigration = await client.query(
+      'SELECT version FROM schema_migrations WHERE version = $1',
+      ['039'],
+    );
+    if (chargeSourceAlcoholVarianceMigration.rowCount === 0) {
+      await client.query(
+        'ALTER TABLE distillation_runs ADD COLUMN IF NOT EXISTS charge_source_alcohol_variance_gal REAL',
+      );
+      await client.query(`INSERT INTO schema_migrations (version) VALUES ('039')`);
+    }
     await client.query(`
       INSERT INTO inventory_categories (name)
       SELECT 'botanicals'
