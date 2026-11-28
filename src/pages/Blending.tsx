@@ -115,6 +115,7 @@ import {
 } from '../lib/blending';
 import { formatInventoryOnHand, inventoryCategoryLabel } from '../lib/inventory-units';
 import { previewProofingWaterAdjustment, type ProofingWaterPreview } from '../lib/blend-abv-confirm';
+import { refreshBlendIngredientsFromInventory } from '../lib/blend-ingredient-inventory';
 import { parseBlendRecipeSnapshot } from '../lib/blend-recipe-version';
 import { decimalStringFromNumber } from '../lib/calc-engine/number-bridge';
 import {
@@ -947,7 +948,10 @@ export function Blending() {
       });
     });
     setSpiritSources(nextSpirits);
-    const scaledIngredients = scaleIngredients(template.ingredients, factor);
+    const scaledIngredients = refreshBlendIngredientsFromInventory(
+      scaleIngredients(template.ingredients, factor),
+      inventoryById,
+    );
     const spiritInputs = nextSpirits
       .filter((source) => source.volume_gal > 0 && source.abv > 0)
       .map((source) => ({ volumeGal: source.volume_gal, abv: source.abv }));
@@ -977,6 +981,10 @@ export function Blending() {
     setWizardSpiritSource(recipe.source_type ?? 'tank');
     const latest = getLatestBlendRecipeVersion(recipeId);
     const snapshot = latest ? parseBlendRecipeSnapshot(latest.snapshot_json) : null;
+    const templateIngredients = refreshBlendIngredientsFromInventory(
+      (snapshot ? snapshot.ingredients : recipe.ingredients).map((ingredient) => blendIngredientFromRecord(ingredient)),
+      inventoryById,
+    );
     const template: RecipeTemplate = snapshot
       ? {
         spirit_sources: snapshot.spirit_sources.map((source) => ({
@@ -987,7 +995,7 @@ export function Blending() {
           entered_amount: source.entered_amount ?? null,
           entered_unit: source.entered_unit ?? null,
         })),
-        ingredients: snapshot.ingredients.map((ingredient) => blendIngredientFromRecord(ingredient)),
+        ingredients: templateIngredients,
       }
       : {
         spirit_sources: recipe.spirit_sources.map((source) => ({
@@ -998,7 +1006,7 @@ export function Blending() {
           entered_amount: source.entered_amount ?? null,
           entered_unit: source.entered_unit ?? null,
         })),
-        ingredients: recipe.ingredients.map((ingredient) => blendIngredientFromRecord(ingredient)),
+        ingredients: templateIngredients,
       };
     setEditId(undefined);
     setSelectedRecipeId(recipeId);
