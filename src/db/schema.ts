@@ -144,6 +144,7 @@ CREATE TABLE IF NOT EXISTS distillation_runs (
   alcohol_collected_gal REAL,
   alcohol_loss_gal REAL,
   alcohol_charge_basis TEXT,
+  charge_source_alcohol_variance_gal REAL,
   proof_spirit_gal REAL,
   proof_spirit_abv REAL,
   proof_water_gal REAL NOT NULL DEFAULT 0,
