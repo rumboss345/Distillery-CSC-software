@@ -106,6 +106,62 @@ function lineSpendFromInventory(
   return roundMoney(qty * unitCost);
 }
 
+function blendIngredientCategory(ingredient: BlendIngredient): string {
+  if (ingredient.inventory_category?.trim()) return ingredient.inventory_category.trim();
+  if (ingredient.ingredient_type === 'sugar') return 'sugar';
+  if (ingredient.ingredient_type === 'color') return 'color';
+  if (ingredient.ingredient_type === 'syrup') return 'syrup';
+  return 'other';
+}
+
+/** Match a blend line to stock for costing — same naming rules as lookupInventoryCost. */
+function findInventoryItemForBlendIngredient(
+  ingredient: BlendIngredient,
+  index: InventoryCostEntry[],
+): InventoryItem | null {
+  if (ingredient.inventory_item_id != null) {
+    return getInventoryItems().find((row) => row.id === ingredient.inventory_item_id) ?? null;
+  }
+
+  const category = blendIngredientCategory(ingredient);
+  const wanted = ingredient.name.trim().toLowerCase();
+  const items = getInventoryItems();
+  const inCategory = items.filter(
+    (row) => row.category.trim().toLowerCase() === category.toLowerCase(),
+  );
+  const exact = inCategory.find((row) => row.name.trim().toLowerCase() === wanted);
+  if (exact) return exact;
+  for (const row of inCategory) {
+    const name = row.name.trim().toLowerCase();
+    if (!name) continue;
+    if (wanted.includes(name) || name.includes(wanted)) return row;
+  }
+
+  const key = inventoryKey(category, ingredient.name);
+  const entry = index.find((row) => row.key === key);
+  if (entry) {
+    return items.find((row) => row.id === entry.id) ?? null;
+  }
+  const prefix = `${category.toLowerCase()}::`;
+  for (const costEntry of index) {
+    if (!costEntry.key.startsWith(prefix)) continue;
+    const itemName = costEntry.key.slice(prefix.length);
+    if (!itemName || !(wanted.includes(itemName) || itemName.includes(wanted))) continue;
+    const match = items.find((row) => row.id === costEntry.id);
+    if (match) return match;
+  }
+
+  if (ingredient.ingredient_type === 'flavoring' || ingredient.ingredient_type === 'other') {
+    for (const row of items) {
+      const name = row.name.trim().toLowerCase();
+      if (!name) continue;
+      if (wanted.includes(name) || name.includes(wanted)) return row;
+    }
+  }
+
+  return null;
+}
+
 function blendIngredientSpend(
   ingredient: BlendIngredient,
   at: string,
@@ -113,11 +169,12 @@ function blendIngredientSpend(
 ): number {
   if (!(ingredient.amount > 0)) return 0;
   if (ingredient.ingredient_type === 'water' && ingredient.inventory_item_id == null) {
-    return 0;
+    const waterItem = findInventoryItemForBlendIngredient(ingredient, index);
+    if (!waterItem) return 0;
   }
-  if (ingredient.inventory_item_id != null) {
-    const item = getInventoryItems().find((row) => row.id === ingredient.inventory_item_id);
-    if (!item) return 0;
+
+  const item = findInventoryItemForBlendIngredient(ingredient, index);
+  if (item) {
     return lineSpendFromInventory(
       ingredient.amount,
       ingredient.unit,
@@ -127,16 +184,12 @@ function blendIngredientSpend(
       ingredient.cost_per_unit,
     );
   }
+
   if (ingredient.cost_per_unit != null && ingredient.cost_per_unit >= 0) {
     return roundMoney(ingredient.amount * ingredient.cost_per_unit);
   }
-  const category = ingredient.ingredient_type === 'sugar' ? 'sugar'
-    : ingredient.ingredient_type === 'color' ? 'color'
-      : ingredient.ingredient_type === 'syrup' ? 'syrup'
-        : 'other';
-  const unitCost = lookupInventoryCost(index, category, ingredient.name, at);
-  if (unitCost == null) return 0;
-  return roundMoney(ingredient.amount * unitCost);
+
+  return 0;
 }
 
 function blendFinished(status: string, executed_at: string | null): boolean {
