@@ -77,3 +77,43 @@ describe('buildProductionConsumptionInRange blend additive costing', () => {
     expect(rows[0].amount).not.toBeCloseTo(160889.31, 0);
   });
 });
+
+describe('buildProductionConsumptionInRange gin botanical costing', () => {
+  it('converts botanical weight before applying inventory unit cost', async () => {
+    const { getDistillationRuns } = await import('../../db/queries');
+    const { queryAll } = await import('../../db/database');
+
+    vi.mocked(getBlendProducts).mockReturnValue([]);
+    vi.mocked(getBlendIngredients).mockReturnValue([]);
+    vi.mocked(getDistillationRuns).mockReturnValue([
+      {
+        id: 9,
+        batch_number: 'G-2026-001',
+        status: 'complete',
+        run_date: '2026-08-01',
+        gin_recipe_name: 'House Gin',
+      },
+    ] as never);
+    vi.mocked(queryAll).mockImplementation((sql: string) => {
+      if (sql.includes('distillation_run_botanicals')) {
+        return [{
+          distillation_run_id: 9,
+          name: 'Juniper',
+          inventory_item_id: null,
+          weight: 453.592,
+          weight_unit: 'g',
+        }];
+      }
+      return [];
+    });
+    vi.mocked(getInventoryItems).mockReturnValue([
+      { id: 30, category: 'botanicals', name: 'Juniper', unit: 'lbs', cost_per_unit: 12 } as InventoryItem,
+    ]);
+
+    const index = [{ id: 30, key: 'botanicals::juniper', category: 'botanicals', currentCost: 12, changes: [] }];
+    const { rows } = buildProductionConsumptionInRange(allTime, index);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].amount).toBeCloseTo(12, 0);
+    expect(rows[0].amount).not.toBeCloseTo(5443, 0);
+  });
+});

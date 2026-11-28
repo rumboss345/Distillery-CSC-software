@@ -6,10 +6,16 @@ import {
   getInventoryItems,
 } from '../../db/queries';
 import { BARREL_STOCK_CATEGORY, BARREL_STOCK_ITEM_NAME } from '../barrel-inventory';
-import { inventoryQuantityDelta } from '../inventory-units';
-import type { BlendIngredient, InventoryCostChange, InventoryItem } from '../../types';
-import { inventoryCostAt } from '../inventory-cost-at';
+import type { BlendIngredient } from '../../types';
 import { eventInReportRange, type ReportDateRange } from './period';
+import {
+  findInventoryItemForCosting,
+  spendFromInventoryLine,
+  spendFromInventoryLookup,
+  type InventoryCostEntry,
+} from './inventory-cost-spend';
+
+export type { InventoryCostEntry };
 
 export interface ProductionConsumptionTotals {
   blendAdditive: number;
@@ -25,14 +31,6 @@ export interface ProductionConsumptionRow {
   date?: string;
   meta?: string;
   amount: number;
-}
-
-interface InventoryCostEntry {
-  id: number;
-  key: string;
-  category: string;
-  currentCost: number | null;
-  changes: InventoryCostChange[];
 }
 
 interface RunBotanicalRow {
@@ -56,110 +54,12 @@ function roundMoney(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
-function inventoryKey(category: string, name: string): string {
-  return `${category.trim().toLowerCase()}::${name.trim().toLowerCase()}`;
-}
-
-function entryCostAt(entry: InventoryCostEntry, at: string): number | null {
-  return inventoryCostAt(entry.currentCost, entry.changes, at);
-}
-
-function lookupInventoryCost(
-  index: InventoryCostEntry[],
-  category: string,
-  name: string,
-  at: string,
-): number | null {
-  const key = inventoryKey(category, name);
-  for (let i = index.length - 1; i >= 0; i -= 1) {
-    if (index[i].key !== key) continue;
-    const cost = entryCostAt(index[i], at);
-    if (cost != null) return cost;
-  }
-  const prefix = `${category.toLowerCase()}::`;
-  const wanted = name.toLowerCase();
-  for (const entry of index) {
-    if (!entry.key.startsWith(prefix)) continue;
-    const itemName = entry.key.slice(prefix.length);
-    if (!itemName || !(wanted.includes(itemName) || itemName.includes(wanted))) continue;
-    const cost = entryCostAt(entry, at);
-    if (cost != null) return cost;
-  }
-  return null;
-}
-
-function lineSpendFromInventory(
-  amount: number,
-  unit: string,
-  item: InventoryItem,
-  at: string,
-  index: InventoryCostEntry[],
-  fallbackUnitCost: number | null,
-): number {
-  const qty = inventoryQuantityDelta(amount, unit, item.unit);
-  if (qty == null || !(qty > 0)) return 0;
-  const entry = index.find((row) => row.id === item.id);
-  const unitCost = (entry ? entryCostAt(entry, at) : null)
-    ?? fallbackUnitCost
-    ?? lookupInventoryCost(index, item.category, item.name, at);
-  if (unitCost == null || !(unitCost >= 0)) return 0;
-  return roundMoney(qty * unitCost);
-}
-
 function blendIngredientCategory(ingredient: BlendIngredient): string {
   if (ingredient.inventory_category?.trim()) return ingredient.inventory_category.trim();
   if (ingredient.ingredient_type === 'sugar') return 'sugar';
   if (ingredient.ingredient_type === 'color') return 'color';
   if (ingredient.ingredient_type === 'syrup') return 'syrup';
   return 'other';
-}
-
-/** Match a blend line to stock for costing — same naming rules as lookupInventoryCost. */
-function findInventoryItemForBlendIngredient(
-  ingredient: BlendIngredient,
-  index: InventoryCostEntry[],
-): InventoryItem | null {
-  if (ingredient.inventory_item_id != null) {
-    return getInventoryItems().find((row) => row.id === ingredient.inventory_item_id) ?? null;
-  }
-
-  const category = blendIngredientCategory(ingredient);
-  const wanted = ingredient.name.trim().toLowerCase();
-  const items = getInventoryItems();
-  const inCategory = items.filter(
-    (row) => row.category.trim().toLowerCase() === category.toLowerCase(),
-  );
-  const exact = inCategory.find((row) => row.name.trim().toLowerCase() === wanted);
-  if (exact) return exact;
-  for (const row of inCategory) {
-    const name = row.name.trim().toLowerCase();
-    if (!name) continue;
-    if (wanted.includes(name) || name.includes(wanted)) return row;
-  }
-
-  const key = inventoryKey(category, ingredient.name);
-  const entry = index.find((row) => row.key === key);
-  if (entry) {
-    return items.find((row) => row.id === entry.id) ?? null;
-  }
-  const prefix = `${category.toLowerCase()}::`;
-  for (const costEntry of index) {
-    if (!costEntry.key.startsWith(prefix)) continue;
-    const itemName = costEntry.key.slice(prefix.length);
-    if (!itemName || !(wanted.includes(itemName) || itemName.includes(wanted))) continue;
-    const match = items.find((row) => row.id === costEntry.id);
-    if (match) return match;
-  }
-
-  if (ingredient.ingredient_type === 'flavoring' || ingredient.ingredient_type === 'other') {
-    for (const row of items) {
-      const name = row.name.trim().toLowerCase();
-      if (!name) continue;
-      if (wanted.includes(name) || name.includes(wanted)) return row;
-    }
-  }
-
-  return null;
 }
 
 function blendIngredientSpend(
@@ -169,27 +69,25 @@ function blendIngredientSpend(
 ): number {
   if (!(ingredient.amount > 0)) return 0;
   if (ingredient.ingredient_type === 'water' && ingredient.inventory_item_id == null) {
-    const waterItem = findInventoryItemForBlendIngredient(ingredient, index);
+    const waterItem = findInventoryItemForCosting(
+      { category: blendIngredientCategory(ingredient), name: ingredient.name },
+      index,
+    );
     if (!waterItem) return 0;
   }
 
-  const item = findInventoryItemForBlendIngredient(ingredient, index);
-  if (item) {
-    return lineSpendFromInventory(
-      ingredient.amount,
-      ingredient.unit,
-      item,
-      at,
-      index,
-      ingredient.cost_per_unit,
-    );
-  }
-
-  if (ingredient.cost_per_unit != null && ingredient.cost_per_unit >= 0) {
-    return roundMoney(ingredient.amount * ingredient.cost_per_unit);
-  }
-
-  return 0;
+  return spendFromInventoryLookup(
+    ingredient.amount,
+    ingredient.unit,
+    {
+      inventoryItemId: ingredient.inventory_item_id,
+      category: blendIngredientCategory(ingredient),
+      name: ingredient.name,
+    },
+    at,
+    index,
+    ingredient.cost_per_unit,
+  );
 }
 
 function blendFinished(status: string, executed_at: string | null): boolean {
@@ -213,7 +111,13 @@ export function buildProductionConsumptionInRange(
     let blendTotal = 0;
     const parts: string[] = [];
     for (const ingredient of getBlendIngredients(blend.id)) {
-      if (ingredient.ingredient_type === 'water' && ingredient.inventory_item_id == null) continue;
+      if (ingredient.ingredient_type === 'water' && ingredient.inventory_item_id == null) {
+        const waterStocked = findInventoryItemForCosting(
+          { category: blendIngredientCategory(ingredient), name: ingredient.name },
+          index,
+        );
+        if (!waterStocked) continue;
+      }
       const spend = blendIngredientSpend(ingredient, occurred, index);
       if (spend <= 0) continue;
       blendTotal += spend;
@@ -253,25 +157,17 @@ export function buildProductionConsumptionInRange(
     let runTotal = 0;
     for (const line of lines) {
       if (!(line.weight > 0)) continue;
-      let spend = 0;
-      if (line.inventory_item_id != null) {
-        const item = getInventoryItems().find((row) => row.id === line.inventory_item_id);
-        if (item) {
-          spend = lineSpendFromInventory(line.weight, line.weight_unit, item, run.run_date, index, null);
-        }
-      } else if (line.name.trim()) {
-        const item = getInventoryItems().find(
-          (row) => row.category === 'botanicals' && row.name.toLowerCase() === line.name.trim().toLowerCase(),
-        );
-        if (item) {
-          spend = lineSpendFromInventory(line.weight, line.weight_unit, item, run.run_date, index, null);
-        } else {
-          const unitCost = lookupInventoryCost(index, 'botanicals', line.name, run.run_date);
-          if (unitCost != null) {
-            spend = roundMoney(line.weight * unitCost);
-          }
-        }
-      }
+      const spend = spendFromInventoryLookup(
+        line.weight,
+        line.weight_unit,
+        {
+          inventoryItemId: line.inventory_item_id,
+          category: 'botanicals',
+          name: line.name,
+        },
+        run.run_date,
+        index,
+      );
       runTotal += spend;
     }
     if (runTotal > 0) {
@@ -300,32 +196,27 @@ export function buildProductionConsumptionInRange(
     if (!item) continue;
     if (item.category.toLowerCase() !== BARREL_STOCK_CATEGORY) continue;
     const qty = Math.abs(row.delta);
-    const spend = lineSpendFromInventory(qty, item.unit, item, day, index, null);
+    const spend = spendFromInventoryLine(qty, item.unit, item, day, index, null);
     if (spend <= 0) continue;
     barrelCooperage += spend;
     rows.push({
       group: 'overhead',
-      label: row.source_ref?.trim() || BARREL_STOCK_ITEM_NAME,
-      detail: 'Barrel cooperage',
+      label: item.name === BARREL_STOCK_ITEM_NAME ? 'Barrel cooperage' : item.name,
+      detail: row.summary?.trim() || row.source_ref || 'Barrel fill',
       date: day,
-      meta: row.summary?.trim() || undefined,
-      amount: spend,
+      meta: item.unit ? `${roundMoney(qty)} ${item.unit}` : undefined,
+      amount: roundMoney(spend),
     });
   }
 
-  blendAdditive = roundMoney(blendAdditive);
-  ginBotanical = roundMoney(ginBotanical);
-  barrelCooperage = roundMoney(barrelCooperage);
-
-  rows.sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
-
+  const total = roundMoney(blendAdditive + ginBotanical + barrelCooperage);
   return {
     totals: {
-      blendAdditive,
-      ginBotanical,
-      barrelCooperage,
-      total: roundMoney(blendAdditive + ginBotanical + barrelCooperage),
+      blendAdditive: roundMoney(blendAdditive),
+      ginBotanical: roundMoney(ginBotanical),
+      barrelCooperage: roundMoney(barrelCooperage),
+      total,
     },
-    rows,
+    rows: rows.sort((a, b) => (b.date ?? '').localeCompare(a.date ?? '')),
   };
 }

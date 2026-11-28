@@ -10,7 +10,6 @@ import {
   getMashBatches,
   getProductionCostMonthlyOverhead,
 } from '../../db/queries';
-import { nutrientAmountInUnit } from '../wash-recipe-nutrients';
 import type { InventoryCostChange, ProductionCostSettings } from '../../types';
 import { inventoryCostAt } from '../inventory-cost-at';
 import { bottlingCountsTowardProduction, packagingBottleCountsBySku, packagingLabelCountsBySku } from '../bottling-lines';
@@ -38,6 +37,7 @@ import {
   buildProductionConsumptionInRange,
   type ProductionConsumptionTotals,
 } from './production-costing-consumption';
+import { spendFromInventoryLookup } from './inventory-cost-spend';
 import { eventInReportRange, type ReportDateRange } from './period';
 
 const STANDARD_BOTTLE_ABV = 40;
@@ -271,16 +271,24 @@ function mashMaterialCost(
   for (const nutrient of getMashBatchNutrients(mashId)) {
     const amount = nutrient.amount;
     if (!(amount > 0)) continue;
-    const linked = nutrient.inventory_item_id != null
-      ? getInventoryItems().find((item) => item.id === nutrient.inventory_item_id)
-      : undefined;
-    const linkedEntry = linked ? index.find((entry) => entry.id === linked.id) : undefined;
-    const inventoryUnit = linked?.unit?.trim() || 'lbs';
-    const qty = nutrientAmountInUnit(amount, nutrient.unit || 'lbs', inventoryUnit);
-    const unitCost = (linkedEntry ? entryCostAt(linkedEntry, at) : null)
-      ?? lookupInventoryCost(index, 'nutrients', nutrient.name, at)
-      ?? lookupInventoryCost(index, 'other', nutrient.name, at);
-    if (unitCost != null) total += qty * unitCost;
+    const unit = nutrient.unit || 'lbs';
+    let spend = spendFromInventoryLookup(
+      amount,
+      unit,
+      { inventoryItemId: nutrient.inventory_item_id, category: 'nutrients', name: nutrient.name },
+      at,
+      index,
+    );
+    if (spend <= 0) {
+      spend = spendFromInventoryLookup(
+        amount,
+        unit,
+        { category: 'other', name: nutrient.name },
+        at,
+        index,
+      );
+    }
+    total += spend;
   }
   return roundMoney(total);
 }
