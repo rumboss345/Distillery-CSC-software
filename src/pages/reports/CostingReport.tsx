@@ -89,6 +89,7 @@ function CostingSpendLines({
 }
 
 const DRILL_DOWN_TITLES: Record<CostSpendDrillDownKey, string> = {
+  productionConsumption: 'Blend additives, gin botanicals & barrels',
   materials: 'Materials in this period',
   processWater: 'Process water (washes & proofing)',
   labour: 'Labour in this period',
@@ -280,12 +281,14 @@ export function CostingReport() {
   const openSpendDrillDown = (key: CostSpendDrillDownKey) => setSpendDrillDown(key);
 
   const spendDrillDownFootnote = spendDrillDown === 'processWater' && report.waterCostPerGal >= 0
-    ? `Amounts use ${money(report.waterCostPerGal)} per gallon from costing assumptions (wash charge, still proofing, tank dilution, and blend proofing).`
+    ? `Amounts use ${money(report.waterCostPerGal)} per gallon from costing assumptions (wash charge, still proofing, tank dilution, and blend proofing water not stocked on inventory).`
     : spendDrillDown === 'washPipeline' && report.waterCostPerGal >= 0
       ? `Wash materials use inventory unit costs. Process water uses ${money(report.waterCostPerGal)} per gallon from costing assumptions.`
       : spendDrillDown === 'packaging'
         ? 'Bottle and label amounts use unit costs from matching packaging inventory items.'
-        : spendDrillDown === 'labour'
+        : spendDrillDown === 'productionConsumption'
+          ? 'Executed blends (inventory-linked additives and stocked proofing water), completed gin botanical charges, and barrel cooperage from inventory usage.'
+          : spendDrillDown === 'labour'
           || spendDrillDown === 'utilities'
           || spendDrillDown === 'facilityProcessWater'
           || spendDrillDown === 'facilityOverhead'
@@ -651,6 +654,13 @@ export function CostingReport() {
                   amount: money(summary.totalBottlingPackagingCost),
                   drillDown: 'packaging',
                 },
+                ...(summary.productionConsumption.total > 0
+                  ? [{
+                    label: 'Blend, gin & barrel stock',
+                    amount: money(summary.productionConsumption.total),
+                    drillDown: 'productionConsumption' as const,
+                  }]
+                  : []),
                 ...(summary.periodMonthlyOverheadTotal > 0
                   ? [{
                     label: 'Facility overhead',
