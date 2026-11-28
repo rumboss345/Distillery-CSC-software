@@ -34,6 +34,10 @@ import {
   summarizeEffectiveDeliveredOutput,
   type EffectiveDeliveredOutputSummary,
 } from './production-effective-output';
+import {
+  buildProductionConsumptionInRange,
+  type ProductionConsumptionTotals,
+} from './production-costing-consumption';
 import { eventInReportRange, type ReportDateRange } from './period';
 
 const STANDARD_BOTTLE_ABV = 40;
@@ -54,6 +58,8 @@ export interface ProductionCostSummary {
   periodMonthlyOverheadTotal: number;
   /** Bottles, labels, and other packaging in the period. */
   totalBottlingPackagingCost: number;
+  /** Blend additives, gin botanicals, and barrel stock in the period. */
+  productionConsumption: ProductionConsumptionTotals;
   productionAlcoholBalance: ProductionAlcoholBalanceSummary;
   alcoholChargedLaaLiters: number;
   /** All production spend per hearts LAA (packaging, water, overhead included). */
@@ -141,6 +147,8 @@ export interface ProductionCostSpendBreakdowns {
   packaging: CostSpendDetailRow[];
   /** Labour, utilities, and facility process water combined. */
   facilityOverhead: CostSpendDetailRow[];
+  /** Blend additives, gin botanicals, and barrel cooperage. */
+  productionConsumption: CostSpendDetailRow[];
 }
 
 export interface ProductionCostReport {
@@ -344,6 +352,7 @@ function processWaterEventsInRange(range: ReportDateRange): ProcessWaterEvent[] 
     let blendGal = 0;
     for (const ingredient of getBlendIngredients(blend.id)) {
       if (ingredient.ingredient_type !== 'water' || !(ingredient.amount > 0)) continue;
+      if (ingredient.inventory_item_id != null) continue;
       blendGal += ingredientVolumeGal({
         amount: ingredient.amount,
         unit: ingredient.unit,
@@ -715,11 +724,13 @@ export function buildProductionCostReport(
     index,
   );
   const overheadBreakdowns = buildOverheadSpendBreakdowns(range);
+  const consumption = buildProductionConsumptionInRange(range, index);
   /** Wash pipeline + bottling packaging (spirit on bottles is an allocation of wash cost, not additive). */
   const grandTotal = roundMoney(
     totalWashDryMaterial
     + bottlingMaterial
     + processWaterCost
+    + consumption.totals.total
     + monthlyLabour
     + monthlyUtilities
     + monthlyProcessWaterOverhead,
@@ -823,6 +834,7 @@ export function buildProductionCostReport(
       costPerLiterAt40AbvInclMonthlyOverhead,
       periodMonthlyOverheadTotal,
       totalBottlingPackagingCost: roundMoney(bottlingMaterial),
+      productionConsumption: consumption.totals,
       productionAlcoholBalance,
       alcoholChargedLaaLiters: roundMoney(alcoholChargedLaaLiters),
       costPerLaaLiterFullProduction,
@@ -854,6 +866,14 @@ export function buildProductionCostReport(
         overheadBreakdowns.utilities,
         overheadBreakdowns.facilityProcessWater,
       ),
+      productionConsumption: consumption.rows.map((row) => ({
+        group: row.group,
+        label: row.label,
+        detail: row.detail,
+        date: row.date,
+        meta: row.meta,
+        amount: row.amount,
+      })),
     },
     waterCostPerGal: waterRate,
     warnings,
