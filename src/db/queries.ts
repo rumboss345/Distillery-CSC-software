@@ -34,6 +34,7 @@ import {
   type StoredCutType,
   type VesselInflow,
 } from '../lib/collection-vessel-cuts';
+import { stillChargeSourceAlcoholVarianceGal } from '../lib/distillation-charge-variance';
 import { distillationAlcoholBalance, distillationRecordsLoss, washChargeAbvFromBrix, type AlcoholChargeBasis, type DistillationAlcoholBalance } from '../lib/distillation-loss';
 import { mapTankHistoryToInOutEntry } from '../lib/holding-tank-in-out-history';
 import { buildLiquidMovements } from '../lib/reporting/movements';
@@ -5418,6 +5419,28 @@ export function clearOrphanDistillationGinRecipeIds(): void {
   );
 }
 
+function chargeSourceAlcoholVarianceForSave(
+  runType: DistillationRunType,
+  run: Omit<DistillationRun, 'id' | 'created_at'>,
+  tankSources: DistillationTankSourceInput[] | undefined,
+): number | null {
+  if (!isTankSourcedRun(runType) || !runConsumesSource(run.status)) return null;
+  if (!tankSources?.some((source) => source.tankId > 0 && source.volumeGal > 0)) return null;
+  const proofed = (run.proof_water_gal ?? 0) > 0.001
+    && run.proof_spirit_gal != null
+    && run.proof_spirit_gal > 0;
+  const spiritVol = proofed ? run.proof_spirit_gal! : run.charge_volume_gal;
+  const measuredAbv = proofed ? (run.proof_spirit_abv ?? run.charge_abv) : run.charge_abv;
+  return stillChargeSourceAlcoholVarianceGal({
+    tankSources: tankSources.map((source) => ({
+      volumeGal: source.volumeGal,
+      bookAbv: source.abv,
+    })),
+    spiritVolumeGal: spiritVol,
+    measuredSpiritAbv: measuredAbv ?? null,
+  });
+}
+
 export function saveDistillationRun(
   run: Omit<DistillationRun, 'id' | 'created_at'>,
   id?: number,
@@ -5513,10 +5536,11 @@ export function saveDistillationRun(
     ? { ...run, source_fermenter_equipment_id: fermenterSourceForCharge }
     : run;
   const fermenterSourceId = isFermenterSourcedRun(runType) ? fermenterSourceForCharge : null;
+  const chargeSourceAlcoholVariance = chargeSourceAlcoholVarianceForSave(runType, run, tankSources);
   let runId = id ?? 0;
   if (id) {
     runQuery(
-      `UPDATE distillation_runs SET batch_number=?, run_type=?, source_mash_batch_id=?, source_fermenter_equipment_id=?, source_holding_tank_equipment_id=?, dest_holding_tank_equipment_id=?, still_name=?, run_date=?, charge_volume_gal=?, charge_abv=?, proof_spirit_gal=?, proof_spirit_abv=?, proof_water_gal=?, proof_place=?, stillage_volume_gal=?, stillage_discarded=?, stillage_holding_tank_equipment_id=?, status=?, assigned_user_id=?, assigned_user_name=?, notes=?, gin_recipe_id=?, gin_recipe_name=? WHERE id=?`,
+      `UPDATE distillation_runs SET batch_number=?, run_type=?, source_mash_batch_id=?, source_fermenter_equipment_id=?, source_holding_tank_equipment_id=?, dest_holding_tank_equipment_id=?, still_name=?, run_date=?, charge_volume_gal=?, charge_abv=?, proof_spirit_gal=?, proof_spirit_abv=?, proof_water_gal=?, proof_place=?, stillage_volume_gal=?, stillage_discarded=?, stillage_holding_tank_equipment_id=?, status=?, assigned_user_id=?, assigned_user_name=?, notes=?, gin_recipe_id=?, gin_recipe_name=?, charge_source_alcohol_variance_gal=? WHERE id=?`,
       [
         run.batch_number,
         runType,
@@ -5541,12 +5565,13 @@ export function saveDistillationRun(
         run.notes,
         ginRecipe.gin_recipe_id,
         ginRecipe.gin_recipe_name,
+        chargeSourceAlcoholVariance,
         id,
       ],
     );
   } else {
     runId = insertRow(
-      `INSERT INTO distillation_runs (batch_number, run_type, source_mash_batch_id, source_fermenter_equipment_id, source_holding_tank_equipment_id, dest_holding_tank_equipment_id, still_name, run_date, charge_volume_gal, charge_abv, proof_spirit_gal, proof_spirit_abv, proof_water_gal, proof_place, stillage_volume_gal, stillage_discarded, stillage_holding_tank_equipment_id, status, assigned_user_id, assigned_user_name, notes, gin_recipe_id, gin_recipe_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO distillation_runs (batch_number, run_type, source_mash_batch_id, source_fermenter_equipment_id, source_holding_tank_equipment_id, dest_holding_tank_equipment_id, still_name, run_date, charge_volume_gal, charge_abv, proof_spirit_gal, proof_spirit_abv, proof_water_gal, proof_place, stillage_volume_gal, stillage_discarded, stillage_holding_tank_equipment_id, status, assigned_user_id, assigned_user_name, notes, gin_recipe_id, gin_recipe_name, charge_source_alcohol_variance_gal) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         run.batch_number,
         runType,
@@ -5571,6 +5596,7 @@ export function saveDistillationRun(
         run.notes,
         ginRecipe.gin_recipe_id,
         ginRecipe.gin_recipe_name,
+        chargeSourceAlcoholVariance,
       ],
     );
   }
